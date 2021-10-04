@@ -1,0 +1,100 @@
+0	0x00021336	LDirtGravel01	textures/landscape/ground/dirtgravel01_d.dds
+1	0x0001D1D3	LDriedGrass01	textures/landscape/ground/driedgrass01_d.dds
+2	0x000BE9B6	LNFoothillsDirt01	materials/landscape/ground/nf_dirt01.bgsm	textures/landscape/ground/nf_dirt01_d.dds
+3	0x0004417F	LDirtGravel01Grass	textures/landscape/ground/dirtgravel01_d.dds
+4	0x000C55FB	LNFoothillsDriedGrass01NoGrass	materials/landscape/ground/nf_scrubgrass01.bgsm	textures/landscape/ground/nf_scrubgrass_d.dds
+5	0x000C55FA	LNFoothillsDriedGrass01	materials/landscape/ground/nf_scrubgrass01.bgsm	textures/landscape/ground/nf_scrubgrass_d.dds
+6	0x00022B63	LDriedGrass02Weeds	textures/landscape/ground/driedgrass01_d.dds
+7	0x000C55FC	LNFoothillsRubbleRock01	materials/landscape/ground/northernfoothillsrubblerock01.bgsm	textures/landscape/ground/northernfoothillsrubblerock01_d.dds
+8	0x000BA560	LNFoothillsDirt01Grass02	materials/landscape/ground/nf_dirt01.bgsm	textures/landscape/ground/nf_dirt01_d.dds
+9	0x00022DFD	LDirtPath01	textures/landscape/ground/dirtpath01_d.dds
+10	0x0004DDF3	LRiverbedSilt01Wet	textures/landscape/ground/riverbedsilt01wet_d.dds
+11	0x000C55FD	LNFoothillsRubbleRock01Grass	materials/landscape/ground/northernfoothillsrubblerock01.bgsm	textures/landscape/ground/northernfoothillsrubblerock01_d.dds
+12	0x000BA55F	LNFoothillsDirt01Grass01	materials/landscape/ground/nf_dirt01.bgsm	textures/landscape/ground/nf_dirt01_d.dds
+13	0x000227B7	LRiverbedSilt01	textures/landscape/ground/riverbedsilt01_d.dds
+14	0x000BC13D	LRiverbedRocks02Wet	textures/landscape/ground/riverbedrocks02wet_d.dds
+15	0x0001D9B1	LDriedGrass01NoGrass	textures/landscape/ground/driedgrass01_d.dds
+16	0x001793E0	LRiverbedRocks01WetGrass02	textures/landscape/ground/riverbedrockswet_d.dds
+17	0x000BC13F	LRiverbedRocks02WetGrass	textures/landscape/ground/riverbedrocks02wet_d.dds
+18	0x000A7C4C	LRiverbedRocks02	textures/landscape/ground/riverbedrocks02_d.dds
+19	0x000A7C4B	LRiverbedRocks01	textures/landscape/ground/riverbedrocks_d.dds
+20	0x000BC140	LRiverbedRocks01WetGrass	textures/landscape/ground/riverbedrockswet_d.dds
+21	0x0006E61A	LDriedGrass03	textures/landscape/ground/driedgrass01_d.dds
+22	0x0014EC5C	LDebrisGround	materials/landscape/ground/debrisgroundtile.bgsm	textures/landscape/ground/debrisgroundtile_d.dds
+23	0x001C40A9	LDebrisGround01Wood01	materials/landscape/ground/debrisgroundtile.bgsm	textures/landscape/ground/debrisgroundtile_d.dds
+24	0x001AC8A1	LDebrisGround01Trash01	materials/landscape/ground/debrisgroundtile.bgsm	textures/landscape/ground/debrisgroundtile_d.dds
+25	0x00021C68	LAsphalt01	textures/landscape/roads/asphalt01_d.dds
+26	0x000B37BB	LDebrisRubble01	materials/setdressing/rubble/rubdense01.bgsm	textures/setdressing/rubble/rubdense01_d.dds
+27	0x000B378E	LDebrisRubble01NoGrass	materials/setdressing/rubble/rubdense01.bgsm	textures/setdressing/rubble/rubdense01_d.dds
+28	0x000B378B	LDebrisRubble02	materials/setdressing/rubble/rubdense01.bgsm	textures/setdressing/rubble/rubdense01_d.dds
+29	0x000A7C4E	LRiverbedRocks01Wet	textures/landscape/ground/riverbedrockswet_d.dds
+30	0x000B378D	LDebrisRubbleBrick01NoGrass	materials/setdressing/rubble/rubdense02.bgsm	textures/setdressing/rubble/rubdense02_d.dds
+31	0x0014EC5D	LDebrisRubbleBrick01	materials/setdressing/rubble/rubdense02.bgsm	textures/setdressing/rubble/rubdense02_d.dds
+32	0x00154C7D	LCitySW01	materials/landscape/ground/swland01.bgsm	textures/landscape/ground/swland01_d.dds
+33	0x0016692D	LCobblestone01	materials/landscape/roads/cobblestone01landscape.bgsm	textures/landscape/roads/cobblestone01landscape_d.dds
+34	0x00084765	LRubbleRock01Grass	textures/landscape/ground/rubblerock01_d.dds
+35	0x0019DF0C	LNF_Dirt01	textures/landscape/ground/nf_dirt01_d.dds
+36	0x0019DF08	LNF_ScrubGrass01	textures/landscape/ground/nf_scrubgrass_d.dds
+37	0x0019DF0D	LNF_ScrubGrass01_NoGrass	textures/landscape/ground/nf_scrubgrass_d.dds
+38	0x000C55F8	LNFoothillsRootsEroded01Rocks01	materials/landscape/ground/northernfoothillsrootseroded01.bgsm	textures/landscape/ground/northernfoothillsrootseroded01_d.dds
+39	0x0019DF06	LNF_ForestFloor01	textures/landscape/ground/nf_forestfloor01_d.dds
+40	0x000C55F9	LNFoothillsRootsEroded01	materials/landscape/ground/northernfoothillsrootseroded01.bgsm	textures/landscape/ground/northernfoothillsrootseroded01_d.dds
+41	0x0001F78C	LRubbleRock01	textures/landscape/ground/rubblerock01_d.dds
+42	0x0003343C	LForestFloor01	textures/landscape/ground/forestfloor01_d.dds
+43	0x000AB501	LRiverbedSilt01Grass01	textures/landscape/ground/riverbedsilt01_d.dds
+44	0x000864D2	LDiamondTrash01	materials/architecture/diamondcity/diamondrubbletrash01.bgsm	textures/architecture/diamondcity/diamondrubbletrash01_d.dds
+45	0x00109043	LMarshMudTrash01	textures/landscape/ground/marshmudtrash01_d.dds
+46	0x0019DF04	LNF_MountainScrub01	textures/landscape/ground/nf_mountainscrub01_d.dds
+47	0x00189848	LDebrisCraterBrickRed	materials/landscape/ground/craterdebrisbrickred.bgsm	textures/landscape/ground/craterdebrisbrickred_d.dds
+48	0x000BA523	LRiverbedRocks02Grass	textures/landscape/ground/riverbedrocks02_d.dds
+49	0x000AB72E	LCoastSandWet01	textures/landscape/ground/coastsandwet01_d.dds
+50	0x0014D270	LOceanFloor01ShortKelp	textures/landscape/ground/oceanfloor01_d.dds
+51	0x000BA4E9	LCoastWetRockSand01	textures/landscape/ground/coastwetrocksand01_d.dds
+52	0x0014BF47	LOceanFloor01	textures/landscape/ground/oceanfloor01_d.dds
+53	0x000B8835	LCoastSandRipples01	textures/landscape/ground/coastsandripples01_d.dds
+54	0x000AB72C	LCoastSandDry01	textures/landscape/ground/coastsanddry01_d.dds
+55	0x000AB730	LCoastGrassSand01	textures/landscape/ground/coastgrasssand01_d.dds
+56	0x00055ED0	LMuddyLeaves01Wet	textures/landscape/ground/muddyleaves01wet_d.dds
+57	0x00125C6C	LBlastedForestDirt01	textures/landscape/ground/blastedforestdirt01_d.dds
+58	0x001E7D17	LCoastWetRockSand01NoGrass	textures/landscape/ground/coastwetrocksand01_d.dds
+59	0x0013574B	LCoastGrassSand01NoGrass	textures/landscape/ground/coastgrasssand01_d.dds
+60	0x00038C05	LRootsEroded01	textures/landscape/ground/rootseroded01_d.dds
+61	0x000D0E0B	LDebrisRubbleHightech	materials/setdressing/rubble/hightechrubblepiles01.bgsm	textures/setdressing/rubble/hightechrubblepiles01_d.dds
+62	0x001D7972	LDebrisRubbleHightechChunk01	materials/setdressing/rubble/hightechrubblepiles01.bgsm	textures/setdressing/rubble/hightechrubblepiles01_d.dds
+63	0x00030888	LFallenLeaves01	textures/landscape/ground/fallenleaves01_d.dds
+64	0x00085B4F	LQuaryMarble01	materials/architecture/quarry/quarrymarblefloor01.bgsm	textures/architecture/quarry/qrymarblefloor01_d.dds
+65	0x000BA522	LRiverbedRocks01Grass	textures/landscape/ground/riverbedrocks_d.dds
+66	0x00166725	LOceanFloor01TallKelp	textures/landscape/ground/oceanfloor01_d.dds
+67	0x000FA5A8	LGlowingSeaCorrosion02	textures/landscape/dirtcliffs/glowingseacliff02_d.dds
+68	0x000DEDC7	LGlowingSeaRubble01	textures/landscape/ground/glowingsearubble01_d.dds
+69	0x000464C5	textures/landscape/ground/nf_dirt01_d.dds
+70	0x0016579A	LMirelurkNest01	textures/props/mirelurkeggs/mirelurknest01_d.dds
+71	0x00109041	LMarshMudFloor01	textures/landscape/ground/marshmudfloor01_d.dds
+72	0x0010980A	LMarshGrass01	textures/landscape/ground/marshmuddygrass01_d.dds
+73	0x00118017	LMarshMudFloor01Grass	textures/landscape/ground/marshmudfloor01_d.dds
+74	0x00118B70	LMarshGrass01_NoGrass	textures/landscape/ground/marshmuddygrass01_d.dds
+75	0x0010C70E	LMarshHighGround01	textures/landscape/ground/marshhighground01_d.dds
+76	0x001D1AD7	LDebrisRubbleHightechGrass01	materials/setdressing/rubble/hightechrubblepiles01.bgsm	textures/setdressing/rubble/hightechrubblepiles01_d.dds
+77	0x0016CCF6	LDebrisCrater01	materials/landscape/ground/craterdebris01.bgsm	textures/landscape/ground/craterdebris01_d.dds
+78	0x001357B2	LDebrisRubblePlain	materials/setdressing/rubble/extrubbleplain01.bgsm	textures/setdressing/rubble/extrubbleplain01_d.dds
+79	0x00121C34	LPreWarDirt01	textures/landscape/ground/prewardirt01_d.dds
+80	0x000ECBDF	LGlowingSeaRubble01NoGrass	textures/landscape/ground/glowingsearubble01_d.dds
+81	0x000DEDC9	LGlowingSeaCrackedMud01	textures/landscape/ground/glowingseacrackedmud01_d.dds
+82	0x000ECBDE	LGlowingSeaMud01NoGrass	textures/landscape/ground/glowingseamud01_d.dds
+83	0x000DEDC4	LGlowingSeaMud01	textures/landscape/ground/glowingseamud01_d.dds
+84	0x000DEDC8	LGlowingSeaCorrosion01	textures/landscape/ground/glowingseacorrosion01_d.dds
+85	0x000ECBDD	LGlowingSeaCrackedMud01NoGrass	textures/landscape/ground/glowingseacrackedmud01_d.dds
+86	0x0012756A	LBlastedForestGrass01	textures/landscape/ground/blastedforestgrass01_d.dds
+87	0x0003E1A4	LRootsEroded01Grass01	textures/landscape/ground/rootseroded01_d.dds
+88	0x00125C7B	LBlastedForestGravel01	textures/landscape/ground/blastedforestgravel01_d.dds
+89	0x000C55F3	LRootsEroded01Rocks01	textures/landscape/ground/rootseroded01_d.dds
+90	0x00127568	LBlastedForestGrass01_NoGrass	textures/landscape/ground/blastedforestgrass01_d.dds
+91	0x0004BAE7	LRootsEroded02	textures/landscape/ground/rootseroded02_d.dds
+92	0x00026F7F	LCrackedMud01	textures/landscape/ground/crackedmud01_d.dds
+93	0x0012C097	LBlastedForestGravel01_NoRocks	textures/landscape/ground/blastedforestgravel01_d.dds
+94	0x0012756C	LBlastedForestFloor02	textures/landscape/ground/blastedforestfloor02_d.dds
+95	0x00125C71	LBlastedForestFloor01	textures/landscape/ground/blastedforestfloor01_d.dds
+96	0x000D7D7E	LDebrisCrater01NoGrass	materials/landscape/ground/craterdebris01.bgsm	textures/landscape/ground/craterdebris01_d.dds
+97	0x0012C09C	LBlastedForestFloor02_NoTwigs	textures/landscape/ground/blastedforestfloor02_d.dds
+98	0x000AB07E	LCWDefault01Grass02	materials/landscape/ground/commonwealthdefault01.bgsm	textures/landscape/ground/commonwealthdefault01_d.dds
+99	0x0012630A	LPreWarWildGrass01	textures/landscape/ground/prewarwildgrass01_d.dds
