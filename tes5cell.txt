@@ -1,0 +1,37 @@
+// Field definition example based on
+// https://en.uesp.net/wiki/Skyrim_Mod:Mod_File_Format/CELL
+//
+// The format is RECORD[,...]\tFIELD[,...]\tNAME\tDATATYPES
+// After #, ;, or //, the rest of the line is ignored. Data types include:
+//   <: remaining data is an array, and can be repeated any number of times
+//   b: boolean
+//   c: 8-bit unsigned integer (hexadecimal)
+//   h: 16-bit unsigned integer (hexadecimal)
+//   s: 16-bit signed integer
+//   x: 32-bit unsigned integer (hexadecimal)
+//   u: 32-bit unsigned integer
+//   i: 32-bit signed integer
+//   d: form ID
+//   f: 32-bit float
+//   l: localized string
+//   z: string
+//   n: file name
+//   .: ignore byte
+//   *: ignore any remaining data
+CELL	DATA	Flags	<c
+CELL	XCLC	Location	iic*
+CELL	XCLL	Lighting	xxxffiifffxxxxxxxfxfffx*
+CELL	LTMP	Lighting template	d
+CELL	XCLW	Water height	f
+CELL	XCLR	Regions	<d
+CELL	XLCN	Location	d
+CELL	XWCU	Water current	<fff....
+CELL	XCWT	Water	d
+CELL	XOWN	Owner	d
+CELL	XILL	Lock list	d
+CELL	XWEM	Water environment map	n
+CELL	XCCM	Climate	d
+CELL	XCAS	Acoustic space	d
+CELL	XEZN	Encounter zone	d
+CELL	XCMO	Music type	d
+CELL	XCIM	Image space	d
