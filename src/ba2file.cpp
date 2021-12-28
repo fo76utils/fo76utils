@@ -88,6 +88,8 @@ BA2File::BA2File(const char *fileName)
   {
     std::string folderName;
     unsigned int  flags = readUInt32();
+    if (archiveType < 104)
+      flags = flags & ~0x0700U;
     if ((flags & ~0x01BCU) != 0x0003)
       throw errorMessage("unsupported archive file format");
     size_t  folderCnt = readUInt32();
