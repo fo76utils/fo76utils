@@ -55,9 +55,8 @@ class ESMDump : public ESMFile
   void printLString(std::string& s, FileBuffer& buf);
   static void printZString(std::string& s, FileBuffer& buf);
   static void printFileName(std::string& s, FileBuffer& buf);
-  void convertField(std::string& s,
-                    const ESMField& f, const std::string& fldDef);
-  void convertField(std::string& s, const ESMRecord& r, const ESMField& f);
+  void convertField(std::string& s, ESMField& f, const std::string& fldDef);
+  void convertField(std::string& s, const ESMRecord& r, ESMField& f);
  public:
   ESMDump(const char *fileName, std::FILE *outFile = 0);
   virtual ~ESMDump();

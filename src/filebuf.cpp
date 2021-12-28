@@ -87,6 +87,27 @@ unsigned long long FileBuffer::readUInt64()
   return tmp;
 }
 
+void FileBuffer::setBuffer(const unsigned char *fileData, size_t fileSize)
+{
+  if (fileStream)
+  {
+    munmap((void *) fileBuf, fileBufSize);
+    std::fclose(fileStream);
+    fileStream = (std::FILE *) 0;
+  }
+  fileBuf = fileData;
+  fileBufSize = fileSize;
+  filePos = 0;
+}
+
+FileBuffer::FileBuffer()
+  : fileBuf((unsigned char *) 0),
+    fileBufSize(0),
+    filePos(0),
+    fileStream((std::FILE *) 0)
+{
+}
+
 FileBuffer::FileBuffer(const unsigned char *fileData, size_t fileSize)
   : fileBuf(fileData),
     fileBufSize(fileSize),

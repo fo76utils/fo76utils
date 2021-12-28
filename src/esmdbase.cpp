@@ -40,12 +40,11 @@ void ESMDump::findEDIDs(unsigned int formID)
       findEDIDs(r.children);
     if (!(r == "GRUP" || r == "LAND" || r == "NAVM"))
     {
-      ESMField  f;
-      if (getFirstField(f, r) && f == "EDID")
+      ESMField  f(*this, r);
+      if (f.next() && f == "EDID")
       {
         std::string s;
-        FileBuffer  buf(f.data, f.size);
-        printZString(s, buf);
+        printZString(s, f);
         if (s.empty())
           continue;
         std::map< unsigned int, std::string >::iterator i = edidDB.find(formID);
@@ -291,7 +290,7 @@ void ESMDump::printFileName(std::string& s, FileBuffer& buf)
 }
 
 void ESMDump::convertField(std::string& s,
-                           const ESMField& f, const std::string& fldDef)
+                           ESMField& f, const std::string& fldDef)
 {
   const char  *dataTypes = fldDef.c_str();
   size_t  n = fldDef.find('\t');
@@ -304,7 +303,6 @@ void ESMDump::convertField(std::string& s,
       s.insert(s.length(), fldDef, 0, n);
     }
   }
-  FileBuffer  buf(f.data, f.size);
   size_t  arrayPos = std::string::npos;
   bool    haveData = false;
   for (size_t i = 0; dataTypes[i] != '\0'; i++)
@@ -317,7 +315,7 @@ void ESMDump::convertField(std::string& s,
       sizeRequired = 2;
     else if ((unsigned char) c > 'c' && c != 'z' && c != 'n')
       sizeRequired = 4;
-    if ((buf.getPosition() + sizeRequired) > buf.size())
+    if ((f.getPosition() + sizeRequired) > f.size())
     {
       if (arrayPos == std::string::npos)
         haveData = false;
@@ -333,43 +331,43 @@ void ESMDump::convertField(std::string& s,
           arrayPos = i;
         break;
       case 'b':
-        printBoolean(s, buf);
+        printBoolean(s, f);
         break;
       case 'c':
-        printHexValue(s, buf.readUInt8(), 2);
+        printHexValue(s, f.readUInt8(), 2);
         break;
       case 'h':
-        printHexValue(s, buf.readUInt16(), 4);
+        printHexValue(s, f.readUInt16(), 4);
         break;
       case 's':
-        printInteger(s, buf.readInt16());
+        printInteger(s, f.readInt16());
         break;
       case 'x':
-        printHexValue(s, buf.readUInt32(), 8);
+        printHexValue(s, f.readUInt32(), 8);
         break;
       case 'u':
-        printInteger(s, buf.readUInt32());
+        printInteger(s, f.readUInt32());
         break;
       case 'i':
-        printInteger(s, buf.readInt32());
+        printInteger(s, f.readInt32());
         break;
       case 'd':
-        printFormID(s, buf);
+        printFormID(s, f);
         break;
       case 'f':
-        printFloat(s, buf);
+        printFloat(s, f);
         break;
       case 'l':
-        printLString(s, buf);
+        printLString(s, f);
         break;
       case 'z':
-        printZString(s, buf);
+        printZString(s, f);
         break;
       case 'n':
-        printFileName(s, buf);
+        printFileName(s, f);
         break;
       case '.':
-        (void) buf.readUInt8Fast();
+        (void) f.readUInt8Fast();
         break;
       default:
         throw errorMessage("invalid data type in field definition");
@@ -385,8 +383,7 @@ void ESMDump::convertField(std::string& s,
     s.resize(s.length() - 1);
 }
 
-void ESMDump::convertField(std::string& s,
-                           const ESMRecord& r, const ESMField& f)
+void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
 {
   if (fieldDefDB.begin() != fieldDefDB.end())
   {
@@ -455,12 +452,12 @@ void ESMDump::convertField(std::string& s,
     case 0x41544144:            // "DATA"
       if (r == "GMST")
       {
-        ESMField  tmpField;
-        if (getFirstField(tmpField, r))
+        ESMField  tmpField(*this, r);
+        if (tmpField.next())
         {
-          if (tmpField == "EDID" && tmpField.size > 0)
+          if (tmpField == "EDID" && tmpField.size() > 0)
           {
-            switch (tmpField.data[0])
+            switch (tmpField.getDataPtr()[0])
             {
               case 'b':
                 dataType = 1;
@@ -530,7 +527,7 @@ void ESMDump::convertField(std::string& s,
       if (!tsvFormat)
       {
         dataType = 6;
-        arraySize = int(f.size >> 2);
+        arraySize = int(f.size() >> 2);
       }
       break;
     case 0x4F4C564C:            // "LVLO"
@@ -613,11 +610,11 @@ void ESMDump::convertField(std::string& s,
   }
   if (!dataType)
   {
-    if (verboseMode && (f.type & 0xFFFFFF00U) == 0x4D414E00 && f.size == 4)
+    if (verboseMode && (f.type & 0xFFFFFF00U) == 0x4D414E00 && f.size() == 4)
     {
       // "*NAM"
-      FileBuffer    buf(f.data, f.size);
-      unsigned int  n = buf.readUInt32();
+      unsigned int  n = f.readUInt32();
+      f.setPosition(0);
       if (n >= 256U && n < 0x80000000U && getRecordPtr(n))
         dataType = 6;
     }
@@ -642,9 +639,8 @@ void ESMDump::convertField(std::string& s,
     }
   }
   dataSize = dataSize * size_t(arraySize);
-  if ((exactSizeRequired && f.size != dataSize) || f.size < dataSize)
+  if ((exactSizeRequired && f.size() != dataSize) || f.size() < dataSize)
     return;
-  FileBuffer  buf(f.data, f.size);
   for (int i = 0; i < arraySize; i++)
   {
     for (int j = 0; j < dataCnt; j++)
@@ -653,34 +649,34 @@ void ESMDump::convertField(std::string& s,
       switch (dataTypes[j])
       {
         case 1:                 // boolean
-          printBoolean(s, buf);
+          printBoolean(s, f);
           break;
         case 2:                 // 16-bit integer flags
-          printHexValue(s, buf.readUInt16(), 4);
+          printHexValue(s, f.readUInt16(), 4);
           break;
         case 3:                 // 16-bit signed integer
-          printInteger(s, buf.readInt16());
+          printInteger(s, f.readInt16());
           break;
         case 4:                 // 32-bit unsigned integer
-          printInteger(s, buf.readUInt32());
+          printInteger(s, f.readUInt32());
           break;
         case 5:                 // 32-bit signed integer
-          printInteger(s, buf.readInt32());
+          printInteger(s, f.readInt32());
           break;
         case 6:                 // form ID
-          printFormID(s, buf);
+          printFormID(s, f);
           break;
         case 7:                 // float
-          printFloat(s, buf);
+          printFloat(s, f);
           break;
         case 8:                 // localized string
-          printLString(s, buf);
+          printLString(s, f);
           break;
         case 9:                 // string
-          printZString(s, buf);
+          printZString(s, f);
           break;
         case 10:                // file name
-          printFileName(s, buf);
+          printFileName(s, f);
           break;
       }
     }
@@ -849,29 +845,25 @@ void ESMDump::dumpRecord(unsigned int formID, const ESMRecord *parentGroup)
 
     std::string edid;
     std::vector< Field >  fields;
-    ESMField  f;
-    if (getFirstField(f, r))
+    ESMField  f(*this, r);
+    while (f.next())
     {
-      do
+      Field   tmpField;
+      tmpField.type = f.type;
+      updateStats(recordType, f.type);
+      if (!statsOnly && fieldsExcluded.find(f.type) == fieldsExcluded.end())
       {
-        Field   tmpField;
-        tmpField.type = f.type;
-        updateStats(recordType, f.type);
-        if (!statsOnly && fieldsExcluded.find(f.type) == fieldsExcluded.end())
+        if (f == "EDID")
         {
-          if (f == "EDID")
-          {
-            convertField(edid, r, f);
-          }
-          else
-          {
-            convertField(tmpField.data, r, f);
-            if (!tmpField.data.empty())
-              fields.push_back(tmpField);
-          }
+          convertField(edid, r, f);
+        }
+        else
+        {
+          convertField(tmpField.data, r, f);
+          if (!tmpField.data.empty())
+            fields.push_back(tmpField);
         }
       }
-      while (f.next());
     }
     if (edid.empty() && fields.size() < 1)
     {

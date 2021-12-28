@@ -260,62 +260,69 @@ const ESMFile::ESMRecord& ESMFile::getRecord(unsigned int formID) const
   return *r;
 }
 
-bool ESMFile::getFirstField(ESMField& f, const ESMRecord& r)
+ESMFile::ESMField::ESMField(ESMFile& f, const ESMRecord& r)
+  : FileBuffer(),
+    type(0),
+    dataRemaining(0)
 {
-  f.type = 0;
-  f.size = 0;
-  f.data = (unsigned char *) 0;
-  f.dataRemaining = 0;
   if (r.type == 0x50555247)             // "GRUP"
-    return false;
+    return;
   if (r.flags & 0x00040000)             // compressed record
-    f.data = uncompressRecord(*(findRecord(r.formID)));
+    fileBuf = f.uncompressRecord(*(f.findRecord(r.formID)));
   else
-    f.data = r.fileData;
-  f.dataRemaining =
-      (unsigned int) f.data[4] | ((unsigned int) f.data[5] << 8)
-      | ((unsigned int) f.data[6] << 16) | ((unsigned int) f.data[7] << 24);
-  f.data = f.data + 24;
-  return f.next();
+    fileBuf = r.fileData;
+  fileBufSize = 24;
+  filePos = 4;
+  dataRemaining = readUInt32Fast();
 }
 
-bool ESMFile::getFirstField(ESMField& f, unsigned int formID)
+ESMFile::ESMField::ESMField(ESMFile& f, unsigned int formID)
+  : FileBuffer(),
+    type(0),
+    dataRemaining(0)
 {
-  const ESMRecord *r = findRecord(formID);
+  const ESMRecord *r = f.findRecord(formID);
   if (!r)
-  {
-    f.type = 0;
-    f.size = 0;
-    f.data = (unsigned char *) 0;
-    f.dataRemaining = 0;
     throw errorMessage("invalid form ID");
-  }
-  return getFirstField(f, *r);
+  if (r->type == 0x50555247)            // "GRUP"
+    return;
+  if (r->flags & 0x00040000)            // compressed record
+    fileBuf = f.uncompressRecord(*(f.findRecord(r->formID)));
+  else
+    fileBuf = r->fileData;
+  fileBufSize = 24;
+  filePos = 4;
+  dataRemaining = readUInt32Fast();
 }
 
 bool ESMFile::ESMField::next()
 {
-  if (dataRemaining <= size)
-    return false;
-  FileBuffer  tmpBuf(data, dataRemaining);
-  if ((size + 6) > dataRemaining)
-    throw errorMessage("end of record data");
-  tmpBuf.setPosition(size);
-  type = tmpBuf.readUInt32Fast();
-  size = tmpBuf.readUInt16Fast();
-  if (type == 0x58585858 && size == 4)  // "XXXX"
-  {
-    if ((tmpBuf.getPosition() + 10) > dataRemaining)
-      throw errorMessage("end of record data");
-    size = tmpBuf.readUInt32Fast();
-    type = tmpBuf.readUInt32Fast();
-    (void) tmpBuf.readUInt16Fast();
-  }
-  dataRemaining = dataRemaining - (unsigned int) tmpBuf.getPosition();
+  fileBuf = fileBuf + fileBufSize;
+  fileBufSize = dataRemaining;
+  filePos = 0;
   if (!dataRemaining)
-    data = (unsigned char *) 0;
+    return false;
+  if (dataRemaining < 6)
+    throw errorMessage("end of record data");
+  type = readUInt32Fast();
+  size_t  n = readUInt16Fast();
+  if (type == 0x58585858 && n == 4)     // "XXXX"
+  {
+    if (dataRemaining < 16)
+      throw errorMessage("end of record data");
+    n = readUInt32Fast();
+    type = readUInt32Fast();
+    (void) readUInt16Fast();
+  }
+  if ((filePos + n) > dataRemaining)
+    throw errorMessage("end of record data");
+  dataRemaining = dataRemaining - (unsigned int) (filePos + n);
+  if (!(n + dataRemaining))
+    fileBuf = (unsigned char *) 0;
   else
-    data = data + tmpBuf.getPosition();
+    fileBuf = fileBuf + filePos;
+  fileBufSize = n;
+  filePos = 0;
   return true;
 }
 

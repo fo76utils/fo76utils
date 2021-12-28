@@ -28,16 +28,13 @@ class ESMFile
       return FileBuffer::checkType(type, s);
     }
   };
-  struct ESMField
+  class ESMField : public FileBuffer
   {
+   public:
     unsigned int  type;
-    unsigned int  size;
-    const unsigned char *data;
     unsigned int  dataRemaining;
-    ESMField()
-      : type(0), size(0), data((unsigned char *) 0), dataRemaining(0)
-    {
-    }
+    ESMField(ESMFile& f, const ESMRecord& r);
+    ESMField(ESMFile& f, unsigned int formID);
     bool next();
     inline bool operator==(const char *s) const
     {
@@ -86,8 +83,6 @@ class ESMFile
   {
     return findRecord(formID);
   }
-  bool getFirstField(ESMField& f, const ESMRecord& r);
-  bool getFirstField(ESMField& f, unsigned int formID);
   // encoding is (year - 2000) * 512 + (month * 32) + day for FO4 and newer
   unsigned short getRecordTimestamp(unsigned int formID) const;
   unsigned short getRecordUserID(unsigned int formID) const;

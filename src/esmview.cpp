@@ -175,26 +175,22 @@ unsigned int ESMView::findNextRef(unsigned int formID, const char *pattern)
     {
       continue;
     }
-    ESMField  f;
-    if (!getFirstField(f, r))
-      continue;
-    do
+    ESMField  f(*this, r);
+    while (f.next())
     {
       if (f.type == fieldType || fieldType == 0x2A000000)       // "*"
       {
-        FileBuffer  buf(f.data, f.size);
-        if (f.type == 0x4F4C564C && f.size >= 8)                // "LVLO"
-          (void) buf.readUInt32Fast();
-        while ((buf.getPosition() + 4) <= buf.size())
+        if (f.type == 0x4F4C564C && f.size() >= 8)              // "LVLO"
+          (void) f.readUInt32Fast();
+        while ((f.getPosition() + 4) <= f.size())
         {
-          if (buf.readUInt32Fast() == n)
+          if (f.readUInt32Fast() == n)
             return formID;
           if (f.type != 0x4144574B && f.type != 0x5051434D) // "KWDA", "MCQP"
             break;
         }
       }
     }
-    while (f.next());
   }
   return formID;
 }
@@ -344,35 +340,31 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
   }
 
   std::vector< Field >  fields;
-  ESMField  f;
-  if (getFirstField(f, r))
+  ESMField  f(*this, r);
+  while (f.next())
   {
-    do
+    Field   tmpField;
+    tmpField.type = f.type;
+    convertField(tmpField.data, r, f);
+    if (tmpField.data.empty() && f.size() > 0 && !noUnknownFields)
     {
-      Field   tmpField;
-      tmpField.type = f.type;
-      convertField(tmpField.data, r, f);
-      if (tmpField.data.empty() && f.size > 0 && !noUnknownFields)
+      char    tmpBuf[32];
+      std::sprintf(tmpBuf, "\t[%5u]", (unsigned int) f.size());
+      tmpField.data = tmpBuf;
+      for (size_t i = 0; i < f.size(); i++)
       {
-        char    tmpBuf[32];
-        std::sprintf(tmpBuf, "\t[%5u]", (unsigned int) f.size);
-        tmpField.data = tmpBuf;
-        for (size_t i = 0; i < f.size; i++)
+        if (i >= 17)
         {
-          if (i >= 17)
-          {
-            tmpField.data += " ...";
-            break;
-          }
-          std::sprintf(tmpBuf, (!(i & 3) ? "  %02X" : " %02X"),
-                       (unsigned int) f.data[i]);
-          tmpField.data += tmpBuf;
+          tmpField.data += " ...";
+          break;
         }
+        std::sprintf(tmpBuf, (!(i & 3) ? "  %02X" : " %02X"),
+                     (unsigned int) f.getDataPtr()[i]);
+        tmpField.data += tmpBuf;
       }
-      if (!tmpField.data.empty())
-        fields.push_back(tmpField);
     }
-    while (f.next());
+    if (!tmpField.data.empty())
+      fields.push_back(tmpField);
   }
   if (fields.size() < 1)
     return;

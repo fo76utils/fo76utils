@@ -60,8 +60,8 @@ void dumpLandscape(ESMFile& esmFile, unsigned int formID, unsigned int fldMask)
       return;
     r = &(esmFile.getRecord(parent));
   }
-  ESMFile::ESMField f;
-  if (!esmFile.getFirstField(f, *r))
+  ESMFile::ESMField f(esmFile, *r);
+  if (!f.next())
     return;
   int     cellX = 0;
   int     cellY = 0;
@@ -71,13 +71,13 @@ void dumpLandscape(ESMFile& esmFile, unsigned int formID, unsigned int fldMask)
       if (!f.next())
         return;
     }
-    FileBuffer  tmp(f.data, f.size);
-    cellX = tmp.readInt32();
-    cellY = tmp.readInt32();
+    cellX = f.readInt32();
+    cellY = f.readInt32();
   }
   if (cellX < -32768 || cellX > 32767 || cellY < -32768 || cellY > 32767)
     return;
-  if (!esmFile.getFirstField(f, *landRecord))
+  ESMFile::ESMField f2(esmFile, *landRecord);
+  if (!f2.next())
     return;
   unsigned int  key =
       ((unsigned int) (cellY + 32768) << 16) | (unsigned int) (cellX + 32768);
@@ -91,58 +91,55 @@ void dumpLandscape(ESMFile& esmFile, unsigned int formID, unsigned int fldMask)
   unsigned char textureLayer = 0;
   do
   {
-    if (f == "VHGT" && (fldMask & 1) != 0 && f.size >= 1093)
+    if (f2 == "VHGT" && (fldMask & 1) != 0 && f2.size() >= 1093)
     {
       cell.heightMap.resize(1024, 0.0f);
-      FileBuffer  tmp(f.data, f.size);
-      float   z = tmp.readFloat() * 8.0f;
+      float   z = f2.readFloat() * 8.0f;
       for (int y = 0; y < 32; y++)
       {
-        z += float(int(tmp.readInt8()) << 3);
+        z += float(int(f2.readInt8()) << 3);
         cell.heightMap[y << 5] = z;
         zMin = (z < zMin ? z : zMin);
         zMax = (z > zMax ? z : zMax);
         float   z0 = z;
         for (int x = 1; x < 32; x++)
         {
-          z += float(int(tmp.readInt8()) << 3);
+          z += float(int(f2.readInt8()) << 3);
           cell.heightMap[(y << 5) | x] = z;
           zMin = (z < zMin ? z : zMin);
           zMax = (z > zMax ? z : zMax);
         }
         z = z0;
-        (void) tmp.readUInt8();
+        (void) f2.readUInt8();
       }
     }
-    else if (f == "VNML" && (fldMask & 2) != 0 && f.size >= 3267)
+    else if (f2 == "VNML" && (fldMask & 2) != 0 && f2.size() >= 3267)
     {
       cell.vertexNormals.resize(3072);
-      FileBuffer  tmp(f.data, f.size);
       for (int y = 0; y < 32; y++)
       {
         for (int x = 0; x < 96; x++)
-          cell.vertexNormals[y * 96 + x] = tmp.readUInt8();
-        (void) tmp.readUInt8();
-        (void) tmp.readUInt8();
-        (void) tmp.readUInt8();
+          cell.vertexNormals[y * 96 + x] = f2.readUInt8();
+        (void) f2.readUInt8();
+        (void) f2.readUInt8();
+        (void) f2.readUInt8();
       }
     }
-    else if (f == "VCLR" && (fldMask & 4) != 0 && f.size >= 3267)
+    else if (f2 == "VCLR" && (fldMask & 4) != 0 && f2.size() >= 3267)
     {
       cell.vertexColors.resize(3072);
-      FileBuffer  tmp(f.data, f.size);
       for (int y = 0; y < 32; y++)
       {
         for (int x = 0; x < 96; x++)
-          cell.vertexColors[y * 96 + x] = tmp.readUInt8();
-        (void) tmp.readUInt8();
-        (void) tmp.readUInt8();
-        (void) tmp.readUInt8();
+          cell.vertexColors[y * 96 + x] = f2.readUInt8();
+        (void) f2.readUInt8();
+        (void) f2.readUInt8();
+        (void) f2.readUInt8();
       }
     }
-    else if ((fldMask & 8) != 0 && f.size >= 8)
+    else if ((fldMask & 8) != 0 && f2.size() >= 8)
     {
-      if (f == "BTXT" || f == "ATXT")
+      if (f2 == "BTXT" || f2 == "ATXT")
       {
         if (cell.vertexTextures.size() < 0x4800)
         {
@@ -153,12 +150,11 @@ void dumpLandscape(ESMFile& esmFile, unsigned int formID, unsigned int fldMask)
             cell.vertexTextures[i + 1] = 0xFF;
           }
         }
-        FileBuffer  tmp(f.data, f.size);
-        textureID = findTextureID(tmp.readUInt32());
-        textureQuadrant = (unsigned char) (tmp.readUInt16() & 3);
+        textureID = findTextureID(f2.readUInt32());
+        textureQuadrant = (unsigned char) (f2.readUInt16() & 3);
         textureLayer = 0;
-        if (f == "ATXT")
-          textureLayer = (unsigned char) ((tmp.readUInt16() & 7) + 1);
+        if (f2 == "ATXT")
+          textureLayer = (unsigned char) ((f2.readUInt16() & 7) + 1);
         int     offs =
             int(((textureQuadrant & 2) << 4) | (textureQuadrant & 1)) * 0x0120
             + (textureLayer << 1);
@@ -168,13 +164,12 @@ void dumpLandscape(ESMFile& esmFile, unsigned int formID, unsigned int fldMask)
             cell.vertexTextures[((y << 5) | x) * 18 + offs] = textureID;
         }
       }
-      else if (f == "VTXT" && textureLayer >= 1 && textureLayer <= 8)
+      else if (f2 == "VTXT" && textureLayer >= 1 && textureLayer <= 8)
       {
-        FileBuffer  tmp(f.data, f.size);
-        for (size_t i = 0; (i + 8) <= f.size; i = i + 8)
+        for (size_t i = 0; (i + 8) <= f2.size(); i = i + 8)
         {
-          unsigned int  p = tmp.readUInt32() & 0xFFFF;
-          float   a = tmp.readFloat();
+          unsigned int  p = f2.readUInt32() & 0xFFFF;
+          float   a = f2.readFloat();
           int     x = int(p % 17U);
           int     y = int((p / 17U) % 17U);
           if (x >= 16 || y >= 16)
@@ -188,7 +183,7 @@ void dumpLandscape(ESMFile& esmFile, unsigned int formID, unsigned int fldMask)
       }
     }
   }
-  while (f.next());
+  while (f2.next());
 }
 
 void findLandscape(ESMFile& esmFile, unsigned int formID, unsigned int fldMask)
@@ -203,19 +198,14 @@ void findLandscape(ESMFile& esmFile, unsigned int formID, unsigned int fldMask)
     }
     else if (r == "WRLD" && r.formID == worldFormID)
     {
-      ESMFile::ESMField f;
-      if (esmFile.getFirstField(f, r))
+      ESMFile::ESMField f(esmFile, r);
+      while (f.next())
       {
-        do
+        if (f == "DNAM" && f.size() >= 8)
         {
-          if (f == "DNAM" && f.size >= 8)
-          {
-            FileBuffer  tmp(f.data, f.size);
-            (void) tmp.readFloat();
-            waterLevel = tmp.readFloat();
-          }
+          (void) f.readFloat();
+          waterLevel = f.readFloat();
         }
-        while (f.next());
       }
     }
     else if (r == "LAND")
@@ -238,41 +228,37 @@ static bool printLTEXInfo(ESMFile& esmFile, unsigned int formID)
     {
       std::string   edid;
       unsigned int  txstFormID = 0U;
-      ESMFile::ESMField f;
-      if (esmFile.getFirstField(f, r))
+      ESMFile::ESMField f(esmFile, r);
+      while (f.next())
       {
-        do
+        if (f == "EDID" && edid.empty())
         {
-          if (f == "EDID" && edid.empty())
+          for (size_t i = 0; i < f.size(); i++)
           {
-            for (size_t i = 0; i < f.size; i++)
-            {
-              if (f.data[i] == '\0')
-                break;
-              if (f.data[i] >= 0x20 && f.data[i] < 0x7F)
-                edid += char(f.data[i]);
-            }
-          }
-          else if (f == "TNAM" && f.size == 4)
-          {
-            FileBuffer  buf(f.data, f.size);
-            txstFormID = buf.readUInt32();
+            if (f.getDataPtr()[i] == '\0')
+              break;
+            if (f.getDataPtr()[i] >= 0x20 && f.getDataPtr()[i] < 0x7F)
+              edid += char(f.getDataPtr()[i]);
           }
         }
-        while (f.next());
+        else if (f == "TNAM" && f.size() == 4)
+        {
+          txstFormID = f.readUInt32();
+        }
       }
       if (!edid.empty())
         std::printf("\t%s", edid.c_str());
-      if (txstFormID && esmFile.getFirstField(f, txstFormID))
+      if (txstFormID)
       {
-        do
+        ESMFile::ESMField f2(esmFile, txstFormID);
+        while (f2.next())
         {
-          if ((f == "TX00" || f == "MNAM") && f.size > 0)
+          if ((f2 == "TX00" || f2 == "MNAM") && f2.size() > 0)
           {
             std::fputc('\t', stdout);
-            for (size_t i = 0; i < f.size; i++)
+            for (size_t i = 0; i < f2.size(); i++)
             {
-              unsigned char c = f.data[i];
+              unsigned char c = f2.getDataPtr()[i];
               if (c == '\0')
                 break;
               if (c < 0x20)
@@ -287,7 +273,6 @@ static bool printLTEXInfo(ESMFile& esmFile, unsigned int formID)
             break;
           }
         }
-        while (f.next());
       }
     }
   }

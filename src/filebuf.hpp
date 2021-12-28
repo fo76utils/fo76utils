@@ -50,6 +50,8 @@ class FileBuffer
   {
     return fileBuf;
   }
+  void setBuffer(const unsigned char *fileData, size_t fileSize);
+  FileBuffer();
   FileBuffer(const unsigned char *fileData, size_t fileSize);
   FileBuffer(const char *fileName);
   virtual ~FileBuffer();

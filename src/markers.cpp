@@ -394,31 +394,32 @@ const ESMFile::ESMRecord * MapImage::getParentCell(unsigned int formID) const
 
 bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
 {
-  ESMField  f;
   const ESMRecord *p = getRecordPtr(formID);
-  if (!p || !(*p == "REFR" || *p == "ACHR") || !getFirstField(f, *p))
+  if (!p || !(*p == "REFR" || *p == "ACHR"))
+    return false;
+  ESMField  f(*this, *p);
+  if (!f.next())
     return false;
   r.formID = formID;
   do
   {
-    if (f == "NAME" && f.size >= 4)
+    if (f == "NAME" && f.size() >= 4)
     {
-      r.name = FileBuffer(f.data, f.size).readUInt32Fast();
+      r.name = f.readUInt32Fast();
     }
-    else if (f == "DATA" && f.size >= 12)
+    else if (f == "DATA" && f.size() >= 12)
     {
-      FileBuffer  tmpBuf(f.data, f.size);
-      r.x = tmpBuf.readFloat();
-      r.y = tmpBuf.readFloat();
-      r.z = tmpBuf.readFloat();
+      r.x = f.readFloat();
+      r.y = f.readFloat();
+      r.z = f.readFloat();
     }
-    else if (f == "XTEL" && f.size >= 4)
+    else if (f == "XTEL" && f.size() >= 4)
     {
-      r.xtel = FileBuffer(f.data, f.size).readUInt32Fast();
+      r.xtel = f.readUInt32Fast();
     }
-    else if (f == "TNAM" && f.size >= 2)
+    else if (f == "TNAM" && f.size() >= 2)
     {
-      r.tnam = FileBuffer(f.data, f.size).readUInt16Fast();
+      r.tnam = f.readUInt16Fast();
     }
   }
   while (f.next());
@@ -438,19 +439,19 @@ bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
   if (r.xtel)
   {
     p = getRecordPtr(r.name);
-    if (p && *p == "DOOR" && getFirstField(f, *p))
+    if (p && *p == "DOOR")
     {
       r.isDoor = true;
-      do
+      ESMField  f2(*this, *p);
+      while (f2.next())
       {
-        if (f == "FNAM" && f.size >= 1)
+        if (f2 == "FNAM" && f2.size() >= 1)
         {
           // ignore doors with the minimal use flag
-          r.isDoor = !(f.data[0] & 0x08);
+          r.isDoor = !(f2.getDataPtr()[0] & 0x08);
           break;
         }
       }
-      while (f.next());
     }
   }
   return true;
@@ -543,7 +544,6 @@ void MapImage::findMarkers(unsigned int worldFormID)
 {
   std::set< REFRRecord >  objectsFound;
   const ESMRecord *r = getRecordPtr(0U);
-  ESMField  f;
   while (r)
   {
     bool    searchChildRecords = bool(r->children);
@@ -555,25 +555,25 @@ void MapImage::findMarkers(unsigned int worldFormID)
         searchChildRecords = false;
       }
     }
-    else if ((*r == "REFR" || *r == "ACHR") && getFirstField(f, *r))
+    else if (*r == "REFR" || *r == "ACHR")
     {
       bool    matchFlag = (formIDs.find(r->formID) != formIDs.end());
-      do
+      ESMField  f(*this, *r);
+      while (f.next())
       {
-        if (f == "NAME" && f.size >= 4)
+        if (f == "NAME" && f.size() >= 4)
         {
-          unsigned int  n = FileBuffer(f.data, f.size).readUInt32Fast();
+          unsigned int  n = f.readUInt32Fast();
           if (formIDs.find(n) != formIDs.end())
             matchFlag = true;
         }
-        else if (BRANCH_EXPECT(f == "XTEL", false) && f.size >= 4)
+        else if (BRANCH_EXPECT(f == "XTEL", false) && f.size() >= 4)
         {
           REFRRecord  refr;
           if (getREFRRecord(refr, r->formID))
             setInteriorCellOffset(refr);
         }
       }
-      while (f.next());
       if (matchFlag)
       {
         REFRRecord  refr;

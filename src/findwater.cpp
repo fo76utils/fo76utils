@@ -149,7 +149,6 @@ void findWater(ESMFile& esmFile, unsigned int formID)
     }
     if (r == "REFR")
     {
-      ESMFile::ESMField f;
       unsigned int  n = 0;
       float   x = 0.0f;
       float   y = 0.0f;
@@ -165,57 +164,47 @@ void findWater(ESMFile& esmFile, unsigned int formID)
       float   rz = 0.0f;
       float   scale = 1.0f;
       bool    isWater = false;
-      if (esmFile.getFirstField(f, r))
+      ESMFile::ESMField f(esmFile, r);
+      while (f.next())
       {
-        do
+        if (f == "NAME" && f.size() >= 4)
         {
-          if (f == "NAME" && f.size >= 4)
-          {
-            FileBuffer  buf(f.data, f.size);
-            n = buf.readUInt32();
-          }
-          else if (f == "DATA" && f.size >= 24)
-          {
-            FileBuffer  buf(f.data, f.size);
-            x = buf.readFloat();
-            y = buf.readFloat();
-            z = buf.readFloat();
-            rx = buf.readFloat();
-            ry = buf.readFloat();
-            rz = buf.readFloat();
-          }
-          else if (f == "XSCL" && f.size == 4)
-          {
-            FileBuffer  buf(f.data, f.size);
-            scale = buf.readFloat();
-          }
+          n = f.readUInt32();
         }
-        while (f.next());
+        else if (f == "DATA" && f.size() >= 24)
+        {
+          x = f.readFloat();
+          y = f.readFloat();
+          z = f.readFloat();
+          rx = f.readFloat();
+          ry = f.readFloat();
+          rz = f.readFloat();
+        }
+        else if (f == "XSCL" && f.size() == 4)
+        {
+          scale = f.readFloat();
+        }
       }
       const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(n);
       if (r2 && (*r2 == "ACTI" || *r2 == "PWAT"))
       {
         isWater = (*r2 == "PWAT");
-        if (esmFile.getFirstField(f, *r2))
+        ESMFile::ESMField f2(esmFile, *r2);
+        while (f2.next())
         {
-          do
+          if (f2 == "WNAM" && f2.size() >= 4)
           {
-            if (f == "WNAM" && f.size >= 4)
-            {
-              isWater = true;
-            }
-            else if (f == "OBND" && f.size >= 12)
-            {
-              FileBuffer  buf(f.data, f.size);
-              x1 = buf.readInt16();
-              y1 = buf.readInt16();
-              z1 = buf.readInt16();
-              x2 = buf.readInt16();
-              y2 = buf.readInt16();
-              z2 = buf.readInt16();
-            }
+            isWater = true;
           }
-          while (f.next());
+          else if (f2 == "OBND" && f2.size() >= 12)
+          {
+            x1 = f2.readInt16();
+            y1 = f2.readInt16();
+            z1 = f2.readInt16();
+            x2 = f2.readInt16();
+            y2 = f2.readInt16();
+            z2 = f2.readInt16();
+          }
         }
       }
       if (isWater)
@@ -231,33 +220,26 @@ void findWater(ESMFile& esmFile, unsigned int formID)
     }
     if (r == "CELL")
     {
-      ESMFile::ESMField f;
       unsigned int  flags = 0;
       float   x = 0.0f;
       float   y = 0.0f;
       float   z = 0.0f;
-      if (esmFile.getFirstField(f, r))
+      ESMFile::ESMField f(esmFile, r);
+      while (f.next())
       {
-        do
+        if (f == "DATA" && f.size() >= 1)
         {
-          if (f == "DATA" && f.size >= 1)
-          {
-            FileBuffer  buf(f.data, f.size);
-            flags = buf.readUInt8();
-          }
-          else if (f == "XCLC" && f.size >= 8)
-          {
-            FileBuffer  buf(f.data, f.size);
-            x = float(buf.readInt32()) * 4096.0f;
-            y = float(buf.readInt32()) * 4096.0f;
-          }
-          else if (f == "XCLW" && f.size >= 4)
-          {
-            FileBuffer  buf(f.data, f.size);
-            z = buf.readFloat();
-          }
+          flags = f.readUInt8();
         }
-        while (f.next());
+        else if (f == "XCLC" && f.size() >= 8)
+        {
+          x = float(f.readInt32()) * 4096.0f;
+          y = float(f.readInt32()) * 4096.0f;
+        }
+        else if (f == "XCLW" && f.size() >= 4)
+        {
+          z = f.readFloat();
+        }
       }
       if (((flags & 3) == 2) && z >= -1000000.0f && z <= 1000000.0f)
       {
