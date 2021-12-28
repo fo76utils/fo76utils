@@ -41,9 +41,30 @@ class ESMFile
       return FileBuffer::checkType(type, s);
     }
   };
+  struct ESMVCInfo
+  {
+    unsigned int  year;
+    unsigned int  month;
+    unsigned int  day;
+    unsigned int  userID1;
+    unsigned int  userID2;
+    unsigned int  formVersion;
+    unsigned int  vcInfo2;
+  };
  protected:
   unsigned int  recordCnt;
-  unsigned int  groupOffs;
+  unsigned char recordHdrSize;  // 20 for Oblivion, 24 for Fallout 3 and newer
+  // 0x00: Oblivion
+  // 0x02: Fallout 3/New Vegas
+  // 0x0F: Fallout 3/New Vegas DLC
+  // 0x28: Skyrim (2011)
+  // 0x2B: Skyrim DLC
+  // 0x2C: Skyrim Special Edition (2016)
+  // 0x83: Fallout 4
+  // 0xC2: Fallout 76 (Wastelanders)
+  // 0xC3: Fallout 76 (Steel Dawn and newer)
+  unsigned char esmVersion;
+  unsigned short  esmFlags;     // 0x80: localized strings
   unsigned int  zlibBufIndex;
   unsigned int  zlibBufRecord;
   std::vector< ESMRecord >    recordBuf;
@@ -55,7 +76,7 @@ class ESMFile
   {
     size_t  offs = recordBuf.size();
     if (n & 0x80000000U)
-      offs = (n & 0x7FFFFFFFU) + groupOffs;
+      offs = (n & 0x7FFFFFFFU) + recordCnt;
     else if (n < formIDMap.size())
       offs = formIDMap[n];
     if (offs >= recordBuf.size())
@@ -86,6 +107,23 @@ class ESMFile
   // encoding is (year - 2000) * 512 + (month * 32) + day for FO4 and newer
   unsigned short getRecordTimestamp(unsigned int formID) const;
   unsigned short getRecordUserID(unsigned int formID) const;
+  inline unsigned int getESMVersion() const
+  {
+    return esmVersion;
+  }
+  inline unsigned int getESMFlags() const
+  {
+    return esmFlags;
+  }
+  inline unsigned int getRecordHeaderSize() const
+  {
+    return recordHdrSize;
+  }
+  inline bool getIsLocalized() const
+  {
+    return bool(esmFlags & 0x80);
+  }
+  void getVersionControlInfo(ESMVCInfo& f, const ESMRecord& r) const;
 };
 
 #endif

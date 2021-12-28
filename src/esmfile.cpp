@@ -13,14 +13,15 @@ const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
   }
   if (compressedSize < 10)
     throw errorMessage("invalid compressed record size");
-  FileBuffer  buf(r.fileData, compressedSize + 24);
+  unsigned int  offs = recordHdrSize;
+  FileBuffer  buf(r.fileData, compressedSize + offs);
   compressedSize = compressedSize - 4;
-  buf.setPosition(24);
+  buf.setPosition(offs);
   unsigned int  uncompressedSize = buf.readUInt32();
   zlibBufRecord = 0xFFFFFFFFU;
-  zlibBuf[zlibBufIndex].resize(size_t(24) + uncompressedSize);
+  zlibBuf[zlibBufIndex].resize(size_t(offs) + uncompressedSize);
   unsigned char *p = &(zlibBuf[zlibBufIndex].front());
-  std::memcpy(p, buf.getDataPtr(), 24);
+  std::memcpy(p, buf.getDataPtr(), offs);
   p[4] = (unsigned char) (uncompressedSize & 0xFF);
   p[5] = (unsigned char) ((uncompressedSize >> 8) & 0xFF);
   p[6] = (unsigned char) ((uncompressedSize >> 16) & 0xFF);
@@ -28,8 +29,8 @@ const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
   p[10] = p[10] & 0xFB;         // clear compressed record flag
   unsigned int  recordSize =
       (unsigned int) zlibDecompressor.decompressData(
-                         p + 24, uncompressedSize,
-                         buf.getDataPtr() + 28, compressedSize);
+                         p + offs, uncompressedSize,
+                         buf.getDataPtr() + (offs + 4), compressedSize);
   if (recordSize != uncompressedSize)
     throw errorMessage("invalid compressed record size");
   if ((zlibBufIndex + 1) < zlibBuf.size())
@@ -49,7 +50,7 @@ unsigned int ESMFile::loadRecords(size_t& groupCnt, FileBuffer& buf,
   unsigned int  r = 0U;
   while (buf.getPosition() < endPos)
   {
-    if ((buf.getPosition() + 24) > endPos)
+    if ((buf.getPosition() + recordHdrSize) > endPos)
       throw errorMessage("end of group in ESM input file");
     const unsigned char *p = buf.getDataPtr() + buf.getPosition();
     unsigned int  recordType = buf.readUInt32Fast();
@@ -57,8 +58,8 @@ unsigned int ESMFile::loadRecords(size_t& groupCnt, FileBuffer& buf,
     unsigned int  flags = buf.readUInt32Fast();
     unsigned int  formID = buf.readUInt32Fast();
     unsigned int  n = formID;
-    (void) buf.readUInt32Fast();        // timestamp, version control info
-    (void) buf.readUInt32Fast();        // record version, unknown
+    // skip version control info
+    buf.setPosition(buf.getPosition() + (recordHdrSize - 16));
     if (FileBuffer::checkType(recordType, "GRUP"))
     {
       n = (unsigned int) groupCnt | 0x80000000U;
@@ -70,7 +71,8 @@ unsigned int ESMFile::loadRecords(size_t& groupCnt, FileBuffer& buf,
     if (FileBuffer::checkType(recordType, "GRUP"))
     {
       esmRecord->children = loadRecords(groupCnt, buf,
-                                        buf.getPosition() + recordSize - 24, n);
+                                        buf.getPosition() + recordSize
+                                        - recordHdrSize, n);
     }
     else if (recordSize > 0)
     {
@@ -100,7 +102,9 @@ unsigned int ESMFile::loadRecords(size_t& groupCnt, FileBuffer& buf,
 
 ESMFile::ESMFile(const char *fileNames, bool enableZLibCache)
   : recordCnt(0),
-    groupOffs(0),
+    recordHdrSize(0),
+    esmVersion(0),
+    esmFlags(0),
     zlibBufIndex(0),
     zlibBufRecord(0xFFFFFFFFU)
 {
@@ -135,9 +139,27 @@ ESMFile::ESMFile(const char *fileNames, bool enableZLibCache)
       esmFiles[i] = new FileBuffer(fName);
       if (!FileBuffer::checkType(esmFiles[i]->readUInt32(), "TES4"))
         throw errorMessage("input file %s is not in ESM format", fName);
-      (void) esmFiles[i]->readUInt64();
+      (void) esmFiles[i]->readUInt32();
+      esmFlags = esmFiles[i]->readUInt16();
+      (void) esmFiles[i]->readUInt16();
       if (esmFiles[i]->readUInt32() != 0U)
         throw errorMessage("%s: invalid ESM file header", fName);
+      (void) esmFiles[i]->readUInt32();
+      unsigned int  tmp = esmFiles[i]->readUInt16();
+      if (tmp < 0x0100)
+      {
+        recordHdrSize = 24;
+        esmVersion = (unsigned char) tmp;
+      }
+      else if (tmp == 0x4548)           // "HE"
+      {
+        recordHdrSize = 20;
+        esmVersion = 0x00;
+      }
+      else
+      {
+        throw errorMessage("%s: invalid ESM file header", fName);
+      }
     }
 
     size_t  compressedCnt = 0;
@@ -149,18 +171,18 @@ ESMFile::ESMFile(const char *fileNames, bool enableZLibCache)
       buf.setPosition(0);
       while (buf.getPosition() < buf.size())
       {
-        if ((buf.getPosition() + 24) > buf.size())
+        if ((buf.getPosition() + recordHdrSize) > buf.size())
           throw errorMessage("end of input file %s", tmpFileNames[i].c_str());
         unsigned int  recordType = buf.readUInt32Fast();
         unsigned int  recordSize = buf.readUInt32Fast();
         unsigned int  flags = buf.readUInt32Fast();
         unsigned int  formID = buf.readUInt32Fast();
-        (void) buf.readUInt32Fast();    // timestamp, version control info
-        (void) buf.readUInt32Fast();    // record version, unknown
+        // skip version control info
+        buf.setPosition(buf.getPosition() + (recordHdrSize - 16));
         if (FileBuffer::checkType(recordType, "GRUP"))
         {
-          if (recordSize < 24 ||
-              (buf.getPosition() + (recordSize - 24)) > buf.size())
+          if (recordSize < recordHdrSize ||
+              (buf.getPosition() + (recordSize - recordHdrSize)) > buf.size())
           {
             throw errorMessage("%s: invalid group size",
                                tmpFileNames[i].c_str());
@@ -185,7 +207,6 @@ ESMFile::ESMFile(const char *fileNames, bool enableZLibCache)
         }
       }
     }
-    groupOffs = recordCnt;
     recordBuf.resize(recordCnt + groupCnt);
     formIDMap.resize(maxFormID + 1U, (unsigned int) recordBuf.size());
     if (compressedCnt)
@@ -206,8 +227,8 @@ ESMFile::ESMFile(const char *fileNames, bool enableZLibCache)
         unsigned int  recordSize = buf.readUInt32Fast();
         (void) buf.readUInt32Fast();    // flags
         unsigned int  formID = buf.readUInt32Fast();
-        (void) buf.readUInt32Fast();    // timestamp, version control info
-        (void) buf.readUInt32Fast();    // record version, unknown
+        // skip version control info
+        buf.setPosition(buf.getPosition() + (recordHdrSize - 16));
         if (!FileBuffer::checkType(recordType, "GRUP") && formID <= maxFormID)
         {
           formIDMap[formID] = n;
@@ -271,7 +292,7 @@ ESMFile::ESMField::ESMField(ESMFile& f, const ESMRecord& r)
     fileBuf = f.uncompressRecord(*(f.findRecord(r.formID)));
   else
     fileBuf = r.fileData;
-  fileBufSize = 24;
+  fileBufSize = f.recordHdrSize;
   filePos = 4;
   dataRemaining = readUInt32Fast();
 }
@@ -290,7 +311,7 @@ ESMFile::ESMField::ESMField(ESMFile& f, unsigned int formID)
     fileBuf = f.uncompressRecord(*(f.findRecord(r->formID)));
   else
     fileBuf = r->fileData;
-  fileBufSize = 24;
+  fileBufSize = f.recordHdrSize;
   filePos = 4;
   dataRemaining = readUInt32Fast();
 }
@@ -342,5 +363,46 @@ unsigned short ESMFile::getRecordUserID(unsigned int formID) const
     throw errorMessage("invalid form ID");
   const unsigned char *p = r->fileData;
   return (((unsigned short) p[19] << 8) | p[18]);
+}
+
+void ESMFile::getVersionControlInfo(ESMVCInfo& f, const ESMRecord& r) const
+{
+  unsigned int  tmp = ((unsigned int) r.fileData[17] << 8) | r.fileData[16];
+  f.day = tmp & 0x1F;
+  if (esmVersion < 0x80)
+  {
+    // Oblivion, Fallout 3, New Vegas, Skyrim
+    f.month = (tmp >> 8) - 1;
+    f.year = 2003U + (f.month / 12U);
+    f.month = (f.month % 12U) + 1;
+    if (f.year == 2003 && esmVersion >= 0x28)
+      f.year = 2011;
+  }
+  else
+  {
+    // Fallout 4, 76
+    f.month = (tmp >> 5) & 0x0F;
+    f.year = 2000U + (tmp >> 9);
+  }
+  tmp = ((unsigned int) r.fileData[19] << 8) | r.fileData[18];
+  f.userID1 = tmp & 0xFF;
+  f.userID2 = tmp >> 8;
+  if (f.userID2 != 0 && esmVersion >= 0xC0 &&
+      (f.year > 2019 || (f.year == 2019 && f.month >= 6)))
+  {
+    // Fallout 76 uses 16-bit user IDs since mid-2019
+    f.userID1 = tmp;
+    f.userID2 = 0;
+  }
+  if (!esmVersion)
+  {
+    f.formVersion = 0;
+    f.vcInfo2 = 0;
+  }
+  else
+  {
+    f.formVersion = ((unsigned int) r.fileData[21] << 8) | r.fileData[20];
+    f.vcInfo2 = ((unsigned int) r.fileData[23] << 8) | r.fileData[22];
+  }
 }
 
