@@ -388,9 +388,12 @@ int main(int argc, char **argv)
       int     zMax = uint32ToSigned(hdrBuf[7]);
       int     cellSize = int(hdrBuf[9]);
       heightScale = (unsigned int) ((zMax - zMin) * cellSize + 256) >> 9;
-      waterLevel =
-          (unsigned int) roundFloat(float(uint32ToSigned(hdrBuf[8]) - zMin)
-                                    * 262140.0f / float(zMax - zMin));
+      int     wLvl = uint32ToSigned(hdrBuf[8]);
+      if (wLvl > zMin)
+      {
+        waterLevel = (unsigned int) roundFloat(float(wLvl - zMin) * 262140.0f
+                                               / float(zMax - zMin));
+      }
     }
     hmapBuf = hmapFile.getDataPtr();
 
