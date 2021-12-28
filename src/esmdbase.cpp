@@ -444,7 +444,7 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
     case 0x54585442:            // "BTXT"
     case 0x54585449:            // "ITXT"
       if (r == "TERM" && !tsvFormat)
-        dataType = 8;
+        dataType = (!(esmFlags & 0x80) ? 9 : 8);
       break;
     case 0x45565243:            // "CRVE"
       dataType = 10;
@@ -469,7 +469,7 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
                 dataType = 5;
                 break;
               case 's':
-                dataType = 8;
+                dataType = (!(esmFlags & 0x80) ? 9 : 8);
                 break;
               case 'u':
                 dataType = 4;
@@ -491,7 +491,7 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
       break;
     case 0x43534544:            // "DESC"
     case 0x4C4C5546:            // "FULL"
-      dataType = 8;
+      dataType = (!(esmFlags & 0x80) ? 9 : 8);
       break;
     case 0x4D414E44:            // "DNAM"
       if (r == "KYWD" || r == "IDLE")
@@ -544,7 +544,8 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
         dataType = 10;
       break;
     case 0x314D414E:            // "NAM1"
-      dataType = ((r == "INFO" || r == "QUST") ? 8 : 6);
+      dataType =
+          ((r == "INFO" || r == "QUST") ? (!(esmFlags & 0x80) ? 9 : 8) : 6);
       break;
     case 0x324D414E:            // "NAM2"
       if (!tsvFormat && (r == "INFO" || r == "QUST"))
@@ -571,7 +572,8 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
         dataType = 10;
       break;
     case 0x4D414E52:            // "RNAM"
-      dataType = ((r == "INFO" || r == "TERM") ? 8 : 6);
+      dataType =
+          ((r == "INFO" || r == "TERM") ? (!(esmFlags & 0x80) ? 9 : 8) : 6);
       break;
     case 0x544C4354:            // "TCLT"
       if (!tsvFormat && r == "INFO")
