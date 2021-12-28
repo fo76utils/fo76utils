@@ -542,10 +542,12 @@ int main(int argc, char **argv)
           continue;
         size_t  fileOffs =
             size_t(r->fileData - esmFile.getRecordPtr(0U)->fileData);
-        std::printf("Timestamp:  0x%04X\tUser ID:  0x%04X\t"
+        ESMFile::ESMVCInfo  vcInfo;
+        esmFile.getVersionControlInfo(vcInfo, *r);
+        std::printf("Timestamp:  %04u-%02u-%02u\tUser ID:  0x%04X, 0x%02X\t"
                     "File pointer:  0x%08X\n\n",
-                    (unsigned int) esmFile.getRecordTimestamp(formID),
-                    (unsigned int) esmFile.getRecordUserID(formID),
+                    vcInfo.year, vcInfo.month, vcInfo.day,
+                    vcInfo.userID1, vcInfo.userID2,
                     (unsigned int) fileOffs & 0xFFFFFFFFU);
         if (r->children)
         {
