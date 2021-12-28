@@ -933,3 +933,135 @@ void ESMDump::dumpRecord(unsigned int formID, const ESMRecord *parentGroup)
   while (formID);
 }
 
+void ESMDump::dumpVersionInfo(unsigned int formID, const ESMRecord *parentGroup)
+{
+  do
+  {
+    const ESMRecord&  r = getRecord(formID);
+    unsigned int  recordType = r.type;
+    unsigned int  parentGroupID = 0U;
+    if (parentGroup)
+      parentGroupID = parentGroup->flags;
+    unsigned int  flags = r.flags;
+    if ((flags & flagsExcluded) || (flagsIncluded && !(flags & flagsIncluded)))
+    {
+      formID = r.next;
+      continue;
+    }
+    if (recordsIncluded.begin() != recordsIncluded.end())
+    {
+      if (recordsIncluded.find(parentGroupID) == recordsIncluded.end() &&
+          recordsIncluded.find(recordType) == recordsIncluded.end())
+      {
+        formID = r.next;
+        continue;
+      }
+    }
+    if (recordsExcluded.begin() != recordsExcluded.end())
+    {
+      if (recordsExcluded.find(parentGroupID) != recordsExcluded.end() ||
+          recordsExcluded.find(recordType) != recordsExcluded.end())
+      {
+        formID = r.next;
+        continue;
+      }
+    }
+
+    std::map< unsigned int, std::string >::const_iterator i;
+    std::string   edid;
+    std::string   edid2;
+    unsigned int  parentType = 0x4C4C554EU;     // "NULL"
+    if (r == "GRUP")
+    {
+      parentType = recordType;
+      recordType = r.flags;
+      if (r.formID)
+      {
+        recordType = r.formID & 0x0F;
+        if (recordType >= 0x0A)
+          recordType = recordType + 7;
+        recordType = (recordType << 24) + 0x30303030U;
+      }
+    }
+    else
+    {
+      if (parentGroup)
+        parentType = parentGroupID;
+      i = edidDB.find(formID);
+      if (i != edidDB.end())
+        edid = i->second;
+      if (r == "REFR")
+      {
+        unsigned int  refrName = 0U;
+        ESMField  f(*this, r);
+        while (f.next())
+        {
+          if (f == "NAME" && f.size() >= 4)
+            refrName = f.readUInt32Fast();
+        }
+        if (refrName)
+        {
+          const ESMRecord *r2 = getRecordPtr(refrName);
+          if (r2)
+          {
+            parentType = recordType;
+            recordType = r2->type;
+            i = edidDB.find(refrName);
+            if (i != edidDB.end())
+              edid2 = i->second;
+          }
+        }
+      }
+      const ESMRecord *r2 = &r;
+      while (edid.empty() && r2 && r2->parent != 0U)
+      {
+        r2 = getRecordPtr(r2->parent);
+        if (!(r2 && *r2 == "GRUP"))
+          break;
+        if (!(r2->formID == 1 || (r2->formID >= 6 && r2->formID <= 9)))
+          continue;
+        i = edidDB.find(r2->flags);
+        if (i != edidDB.end())
+          edid = i->second;
+      }
+    }
+
+    if (getRecordTimestamp(formID))
+    {
+      ESMVCInfo vcInfo;
+      getVersionControlInfo(vcInfo, r);
+      std::fprintf(outputFile, "%04u-%02u-%02u\t0x%04X\t",
+                   vcInfo.year, vcInfo.month, vcInfo.day, vcInfo.userID1);
+      printID(parentType);
+      std::fputc('\t', outputFile);
+      printID(recordType);
+      if (r == "GRUP" && r.formID)
+      {
+        if (r.formID == 1 || (r.formID >= 6 && r.formID <= 9))
+        {
+          i = edidDB.find(r.flags);
+          if (i != edidDB.end())
+            edid = i->second;
+        }
+        std::fprintf(outputFile, "\t0x%08X", r.flags);
+      }
+      else
+      {
+        std::fprintf(outputFile, "\t0x%08X", formID);
+      }
+      if (!edid2.empty())
+        std::fprintf(outputFile, "\t%s", edid2.c_str());
+      if (!edid.empty())
+        std::fprintf(outputFile, "\t%s", edid.c_str());
+      std::fputc('\n', outputFile);
+    }
+    if (r == "GRUP")
+    {
+      if (r.children)
+        dumpVersionInfo(r.children, (r.formID ? parentGroup : &r));
+    }
+    formID = r.next;
+  }
+  while (formID);
+}
+

@@ -68,6 +68,8 @@ class ESMDump : public ESMFile
   void loadStrings(const char *fileName, const char *stringsPrefix);
   void dumpRecord(unsigned int formID = 0U,
                   const ESMRecord *parentGroup = (ESMRecord *) 0);
+  void dumpVersionInfo(unsigned int formID = 0U,
+                       const ESMRecord *parentGroup = (ESMRecord *) 0);
   void printStats();
   void setStatsOnlyMode(bool isEnabled)
   {

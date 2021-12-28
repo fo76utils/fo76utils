@@ -21,6 +21,7 @@ static void printUsage()
   std::fprintf(stderr, "    -s      only print record and field stats\n");
   std::fprintf(stderr, "    -edid   print EDIDs of form ID fields\n");
   std::fprintf(stderr, "    -t      TSV format output\n");
+  std::fprintf(stderr, "    -u      print TSV format version control info\n");
   std::fprintf(stderr, "    -v      verbose mode (print REFR records)\n");
 }
 
@@ -50,6 +51,7 @@ int main(int argc, char **argv)
     bool    noOptionsFlag = false;
     bool    verboseMode = false;
     bool    printEDIDs = false;
+    bool    vcFormat = false;
     for (int i = 1; i < argc; i++)
     {
       if (!noOptionsFlag && argv[i][0] == '-')
@@ -115,6 +117,9 @@ int main(int argc, char **argv)
               continue;
             case 't':
               tsvFormat = true;
+              continue;
+            case 'u':
+              vcFormat = true;
               continue;
             case 'v':
               verboseMode = true;
@@ -185,21 +190,28 @@ int main(int argc, char **argv)
     {
       esmFile.excludeFieldType(*i);
     }
-    esmFile.setTSVFormat(tsvFormat);
-    esmFile.setStatsOnlyMode(statsOnly);
-    esmFile.setVerboseMode(verboseMode);
-    if (printEDIDs)
-      esmFile.findEDIDs();
-    if (fldDefFileName)
-      esmFile.loadFieldDefFile(fldDefFileName);
 
-    esmFile.dumpRecord();
-
-    if (!noStats)
+    if (vcFormat)
     {
-      if (!statsOnly)
-        std::fputc('\n', (outputFile ? outputFile : stdout));
-      esmFile.printStats();
+      esmFile.findEDIDs();
+      esmFile.dumpVersionInfo();
+    }
+    else
+    {
+      esmFile.setTSVFormat(tsvFormat);
+      esmFile.setStatsOnlyMode(statsOnly);
+      esmFile.setVerboseMode(verboseMode);
+      if (printEDIDs)
+        esmFile.findEDIDs();
+      if (fldDefFileName)
+        esmFile.loadFieldDefFile(fldDefFileName);
+      esmFile.dumpRecord();
+      if (!noStats)
+      {
+        if (!statsOnly)
+          std::fputc('\n', (outputFile ? outputFile : stdout));
+        esmFile.printStats();
+      }
     }
 
     if (outputFile)
