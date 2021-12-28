@@ -358,7 +358,10 @@ void ESMDump::convertField(std::string& s,
         printFloat(s, f);
         break;
       case 'l':
-        printLString(s, f);
+        if (!(esmFlags & 0x80))
+          printZString(s, f);
+        else
+          printLString(s, f);
         break;
       case 'z':
         printZString(s, f);
