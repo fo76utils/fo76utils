@@ -245,6 +245,10 @@ static bool printLTEXInfo(ESMFile& esmFile, unsigned int formID)
         {
           txstFormID = f.readUInt32();
         }
+        else if (f == "ICON" && f.size() > 1)
+        {
+          txstFormID = formID;
+        }
       }
       if (!edid.empty())
         std::printf("\t%s", edid.c_str());
@@ -253,7 +257,7 @@ static bool printLTEXInfo(ESMFile& esmFile, unsigned int formID)
         ESMFile::ESMField f2(esmFile, txstFormID);
         while (f2.next())
         {
-          if ((f2 == "TX00" || f2 == "MNAM") && f2.size() > 0)
+          if ((f2 == "TX00" || f2 == "MNAM" || f2 == "ICON") && f2.size() > 0)
           {
             std::fputc('\t', stdout);
             for (size_t i = 0; i < f2.size(); i++)
