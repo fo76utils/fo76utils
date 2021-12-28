@@ -313,6 +313,8 @@ void ESMDump::convertField(std::string& s,
     size_t  sizeRequired = 1;
     if (c == 'h' || c == 's')
       sizeRequired = 2;
+    else if (c == 'l' && !(esmFlags & 0x80))
+      c = 'z';
     else if ((unsigned char) c > 'c' && c != 'z' && c != 'n')
       sizeRequired = 4;
     if ((f.getPosition() + sizeRequired) > f.size())
@@ -358,10 +360,7 @@ void ESMDump::convertField(std::string& s,
         printFloat(s, f);
         break;
       case 'l':
-        if (!(esmFlags & 0x80))
-          printZString(s, f);
-        else
-          printLString(s, f);
+        printLString(s, f);
         break;
       case 'z':
         printZString(s, f);
