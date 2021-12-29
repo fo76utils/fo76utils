@@ -372,8 +372,8 @@ void ESMFile::getVersionControlInfo(ESMVCInfo& f, const ESMRecord& r) const
   if (esmVersion < 0x80)
   {
     // Oblivion, Fallout 3, New Vegas, Skyrim
-    f.month = (tmp >> 8) - 1;
-    f.year = 2003U + (f.month / 12U);
+    f.month = (tmp >> 8) + 11;
+    f.year = 2002U + (f.month / 12U);
     f.month = (f.month % 12U) + 1;
     if (f.year == 2003 && esmVersion >= 0x28)
       f.year = 2011;
@@ -384,14 +384,12 @@ void ESMFile::getVersionControlInfo(ESMVCInfo& f, const ESMRecord& r) const
     f.month = (tmp >> 5) & 0x0F;
     f.year = 2000U + (tmp >> 9);
   }
-  tmp = ((unsigned int) r.fileData[19] << 8) | r.fileData[18];
-  f.userID1 = tmp & 0xFF;
-  f.userID2 = tmp >> 8;
-  if (f.userID2 != 0 && esmVersion >= 0xC0 &&
-      (f.year > 2019 || (f.year == 2019 && f.month >= 6)))
+  f.userID1 = r.fileData[18];
+  f.userID2 = r.fileData[19];
+  if (f.userID2 != 0 && (esmVersion >= 0xC0 && tmp >= 0x26C0))  // June 2019
   {
     // Fallout 76 uses 16-bit user IDs since mid-2019
-    f.userID1 = tmp;
+    f.userID1 = f.userID1 | (f.userID2 << 8);
     f.userID2 = 0;
   }
   if (!esmVersion)
