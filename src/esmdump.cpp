@@ -22,7 +22,7 @@ static void printUsage()
   std::fprintf(stderr, "    -edid   print EDIDs of form ID fields\n");
   std::fprintf(stderr, "    -t      TSV format output\n");
   std::fprintf(stderr, "    -u      print TSV format version control info\n");
-  std::fprintf(stderr, "    -v      verbose mode (print REFR records)\n");
+  std::fprintf(stderr, "    -v      verbose mode\n");
 }
 
 int main(int argc, char **argv)
@@ -191,18 +191,17 @@ int main(int argc, char **argv)
       esmFile.excludeFieldType(*i);
     }
 
+    esmFile.setVerboseMode(verboseMode);
+    if (printEDIDs)
+      esmFile.findEDIDs();
     if (vcFormat)
     {
-      esmFile.findEDIDs();
       esmFile.dumpVersionInfo();
     }
     else
     {
       esmFile.setTSVFormat(tsvFormat);
       esmFile.setStatsOnlyMode(statsOnly);
-      esmFile.setVerboseMode(verboseMode);
-      if (printEDIDs)
-        esmFile.findEDIDs();
       if (fldDefFileName)
         esmFile.loadFieldDefFile(fldDefFileName);
       esmFile.dumpRecord();

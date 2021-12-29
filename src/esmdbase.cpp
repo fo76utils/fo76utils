@@ -969,7 +969,8 @@ void ESMDump::dumpVersionInfo(unsigned int formID, const ESMRecord *parentGroup)
 
     std::map< unsigned int, std::string >::const_iterator i;
     std::string   edid;
-    std::string   edid2;
+    std::string   refrNameEDID;
+    std::string   parentEDID;
     unsigned int  parentType = 0x4C4C554EU;     // "NULL"
     if (r == "GRUP")
     {
@@ -990,7 +991,7 @@ void ESMDump::dumpVersionInfo(unsigned int formID, const ESMRecord *parentGroup)
       i = edidDB.find(formID);
       if (i != edidDB.end())
         edid = i->second;
-      if (r == "REFR")
+      if (r == "REFR" || r == "ACHR")
       {
         unsigned int  refrName = 0U;
         ESMField  f(*this, r);
@@ -1008,22 +1009,22 @@ void ESMDump::dumpVersionInfo(unsigned int formID, const ESMRecord *parentGroup)
             recordType = r2->type;
             i = edidDB.find(refrName);
             if (i != edidDB.end())
-              edid2 = i->second;
+              refrNameEDID = i->second;
           }
         }
       }
-      const ESMRecord *r2 = &r;
-      while (edid.empty() && r2 && r2->parent != 0U)
-      {
-        r2 = getRecordPtr(r2->parent);
-        if (!(r2 && *r2 == "GRUP"))
-          break;
-        if (!(r2->formID == 1 || (r2->formID >= 6 && r2->formID <= 9)))
-          continue;
-        i = edidDB.find(r2->flags);
-        if (i != edidDB.end())
-          edid = i->second;
-      }
+    }
+    const ESMRecord *r2 = &r;
+    while (parentEDID.empty() && r2 && r2->parent != 0U)
+    {
+      r2 = getRecordPtr(r2->parent);
+      if (!(r2 && *r2 == "GRUP"))
+        break;
+      if (!(r2->formID == 1 || (r2->formID >= 6 && r2->formID <= 9)))
+        continue;
+      i = edidDB.find(r2->flags);
+      if (i != edidDB.end())
+        parentEDID = i->second;
     }
 
     if (getRecordTimestamp(formID))
@@ -1036,23 +1037,19 @@ void ESMDump::dumpVersionInfo(unsigned int formID, const ESMRecord *parentGroup)
       std::fputc('\t', outputFile);
       printID(recordType);
       if (r == "GRUP" && r.formID)
-      {
-        if (r.formID == 1 || (r.formID >= 6 && r.formID <= 9))
-        {
-          i = edidDB.find(r.flags);
-          if (i != edidDB.end())
-            edid = i->second;
-        }
         std::fprintf(outputFile, "\t0x%08X", r.flags);
-      }
       else
-      {
         std::fprintf(outputFile, "\t0x%08X", formID);
+      if (verboseMode)
+      {
+        std::fprintf(outputFile, "\t0x%02X\t0x%04X\t0x%04X",
+                     vcInfo.userID2, vcInfo.formVersion, vcInfo.vcInfo2);
       }
-      if (!edid2.empty())
-        std::fprintf(outputFile, "\t%s", edid2.c_str());
-      if (!edid.empty())
-        std::fprintf(outputFile, "\t%s", edid.c_str());
+      if (!(refrNameEDID.empty() && edid.empty() && parentEDID.empty()))
+      {
+        std::fprintf(outputFile, "\t%s\t%s\t%s",
+                     refrNameEDID.c_str(), edid.c_str(), parentEDID.c_str());
+      }
       std::fputc('\n', outputFile);
     }
     if (r == "GRUP")
