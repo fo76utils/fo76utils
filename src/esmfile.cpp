@@ -375,7 +375,7 @@ void ESMFile::getVersionControlInfo(ESMVCInfo& f, const ESMRecord& r) const
     f.month = (tmp >> 8) + 11;
     f.year = 2002U + (f.month / 12U);
     f.month = (f.month % 12U) + 1;
-    if (f.year == 2003 && esmVersion >= 0x0F)
+    if (f.year == 2003 && esmVersion != 0x00)
       f.year = 2011;
   }
   else
