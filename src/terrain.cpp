@@ -129,9 +129,11 @@ static inline unsigned long long getVertexColor(int x, int y)
 {
   if (!ltexBuf)
     return 0x0000FF000FF000FFULL;
-  unsigned int  x0 = (unsigned int) x >> (8 - textureScale);
+  x = x << textureScale;
+  y = y << textureScale;
+  unsigned int  x0 = (unsigned int) x >> 8;
   unsigned int  x1 = x0 + (unsigned int) ((x0 + 1) < textureWidth);
-  unsigned int  y0 = (unsigned int) y >> (8 - textureScale);
+  unsigned int  y0 = (unsigned int) y >> 8;
   unsigned int  y1 = y0 + (unsigned int) ((y0 + 1) < textureHeight);
   unsigned long long  c0, c1, c2, c3;
   if (ltexRGBFormat)
