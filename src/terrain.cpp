@@ -293,8 +293,9 @@ void renderThread(size_t xMin, size_t xMax)
   int     y0 = yOffset * 256 + (landHeight << 7);
   if (renderMode == 4)
   {
-    x0 = x0 - int(renderWidth << 5) - (1 << (renderScale - 1));
-    y0 = y0 + int(renderHeight << 5) - (1 << (renderScale - 1));
+    int     offs = (1 << renderScale) >> (textureScale + 2);
+    x0 = x0 - int(renderWidth << 5) - offs;
+    y0 = y0 + int(renderHeight << 5) + offs;
   }
   else
   {
