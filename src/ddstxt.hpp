@@ -14,8 +14,13 @@ class DDSTexture
   bool          haveAlpha;
   unsigned int  *textureData[20];
   std::vector< unsigned int > textureDataBuf;
-  static void decodeBlock_BC1(unsigned int *dst, const unsigned char *src);
-  static void decodeBlock_BC3(unsigned int *dst, const unsigned char *src);
+  static size_t decodeBlock_BC1(unsigned int *dst, const unsigned char *src);
+  static size_t decodeBlock_BC2(unsigned int *dst, const unsigned char *src);
+  static size_t decodeBlock_BC3(unsigned int *dst, const unsigned char *src);
+  static size_t decodeBlock_BC4(unsigned int *dst, const unsigned char *src);
+  static size_t decodeBlock_BC4S(unsigned int *dst, const unsigned char *src);
+  static size_t decodeBlock_BC5(unsigned int *dst, const unsigned char *src);
+  static size_t decodeBlock_BC5S(unsigned int *dst, const unsigned char *src);
   void loadTexture(FileBuffer& buf);
  public:
   DDSTexture(const char *fileName);

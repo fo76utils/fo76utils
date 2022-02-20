@@ -2,53 +2,12 @@
 #include "common.hpp"
 #include "ddstxt.hpp"
 
-void DDSTexture::decodeBlock_BC1(unsigned int *dst, const unsigned char *src)
+static inline unsigned long long decodeBC3Alpha(unsigned int *a,
+                                                const unsigned char *src,
+                                                bool isSigned = false)
 {
-  unsigned int  c[4];
-  unsigned int  c0 = ((unsigned int) src[1] << 8) | src[0];
-  unsigned int  c1 = ((unsigned int) src[3] << 8) | src[2];
-  unsigned int  r0 = (((c0 >> 11) & 0x1F) * 255 + 15) / 31;
-  unsigned int  g0 = (((c0 >> 5) & 0x3F) * 255 + 31) / 63;
-  unsigned int  b0 = ((c0 & 0x1F) * 255 + 15) / 31;
-  unsigned int  r1 = (((c1 >> 11) & 0x1F) * 255 + 15) / 31;
-  unsigned int  g1 = (((c1 >> 5) & 0x3F) * 255 + 31) / 63;
-  unsigned int  b1 = ((c1 & 0x1F) * 255 + 15) / 31;
-  c[0] = r0 | (g0 << 8) | (b0 << 16) | 0xFF000000U;
-  c[1] = r1 | (g1 << 8) | (b1 << 16) | 0xFF000000U;
-  c[2] = ((r0 + r0 + r1 + 1) / 3) | (((g0 + g0 + g1 + 1) / 3) << 8)
-         | (((b0 + b0 + b1 + 1) / 3) << 16) | 0xFF000000U;
-  c[3] = ((r0 + r1 + r1 + 1) / 3) | (((g0 + g1 + g1 + 1) / 3) << 8)
-         | (((b0 + b1 + b1 + 1) / 3) << 16) | 0xFF000000U;
-  unsigned int  bc = 0;
-  for (unsigned int i = 0; i < 4; i++)
-    bc = bc | ((unsigned long long) src[i + 4] << (i << 3));
-  for (unsigned int i = 0; i < 16; i++)
-  {
-    dst[i] = c[bc & 3];
-    bc = bc >> 2;
-  }
-}
-
-void DDSTexture::decodeBlock_BC3(unsigned int *dst, const unsigned char *src)
-{
-  unsigned int  c[4];
-  unsigned int  a[8];
-  a[0] = src[0];
-  a[1] = src[1];
-  unsigned int  c0 = ((unsigned int) src[9] << 8) | src[8];
-  unsigned int  c1 = ((unsigned int) src[11] << 8) | src[10];
-  unsigned int  r0 = (((c0 >> 11) & 0x1F) * 255 + 15) / 31;
-  unsigned int  g0 = (((c0 >> 5) & 0x3F) * 255 + 31) / 63;
-  unsigned int  b0 = ((c0 & 0x1F) * 255 + 15) / 31;
-  unsigned int  r1 = (((c1 >> 11) & 0x1F) * 255 + 15) / 31;
-  unsigned int  g1 = (((c1 >> 5) & 0x3F) * 255 + 31) / 63;
-  unsigned int  b1 = ((c1 & 0x1F) * 255 + 15) / 31;
-  c[0] = r0 | (g0 << 8) | (b0 << 16);
-  c[1] = r1 | (g1 << 8) | (b1 << 16);
-  c[2] = ((r0 + r0 + r1 + 1) / 3) | (((g0 + g0 + g1 + 1) / 3) << 8)
-         | (((b0 + b0 + b1 + 1) / 3) << 16);
-  c[3] = ((r0 + r1 + r1 + 1) / 3) | (((g0 + g1 + g1 + 1) / 3) << 8)
-         | (((b0 + b1 + b1 + 1) / 3) << 16);
+  a[0] = src[0] ^ (!isSigned ? 0U : 0x80U);
+  a[1] = src[1] ^ (!isSigned ? 0U : 0x80U);
   if (a[0] > a[1])
   {
     for (unsigned int i = 1; i < 7; i++)
@@ -62,17 +21,129 @@ void DDSTexture::decodeBlock_BC3(unsigned int *dst, const unsigned char *src)
     a[7] = 255;
   }
   unsigned long long  ba = 0;
-  unsigned int        bc = 0;
   for (unsigned int i = 0; i < 6; i++)
     ba = ba | ((unsigned long long) src[i + 2] << (i << 3));
+  return ba;
+}
+
+static inline unsigned int decodeBC1Colors(unsigned int *c,
+                                           const unsigned char *src,
+                                           unsigned int a = 0U)
+{
+  unsigned int  c0 = ((unsigned int) src[1] << 8) | src[0];
+  unsigned int  c1 = ((unsigned int) src[3] << 8) | src[2];
+  unsigned int  r0 = (((c0 >> 11) & 0x1F) * 255 + 15) / 31;
+  unsigned int  g0 = (((c0 >> 5) & 0x3F) * 255 + 31) / 63;
+  unsigned int  b0 = ((c0 & 0x1F) * 255 + 15) / 31;
+  unsigned int  r1 = (((c1 >> 11) & 0x1F) * 255 + 15) / 31;
+  unsigned int  g1 = (((c1 >> 5) & 0x3F) * 255 + 31) / 63;
+  unsigned int  b1 = ((c1 & 0x1F) * 255 + 15) / 31;
+  c[0] = r0 | (g0 << 8) | (b0 << 16) | a;
+  c[1] = r1 | (g1 << 8) | (b1 << 16) | a;
+  c[2] = ((r0 + r0 + r1 + 1) / 3) | (((g0 + g0 + g1 + 1) / 3) << 8)
+         | (((b0 + b0 + b1 + 1) / 3) << 16) | a;
+  c[3] = ((r0 + r1 + r1 + 1) / 3) | (((g0 + g1 + g1 + 1) / 3) << 8)
+         | (((b0 + b1 + b1 + 1) / 3) << 16) | a;
+  unsigned int  bc = 0;
   for (unsigned int i = 0; i < 4; i++)
-    bc = bc | ((unsigned long long) src[i + 12] << (i << 3));
+    bc = bc | ((unsigned long long) src[i + 4] << (i << 3));
+  return bc;
+}
+
+size_t DDSTexture::decodeBlock_BC1(unsigned int *dst, const unsigned char *src)
+{
+  unsigned int  c[4];
+  unsigned int  bc = decodeBC1Colors(c, src, 0xFF000000U);
+  for (unsigned int i = 0; i < 16; i++)
+  {
+    dst[i] = c[bc & 3];
+    bc = bc >> 2;
+  }
+  return 8;
+}
+
+size_t DDSTexture::decodeBlock_BC2(unsigned int *dst, const unsigned char *src)
+{
+  unsigned int  c[4];
+  unsigned int  bc = decodeBC1Colors(c, src + 8);
+  for (unsigned int i = 0; i < 8; i++)
+  {
+    unsigned char a = src[i];
+    dst[i << 1] = c[bc & 3] | ((a & 0x0FU) * 0x11000000U);
+    bc = bc >> 2;
+    dst[(i << 1) + 1] = c[bc & 3] | (((a >> 4) & 0x0FU) * 0x11000000U);
+    bc = bc >> 2;
+  }
+  return 16;
+}
+
+size_t DDSTexture::decodeBlock_BC3(unsigned int *dst, const unsigned char *src)
+{
+  unsigned int  c[4];
+  unsigned int  a[8];
+  unsigned long long  ba = decodeBC3Alpha(a, src);
+  unsigned int  bc = decodeBC1Colors(c, src + 8);
   for (unsigned int i = 0; i < 16; i++)
   {
     dst[i] = c[bc & 3] | (a[ba & 7] << 24);
     ba = ba >> 3;
     bc = bc >> 2;
   }
+  return 16;
+}
+
+size_t DDSTexture::decodeBlock_BC4(unsigned int *dst, const unsigned char *src)
+{
+  unsigned int  a[8];
+  unsigned long long  ba = decodeBC3Alpha(a, src);
+  for (unsigned int i = 0; i < 16; i++)
+  {
+    dst[i] = (a[ba & 7] * 0x00010101U) | 0xFF000000U;
+    ba = ba >> 3;
+  }
+  return 8;
+}
+
+size_t DDSTexture::decodeBlock_BC4S(unsigned int *dst, const unsigned char *src)
+{
+  unsigned int  a[8];
+  unsigned long long  ba = decodeBC3Alpha(a, src, true);
+  for (unsigned int i = 0; i < 16; i++)
+  {
+    dst[i] = (a[ba & 7] * 0x00010101U) | 0xFF000000U;
+    ba = ba >> 3;
+  }
+  return 8;
+}
+
+size_t DDSTexture::decodeBlock_BC5(unsigned int *dst, const unsigned char *src)
+{
+  unsigned int  a1[8];
+  unsigned int  a2[8];
+  unsigned long long  ba1 = decodeBC3Alpha(a1, src);
+  unsigned long long  ba2 = decodeBC3Alpha(a2, src + 8);
+  for (unsigned int i = 0; i < 16; i++)
+  {
+    dst[i] = a1[ba1 & 7] | (a2[ba2 & 7] << 8) | 0xFF000000U;
+    ba1 = ba1 >> 3;
+    ba2 = ba2 >> 3;
+  }
+  return 16;
+}
+
+size_t DDSTexture::decodeBlock_BC5S(unsigned int *dst, const unsigned char *src)
+{
+  unsigned int  a1[8];
+  unsigned int  a2[8];
+  unsigned long long  ba1 = decodeBC3Alpha(a1, src, true);
+  unsigned long long  ba2 = decodeBC3Alpha(a2, src + 8, true);
+  for (unsigned int i = 0; i < 16; i++)
+  {
+    dst[i] = a1[ba1 & 7] | (a2[ba2 & 7] << 8) | 0xFF000000U;
+    ba1 = ba1 >> 3;
+    ba2 = ba2 >> 3;
+  }
+  return 16;
 }
 
 void DDSTexture::loadTexture(FileBuffer& buf)
@@ -110,6 +181,9 @@ void DDSTexture::loadTexture(FileBuffer& buf)
     throw errorMessage("unsupported texture file format");
   unsigned int  fourCC = buf.readUInt32();
   unsigned int  dataOffs = 128;
+  size_t  blockSize = 8;
+  size_t  (*decodeFunction)(unsigned int *, const unsigned char *) =
+      &decodeBlock_BC1;
   if (FileBuffer::checkType(fourCC, "DX10"))
   {
     dataOffs = 148;
@@ -120,22 +194,58 @@ void DDSTexture::loadTexture(FileBuffer& buf)
       case 0x47:                        // DXGI_FORMAT_BC1_UNORM
       case 0x48:                        // DXGI_FORMAT_BC1_UNORM_SRGB
         break;
+      case 0x4A:                        // DXGI_FORMAT_BC2_UNORM
+      case 0x4B:                        // DXGI_FORMAT_BC2_UNORM_SRGB
+        haveAlpha = true;
+        blockSize = 16;
+        decodeFunction = &decodeBlock_BC2;
+        break;
       case 0x4D:                        // DXGI_FORMAT_BC3_UNORM
       case 0x4E:                        // DXGI_FORMAT_BC3_UNORM_SRGB
         haveAlpha = true;
+        blockSize = 16;
+        decodeFunction = &decodeBlock_BC3;
+        break;
+      case 0x50:                        // DXGI_FORMAT_BC4_UNORM
+        decodeFunction = &decodeBlock_BC4;
+        break;
+      case 0x51:                        // DXGI_FORMAT_BC4_SNORM
+        decodeFunction = &decodeBlock_BC4S;
+        break;
+      case 0x53:                        // DXGI_FORMAT_BC5_UNORM
+        blockSize = 16;
+        decodeFunction = &decodeBlock_BC5;
+        break;
+      case 0x54:                        // DXGI_FORMAT_BC5_SNORM
+        blockSize = 16;
+        decodeFunction = &decodeBlock_BC5S;
         break;
       default:
         throw errorMessage("unsupported DXGI_FORMAT: 0x%08X", tmp);
     }
   }
-  else if (FileBuffer::checkType(fourCC, "DXT5"))
+  else
   {
-    haveAlpha = true;
-  }
-  else if (!FileBuffer::checkType(fourCC, "DXT1"))
-  {
-    throw errorMessage("unsupported DDS fourCC: 0x%08X",
-                       FileBuffer::swapUInt32(fourCC));
+    switch (fourCC)
+    {
+      case 0x31545844:                  // "DXT1"
+        break;
+      case 0x32545844:                  // "DXT2"
+      case 0x33545844:                  // "DXT3"
+        haveAlpha = true;
+        blockSize = 16;
+        decodeFunction = &decodeBlock_BC2;
+        break;
+      case 0x34545844:                  // "DXT4"
+      case 0x35545844:                  // "DXT5"
+        haveAlpha = true;
+        blockSize = 16;
+        decodeFunction = &decodeBlock_BC3;
+        break;
+      default:
+        throw errorMessage("unsupported DDS fourCC: 0x%08X",
+                           FileBuffer::swapUInt32(fourCC));
+    }
   }
   size_t  sizeRequired = dataOffs;
   for (int i = 0; i < mipLevelCnt; i++)
@@ -146,7 +256,7 @@ void DDSTexture::loadTexture(FileBuffer& buf)
       w = 1;
     if (h < 1)
       h = 1;
-    sizeRequired = sizeRequired + (size_t(w) * h * (haveAlpha ? 16U : 8U));
+    sizeRequired = sizeRequired + (size_t(w) * h * blockSize);
   }
   if (buf.size() < sizeRequired)
     throw errorMessage("DDS file is shorter than expected");
@@ -183,16 +293,7 @@ void DDSTexture::loadTexture(FileBuffer& buf)
       {
         for (unsigned int x = 0; x < w; x = x + 4)
         {
-          if (!haveAlpha)
-          {
-            decodeBlock_BC1(tmpBuf, srcPtr);
-            srcPtr = srcPtr + 8;
-          }
-          else
-          {
-            decodeBlock_BC3(tmpBuf, srcPtr);
-            srcPtr = srcPtr + 16;
-          }
+          srcPtr = srcPtr + decodeFunction(tmpBuf, srcPtr);
           for (unsigned int j = 0; j < 16; j++)
             p[(y + (j >> 2)) * w + (x + (j & 3))] = tmpBuf[j];
         }
