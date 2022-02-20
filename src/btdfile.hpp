@@ -9,8 +9,6 @@
 class BTDFile : public FileBuffer
 {
  protected:
-  ZLibDecompressor  zlibDecompressor;
-  std::vector< unsigned short > zlibBuf;
   size_t  heightMapResX;        // landscape total X resolution (nCellsX * 128)
   size_t  heightMapResY;        // landscape total Y resolution (nCellsY * 128)
   int     cellMinX;             // X coordinate of cell in SW corner
@@ -58,7 +56,14 @@ class BTDFile : public FileBuffer
   static void loadBlockLines_16(unsigned short *dst, const unsigned char *src,
                                 unsigned char l);
   void loadBlock(unsigned short *tileData, size_t n,
-                 unsigned char l, unsigned char b);
+                 unsigned char l, unsigned char b,
+                 ZLibDecompressor& zlibDecompressor,
+                 std::vector< unsigned short >& zlibBuf);
+  void loadBlocks(unsigned short *tileData, size_t x, size_t y,
+                  size_t threadIndex, size_t threadCnt);
+  static void loadBlocksThread(BTDFile *p, std::string *errMsg,
+                               unsigned short *tileData, size_t x, size_t y,
+                               size_t threadIndex, size_t threadCnt);
   void loadTile(int cellX, int cellY);
  public:
   BTDFile(const char *fileName);

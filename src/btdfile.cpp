@@ -50,6 +50,8 @@
 #include "common.hpp"
 #include "btdfile.hpp"
 
+#include <thread>
+
 void BTDFile::loadBlockLines_8(unsigned short *dst, const unsigned char *src,
                                unsigned char l)
 {
@@ -92,29 +94,31 @@ void BTDFile::loadBlockLines_16(unsigned short *dst, const unsigned char *src,
 }
 
 void BTDFile::loadBlock(unsigned short *tileData, size_t n,
-                        unsigned char l, unsigned char b)
+                        unsigned char l, unsigned char b,
+                        ZLibDecompressor& zlibDecompressor,
+                        std::vector< unsigned short >& zlibBuf)
 {
   if (l >= 2)
     n = (n << 1) + b;
   else if (l == 0 && b != 0)
     n = n + (nCellsY * nCellsX);
-  if (l == 3)
-    filePos = zlibBlkTableOffsLOD3 + (n << 3);
+  size_t  zlibBlkTableOffs = zlibBlkTableOffsLOD0 + (n << 3);
+  if (l == 1)
+    zlibBlkTableOffs = zlibBlkTableOffsLOD1 + (n << 3);
   else if (l == 2)
-    filePos = zlibBlkTableOffsLOD2 + (n << 3);
-  else if (l == 1)
-    filePos = zlibBlkTableOffsLOD1 + (n << 3);
-  else
-    filePos = zlibBlkTableOffsLOD0 + (n << 3);
-  size_t  offs = readUInt32() + zlibBlocksDataOffs;
-  size_t  compressedSize = readUInt32();
-  filePos = offs;
-  if ((filePos + compressedSize) > fileBufSize)
+    zlibBlkTableOffs = zlibBlkTableOffsLOD2 + (n << 3);
+  else if (l == 3)
+    zlibBlkTableOffs = zlibBlkTableOffsLOD3 + (n << 3);
+  FileBuffer  blockBuf(fileBuf + zlibBlkTableOffs,
+                       fileBufSize - zlibBlkTableOffs);
+  size_t  offs = blockBuf.readUInt32() + zlibBlocksDataOffs;
+  size_t  compressedSize = blockBuf.readUInt32();
+  if ((offs + compressedSize) > fileBufSize)
     throw errorMessage("end of input file");
   unsigned char *p = reinterpret_cast< unsigned char * >(&(zlibBuf.front()));
   if (zlibDecompressor.decompressData(p,
                                       zlibBuf.size() * sizeof(unsigned short),
-                                      fileBuf + filePos, compressedSize)
+                                      fileBuf + offs, compressedSize)
       != ((l == 0 && b != 0) ? 16384 : ((l >= 2 && b != 0) ? 32768 : 49152)))
   {
     throw errorMessage("error in compressed landscape data");
@@ -144,6 +148,55 @@ void BTDFile::loadBlock(unsigned short *tileData, size_t n,
     // landscape textures
     loadBlockLines_16(tileData + (y << (l + 10)) + 0x00100000, p, l);
     p = p + 384;
+  }
+}
+
+void BTDFile::loadBlocks(unsigned short *tileData, size_t x, size_t y,
+                         size_t threadIndex, size_t threadCnt)
+{
+  ZLibDecompressor  zlibDecompressor;
+  std::vector< unsigned short > zlibBuf(0x6000, 0);
+  size_t  t = 0;
+  // LOD3..LOD0
+  for (unsigned char l = 4; l-- > 0; )
+  {
+    for (size_t yy = 0; yy < size_t(8 >> l); yy++)
+    {
+      size_t  yc = (y >> l) + yy;
+      if (yc >= ((nCellsY + (1 << l) - 1) >> l))
+        break;
+      for (size_t xx = 0; xx < size_t(8 >> l); xx++)
+      {
+        size_t  xc = (x >> l) + xx;
+        if (xc >= ((nCellsX + (1 << l) - 1) >> l))
+          break;
+        if (t == threadIndex)
+        {
+          size_t  n = yc * ((nCellsX + (1 << l) - 1) >> l) + xc;
+          unsigned short  *p =
+              tileData + (((yy << l) << 17) + ((xx << l) << 7));
+          loadBlock(p, n, l, 0, zlibDecompressor, zlibBuf);
+          if (l != 1)
+            loadBlock(p, n, l, 1, zlibDecompressor, zlibBuf);
+        }
+        if (++t >= threadCnt)
+          t = 0;
+      }
+    }
+  }
+}
+
+void BTDFile::loadBlocksThread(BTDFile *p, std::string *errMsg,
+                               unsigned short *tileData, size_t x, size_t y,
+                               size_t threadIndex, size_t threadCnt)
+{
+  try
+  {
+    p->loadBlocks(tileData, x, y, threadIndex, threadCnt);
+  }
+  catch (std::exception& e)
+  {
+    *errMsg = std::string(e.what());
   }
 }
 
@@ -195,32 +248,44 @@ void BTDFile::loadTile(int cellX, int cellY)
     }
   }
   // LOD3..LOD0
-  for (unsigned char l = 4; l-- > 0; )
+  size_t  threadCnt = size_t(std::thread::hardware_concurrency());
+  if (threadCnt < 1)
+    threadCnt = 1;
+  else if (threadCnt > 16)
+    threadCnt = 16;
+  std::vector< std::thread * >  threads(threadCnt, (std::thread *) 0);
+  std::vector< std::string >    errMsgs(threadCnt);
+  for (size_t i = 0; i < threadCnt; i++)
   {
-    for (size_t yy = 0; yy < size_t(8 >> l); yy++)
+    try
     {
-      size_t  yc = (y >> l) + yy;
-      if (yc >= ((nCellsY + (1 << l) - 1) >> l))
-        break;
-      for (size_t xx = 0; xx < size_t(8 >> l); xx++)
-      {
-        size_t  xc = (x >> l) + xx;
-        if (xc >= ((nCellsX + (1 << l) - 1) >> l))
-          break;
-        size_t  n = yc * ((nCellsX + (1 << l) - 1) >> l) + xc;
-        unsigned short  *p =
-            curTileData + (((yy << l) << 17) + ((xx << l) << 7));
-        loadBlock(p, n, l, 0);
-        if (l != 1)
-          loadBlock(p, n, l, 1);
-      }
+      threads[i] = new std::thread(loadBlocksThread,
+                                   this, &(errMsgs.front()) + i, curTileData,
+                                   x, y, i, threadCnt);
     }
+    catch (std::exception& e)
+    {
+      errMsgs[i] = std::string(e.what());
+      break;
+    }
+  }
+  for (size_t i = 0; i < threadCnt; i++)
+  {
+    if (threads[i])
+    {
+      threads[i]->join();
+      delete threads[i];
+    }
+  }
+  for (size_t i = 0; i < threadCnt; i++)
+  {
+    if (!errMsgs[i].empty())
+      throw errorMessage("%s", errMsgs[i].c_str());
   }
 }
 
 BTDFile::BTDFile(const char *fileName)
-  : FileBuffer(fileName),
-    zlibBuf(0x6000, 0)
+  : FileBuffer(fileName)
 {
   if (!checkType(readUInt32(), "BTDB"))
     throw errorMessage("input file format is not BTD");
