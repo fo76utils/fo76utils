@@ -80,7 +80,10 @@ for i in range(maxUID + 1):
         zdata1[i] += [0]
 
 for i in fileNames:
-    f = open(i, "r")
+    if i == "-" or i == "stdin":
+        f = sys.stdin
+    else:
+        f = open(i, "r")
     for l in f:
         if len(l) < 38 or l[:38] in recordList:
             continue
@@ -111,7 +114,8 @@ for i in fileNames:
                 if userID > maxUID:
                     continue
                 zdata1[userID][x] += 1
-    f.close()
+    if f != sys.stdin:
+        f.close()
 
 # plot the data
 fig = plt.figure(tight_layout = True)
