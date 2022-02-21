@@ -28,7 +28,7 @@ class BTDFile : public FileBuffer
   size_t  gcvrMapOffs;          // 8 x ground cover for each cell quadrant
   size_t  heightMapLOD4;        // 1/8 cell resolution
   size_t  landTexturesLOD4;     // 1/8 cell resolution
-  size_t  unknownLOD4;          // 1/8 cell resolution
+  size_t  vertexColorLOD4;      // 1/8 cell resolution
   size_t  nCompressedBlocks;    // number of ZLib compressed blocks
   size_t  zlibBlocksTableOffs;  // table of compressed block offsets and sizes
   size_t  zlibBlocksDataOffs;   // ZLib compressed data
@@ -46,7 +46,7 @@ class BTDFile : public FileBuffer
   //   curTileData[y * 1024 + x + 0x00000000] = vertex height
   //   curTileData[y * 1024 + x + 0x00100000] = landscape textures
   //   curTileData[y * 1024 + x + 0x00200000] = ground cover
-  //   curTileData[y * 1024 + x + 0x00300000] = unknown map type
+  //   curTileData[y * 1024 + x + 0x00300000] = terrain color
   unsigned short  *curTileData;
   unsigned short  *prvTileData;
   std::vector< unsigned short > tileBuf;
@@ -102,7 +102,7 @@ class BTDFile : public FileBuffer
   void getCellLandTexture(unsigned char *buf, int cellX, int cellY);
   // buf[128 * 128 * 8], bit 7 is transparency (no ground cover if set)
   void getCellGroundCover(unsigned char *buf, int cellX, int cellY);
-  // buf[128 * 128], unknown 3-channel map type in packed 16-bit format
+  // buf[128 * 128], vertex colors in packed 16-bit format
   void getCellData4(unsigned short *buf, int cellX, int cellY);
 };
 

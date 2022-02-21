@@ -56,8 +56,8 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "    FMT = 3: dithered 8-bit landscape texture\n");
     std::fprintf(stderr, "    FMT = 4: raw ground cover (2 bytes / vertex)\n");
     std::fprintf(stderr, "    FMT = 5: dithered 8-bit ground cover\n");
-    std::fprintf(stderr, "    FMT = 6: raw 16-bit unknown map type\n");
-    std::fprintf(stderr, "    FMT = 7: unknown map in 24-bit RGB format\n");
+    std::fprintf(stderr, "    FMT = 6: raw 16-bit terrain color\n");
+    std::fprintf(stderr, "    FMT = 7: terrain color in 24-bit RGB format\n");
     std::fprintf(stderr, "Using a palette file changes formats 3 and 5 "
                          "from dithered 8-bit to RGB\n");
     return 1;
@@ -281,7 +281,7 @@ int main(int argc, char **argv)
               p[0] = tmp;
             }
             break;
-          case 6:               // raw unknown map
+          case 6:               // raw vertex colors (?)
             for (size_t xx = 0; xx < 128; xx = xx + size_t(1 << l), p = p + 2)
             {
               unsigned int  tmp = cellDataBuf[(yy << 7) | xx];
@@ -289,7 +289,7 @@ int main(int argc, char **argv)
               p[1] = (unsigned char) ((tmp >> 8) | 0x80);
             }
             break;
-          case 7:               // unknown map in 24-bit RGB format
+          case 7:               // vertex colors (?) in 24-bit RGB format
             for (size_t xx = 0; xx < 128; xx = xx + size_t(1 << l), p = p + 3)
             {
               unsigned int  tmp = cellDataBuf[(yy << 7) | xx];

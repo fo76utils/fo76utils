@@ -25,7 +25,7 @@
 // 0x007B4C9C-0x00CA351B: 201 * 8 * 201 * 8 * int16, LOD4 land textures,
 //                        bits[N * 3 to N * 3 + 2] = opacity of texture N,
 //                        texture 6 is the base texture
-// 0x00CA351C-0x01191D9B: 201 * 8 * 201 * 8 * int16, LOD4 unknown 3-channel map
+// 0x00CA351C-0x01191D9B: 201 * 8 * 201 * 8 * int16, LOD4 terrain color
 //                        type in packed 16-bit format, 5 bits per channel
 // 0x01191D9C-0x01250643: 97557 * (int32, int32), pairs of zlib compressed data
 //                        offset (relative to 0x01250644) and size
@@ -35,13 +35,13 @@
 //                         6554 to 16754   (101 * 101): LOD1, 2x2 cell groups
 //                        16755 to 57155   (201 * 201): LOD0 height map, LTEX
 //                        57156 to 97556   (201 * 201): LOD0 ground cover mask
-// LOD3, LOD2: pairs of height map, LTEX and unknown map blocks
+// LOD3, LOD2: pairs of height map, LTEX and terrain color blocks
 // LOD1: height map, land textures block only
 // height map, LTEX block format:
 //   0x0000-0x5FFF: 64 * (64, 128) int16, height map, only the samples
 //                  not present at lower levels of detail
 //   0x6000-0xBFFF: 64 * (64, 128) int16, land texture opacities
-// unknown map block format (LOD3 and LOD2 only):
+// terrain color block format (LOD3 and LOD2 only):
 //   0x0000-0x5FFF: 64 * (64, 128) int16
 //   0x6000-0x7FFF: unused
 // ground cover block format (LOD0 only):
@@ -135,7 +135,7 @@ void BTDFile::loadBlock(unsigned short *tileData, size_t n,
       loadBlockLines_8(tileData + (y << (l + 10)) + 0x00200000, p, l);
       p = p + 256;
     }
-    else                        // unknown
+    else                        // vertex color
     {
       loadBlockLines_16(tileData + (y << (l + 10)) + 0x00300000, p, l);
       p = p + 384;
@@ -242,7 +242,7 @@ void BTDFile::loadTile(int cellX, int cellY)
       filePos = landTexturesLOD4
                 + (((((y << 3) + yy) * (nCellsX << 3)) + ((x << 3) + xx)) << 1);
       curTileData[(((yy << 10) + xx) << 4) + 0x00100000] = readUInt16();
-      filePos = unknownLOD4
+      filePos = vertexColorLOD4
                 + (((((y << 3) + yy) * (nCellsX << 3)) + ((x << 3) + xx)) << 1);
       curTileData[(((yy << 10) + xx) << 4) + 0x00300000] = readUInt16();
     }
@@ -320,7 +320,7 @@ BTDFile::BTDFile(const char *fileName)
   filePos = filePos + ((nCellsY * nCellsX) << 7);
   landTexturesLOD4 = filePos;
   filePos = filePos + ((nCellsY * nCellsX) << 7);
-  unknownLOD4 = filePos;
+  vertexColorLOD4 = filePos;
   filePos = filePos + ((nCellsY * nCellsX) << 7);
   zlibBlocksTableOffs = filePos;
   zlibBlkTableOffsLOD3 = filePos;

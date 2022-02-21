@@ -95,16 +95,60 @@ struct RenderThread
   int     xyScale;
   float   txtScale;
   bool    integerMip;
+  bool    fo76VClrFile;
+  unsigned char fo76VClrMip;
   static inline unsigned long long rgb24ToRGB64(unsigned int c)
   {
     return ((unsigned long long) (c & 0x000000FF)
             | ((unsigned long long) (c & 0x0000FF00) << 12)
             | ((unsigned long long) (c & 0x00FF0000) << 24));
   }
+  inline unsigned int getFO76VertexColor(size_t offs) const
+  {
+    unsigned int  c = *(vclrFile->getDataPtr() + (offs << 1));
+    c = c | ((unsigned int) *(vclrFile->getDataPtr() + (offs << 1) + 1) << 8);
+    return (((c & 0x7C00) >> 7) | ((c & 0x03E0) << 6) | ((c & 0x001F) << 19));
+  }
+  void getFO76VertexColor(unsigned int& r, unsigned int& g, unsigned int& b,
+                          int x, int y) const;
   unsigned int renderPixel(int x, int y, int txtX, int txtY);
   void renderLines(int y0, int y1);
   static void runThread(RenderThread *p, int y0, int y1);
 };
+
+void RenderThread::getFO76VertexColor(unsigned int& r, unsigned int& g,
+                                      unsigned int& b, int x, int y) const
+{
+  y = y - ((1 << fo76VClrMip) - 1);
+  y = (y >= 0 ? y : 0);
+  x = x << (8 - fo76VClrMip);
+  y = y << (8 - fo76VClrMip);
+  int     xf = x & 255;
+  int     yf = y & 255;
+  x = x >> 8;
+  y = y >> 8;
+  size_t  w = size_t(width >> (xyScale + fo76VClrMip));
+  size_t  h = size_t(height >> (xyScale + fo76VClrMip));
+  size_t  offs0 = size_t(y) * w + size_t(x);
+  size_t  offs2 = offs0;
+  if (y < int(h - 1))
+    offs2 += w;
+  size_t  offs1 = offs0;
+  size_t  offs3 = offs2;
+  if (x < int(w - 1))
+  {
+    offs1++;
+    offs3++;
+  }
+  unsigned int  c =
+      blendRGBA32(blendRGBA32(getFO76VertexColor(offs0),
+                              getFO76VertexColor(offs1), xf),
+                  blendRGBA32(getFO76VertexColor(offs2),
+                              getFO76VertexColor(offs3), xf), yf);
+  r = (r * (c & 0xFF) + 64) >> 7;
+  g = (g * ((c >> 8) & 0xFF) + 64) >> 7;
+  b = (b * ((c >> 16) & 0xFF) + 64) >> 7;
+}
 
 unsigned int RenderThread::renderPixel(int x, int y, int txtX, int txtY)
 {
@@ -192,9 +236,16 @@ unsigned int RenderThread::renderPixel(int x, int y, int txtX, int txtY)
   unsigned int  b = (unsigned int) ((c >> 40) & 0x000FFFFF);
   if (vclrFile)
   {
-    b = (b * (*vclrFile)[offs * 3] + 127U) / 255U;
-    g = (g * (*vclrFile)[offs * 3 + 1] + 127U) / 255U;
-    r = (r * (*vclrFile)[offs * 3 + 2] + 127U) / 255U;
+    if (fo76VClrFile)
+    {
+      getFO76VertexColor(r, g, b, x, y);
+    }
+    else
+    {
+      b = (b * (*vclrFile)[offs * 3] + 127U) / 255U;
+      g = (g * (*vclrFile)[offs * 3 + 1] + 127U) / 255U;
+      r = (r * (*vclrFile)[offs * 3 + 2] + 127U) / 255U;
+    }
   }
   r = (r < 0xFF00 ? ((r + 128) >> 8) : 255U);
   g = (g < 0xFF00 ? ((g + 128) >> 8) : 255U);
@@ -276,6 +327,8 @@ int main(int argc, char **argv)
     int           threadCnt = int(std::thread::hardware_concurrency());
     threadCnt = (threadCnt > 1 ? (threadCnt < 256 ? threadCnt : 256) : 1);
     bool          verboseMode = true;
+    bool          fo76VClrFile = false;
+    unsigned char fo76VClrMip = 0;
     for (int i = 4; i < argc; i++)
     {
       if (std::strcmp(argv[i], "-vclr") == 0)
@@ -364,10 +417,22 @@ int main(int argc, char **argv)
       int     tmpPixelFormat = 0;
       vclrFile = new DDSInputFile(vclrFileName,
                                   tmpWidth, tmpHeight, tmpPixelFormat);
-      if (tmpPixelFormat != DDSInputFile::pixelFormatRGB24)
+      if (tmpPixelFormat == DDSInputFile::pixelFormatRGBA16)
+        fo76VClrFile = true;
+      else if (tmpPixelFormat != DDSInputFile::pixelFormatRGB24)
         throw errorMessage("invalid vertex color file pixel format");
       if (tmpWidth != width || tmpHeight != height)
-        throw errorMessage("vertex color dimensions do not match input file");
+      {
+        if (fo76VClrFile)
+        {
+          if ((tmpWidth << 1) == width && (tmpHeight << 1) == height)
+            fo76VClrMip = 1;
+          else if ((tmpWidth << 2) == width && (tmpHeight << 2) == height)
+            fo76VClrMip = 2;
+        }
+        if (!fo76VClrMip)
+          throw errorMessage("vertex color dimensions do not match input file");
+      }
     }
     if (gcvrFileName)
     {
@@ -409,6 +474,8 @@ int main(int argc, char **argv)
       threadData[i].xyScale = xyScale;
       threadData[i].txtScale = txtScale;
       threadData[i].integerMip = integerMip;
+      threadData[i].fo76VClrFile = fo76VClrFile;
+      threadData[i].fo76VClrMip = fo76VClrMip;
     }
     for (int y = 0; y < height; )
     {
