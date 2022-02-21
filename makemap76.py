@@ -16,6 +16,7 @@ textureMip = 4.0        # 5.0
 textureBrightness = 1.2
 terrainBrightness = 125
 enableGCVR = False
+enableVCLR = True
 # enable these to save time if all the data is already extracted and up to date
 noExtractIcons = False          # do not extract map marker icons
 noExtractTextures = False       # do not extract land textures
@@ -214,6 +215,11 @@ def createMap(gameName, gamePath, btdName, esmName, worldID, defTxtID):
         runCmd(args1 + [gameName + "ltex.dds", "2"] + args2)
         if enableGCVR:
             runCmd(args1 + [gameName + "gcvr.dds", "4"] + args2)
+        if enableVCLR:
+            if mipLevel <= 2:
+                runCmd(args1 + [gameName + "vclr.dds", "6"] + cellRange)
+            else:
+                runCmd(args1 + [gameName + "vclr.dds", "6"] + args2)
     runCmd(["findwater", gamePath + "/" + esmName, gameName + "wmap.dds",
             gameName + "hmap.dds", worldID])
     landtxtOptions = [gameName + "ltex.dds", gameName + "ltx2.dds"]
@@ -222,6 +228,8 @@ def createMap(gameName, gamePath, btdName, esmName, worldID, defTxtID):
     landtxtOptions += ["-mult", textureBrightness]
     if enableGCVR:
         landtxtOptions += ["-gcvr", gameName + "gcvr.dds"]
+    if enableVCLR:
+        landtxtOptions += ["-vclr", gameName + "vclr.dds"]
     runCmd(["landtxt"] + landtxtOptions)
     terrainOptions = [gameName + "hmap.dds", gameName + "_map.dds"]
     w = (cellRange[2] + 1 - cellRange[0]) << (7 - mipLevel)
