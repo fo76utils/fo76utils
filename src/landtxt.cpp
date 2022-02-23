@@ -107,7 +107,8 @@ struct RenderThread
   {
     unsigned int  c = *(vclrFile->getDataPtr() + (offs << 1));
     c = c | ((unsigned int) *(vclrFile->getDataPtr() + (offs << 1) + 1) << 8);
-    return (((c & 0x7C00) >> 7) | ((c & 0x03E0) << 6) | ((c & 0x001F) << 19));
+    c = ((c & 0x7C00) << 6) | ((c & 0x03E0) << 3) | (c & 0x001F);
+    return (c * 6U + 0x00202020);
   }
   void getFO76VertexColor(unsigned int& r, unsigned int& g, unsigned int& b,
                           int x, int y) const;
@@ -145,9 +146,9 @@ void RenderThread::getFO76VertexColor(unsigned int& r, unsigned int& g,
                               getFO76VertexColor(offs1), xf),
                   blendRGBA32(getFO76VertexColor(offs2),
                               getFO76VertexColor(offs3), xf), yf);
-  r = (r * (c & 0xFF) + 64) >> 7;
+  r = (r * ((c >> 16) & 0xFF) + 64) >> 7;
   g = (g * ((c >> 8) & 0xFF) + 64) >> 7;
-  b = (b * ((c >> 16) & 0xFF) + 64) >> 7;
+  b = (b * (c & 0xFF) + 64) >> 7;
 }
 
 unsigned int RenderThread::renderPixel(int x, int y, int txtX, int txtY)
