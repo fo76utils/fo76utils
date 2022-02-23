@@ -6,21 +6,22 @@
 #include "zlib.hpp"
 #include "filebuf.hpp"
 
-class BA2File : public FileBuffer
+class BA2File
 {
  protected:
   struct FileDeclaration
   {
-    std::string   fileName;
-    unsigned long long  offset;
+    const unsigned char *fileData;
     unsigned int  packedSize;
     unsigned int  unpackedSize;
+    // 0: BA2 general, 1: BA2 textures, 103-105: BSA
+    int           archiveType;
+    unsigned int  archiveFile;
   };
   std::vector< FileDeclaration >  fileDecls;
-  std::map< std::string, const FileDeclaration * >  fileMap;
+  std::map< std::string, size_t > fileMap;
   ZLibDecompressor  zlibDecompressor;
-  // 0: BA2 general, 1: BA2 textures, 103-105: BSA
-  int     archiveType;
+  std::vector< FileBuffer * > archiveFiles;
   static inline char fixNameCharacter(unsigned char c)
   {
     if (c >= 'A' && c <= 'Z')
@@ -31,8 +32,14 @@ class BA2File : public FileBuffer
       return '/';
     return char(c);
   }
+  size_t allocateFileDecls(size_t fileCnt);
+  void addPackedFile(const std::string& fileName, size_t n);
+  void loadBA2General(FileBuffer& buf, FileDeclaration& fileDecl);
+  void loadBA2Textures(FileBuffer& buf, FileDeclaration& fileDecl);
+  void loadBSAFile(FileBuffer& buf, FileDeclaration& fileDecl);
+  void loadArchiveFile(const char *fileName);
  public:
-  BA2File(const char *fileName);
+  BA2File(const char *pathName);
   virtual ~BA2File();
   void getFileList(std::vector< std::string >& fileList) const;
   long getFileSize(const char *fileName) const;

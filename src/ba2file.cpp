@@ -2,14 +2,200 @@
 #include "common.hpp"
 #include "ba2file.hpp"
 
-BA2File::BA2File(const char *fileName)
-  : FileBuffer(fileName),
-    archiveType(-1)
+size_t BA2File::allocateFileDecls(size_t fileCnt)
 {
+  size_t  n0 = fileDecls.size();
+  size_t  n = n0 + fileCnt;
+  if (fileDecls.capacity() < n)
+    fileDecls.reserve(((n + (n >> 2)) | 1023) + 1);
+  return n0;
+}
+
+void BA2File::addPackedFile(const std::string& fileName, size_t n)
+{
+  std::map< std::string, size_t >::iterator i = fileMap.find(fileName);
+  if (i != fileMap.end())
+    i->second = n;
+  else
+    fileMap.insert(std::pair< std::string, size_t >(fileName, n));
+}
+
+void BA2File::loadBA2General(FileBuffer& buf, FileDeclaration& fileDecl)
+{
+  size_t  fileCnt = buf.readUInt32();
+  size_t  nameOffs = buf.readUInt64();
+  if (fileCnt > (buf.size() / 40) || nameOffs > buf.size())
+    throw errorMessage("invalid BA2 file header");
+  size_t  n0 = allocateFileDecls(fileCnt);
+  for (size_t i = 0; i < fileCnt; i++)
   {
-    unsigned int  hdr1 = readUInt32();
-    unsigned int  hdr2 = readUInt32();
-    unsigned int  hdr3 = readUInt32();
+    (void) buf.readUInt32();            // unknown
+    (void) buf.readUInt32();            // extension
+    (void) buf.readUInt32();            // unknown
+    (void) buf.readUInt32();            // flags
+    fileDecl.fileData = buf.getDataPtr() + buf.readUInt64();
+    fileDecl.packedSize = buf.readUInt32();
+    fileDecl.unpackedSize = buf.readUInt32();
+    (void) buf.readUInt32();            // 0xBAADF00D
+    fileDecls.push_back(fileDecl);
+  }
+  buf.setPosition(nameOffs);
+  std::string fileName;
+  for (size_t i = 0; i < fileCnt; i++)
+  {
+    fileName.clear();
+    size_t  nameLen = buf.readUInt16();
+    while (nameLen--)
+      fileName += fixNameCharacter(buf.readUInt8());
+    addPackedFile(fileName, n0 + i);
+  }
+}
+
+void BA2File::loadBA2Textures(FileBuffer& buf, FileDeclaration& fileDecl)
+{
+  size_t  fileCnt = buf.readUInt32();
+  size_t  nameOffs = buf.readUInt64();
+  if (fileCnt > (buf.size() / 40) || nameOffs > buf.size())
+    throw errorMessage("invalid BA2 file header");
+  size_t  n0 = allocateFileDecls(fileCnt);
+  for (size_t i = 0; i < fileCnt; i++)
+  {
+    (void) buf.readUInt32();            // unknown
+    (void) buf.readUInt32();            // extension ("dds\0")
+    (void) buf.readUInt32();            // unknown
+    (void) buf.readUInt8();             // unknown
+    fileDecl.fileData = buf.getDataPtr() + buf.getPosition();
+    size_t  chunkCnt = buf.readUInt8();
+    (void) buf.readUInt16();            // chunk header size
+    (void) buf.readUInt16();            // texture width
+    (void) buf.readUInt16();            // texture height
+    (void) buf.readUInt8();             // number of mipmaps
+    (void) buf.readUInt8();             // format
+    (void) buf.readUInt16();            // 0x0800
+    fileDecl.packedSize = 0;
+    fileDecl.unpackedSize = 148;
+    for (size_t j = 0; j < chunkCnt; j++)
+    {
+      (void) buf.readUInt64();          // file offset of chunk data
+      fileDecl.packedSize = fileDecl.packedSize + buf.readUInt32();
+      fileDecl.unpackedSize = fileDecl.unpackedSize + buf.readUInt32();
+      (void) buf.readUInt16();          // start mipmap
+      (void) buf.readUInt16();          // end mipmap
+      (void) buf.readUInt32();          // 0xBAADF00D
+    }
+    fileDecls.push_back(fileDecl);
+  }
+  buf.setPosition(nameOffs);
+  std::string fileName;
+  for (size_t i = 0; i < fileCnt; i++)
+  {
+    fileName.clear();
+    size_t  nameLen = buf.readUInt16();
+    while (nameLen--)
+      fileName += fixNameCharacter(buf.readUInt8());
+    addPackedFile(fileName, n0 + i);
+  }
+}
+
+void BA2File::loadBSAFile(FileBuffer& buf, FileDeclaration& fileDecl)
+{
+  unsigned int  flags = buf.readUInt32();
+  if (fileDecl.archiveType < 104)
+    flags = flags & ~0x0700U;
+  if ((flags & ~0x01BCU) != 0x0003)
+    throw errorMessage("unsupported archive file format");
+  size_t  folderCnt = buf.readUInt32();
+  size_t  fileCnt = buf.readUInt32();   // total number of files
+  size_t  n0 = allocateFileDecls(fileCnt);
+  (void) buf.readUInt32();              // total length of all folder names
+  (void) buf.readUInt32();              // total length of all file names
+  (void) buf.readUInt16();              // file flags
+  (void) buf.readUInt16();              // padding
+  std::vector< unsigned int > folderFileCnts(folderCnt);
+  std::vector< std::string >  folderNames(folderCnt);
+  for (size_t i = 0; i < folderCnt; i++)
+  {
+    buf.setPosition(i * (fileDecl.archiveType < 105 ? 16U : 24U) + 36);
+    (void) buf.readUInt64();            // hash
+    folderFileCnts[i] = buf.readUInt32();
+  }
+  buf.setPosition(folderCnt * (fileDecl.archiveType < 105 ? 16U : 24U) + 36);
+  size_t  n = 0;
+  for (size_t i = 0; i < folderCnt; i++)
+  {
+    std::string folderName;
+    for (size_t j = buf.readUInt8(); j-- > 0; )
+    {
+      unsigned char c = buf.readUInt8();
+      if (folderName.empty() && (c == '.' || c == '/' || c == '\\'))
+        continue;
+      if (c)
+        folderName += fixNameCharacter(c);
+    }
+    if (folderName.length() > 0 && folderName[folderName.length() - 1] != '/')
+      folderName += '/';
+    folderNames[i] = folderName;
+    for (size_t j = folderFileCnts[i]; j-- > 0; n++)
+    {
+      (void) buf.readUInt64();          // hash
+      fileDecl.unpackedSize = buf.readUInt32();
+      fileDecl.fileData = buf.getDataPtr() + buf.readUInt32();
+      if ((flags ^ (fileDecl.unpackedSize >> 28)) & 0x04)
+      {
+        fileDecl.packedSize = fileDecl.unpackedSize & 0x3FFFFFFF;
+        fileDecl.unpackedSize = 0;
+      }
+      else
+      {
+        fileDecl.packedSize = 0;
+        fileDecl.unpackedSize = fileDecl.unpackedSize & 0x3FFFFFFF;
+      }
+      fileDecls.push_back(fileDecl);
+    }
+  }
+  if (n != fileCnt)
+    throw errorMessage("invalid file count in BSA archive");
+  n = n0;
+  std::string fileName;
+  for (size_t i = 0; i < folderCnt; i++)
+  {
+    for (size_t j = 0; j < folderFileCnts[i]; j++, n++)
+    {
+      fileName = folderNames[i];
+      unsigned char c;
+      while ((c = buf.readUInt8()) != '\0')
+        fileName += fixNameCharacter(c);
+      addPackedFile(fileName, n);
+    }
+  }
+  for (size_t i = n0; i < n; i++)
+  {
+    buf.setPosition(size_t(fileDecls[i].fileData - buf.getDataPtr()));
+    if (flags & 0x0100)
+    {
+      size_t  offs = buf.readUInt8();
+      offs = offs + buf.getPosition();
+      buf.setPosition(offs);
+    }
+    if (fileDecls[i].packedSize)
+    {
+      fileDecls[i].packedSize = fileDecls[i].packedSize - 4;
+      fileDecls[i].unpackedSize = buf.readUInt32();
+    }
+    fileDecls[i].fileData = buf.getDataPtr() + buf.getPosition();
+  }
+}
+
+void BA2File::loadArchiveFile(const char *fileName)
+{
+  FileBuffer  *bufp = new FileBuffer(fileName);
+  try
+  {
+    FileBuffer&   buf = *bufp;
+    int           archiveType = -1;
+    unsigned int  hdr1 = buf.readUInt32();
+    unsigned int  hdr2 = buf.readUInt32();
+    unsigned int  hdr3 = buf.readUInt32();
     if (hdr1 == 0x58445442 && hdr2 == 0x00000001)       // "BTDX", version
     {
       if (hdr3 == 0x4C524E47)                           // "GNRL"
@@ -22,170 +208,42 @@ BA2File::BA2File(const char *fileName)
       if (hdr2 >= 103 && hdr2 <= 105)
         archiveType = int(hdr2);
     }
-    if (archiveType < 0)
-      throw errorMessage("unsupported archive file format");
-  }
-  if (archiveType <= 1)
-  {
-    size_t  fileCnt = readUInt32();
-    size_t  nameOffs = readUInt64();
-    if (fileCnt > (size() / 40) || nameOffs > size())
-      throw errorMessage("invalid BA2 file header");
-    fileDecls.resize(fileCnt);
-    if (archiveType == 0)               // BA2 general
-    {
-      for (size_t i = 0; i < fileCnt; i++)
-      {
-        (void) readUInt32();            // unknown
-        (void) readUInt32();            // extension
-        (void) readUInt32();            // unknown
-        (void) readUInt32();            // flags
-        fileDecls[i].offset = readUInt64();
-        fileDecls[i].packedSize = readUInt32();
-        fileDecls[i].unpackedSize = readUInt32();
-        (void) readUInt32();            // 0xBAADF00D
-      }
-    }
-    else                                // BA2 textures
-    {
-      for (size_t i = 0; i < fileCnt; i++)
-      {
-        (void) readUInt32();            // unknown
-        (void) readUInt32();            // extension ("dds\0")
-        (void) readUInt32();            // unknown
-        (void) readUInt8();             // unknown
-        fileDecls[i].offset = getPosition();
-        size_t  chunkCnt = readUInt8();
-        (void) readUInt16();            // chunk header size
-        (void) readUInt16();            // texture width
-        (void) readUInt16();            // texture height
-        (void) readUInt8();             // number of mipmaps
-        (void) readUInt8();             // format
-        (void) readUInt16();            // 0x0800
-        fileDecls[i].packedSize = 0;
-        fileDecls[i].unpackedSize = 148;
-        for (size_t j = 0; j < chunkCnt; j++)
-        {
-          (void) readUInt64();          // file offset of chunk data
-          fileDecls[i].packedSize = fileDecls[i].packedSize + readUInt32();
-          fileDecls[i].unpackedSize = fileDecls[i].unpackedSize + readUInt32();
-          (void) readUInt16();          // start mipmap
-          (void) readUInt16();          // end mipmap
-          (void) readUInt32();          // 0xBAADF00D
-        }
-      }
-    }
-    setPosition(nameOffs);
-    for (size_t i = 0; i < fileCnt; i++)
-    {
-      fileDecls[i].fileName.clear();
-      size_t  nameLen = readUInt16();
-      while (nameLen--)
-        fileDecls[i].fileName += fixNameCharacter(readUInt8());
-    }
-  }
-  else                                  // BSA
-  {
-    std::string folderName;
-    unsigned int  flags = readUInt32();
-    if (archiveType < 104)
-      flags = flags & ~0x0700U;
-    if ((flags & ~0x01BCU) != 0x0003)
-      throw errorMessage("unsupported archive file format");
-    size_t  folderCnt = readUInt32();
-    fileDecls.resize(readUInt32());     // total number of files
-    (void) readUInt32();                // total length of all folder names
-    (void) readUInt32();                // total length of all file names
-    (void) readUInt16();                // file flags
-    (void) readUInt16();                // padding
-    std::vector< unsigned int > folderFileCnts(folderCnt);
-    for (size_t i = 0; i < folderCnt; i++)
-    {
-      setPosition(i * (archiveType < 105 ? 16U : 24U) + 36);
-      (void) readUInt64();              // hash
-      folderFileCnts[i] = readUInt32();
-    }
-    setPosition(folderCnt * (archiveType < 105 ? 16U : 24U) + 36);
-    size_t  n = 0;
-    for (size_t i = 0; i < folderCnt; i++)
-    {
-      folderName.clear();
-      for (size_t j = readUInt8(); j-- > 0; )
-      {
-        unsigned char c = readUInt8();
-        if (folderName.empty() && (c == '.' || c == '/' || c == '\\'))
-          continue;
-        if (c)
-          folderName += fixNameCharacter(c);
-      }
-      if (folderName.length() > 0 && folderName[folderName.length() - 1] != '/')
-        folderName += '/';
-      for (size_t j = folderFileCnts[i]; j-- > 0; n++)
-      {
-        fileDecls[n].fileName = folderName;
-        (void) readUInt64();            // hash
-        fileDecls[n].unpackedSize = readUInt32();
-        fileDecls[n].offset = readUInt32();
-        if ((flags ^ (fileDecls[n].unpackedSize >> 28)) & 0x04)
-        {
-          fileDecls[n].packedSize = fileDecls[n].unpackedSize & 0x3FFFFFFF;
-          fileDecls[n].unpackedSize = 0;
-        }
-        else
-        {
-          fileDecls[n].packedSize = 0;
-          fileDecls[n].unpackedSize = fileDecls[n].unpackedSize & 0x3FFFFFFF;
-        }
-      }
-    }
-    if (n != fileDecls.size())
-      throw errorMessage("invalid file count in BSA archive");
-    for (size_t i = 0; i < n; i++)
-    {
-      unsigned char c;
-      while ((c = readUInt8()) != '\0')
-        fileDecls[i].fileName += fixNameCharacter(c);
-    }
-    for (size_t i = 0; i < n; i++)
-    {
-      setPosition(size_t(fileDecls[i].offset));
-      if (flags & 0x0100)
-      {
-        size_t  offs = readUInt8();
-        offs = offs + getPosition();
-        setPosition(offs);
-      }
-      if (fileDecls[i].packedSize)
-      {
-        fileDecls[i].packedSize = fileDecls[i].packedSize - 4;
-        fileDecls[i].unpackedSize = readUInt32();
-      }
-      fileDecls[i].offset = getPosition();
-    }
-  }
-  for (size_t i = 0; i < fileDecls.size(); i++)
-  {
-    if (fileMap.find(fileDecls[i].fileName) == fileMap.end())
-    {
-      fileMap.insert(std::pair< std::string, const FileDeclaration * >(
-                         fileDecls[i].fileName, &(fileDecls.front()) + i));
-    }
+    FileDeclaration fileDecl;
+    fileDecl.archiveType = archiveType;
+    fileDecl.archiveFile = (unsigned int) archiveFiles.size();
+    if (archiveType == 0)
+      loadBA2General(buf, fileDecl);
+    else if (archiveType == 1)
+      loadBA2Textures(buf, fileDecl);
+    else if (archiveType >= 0)
+      loadBSAFile(buf, fileDecl);
     else
-    {
-      fileMap[fileDecls[i].fileName] = &(fileDecls.front()) + i;
-    }
+      throw errorMessage("unsupported archive file format");
+    archiveFiles.push_back(bufp);
   }
+  catch (...)
+  {
+    delete bufp;
+    throw;
+  }
+}
+
+BA2File::BA2File(const char *pathName)
+{
+  loadArchiveFile(pathName);
 }
 
 BA2File::~BA2File()
 {
+  for (size_t i = 0; i < archiveFiles.size(); i++)
+    delete archiveFiles[i];
 }
 
 void BA2File::getFileList(std::vector< std::string >& fileList) const
 {
   fileList.clear();
-  for (std::map< std::string, const FileDeclaration * >::const_iterator i =
-           fileMap.begin(); i != fileMap.end(); i++)
+  for (std::map< std::string, size_t >::const_iterator i = fileMap.begin();
+       i != fileMap.end(); i++)
   {
     fileList.push_back(i->first);
   }
@@ -194,11 +252,10 @@ void BA2File::getFileList(std::vector< std::string >& fileList) const
 long BA2File::getFileSize(const char *fileName) const
 {
   std::string s(fileName ? fileName : "");
-  std::map< std::string, const FileDeclaration * >::const_iterator  i =
-      fileMap.find(s);
+  std::map< std::string, size_t >::const_iterator i = fileMap.find(s);
   if (i == fileMap.end())
     return -1L;
-  return i->second->unpackedSize;
+  return fileDecls[i->second].unpackedSize;
 }
 
 void BA2File::extractFile(std::vector< unsigned char >& buf,
@@ -206,21 +263,23 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
 {
   buf.clear();
   std::string s(fileName ? fileName : "");
-  std::map< std::string, const FileDeclaration * >::const_iterator  i =
-    fileMap.find(s);
+  std::map< std::string, size_t >::const_iterator i = fileMap.find(s);
   if (i == fileMap.end())
     throw errorMessage("file not found in archive");
-  if (i->second->unpackedSize == 0)
+  const FileDeclaration&  fileDecl = *(&(fileDecls.front()) + i->second);
+  if (fileDecl.unpackedSize == 0)
     return;
-  buf.resize(i->second->unpackedSize, 0);
-  if (archiveType != 1)
+  FileBuffer& fileBuf = *(archiveFiles[fileDecl.archiveFile]);
+  buf.resize(fileDecl.unpackedSize, 0);
+  if (fileDecl.archiveType != 1)
   {
-    size_t  offs = size_t(i->second->offset);
-    const unsigned char *p = getDataPtr() + offs;
-    if (i->second->packedSize)
+    const unsigned char *p = fileDecl.fileData;
+    if (fileDecl.packedSize)
     {
+      if ((p + fileDecl.packedSize) > (fileBuf.getDataPtr() + fileBuf.size()))
+        throw errorMessage("invalid packed data offset or size");
       if (zlibDecompressor.decompressData(&(buf.front()), buf.size(),
-                                          p, i->second->packedSize)
+                                          p, fileDecl.packedSize)
           != buf.size())
       {
         throw errorMessage("invalid or corrupt ZLib compressed data");
@@ -228,13 +287,15 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
     }
     else
     {
+      if ((p + fileDecl.unpackedSize) > (fileBuf.getDataPtr() + fileBuf.size()))
+        throw errorMessage("invalid packed data offset or size");
       std::memcpy(&(buf.front()), p, buf.size());
     }
     return;
   }
+
   // BA2 texture
-  size_t  offs = size_t(i->second->offset);
-  const unsigned char *p = getDataPtr() + offs;
+  const unsigned char *p = fileDecl.fileData;
   size_t  chunkCnt = p[0];
   unsigned int  width = ((unsigned int) p[6] << 8) | p[5];
   unsigned int  height = ((unsigned int) p[4] << 8) | p[3];
@@ -316,33 +377,35 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
   buf[110] = 0x40;              // DDSCAPS_MIPMAP
   buf[128] = p[8];              // DXGI_FORMAT
   buf[132] = 3;                 // D3D10_RESOURCE_DIMENSION_TEXTURE2D
-  offs = offs + 11;
+  size_t  offs = size_t(p - fileBuf.getDataPtr()) + 11;
   size_t  writeOffs = 148;
   for ( ; chunkCnt-- > 0; offs = offs + 24)
   {
-    setPosition(offs);
-    size_t  chunkOffset = readUInt64();
-    size_t  chunkSizePacked = readUInt32();
-    size_t  chunkSizeUnpacked = readUInt32();
-    (void) readUInt16();
+    fileBuf.setPosition(offs);
+    size_t  chunkOffset = fileBuf.readUInt64();
+    size_t  chunkSizePacked = fileBuf.readUInt32();
+    size_t  chunkSizeUnpacked = fileBuf.readUInt32();
+    (void) fileBuf.readUInt16();
     if (!chunkSizePacked)
     {
-      if (chunkOffset >= size() || (chunkOffset + chunkSizeUnpacked) > size())
+      if (chunkOffset >= fileBuf.size() ||
+          (chunkOffset + chunkSizeUnpacked) > fileBuf.size())
       {
         throw errorMessage("invalid texture chunk offset or size");
       }
       std::memcpy(&(buf.front()) + writeOffs,
-                  getDataPtr() + chunkOffset, chunkSizeUnpacked);
+                  fileBuf.getDataPtr() + chunkOffset, chunkSizeUnpacked);
     }
     else
     {
-      if (chunkOffset >= size() || (chunkOffset + chunkSizePacked) > size())
+      if (chunkOffset >= fileBuf.size() ||
+          (chunkOffset + chunkSizePacked) > fileBuf.size())
       {
         throw errorMessage("invalid texture chunk offset or size");
       }
       if (zlibDecompressor.decompressData(&(buf.front()) + writeOffs,
                                           chunkSizeUnpacked,
-                                          getDataPtr() + chunkOffset,
+                                          fileBuf.getDataPtr() + chunkOffset,
                                           chunkSizePacked)
           != chunkSizeUnpacked)
       {
