@@ -11,7 +11,7 @@ class ZLibDecompressor
   const unsigned char *inBufEnd;
   unsigned long long  sr;
   unsigned int  srBitCnt;
-  unsigned int  *tableBuf;
+  unsigned int  tableBuf[1312];         // 320 * 3 + 32 + 32 + 288
   // huffTable[N] (0 <= N <= 255):
   //     fast decode table for code lengths <= 8, contains length | (C << 8),
   //     where C is the decoded symbol, or N bit reversed if length > 8
@@ -63,11 +63,21 @@ class ZLibDecompressor
   static void huffmanBuildDecodeTable(
       unsigned int *huffTable, const unsigned char *lenTbl, size_t lenTblSize);
   inline unsigned int huffmanDecode(const unsigned int *huffTable);
+  unsigned char *decompressZLibBlock(unsigned char *wp,
+                                     unsigned char *buf, unsigned char *bufEnd,
+                                     unsigned int& a1, unsigned int& a2);
+  size_t decompressZLib(unsigned char *buf, size_t uncompressedSize);
+  ZLibDecompressor(const unsigned char *inBuf, size_t compressedSize)
+    : inPtr(inBuf),
+      inBufEnd(inBuf + compressedSize),
+      sr(0),
+      srBitCnt(0)
+  {
+  }
  public:
-  ZLibDecompressor();
-  virtual ~ZLibDecompressor();
-  size_t decompressData(unsigned char *buf, size_t uncompressedSize,
-                        const unsigned char *inBuf, size_t compressedSize);
+  static size_t decompressData(unsigned char *buf, size_t uncompressedSize,
+                               const unsigned char *inBuf,
+                               size_t compressedSize);
 };
 
 #endif

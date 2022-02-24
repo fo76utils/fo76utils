@@ -48,6 +48,7 @@
 //   0x0000-0x3FFF: 128 * 128 bytes, bit N is set if ground cover N is enabled
 
 #include "common.hpp"
+#include "zlib.hpp"
 #include "btdfile.hpp"
 
 #include <thread>
@@ -95,7 +96,6 @@ void BTDFile::loadBlockLines_16(unsigned short *dst, const unsigned char *src,
 
 void BTDFile::loadBlock(unsigned short *tileData, size_t n,
                         unsigned char l, unsigned char b,
-                        ZLibDecompressor& zlibDecompressor,
                         std::vector< unsigned short >& zlibBuf)
 {
   if (l >= 2)
@@ -116,9 +116,9 @@ void BTDFile::loadBlock(unsigned short *tileData, size_t n,
   if ((offs + compressedSize) > fileBufSize)
     throw errorMessage("end of input file");
   unsigned char *p = reinterpret_cast< unsigned char * >(&(zlibBuf.front()));
-  if (zlibDecompressor.decompressData(p,
-                                      zlibBuf.size() * sizeof(unsigned short),
-                                      fileBuf + offs, compressedSize)
+  if (ZLibDecompressor::decompressData(p,
+                                       zlibBuf.size() * sizeof(unsigned short),
+                                       fileBuf + offs, compressedSize)
       != ((l == 0 && b != 0) ? 16384 : ((l >= 2 && b != 0) ? 32768 : 49152)))
   {
     throw errorMessage("error in compressed landscape data");
@@ -154,7 +154,6 @@ void BTDFile::loadBlock(unsigned short *tileData, size_t n,
 void BTDFile::loadBlocks(unsigned short *tileData, size_t x, size_t y,
                          size_t threadIndex, size_t threadCnt)
 {
-  ZLibDecompressor  zlibDecompressor;
   std::vector< unsigned short > zlibBuf(0x6000, 0);
   size_t  t = 0;
   // LOD3..LOD0
@@ -175,9 +174,9 @@ void BTDFile::loadBlocks(unsigned short *tileData, size_t x, size_t y,
           size_t  n = yc * ((nCellsX + (1 << l) - 1) >> l) + xc;
           unsigned short  *p =
               tileData + (((yy << l) << 17) + ((xx << l) << 7));
-          loadBlock(p, n, l, 0, zlibDecompressor, zlibBuf);
+          loadBlock(p, n, l, 0, zlibBuf);
           if (l != 1)
-            loadBlock(p, n, l, 1, zlibDecompressor, zlibBuf);
+            loadBlock(p, n, l, 1, zlibBuf);
         }
         if (++t >= threadCnt)
           t = 0;

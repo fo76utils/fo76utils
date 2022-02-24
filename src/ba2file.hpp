@@ -3,7 +3,6 @@
 #define BA2FILE_HPP_INCLUDED
 
 #include "common.hpp"
-#include "zlib.hpp"
 #include "filebuf.hpp"
 
 class BA2File
@@ -20,7 +19,6 @@ class BA2File
   };
   std::vector< FileDeclaration >  fileDecls;
   std::map< std::string, size_t > fileMap;
-  ZLibDecompressor  zlibDecompressor;
   std::vector< FileBuffer * > archiveFiles;
   const std::vector< std::string >  *includePatternsPtr;
   const std::vector< std::string >  *excludePatternsPtr;

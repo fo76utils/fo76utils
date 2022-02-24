@@ -3,7 +3,6 @@
 #define BTDFILE_HPP_INCLUDED
 
 #include "common.hpp"
-#include "zlib.hpp"
 #include "filebuf.hpp"
 
 class BTDFile : public FileBuffer
@@ -57,7 +56,6 @@ class BTDFile : public FileBuffer
                                 unsigned char l);
   void loadBlock(unsigned short *tileData, size_t n,
                  unsigned char l, unsigned char b,
-                 ZLibDecompressor& zlibDecompressor,
                  std::vector< unsigned short >& zlibBuf);
   void loadBlocks(unsigned short *tileData, size_t x, size_t y,
                   size_t threadIndex, size_t threadCnt);

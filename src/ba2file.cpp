@@ -1,5 +1,6 @@
 
 #include "common.hpp"
+#include "zlib.hpp"
 #include "ba2file.hpp"
 
 size_t BA2File::allocateFileDecls(size_t fileCnt)
@@ -338,8 +339,8 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
     {
       if ((p + fileDecl.packedSize) > (fileBuf.getDataPtr() + fileBuf.size()))
         throw errorMessage("invalid packed data offset or size");
-      if (zlibDecompressor.decompressData(&(buf.front()), buf.size(),
-                                          p, fileDecl.packedSize)
+      if (ZLibDecompressor::decompressData(&(buf.front()), buf.size(),
+                                           p, fileDecl.packedSize)
           != buf.size())
       {
         throw errorMessage("invalid or corrupt ZLib compressed data");
@@ -463,10 +464,10 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
       {
         throw errorMessage("invalid texture chunk offset or size");
       }
-      if (zlibDecompressor.decompressData(&(buf.front()) + writeOffs,
-                                          chunkSizeUnpacked,
-                                          fileBuf.getDataPtr() + chunkOffset,
-                                          chunkSizePacked)
+      if (ZLibDecompressor::decompressData(&(buf.front()) + writeOffs,
+                                           chunkSizeUnpacked,
+                                           fileBuf.getDataPtr() + chunkOffset,
+                                           chunkSizePacked)
           != chunkSizeUnpacked)
       {
         throw errorMessage("invalid or corrupt ZLib compressed data");

@@ -3,7 +3,6 @@
 #define ESMFILE_HPP_INCLUDED
 
 #include "common.hpp"
-#include "zlib.hpp"
 #include "filebuf.hpp"
 
 class ESMFile
@@ -70,7 +69,6 @@ class ESMFile
   std::vector< ESMRecord >    recordBuf;
   std::vector< unsigned int > formIDMap;
   std::vector< std::vector< unsigned char > > zlibBuf;
-  ZLibDecompressor  zlibDecompressor;
   std::vector< FileBuffer * > esmFiles;
   inline const ESMRecord *findRecord(unsigned int n) const
   {

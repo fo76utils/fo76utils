@@ -1,5 +1,6 @@
 
 #include "common.hpp"
+#include "zlib.hpp"
 #include "esmfile.hpp"
 
 const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
@@ -28,7 +29,7 @@ const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
   p[7] = (unsigned char) ((uncompressedSize >> 24) & 0xFF);
   p[10] = p[10] & 0xFB;         // clear compressed record flag
   unsigned int  recordSize =
-      (unsigned int) zlibDecompressor.decompressData(
+      (unsigned int) ZLibDecompressor::decompressData(
                          p + offs, uncompressedSize,
                          buf.getDataPtr() + (offs + 4), compressedSize);
   if (recordSize != uncompressedSize)
