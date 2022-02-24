@@ -38,6 +38,7 @@ class BA2File
   void loadBA2General(FileBuffer& buf, FileDeclaration& fileDecl);
   void loadBA2Textures(FileBuffer& buf, FileDeclaration& fileDecl);
   void loadBSAFile(FileBuffer& buf, FileDeclaration& fileDecl);
+  void loadArchivesFromDir(const char *pathName);
   void loadArchiveFile(const char *fileName);
  public:
   BA2File(const char *pathName,
@@ -51,7 +52,8 @@ class BA2File
   virtual ~BA2File();
   void getFileList(std::vector< std::string >& fileList) const;
   long getFileSize(const char *fileName) const;
-  void extractFile(std::vector< unsigned char >& buf, const char *fileName);
+  void extractFile(std::vector< unsigned char >& buf,
+                   const char *fileName) const;
 };
 
 #endif

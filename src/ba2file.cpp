@@ -3,6 +3,10 @@
 #include "zlib.hpp"
 #include "ba2file.hpp"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
+
 size_t BA2File::allocateFileDecls(size_t fileCnt)
 {
   size_t  n0 = fileDecls.size();
@@ -229,8 +233,99 @@ void BA2File::loadBSAFile(FileBuffer& buf, FileDeclaration& fileDecl)
   }
 }
 
+void BA2File::loadArchivesFromDir(const char *pathName)
+{
+  DIR     *d = opendir(pathName);
+  if (!d)
+    throw errorMessage("error opening archive directory");
+  try
+  {
+    std::set< std::string > archiveNames1;
+    std::set< std::string > archiveNames2;
+    std::string dirName(pathName);
+    if (dirName[dirName.length() - 1] != '/' &&
+        dirName[dirName.length() - 1] != '\\')
+    {
+      dirName += '/';
+    }
+    std::string baseName;
+    std::string fullName;
+    struct dirent *e;
+    while (bool(e = readdir(d)))
+    {
+      baseName = e->d_name;
+      if (baseName.length() < 5)
+        continue;
+      fullName = dirName;
+      fullName += baseName;
+      for (size_t i = 0; i < baseName.length(); i++)
+      {
+        if (baseName[i] >= 'A' && baseName[i] <= 'Z')
+          baseName[i] = baseName[i] + ('a' - 'A');
+      }
+      const char  *s = baseName.c_str() + (baseName.length() - 4);
+      if (!(std::strcmp(s, ".ba2") == 0 || std::strcmp(s, ".bsa") == 0))
+        continue;
+      if ((std::strncmp(baseName.c_str(), "oblivion", 8) == 0 ||
+           std::strncmp(baseName.c_str(), "fallout", 7) == 0 ||
+           std::strncmp(baseName.c_str(), "skyrim", 6) == 0 ||
+           std::strncmp(baseName.c_str(), "seventysix", 10) == 0) &&
+          baseName.find("update") == std::string::npos)
+      {
+        archiveNames1.insert(fullName);
+      }
+      else
+      {
+        archiveNames2.insert(fullName);
+      }
+    }
+    closedir(d);
+    d = (DIR *) 0;
+    for (std::set< std::string >::iterator i = archiveNames1.begin();
+         i != archiveNames1.end(); i++)
+    {
+      loadArchiveFile(i->c_str());
+    }
+    for (std::set< std::string >::iterator i = archiveNames2.begin();
+         i != archiveNames2.end(); i++)
+    {
+      loadArchiveFile(i->c_str());
+    }
+  }
+  catch (...)
+  {
+    if (d)
+      closedir(d);
+    throw;
+  }
+}
+
 void BA2File::loadArchiveFile(const char *fileName)
 {
+  {
+    if (!fileName || *fileName == '\0')
+      throw errorMessage("empty input file name");
+#if defined(_WIN32) || defined(_WIN64)
+    struct __stat64 st;
+    if (_stat64(fileName, &st) != 0)
+#else
+    struct stat st;
+    if (stat(fileName, &st) != 0)
+#endif
+    {
+      throw errorMessage("error opening archive file or directory");
+    }
+#if defined(_WIN32) || defined(_WIN64)
+    if ((st.st_mode & _S_IFMT) == _S_IFDIR)
+#else
+    if ((st.st_mode & S_IFMT) == S_IFDIR)
+#endif
+    {
+      loadArchivesFromDir(fileName);
+      return;
+    }
+  }
+
   FileBuffer  *bufp = new FileBuffer(fileName);
   try
   {
@@ -320,7 +415,7 @@ long BA2File::getFileSize(const char *fileName) const
 }
 
 void BA2File::extractFile(std::vector< unsigned char >& buf,
-                          const char *fileName)
+                          const char *fileName) const
 {
   buf.clear();
   std::string s(fileName ? fileName : "");
@@ -330,10 +425,10 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
   const FileDeclaration&  fileDecl = *(&(fileDecls.front()) + i->second);
   if (fileDecl.unpackedSize == 0)
     return;
-  FileBuffer& fileBuf = *(archiveFiles[fileDecl.archiveFile]);
   buf.resize(fileDecl.unpackedSize, 0);
   if (fileDecl.archiveType != 1)
   {
+    const FileBuffer& fileBuf = *(archiveFiles[fileDecl.archiveFile]);
     const unsigned char *p = fileDecl.fileData;
     if (fileDecl.packedSize)
     {
@@ -356,6 +451,8 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
   }
 
   // BA2 texture
+  FileBuffer  fileBuf(archiveFiles[fileDecl.archiveFile]->getDataPtr(),
+                      archiveFiles[fileDecl.archiveFile]->size());
   const unsigned char *p = fileDecl.fileData;
   size_t  chunkCnt = p[0];
   unsigned int  width = ((unsigned int) p[6] << 8) | p[5];
