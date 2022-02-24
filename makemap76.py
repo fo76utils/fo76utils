@@ -50,21 +50,6 @@ def runCmd(args):
         tmpArgs[0] = "./" + tmpArgs[0]
     subprocess.run(tmpArgs)
 
-def findArchives(path, pattern = ""):
-    fileList = []
-    d = os.scandir(path)
-    try:
-        while True:
-            fileName = d.__next__().name
-            tmpName = fileName.lower()
-            if pattern and not pattern in tmpName:
-                continue
-            if tmpName.endswith(".bsa") or tmpName.endswith(".ba2"):
-                fileList += [path + "/" + fileName]
-    except:
-        pass
-    return fileList
-
 iconList = [ [ 0x0000, 389, "cave"              ],
              [ 0x0001, 385, "city"              ],
              [ 0x0002, 361, "camp"              ],
@@ -206,8 +191,7 @@ if enableMarkers:
 
 def createMap(gameName, gamePath, btdName, esmName, worldID, defTxtID):
     if not noExtractTextures:
-        archiveList = findArchives(gamePath, "textures")
-        runCmd(["baunpack"] + archiveList + ["--", "@ltex/%s.txt" % (gameName)])
+        runCmd(["baunpack", gamePath, "--", "@ltex/%s.txt" % (gameName)])
     if not noExtractTerrain:
         args1 = ["btddump", gamePath + "/Terrain/" + btdName]
         args2 = cellRange + [mipLevel]

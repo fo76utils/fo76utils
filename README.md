@@ -16,7 +16,7 @@ Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on 
 
 ### Example
 
-    baunpack Fallout76/Data/*.ba2 -- @ltex/fo76.txt
+    baunpack Fallout76/Data -- @ltex/fo76.txt
     btddump Fallout76/Data/Terrain/Appalachia.btd fo76hmap.dds 0 -80 -80 80 80 1
     btddump Fallout76/Data/Terrain/Appalachia.btd fo76ltex.dds 2 -80 -80 80 80 1
     btddump Fallout76/Data/Terrain/Appalachia.btd fo76gcvr.dds 4 -80 -80 80 80 1

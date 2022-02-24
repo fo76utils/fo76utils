@@ -15,24 +15,8 @@ def runCmd(args):
         tmpArgs[0] = ".\\" + tmpArgs[0] + ".exe"
     return os.spawnv(os.P_WAIT, tmpArgs[0], tmpArgs)
 
-def findArchives(path, pattern = ""):
-    fileList = []
-    d = os.scandir(path)
-    try:
-        while True:
-            fileName = d.__next__().name
-            tmpName = fileName.lower()
-            if pattern and not pattern in tmpName:
-                continue
-            if tmpName.endswith(".bsa") or tmpName.endswith(".ba2"):
-                fileList += [path + "/" + fileName]
-    except:
-        pass
-    return fileList
-
 def createMap(gameName, gamePath, btdName, esmName, worldID, defTxtID, w, h, l):
-    archiveList = findArchives(gamePath, "textures")
-    runCmd(["baunpack"] + archiveList + ["--", "@ltex/%s.txt" % (gameName)])
+    runCmd(["baunpack", gamePath, "--", "@ltex/%s.txt" % (gameName)])
     if btdName:
         args1 = ["btddump", gamePath + "/Terrain/" + btdName]
         args2 = ["-100", "-100", "100", "100", "2"]
