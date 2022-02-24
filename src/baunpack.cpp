@@ -96,17 +96,18 @@ int main(int argc, char **argv)
   try
   {
     std::set< std::string > fileNames;
-    std::set< std::string > filesExtracted;
+    std::set< std::string > namesFound;
     std::vector< std::string >  includePatterns;
     std::vector< std::string >  excludePatterns;
     int     archiveCnt = argc - 1;
     bool    extractingFiles = false;
     for (int i = 1; i < argc; i++)
     {
-      if (std::strcmp(argv[i], "--") == 0)
+      if (std::strcmp(argv[i], "--") == 0 ||
+          std::strcmp(argv[i], "--list") == 0)
       {
         archiveCnt = i - 1;
-        extractingFiles = true;
+        extractingFiles = (argv[i][2] == '\0');
         while (++i < argc)
         {
           if (argv[i][0] == '@' && argv[i][1] != '\0')
@@ -124,7 +125,8 @@ int main(int argc, char **argv)
           }
           else if (argv[i][0] == '*' && argv[i][1] == '\0')
           {
-            includePatterns.push_back(s);
+            includePatterns.clear();
+            includePatterns.push_back(std::string());
           }
           else
           {
@@ -134,8 +136,6 @@ int main(int argc, char **argv)
               includePatterns.push_back(s);
           }
         }
-        if (includePatterns.size() < 1 && fileNames.begin() == fileNames.end())
-          includePatterns.push_back(std::string());
         break;
       }
     }
@@ -143,6 +143,8 @@ int main(int argc, char **argv)
     {
       std::fprintf(stderr, "Usage:\n\n");
       std::fprintf(stderr, "%s ARCHIVES...\n", argv[0]);
+      std::fprintf(stderr, "%s ARCHIVES... --list [PATTERNS...]\n", argv[0]);
+      std::fprintf(stderr, "%s ARCHIVES... --list @LISTFILE\n", argv[0]);
       std::fprintf(stderr, "    List the contents of archives\n");
       std::fprintf(stderr, "%s ARCHIVES... -- [PATTERNS...]\n", argv[0]);
       std::fprintf(stderr, "    Extract files with a name including "
@@ -161,71 +163,55 @@ int main(int argc, char **argv)
       return 1;
     }
 
-    std::vector< unsigned char >  outBuf;
-    for (int i = 1; i <= archiveCnt; i++)
+    if (!extractingFiles)
     {
-      BA2File ba2File(argv[i]);
-      std::vector< std::string >  fileList;
-      ba2File.getFileList(fileList);
-      bool    printArchiveFlag = true;
-      for (size_t j = 0; j < fileList.size(); j++)
+      for (int i = 1; i <= archiveCnt; i++)
       {
-        if (extractingFiles)
-        {
-          if (filesExtracted.find(fileList[j]) != filesExtracted.end())
-            continue;
-          bool    nameMatches = false;
-          if (fileNames.find(fileList[j]) != fileNames.end())
-          {
-            fileNames.erase(fileList[j]);
-            nameMatches = true;
-          }
-          else
-          {
-            for (size_t k = 0; k < includePatterns.size(); k++)
-            {
-              if (includePatterns[k].empty() ||
-                  fileList[j].find(includePatterns[k]) != std::string::npos)
-              {
-                nameMatches = true;
-                break;
-              }
-            }
-          }
-          for (size_t k = 0; k < excludePatterns.size(); k++)
-          {
-            if (fileList[j].find(excludePatterns[k]) != std::string::npos)
-            {
-              nameMatches = false;
-              break;
-            }
-          }
-          if (!nameMatches)
-            continue;
-        }
-        if (printArchiveFlag)
-        {
-          printArchiveFlag = false;
+        BA2File ba2File(argv[i],
+                        &includePatterns, &excludePatterns, &fileNames);
+        std::vector< std::string >  fileList;
+        ba2File.getFileList(fileList);
+        if (fileList.size() > 0)
           std::printf("%s:\n", argv[i]);
-        }
-        std::printf("%s\t%8u bytes\n",
-                    fileList[j].c_str(),
-                    (unsigned int) ba2File.getFileSize(fileList[j].c_str()));
-        if (extractingFiles)
+        for (size_t j = 0; j < fileList.size(); j++)
         {
-          ba2File.extractFile(outBuf, fileList[j].c_str());
-          writeFileWithPath(fileList[j].c_str(), outBuf);
-          filesExtracted.insert(fileList[j]);
+          if (fileNames.find(fileList[j]) != fileNames.end())
+            namesFound.insert(fileList[j]);
+          std::printf("%s\t%8u bytes\n",
+                      fileList[j].c_str(),
+                      (unsigned int) ba2File.getFileSize(fileList[j].c_str()));
         }
       }
     }
-    if (fileNames.begin() != fileNames.end())
+    else
+    {
+      std::vector< std::string >  archivePaths;
+      for (int i = archiveCnt; i >= 1; i--)
+        archivePaths.push_back(std::string(argv[i]));
+      BA2File ba2File(archivePaths,
+                      &includePatterns, &excludePatterns, &fileNames);
+      std::vector< std::string >  fileList;
+      ba2File.getFileList(fileList);
+      std::vector< unsigned char >  outBuf;
+      for (size_t i = 0; i < fileList.size(); i++)
+      {
+        if (fileNames.find(fileList[i]) != fileNames.end())
+          namesFound.insert(fileList[i]);
+        std::printf("%s\t%8u bytes\n",
+                    fileList[i].c_str(),
+                    (unsigned int) ba2File.getFileSize(fileList[i].c_str()));
+        ba2File.extractFile(outBuf, fileList[i].c_str());
+        writeFileWithPath(fileList[i].c_str(), outBuf);
+      }
+    }
+    if (namesFound.size() != fileNames.size())
     {
       std::fprintf(stderr, "\n%s: file(s) not found in archives:\n", argv[0]);
       for (std::set< std::string >::iterator i = fileNames.begin();
            i != fileNames.end(); i++)
       {
-        std::fprintf(stderr, "  %s\n", i->c_str());
+        if (namesFound.find(*i) == namesFound.end())
+          std::fprintf(stderr, "  %s\n", i->c_str());
       }
       return 1;
     }
