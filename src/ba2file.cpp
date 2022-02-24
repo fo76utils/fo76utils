@@ -11,13 +11,46 @@ size_t BA2File::allocateFileDecls(size_t fileCnt)
   return n0;
 }
 
-void BA2File::addPackedFile(const std::string& fileName, size_t n)
+bool BA2File::addPackedFile(const std::string& fileName, size_t n)
 {
+  bool    nameMatches = false;
+  if (fileNamesPtr && fileNamesPtr->begin() != fileNamesPtr->end())
+  {
+    nameMatches = (fileNamesPtr->find(fileName) != fileNamesPtr->end());
+  }
+  if (includePatternsPtr && includePatternsPtr->size() > 0 && !nameMatches)
+  {
+    const std::vector< std::string >& includePatterns = *includePatternsPtr;
+    for (size_t i = 0; i < includePatterns.size(); i++)
+    {
+      if (fileName.find(includePatterns[i]) != std::string::npos)
+      {
+        nameMatches = true;
+        break;
+      }
+    }
+  }
+  else if (!(fileNamesPtr && fileNamesPtr->begin() != fileNamesPtr->end()))
+  {
+    nameMatches = true;
+  }
+  if (!nameMatches)
+    return false;
+  if (excludePatternsPtr && excludePatternsPtr->size() > 0)
+  {
+    const std::vector< std::string >& excludePatterns = *excludePatternsPtr;
+    for (size_t i = 0; i < excludePatterns.size(); i++)
+    {
+      if (fileName.find(excludePatterns[i]) != std::string::npos)
+        return false;
+    }
+  }
   std::map< std::string, size_t >::iterator i = fileMap.find(fileName);
   if (i != fileMap.end())
     i->second = n;
   else
     fileMap.insert(std::pair< std::string, size_t >(fileName, n));
+  return true;
 }
 
 void BA2File::loadBA2General(FileBuffer& buf, FileDeclaration& fileDecl)
@@ -29,14 +62,14 @@ void BA2File::loadBA2General(FileBuffer& buf, FileDeclaration& fileDecl)
   size_t  n0 = allocateFileDecls(fileCnt);
   for (size_t i = 0; i < fileCnt; i++)
   {
-    (void) buf.readUInt32();            // unknown
-    (void) buf.readUInt32();            // extension
-    (void) buf.readUInt32();            // unknown
-    (void) buf.readUInt32();            // flags
+    (void) buf.readUInt32Fast();        // unknown
+    (void) buf.readUInt32Fast();        // extension
+    (void) buf.readUInt32Fast();        // unknown
+    (void) buf.readUInt32Fast();        // flags
     fileDecl.fileData = buf.getDataPtr() + buf.readUInt64();
-    fileDecl.packedSize = buf.readUInt32();
-    fileDecl.unpackedSize = buf.readUInt32();
-    (void) buf.readUInt32();            // 0xBAADF00D
+    fileDecl.packedSize = buf.readUInt32Fast();
+    fileDecl.unpackedSize = buf.readUInt32Fast();
+    (void) buf.readUInt32Fast();        // 0xBAADF00D
     fileDecls.push_back(fileDecl);
   }
   buf.setPosition(nameOffs);
@@ -45,8 +78,10 @@ void BA2File::loadBA2General(FileBuffer& buf, FileDeclaration& fileDecl)
   {
     fileName.clear();
     size_t  nameLen = buf.readUInt16();
+    if ((buf.getPosition() + nameLen) > buf.size())
+      throw errorMessage("end of input file");
     while (nameLen--)
-      fileName += fixNameCharacter(buf.readUInt8());
+      fileName += fixNameCharacter(buf.readUInt8Fast());
     addPackedFile(fileName, n0 + i);
   }
 }
@@ -60,28 +95,32 @@ void BA2File::loadBA2Textures(FileBuffer& buf, FileDeclaration& fileDecl)
   size_t  n0 = allocateFileDecls(fileCnt);
   for (size_t i = 0; i < fileCnt; i++)
   {
-    (void) buf.readUInt32();            // unknown
-    (void) buf.readUInt32();            // extension ("dds\0")
-    (void) buf.readUInt32();            // unknown
-    (void) buf.readUInt8();             // unknown
+    if ((buf.getPosition() + 24) > buf.size())
+      throw errorMessage("end of input file");
+    (void) buf.readUInt32Fast();        // unknown
+    (void) buf.readUInt32Fast();        // extension ("dds\0")
+    (void) buf.readUInt32Fast();        // unknown
+    (void) buf.readUInt8Fast();         // unknown
     fileDecl.fileData = buf.getDataPtr() + buf.getPosition();
-    size_t  chunkCnt = buf.readUInt8();
-    (void) buf.readUInt16();            // chunk header size
-    (void) buf.readUInt16();            // texture width
-    (void) buf.readUInt16();            // texture height
-    (void) buf.readUInt8();             // number of mipmaps
-    (void) buf.readUInt8();             // format
-    (void) buf.readUInt16();            // 0x0800
+    size_t  chunkCnt = buf.readUInt8Fast();
+    (void) buf.readUInt16Fast();        // chunk header size
+    (void) buf.readUInt16Fast();        // texture width
+    (void) buf.readUInt16Fast();        // texture height
+    (void) buf.readUInt8Fast();         // number of mipmaps
+    (void) buf.readUInt8Fast();         // format
+    (void) buf.readUInt16Fast();        // 0x0800
     fileDecl.packedSize = 0;
     fileDecl.unpackedSize = 148;
+    if ((buf.getPosition() + (chunkCnt * 24)) > buf.size())
+      throw errorMessage("end of input file");
     for (size_t j = 0; j < chunkCnt; j++)
     {
       (void) buf.readUInt64();          // file offset of chunk data
-      fileDecl.packedSize = fileDecl.packedSize + buf.readUInt32();
-      fileDecl.unpackedSize = fileDecl.unpackedSize + buf.readUInt32();
-      (void) buf.readUInt16();          // start mipmap
-      (void) buf.readUInt16();          // end mipmap
-      (void) buf.readUInt32();          // 0xBAADF00D
+      fileDecl.packedSize = fileDecl.packedSize + buf.readUInt32Fast();
+      fileDecl.unpackedSize = fileDecl.unpackedSize + buf.readUInt32Fast();
+      (void) buf.readUInt16Fast();      // start mipmap
+      (void) buf.readUInt16Fast();      // end mipmap
+      (void) buf.readUInt32Fast();      // 0xBAADF00D
     }
     fileDecls.push_back(fileDecl);
   }
@@ -91,8 +130,10 @@ void BA2File::loadBA2Textures(FileBuffer& buf, FileDeclaration& fileDecl)
   {
     fileName.clear();
     size_t  nameLen = buf.readUInt16();
+    if ((buf.getPosition() + nameLen) > buf.size())
+      throw errorMessage("end of input file");
     while (nameLen--)
-      fileName += fixNameCharacter(buf.readUInt8());
+      fileName += fixNameCharacter(buf.readUInt8Fast());
     addPackedFile(fileName, n0 + i);
   }
 }
@@ -165,24 +206,25 @@ void BA2File::loadBSAFile(FileBuffer& buf, FileDeclaration& fileDecl)
       unsigned char c;
       while ((c = buf.readUInt8()) != '\0')
         fileName += fixNameCharacter(c);
-      addPackedFile(fileName, n);
+      if (addPackedFile(fileName, n))
+      {
+        size_t  savedPos = buf.getPosition();
+        buf.setPosition(size_t(fileDecls[n].fileData - buf.getDataPtr()));
+        if (flags & 0x0100)
+        {
+          size_t  offs = buf.readUInt8();
+          offs = offs + buf.getPosition();
+          buf.setPosition(offs);
+        }
+        if (fileDecls[n].packedSize)
+        {
+          fileDecls[n].packedSize = fileDecls[n].packedSize - 4;
+          fileDecls[n].unpackedSize = buf.readUInt32();
+        }
+        fileDecls[n].fileData = buf.getDataPtr() + buf.getPosition();
+        buf.setPosition(savedPos);
+      }
     }
-  }
-  for (size_t i = n0; i < n; i++)
-  {
-    buf.setPosition(size_t(fileDecls[i].fileData - buf.getDataPtr()));
-    if (flags & 0x0100)
-    {
-      size_t  offs = buf.readUInt8();
-      offs = offs + buf.getPosition();
-      buf.setPosition(offs);
-    }
-    if (fileDecls[i].packedSize)
-    {
-      fileDecls[i].packedSize = fileDecls[i].packedSize - 4;
-      fileDecls[i].unpackedSize = buf.readUInt32();
-    }
-    fileDecls[i].fileData = buf.getDataPtr() + buf.getPosition();
   }
 }
 
@@ -228,9 +270,27 @@ void BA2File::loadArchiveFile(const char *fileName)
   }
 }
 
-BA2File::BA2File(const char *pathName)
+BA2File::BA2File(const char *pathName,
+                 const std::vector< std::string > *includePatterns,
+                 const std::vector< std::string > *excludePatterns,
+                 const std::set< std::string > *fileNames)
+  : includePatternsPtr(includePatterns),
+    excludePatternsPtr(excludePatterns),
+    fileNamesPtr(fileNames)
 {
   loadArchiveFile(pathName);
+}
+
+BA2File::BA2File(const std::vector< std::string >& pathNames,
+                 const std::vector< std::string > *includePatterns,
+                 const std::vector< std::string > *excludePatterns,
+                 const std::set< std::string > *fileNames)
+  : includePatternsPtr(includePatterns),
+    excludePatternsPtr(excludePatterns),
+    fileNamesPtr(fileNames)
+{
+  for (size_t i = 0; i < pathNames.size(); i++)
+    loadArchiveFile(pathNames[i].c_str());
 }
 
 BA2File::~BA2File()
