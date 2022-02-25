@@ -19,7 +19,6 @@ enableGCVR = False
 enableVCLR = True
 # enable these to save time if all the data is already extracted and up to date
 noExtractIcons = False          # do not extract map marker icons
-noExtractTextures = False       # do not extract land textures
 noExtractTerrain = False        # do not extract terrain from Appalachia.btd
 markerDefFileName = "fo76icondefs.txt"
 # SWFTools from http://www.swftools.org/download.html
@@ -35,7 +34,7 @@ if useAdditionalMarkers:
 if "win" in sys.platform:
     imageMagickPath = "C:/Program Files/ImageMagick-7.1.0-Q16-HDRI/magick.exe"
     baunpackPath = "./baunpack.exe"
-    fo76Path = "D:/SteamLibrary/steamapps/common/Fallout76/Data"
+    fo76Path = "G:/SteamLibrary/steamapps/common/Fallout76/Data"
 else:
     imageMagickPath = "/usr/bin/magick"
     baunpackPath = "./baunpack"
@@ -190,8 +189,6 @@ if enableMarkers:
     markerDefFile.close()
 
 def createMap(gameName, gamePath, btdName, esmName, worldID, defTxtID):
-    if not noExtractTextures:
-        runCmd(["baunpack", gamePath, "--", "@ltex/%s.txt" % (gameName)])
     if not noExtractTerrain:
         args1 = ["btddump", gamePath + "/Terrain/" + btdName]
         args2 = cellRange + [mipLevel]
@@ -207,7 +204,7 @@ def createMap(gameName, gamePath, btdName, esmName, worldID, defTxtID):
     runCmd(["findwater", gamePath + "/" + esmName, gameName + "wmap.dds",
             gameName + "hmap.dds", worldID])
     landtxtOptions = [gameName + "ltex.dds", gameName + "ltx2.dds"]
-    landtxtOptions += ["ltex/" + gameName + ".txt"]
+    landtxtOptions += ["ltex/" + gameName + ".txt", "-d", gamePath]
     landtxtOptions += ["-mip", mipLevel + textureMip]
     landtxtOptions += ["-mult", textureBrightness]
     if enableGCVR:
