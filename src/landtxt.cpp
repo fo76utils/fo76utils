@@ -2,6 +2,7 @@
 #include "common.hpp"
 #include "filebuf.hpp"
 #include "ddstxt.hpp"
+#include "ba2file.hpp"
 
 #include <thread>
 
@@ -15,9 +16,11 @@ static bool isDDSFileName(const std::string& fileName)
 }
 
 static void loadTextures(std::vector< DDSTexture * >& textures,
-                         const char *listFileName, bool verboseMode)
+                         const char *listFileName, bool verboseMode,
+                         int mipOffset = 0, const char *archivePath = 0)
 {
   std::vector< std::string >  fileNames;
+  std::set< std::string > fileNameSet;
   {
     FileBuffer  inFile(listFileName);
     std::string s;
@@ -42,6 +45,7 @@ static void loadTextures(std::vector< DDSTexture * >& textures,
         if (!s.empty())
         {
           fileNames.push_back(s);
+          fileNameSet.insert(s);
           s.clear();
         }
       }
@@ -54,27 +58,43 @@ static void loadTextures(std::vector< DDSTexture * >& textures,
   if (fileNames.size() < 1)
     throw errorMessage("texture file list is empty");
   textures.resize(fileNames.size(), (DDSTexture *) 0);
+  BA2File *ba2File = (BA2File *) 0;
+  if (archivePath)
+    ba2File = new BA2File(archivePath, 0, 0, &fileNameSet);
+  std::vector< unsigned char >  tmpBuf;
   for (size_t i = 0; i < fileNames.size(); i++)
   {
-    if (verboseMode)
-    {
-      std::fprintf(stderr, "\rLoading texture %3d: %-58s",
-                   int(i), fileNames[i].c_str());
-    }
     try
     {
-      textures[i] = new DDSTexture(fileNames[i].c_str());
+      if (verboseMode)
+      {
+        std::fprintf(stderr, "\rLoading texture %3d: %-58s",
+                     int(i), fileNames[i].c_str());
+      }
+      if (ba2File)
+      {
+        int     n = ba2File->extractTexture(tmpBuf, fileNames[i], mipOffset);
+        textures[i] = new DDSTexture(&(tmpBuf.front()), tmpBuf.size(), n);
+      }
+      else
+      {
+        textures[i] = new DDSTexture(fileNames[i].c_str(), mipOffset);
+      }
     }
     catch (...)
     {
       if (isDDSFileName(fileNames[i]))
       {
+        if (ba2File)
+          delete ba2File;
         if (verboseMode)
           std::fputc('\n', stderr);
         throw;
       }
     }
   }
+  if (ba2File)
+    delete ba2File;
   if (verboseMode)
     std::fputc('\n', stderr);
 }
@@ -298,6 +318,8 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "Input file is raw 4 bytes per vertex "
                          "(btddump or fo4land format 2)\n\n");
     std::fprintf(stderr, "Options:\n");
+    std::fprintf(stderr, "    -d PATHNAME         game data path "
+                         "or texture archive file\n");
     std::fprintf(stderr, "    -vclr FILENAME.DDS  vertex color file name\n");
     std::fprintf(stderr, "    -gcvr FILENAME.DDS  ground cover file name\n");
     std::fprintf(stderr, "    -mip FLOAT          mip level\n");
@@ -330,9 +352,16 @@ int main(int argc, char **argv)
     bool          verboseMode = true;
     bool          fo76VClrFile = false;
     unsigned char fo76VClrMip = 0;
+    const char    *archivePath = (char *) 0;
     for (int i = 4; i < argc; i++)
     {
-      if (std::strcmp(argv[i], "-vclr") == 0)
+      if (std::strcmp(argv[i], "-d") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        archivePath = argv[i];
+      }
+      else if (std::strcmp(argv[i], "-vclr") == 0)
       {
         if (++i >= argc)
           throw errorMessage("missing argument for %s", argv[i - 1]);
@@ -447,7 +476,9 @@ int main(int argc, char **argv)
       if (tmpWidth != width || tmpHeight != height)
         throw errorMessage("ground cover dimensions do not match input file");
     }
-    loadTextures(landTextures, argv[3], verboseMode);
+    loadTextures(landTextures, argv[3], verboseMode, int(mipLevel),
+                 archivePath);
+    mipLevel = mipLevel - float(int(mipLevel));
 
     width = width << xyScale;
     height = height << xyScale;
