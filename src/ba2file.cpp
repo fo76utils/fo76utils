@@ -405,61 +405,58 @@ void BA2File::getFileList(std::vector< std::string >& fileList) const
   }
 }
 
-long BA2File::getFileSize(const char *fileName) const
+long BA2File::getFileSize(const std::string& fileName) const
 {
-  std::string s(fileName ? fileName : "");
-  std::map< std::string, size_t >::const_iterator i = fileMap.find(s);
+  std::map< std::string, size_t >::const_iterator i = fileMap.find(fileName);
   if (i == fileMap.end())
     return -1L;
   return fileDecls[i->second].unpackedSize;
 }
 
-void BA2File::extractFile(std::vector< unsigned char >& buf,
-                          const char *fileName) const
+int BA2File::extractBA2Texture(std::vector< unsigned char >& buf,
+                               const FileDeclaration& fileDecl,
+                               int mipOffset) const
 {
-  buf.clear();
-  std::string s(fileName ? fileName : "");
-  std::map< std::string, size_t >::const_iterator i = fileMap.find(s);
-  if (i == fileMap.end())
-    throw errorMessage("file not found in archive");
-  const FileDeclaration&  fileDecl = *(&(fileDecls.front()) + i->second);
-  if (fileDecl.unpackedSize == 0)
-    return;
-  buf.resize(fileDecl.unpackedSize, 0);
-  if (fileDecl.archiveType != 1)
-  {
-    const FileBuffer& fileBuf = *(archiveFiles[fileDecl.archiveFile]);
-    const unsigned char *p = fileDecl.fileData;
-    if (fileDecl.packedSize)
-    {
-      if ((p + fileDecl.packedSize) > (fileBuf.getDataPtr() + fileBuf.size()))
-        throw errorMessage("invalid packed data offset or size");
-      if (ZLibDecompressor::decompressData(&(buf.front()), buf.size(),
-                                           p, fileDecl.packedSize)
-          != buf.size())
-      {
-        throw errorMessage("invalid or corrupt ZLib compressed data");
-      }
-    }
-    else
-    {
-      if ((p + fileDecl.unpackedSize) > (fileBuf.getDataPtr() + fileBuf.size()))
-        throw errorMessage("invalid packed data offset or size");
-      std::memcpy(&(buf.front()), p, buf.size());
-    }
-    return;
-  }
-
-  // BA2 texture
   FileBuffer  fileBuf(archiveFiles[fileDecl.archiveFile]->getDataPtr(),
                       archiveFiles[fileDecl.archiveFile]->size());
   const unsigned char *p = fileDecl.fileData;
   size_t  chunkCnt = p[0];
   unsigned int  width = ((unsigned int) p[6] << 8) | p[5];
   unsigned int  height = ((unsigned int) p[4] << 8) | p[3];
+  int     mipCnt = p[7];
+  unsigned char dxgiFormat = p[8];
+  size_t  offs = size_t(p - fileBuf.getDataPtr()) + 11;
+  buf.resize(148);
+  for ( ; chunkCnt-- > 0; offs = offs + 24)
+  {
+    fileBuf.setPosition(offs);
+    size_t  chunkOffset = fileBuf.readUInt64();
+    size_t  chunkSizePacked = fileBuf.readUInt32Fast();
+    size_t  chunkSizeUnpacked = fileBuf.readUInt32Fast();
+    int     chunkMipCnt = fileBuf.readUInt16Fast();
+    chunkMipCnt = int(fileBuf.readUInt16Fast()) + 1 - chunkMipCnt;
+    if (chunkMipCnt > 0 &&
+        (chunkMipCnt < mipOffset || (chunkMipCnt == mipOffset && chunkCnt > 0)))
+    {
+      do
+      {
+        mipOffset--;
+        width = (width + 1) >> 1;
+        height = (height + 1) >> 1;
+        mipCnt--;
+      }
+      while (--chunkMipCnt > 0);
+    }
+    else
+    {
+      extractBlock(buf, chunkSizeUnpacked, fileDecl,
+                   fileBuf.getDataPtr() + chunkOffset, chunkSizePacked);
+    }
+  }
+  // write DDS header
   unsigned int  pitch = width;
   bool    compressedTexture = true;
-  switch (p[8])
+  switch (dxgiFormat)
   {
     case 0x3D:                  // DXGI_FORMAT_R8_UNORM
       compressedTexture = false;
@@ -499,7 +496,8 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
       pitch = (((width + 3) >> 2) * ((height + 3) >> 2)) << 4;
       break;
     default:
-      throw errorMessage("unsupported DXGI_FORMAT 0x%02X", (unsigned int) p[8]);
+      throw errorMessage("unsupported DXGI_FORMAT 0x%02X",
+                         (unsigned int) dxgiFormat);
   }
   buf[0] = 0x44;                // 'D'
   buf[1] = 0x44;                // 'D'
@@ -515,15 +513,15 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
     buf[10] = 0x02;             // DDSD_MIPMAPCOUNT
   else
     buf[10] = 0x0A;             // DDSD_MIPMAPCOUNT, DDSD_LINEARSIZE
-  buf[12] = p[3];               // height
-  buf[13] = p[4];
-  buf[16] = p[5];               // width
-  buf[17] = p[6];
+  buf[12] = (unsigned char) (height & 0xFF);    // height
+  buf[13] = (unsigned char) (height >> 8);
+  buf[16] = (unsigned char) (width & 0xFF);     // width
+  buf[17] = (unsigned char) (width >> 8);
   buf[20] = (unsigned char) (pitch & 0xFF);
   buf[21] = (unsigned char) ((pitch >> 8) & 0xFF);
   buf[22] = (unsigned char) ((pitch >> 16) & 0xFF);
   buf[23] = (unsigned char) ((pitch >> 24) & 0xFF);
-  buf[28] = p[7];               // mipmap count
+  buf[28] = (unsigned char) mipCnt;     // mipmap count
   buf[76] = 32;                 // size of DDS_PIXELFORMAT
   buf[80] = 0x04;               // DDPF_FOURCC
   buf[84] = 0x44;               // 'D'
@@ -533,44 +531,78 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
   buf[108] = 0x08;              // DDSCAPS_COMPLEX
   buf[109] = 0x10;              // DDSCAPS_TEXTURE
   buf[110] = 0x40;              // DDSCAPS_MIPMAP
-  buf[128] = p[8];              // DXGI_FORMAT
+  buf[128] = dxgiFormat;        // DXGI_FORMAT
   buf[132] = 3;                 // D3D10_RESOURCE_DIMENSION_TEXTURE2D
-  size_t  offs = size_t(p - fileBuf.getDataPtr()) + 11;
-  size_t  writeOffs = 148;
-  for ( ; chunkCnt-- > 0; offs = offs + 24)
+  // return the remaining number of mip levels to be skipped
+  return mipOffset;
+}
+
+void BA2File::extractBlock(
+    std::vector< unsigned char >& buf, unsigned int unpackedSize,
+    const FileDeclaration& fileDecl,
+    const unsigned char *p, unsigned int packedSize) const
+{
+  size_t  n = buf.size();
+  buf.resize(n + unpackedSize);
+  const FileBuffer& fileBuf = *(archiveFiles[fileDecl.archiveFile]);
+  size_t  offs = size_t(p - fileBuf.getDataPtr());
+  if (!packedSize)
   {
-    fileBuf.setPosition(offs);
-    size_t  chunkOffset = fileBuf.readUInt64();
-    size_t  chunkSizePacked = fileBuf.readUInt32();
-    size_t  chunkSizeUnpacked = fileBuf.readUInt32();
-    (void) fileBuf.readUInt16();
-    if (!chunkSizePacked)
-    {
-      if (chunkOffset >= fileBuf.size() ||
-          (chunkOffset + chunkSizeUnpacked) > fileBuf.size())
-      {
-        throw errorMessage("invalid texture chunk offset or size");
-      }
-      std::memcpy(&(buf.front()) + writeOffs,
-                  fileBuf.getDataPtr() + chunkOffset, chunkSizeUnpacked);
-    }
-    else
-    {
-      if (chunkOffset >= fileBuf.size() ||
-          (chunkOffset + chunkSizePacked) > fileBuf.size())
-      {
-        throw errorMessage("invalid texture chunk offset or size");
-      }
-      if (ZLibDecompressor::decompressData(&(buf.front()) + writeOffs,
-                                           chunkSizeUnpacked,
-                                           fileBuf.getDataPtr() + chunkOffset,
-                                           chunkSizePacked)
-          != chunkSizeUnpacked)
-      {
-        throw errorMessage("invalid or corrupt ZLib compressed data");
-      }
-    }
-    writeOffs = writeOffs + chunkSizeUnpacked;
+    if (offs >= fileBuf.size() || (offs + unpackedSize) > fileBuf.size())
+      throw errorMessage("invalid packed data offset or size");
+    std::memcpy(&(buf.front()) + n, p, unpackedSize);
   }
+  else
+  {
+    if (offs >= fileBuf.size() || (offs + packedSize) > fileBuf.size())
+      throw errorMessage("invalid packed data offset or size");
+    if (ZLibDecompressor::decompressData(&(buf.front()) + n, unpackedSize,
+                                         p, packedSize) != unpackedSize)
+    {
+      throw errorMessage("invalid or corrupt ZLib compressed data");
+    }
+  }
+}
+
+void BA2File::extractFile(std::vector< unsigned char >& buf,
+                          const std::string& fileName) const
+{
+  buf.clear();
+  std::map< std::string, size_t >::const_iterator i = fileMap.find(fileName);
+  if (i == fileMap.end())
+    throw errorMessage("file not found in archive");
+  const FileDeclaration&  fileDecl = *(&(fileDecls.front()) + i->second);
+  if (fileDecl.unpackedSize == 0)
+    return;
+  buf.reserve(fileDecl.unpackedSize);
+
+  if (fileDecl.archiveType == 1)
+  {
+    (void) extractBA2Texture(buf, fileDecl);
+    return;
+  }
+
+  extractBlock(buf, fileDecl.unpackedSize,
+               fileDecl, fileDecl.fileData, fileDecl.packedSize);
+}
+
+int BA2File::extractTexture(std::vector< unsigned char >& buf,
+                            const std::string& fileName, int mipOffset) const
+{
+  buf.clear();
+  std::map< std::string, size_t >::const_iterator i = fileMap.find(fileName);
+  if (i == fileMap.end())
+    throw errorMessage("file not found in archive");
+  const FileDeclaration&  fileDecl = *(&(fileDecls.front()) + i->second);
+  if (fileDecl.unpackedSize == 0)
+    return mipOffset;
+  buf.reserve(fileDecl.unpackedSize);
+
+  if (fileDecl.archiveType == 1)
+    return extractBA2Texture(buf, fileDecl, mipOffset);
+
+  extractBlock(buf, fileDecl.unpackedSize,
+               fileDecl, fileDecl.fileData, fileDecl.packedSize);
+  return mipOffset;
 }
 

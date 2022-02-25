@@ -51,9 +51,21 @@ class BA2File
           const std::set< std::string > *fileNames = 0);
   virtual ~BA2File();
   void getFileList(std::vector< std::string >& fileList) const;
-  long getFileSize(const char *fileName) const;
+  long getFileSize(const std::string& fileName) const;
+ protected:
+  int extractBA2Texture(std::vector< unsigned char >& buf,
+                        const FileDeclaration& fileDecl,
+                        int mipOffset = 0) const;
+  void extractBlock(std::vector< unsigned char >& buf,
+                    unsigned int unpackedSize,
+                    const FileDeclaration& fileDecl,
+                    const unsigned char *p, unsigned int packedSize) const;
+ public:
   void extractFile(std::vector< unsigned char >& buf,
-                   const char *fileName) const;
+                   const std::string& fileName) const;
+  // returns the remaining number of mip levels to be skipped
+  int extractTexture(std::vector< unsigned char >& buf,
+                     const std::string& fileName, int mipOffset = 0) const;
 };
 
 #endif
