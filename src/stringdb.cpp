@@ -49,7 +49,7 @@ bool StringDB::loadFile(const char *fileName, const char *stringsPrefix)
     }
     if (tmpName.empty())
       continue;
-    ba2File.extractFile(buf, tmpName.c_str());
+    ba2File.extractFile(buf, tmpName);
     fileBuf = &(buf.front());
     fileBufSize = buf.size();
     filePos = 0;
