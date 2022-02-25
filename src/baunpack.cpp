@@ -143,9 +143,12 @@ int main(int argc, char **argv)
     {
       std::fprintf(stderr, "Usage:\n\n");
       std::fprintf(stderr, "%s ARCHIVES...\n", argv[0]);
+      std::fprintf(stderr, "    List the contents of .ba2 or .bsa files, "
+                           "or archive directories\n");
       std::fprintf(stderr, "%s ARCHIVES... --list [PATTERNS...]\n", argv[0]);
       std::fprintf(stderr, "%s ARCHIVES... --list @LISTFILE\n", argv[0]);
-      std::fprintf(stderr, "    List the contents of archives\n");
+      std::fprintf(stderr, "    List archive contents, filtered by name "
+                           "patterns or list file\n");
       std::fprintf(stderr, "%s ARCHIVES... -- [PATTERNS...]\n", argv[0]);
       std::fprintf(stderr, "    Extract files with a name including "
                            "any of the patterns, archives\n");
@@ -179,7 +182,7 @@ int main(int argc, char **argv)
             namesFound.insert(fileList[j]);
           std::printf("%s\t%8u bytes\n",
                       fileList[j].c_str(),
-                      (unsigned int) ba2File.getFileSize(fileList[j].c_str()));
+                      (unsigned int) ba2File.getFileSize(fileList[j]));
         }
       }
     }
@@ -199,8 +202,8 @@ int main(int argc, char **argv)
           namesFound.insert(fileList[i]);
         std::printf("%s\t%8u bytes\n",
                     fileList[i].c_str(),
-                    (unsigned int) ba2File.getFileSize(fileList[i].c_str()));
-        ba2File.extractFile(outBuf, fileList[i].c_str());
+                    (unsigned int) ba2File.getFileSize(fileList[i]));
+        ba2File.extractFile(outBuf, fileList[i]);
         writeFileWithPath(fileList[i].c_str(), outBuf);
       }
     }
