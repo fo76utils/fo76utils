@@ -14,18 +14,25 @@ class DDSTexture
   bool          haveAlpha;
   unsigned int  *textureData[20];
   std::vector< unsigned int > textureDataBuf;
-  static size_t decodeBlock_BC1(unsigned int *dst, const unsigned char *src);
-  static size_t decodeBlock_BC2(unsigned int *dst, const unsigned char *src);
-  static size_t decodeBlock_BC3(unsigned int *dst, const unsigned char *src);
-  static size_t decodeBlock_BC4(unsigned int *dst, const unsigned char *src);
-  static size_t decodeBlock_BC4S(unsigned int *dst, const unsigned char *src);
-  static size_t decodeBlock_BC5(unsigned int *dst, const unsigned char *src);
-  static size_t decodeBlock_BC5S(unsigned int *dst, const unsigned char *src);
-  void loadTexture(FileBuffer& buf);
+  static size_t decodeBlock_BC1(unsigned int *dst, const unsigned char *src,
+                                unsigned int w);
+  static size_t decodeBlock_BC2(unsigned int *dst, const unsigned char *src,
+                                unsigned int w);
+  static size_t decodeBlock_BC3(unsigned int *dst, const unsigned char *src,
+                                unsigned int w);
+  static size_t decodeBlock_BC4(unsigned int *dst, const unsigned char *src,
+                                unsigned int w);
+  static size_t decodeBlock_BC4S(unsigned int *dst, const unsigned char *src,
+                                 unsigned int w);
+  static size_t decodeBlock_BC5(unsigned int *dst, const unsigned char *src,
+                                unsigned int w);
+  static size_t decodeBlock_BC5S(unsigned int *dst, const unsigned char *src,
+                                 unsigned int w);
+  void loadTexture(FileBuffer& buf, int mipOffset);
  public:
-  DDSTexture(const char *fileName);
-  DDSTexture(const unsigned char *buf, size_t bufSize);
-  DDSTexture(FileBuffer& buf);
+  DDSTexture(const char *fileName, int mipOffset = 0);
+  DDSTexture(const unsigned char *buf, size_t bufSize, int mipOffset = 0);
+  DDSTexture(FileBuffer& buf, int mipOffset = 0);
   virtual ~DDSTexture();
   inline int getWidth() const
   {

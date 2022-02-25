@@ -50,34 +50,42 @@ static inline unsigned int decodeBC1Colors(unsigned int *c,
   return bc;
 }
 
-size_t DDSTexture::decodeBlock_BC1(unsigned int *dst, const unsigned char *src)
+size_t DDSTexture::decodeBlock_BC1(unsigned int *dst, const unsigned char *src,
+                                   unsigned int w)
 {
   unsigned int  c[4];
   unsigned int  bc = decodeBC1Colors(c, src, 0xFF000000U);
   for (unsigned int i = 0; i < 16; i++)
   {
-    dst[i] = c[bc & 3];
+    dst[(i >> 2) * w + (i & 3)] = c[bc & 3];
     bc = bc >> 2;
   }
   return 8;
 }
 
-size_t DDSTexture::decodeBlock_BC2(unsigned int *dst, const unsigned char *src)
+size_t DDSTexture::decodeBlock_BC2(unsigned int *dst, const unsigned char *src,
+                                   unsigned int w)
 {
   unsigned int  c[4];
   unsigned int  bc = decodeBC1Colors(c, src + 8);
-  for (unsigned int i = 0; i < 8; i++)
+  for (unsigned int i = 0; i < 4; i++)
   {
-    unsigned char a = src[i];
-    dst[i << 1] = c[bc & 3] | ((a & 0x0FU) * 0x11000000U);
+    unsigned char a = src[i << 1];
+    dst[i * w] = c[bc & 3] | ((a & 0x0FU) * 0x11000000U);
     bc = bc >> 2;
-    dst[(i << 1) + 1] = c[bc & 3] | (((a >> 4) & 0x0FU) * 0x11000000U);
+    dst[i * w + 1] = c[bc & 3] | (((a >> 4) & 0x0FU) * 0x11000000U);
+    bc = bc >> 2;
+    a = src[(i << 1) + 1];
+    dst[i * w + 2] = c[bc & 3] | ((a & 0x0FU) * 0x11000000U);
+    bc = bc >> 2;
+    dst[i * w + 3] = c[bc & 3] | (((a >> 4) & 0x0FU) * 0x11000000U);
     bc = bc >> 2;
   }
   return 16;
 }
 
-size_t DDSTexture::decodeBlock_BC3(unsigned int *dst, const unsigned char *src)
+size_t DDSTexture::decodeBlock_BC3(unsigned int *dst, const unsigned char *src,
+                                   unsigned int w)
 {
   unsigned int  c[4];
   unsigned int  a[8];
@@ -85,38 +93,41 @@ size_t DDSTexture::decodeBlock_BC3(unsigned int *dst, const unsigned char *src)
   unsigned int  bc = decodeBC1Colors(c, src + 8);
   for (unsigned int i = 0; i < 16; i++)
   {
-    dst[i] = c[bc & 3] | (a[ba & 7] << 24);
+    dst[(i >> 2) * w + (i & 3)] = c[bc & 3] | (a[ba & 7] << 24);
     ba = ba >> 3;
     bc = bc >> 2;
   }
   return 16;
 }
 
-size_t DDSTexture::decodeBlock_BC4(unsigned int *dst, const unsigned char *src)
+size_t DDSTexture::decodeBlock_BC4(unsigned int *dst, const unsigned char *src,
+                                   unsigned int w)
 {
   unsigned int  a[8];
   unsigned long long  ba = decodeBC3Alpha(a, src);
   for (unsigned int i = 0; i < 16; i++)
   {
-    dst[i] = (a[ba & 7] * 0x00010101U) | 0xFF000000U;
+    dst[(i >> 2) * w + (i & 3)] = (a[ba & 7] * 0x00010101U) | 0xFF000000U;
     ba = ba >> 3;
   }
   return 8;
 }
 
-size_t DDSTexture::decodeBlock_BC4S(unsigned int *dst, const unsigned char *src)
+size_t DDSTexture::decodeBlock_BC4S(unsigned int *dst, const unsigned char *src,
+                                    unsigned int w)
 {
   unsigned int  a[8];
   unsigned long long  ba = decodeBC3Alpha(a, src, true);
   for (unsigned int i = 0; i < 16; i++)
   {
-    dst[i] = (a[ba & 7] * 0x00010101U) | 0xFF000000U;
+    dst[(i >> 2) * w + (i & 3)] = (a[ba & 7] * 0x00010101U) | 0xFF000000U;
     ba = ba >> 3;
   }
   return 8;
 }
 
-size_t DDSTexture::decodeBlock_BC5(unsigned int *dst, const unsigned char *src)
+size_t DDSTexture::decodeBlock_BC5(unsigned int *dst, const unsigned char *src,
+                                   unsigned int w)
 {
   unsigned int  a1[8];
   unsigned int  a2[8];
@@ -124,14 +135,16 @@ size_t DDSTexture::decodeBlock_BC5(unsigned int *dst, const unsigned char *src)
   unsigned long long  ba2 = decodeBC3Alpha(a2, src + 8);
   for (unsigned int i = 0; i < 16; i++)
   {
-    dst[i] = a1[ba1 & 7] | (a2[ba2 & 7] << 8) | 0xFF000000U;
+    dst[(i >> 2) * w + (i & 3)] =
+        a1[ba1 & 7] | (a2[ba2 & 7] << 8) | 0xFF000000U;
     ba1 = ba1 >> 3;
     ba2 = ba2 >> 3;
   }
   return 16;
 }
 
-size_t DDSTexture::decodeBlock_BC5S(unsigned int *dst, const unsigned char *src)
+size_t DDSTexture::decodeBlock_BC5S(unsigned int *dst, const unsigned char *src,
+                                    unsigned int w)
 {
   unsigned int  a1[8];
   unsigned int  a2[8];
@@ -139,14 +152,15 @@ size_t DDSTexture::decodeBlock_BC5S(unsigned int *dst, const unsigned char *src)
   unsigned long long  ba2 = decodeBC3Alpha(a2, src + 8, true);
   for (unsigned int i = 0; i < 16; i++)
   {
-    dst[i] = a1[ba1 & 7] | (a2[ba2 & 7] << 8) | 0xFF000000U;
+    dst[(i >> 2) * w + (i & 3)] =
+        a1[ba1 & 7] | (a2[ba2 & 7] << 8) | 0xFF000000U;
     ba1 = ba1 >> 3;
     ba2 = ba2 >> 3;
   }
   return 16;
 }
 
-void DDSTexture::loadTexture(FileBuffer& buf)
+void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
 {
   buf.setPosition(0);
   if (buf.size() < 148 || !FileBuffer::checkType(buf.readUInt32(), "DDS "))
@@ -182,8 +196,8 @@ void DDSTexture::loadTexture(FileBuffer& buf)
   unsigned int  fourCC = buf.readUInt32();
   unsigned int  dataOffs = 128;
   size_t  blockSize = 8;
-  size_t  (*decodeFunction)(unsigned int *, const unsigned char *) =
-      &decodeBlock_BC1;
+  size_t  (*decodeFunction)(unsigned int *, const unsigned char *,
+                            unsigned int) = &decodeBlock_BC1;
   if (FileBuffer::checkType(fourCC, "DX10"))
   {
     dataOffs = 148;
@@ -260,6 +274,15 @@ void DDSTexture::loadTexture(FileBuffer& buf)
   }
   if (buf.size() < sizeRequired)
     throw errorMessage("DDS file is shorter than expected");
+  const unsigned char *srcPtr = buf.getDataPtr() + dataOffs;
+  for ( ; mipOffset > 0 && mipLevelCnt > 1; mipOffset--, mipLevelCnt--)
+  {
+    unsigned int  w = (xSizeMip0 + 3) >> 2;
+    unsigned int  h = (ySizeMip0 + 3) >> 2;
+    srcPtr = srcPtr + (size_t(w) * h * blockSize);
+    xSizeMip0 = (xSizeMip0 + 1) >> 1;
+    ySizeMip0 = (ySizeMip0 + 1) >> 1;
+  }
 
   size_t  dataOffsets[20];
   size_t  bufSize = 0;
@@ -275,7 +298,6 @@ void DDSTexture::loadTexture(FileBuffer& buf)
     bufSize = bufSize + (size_t(w) * h);
   }
   textureDataBuf.resize(bufSize);
-  const unsigned char *srcPtr = buf.getDataPtr() + dataOffs;
   for (int i = 0; i < 20; i++)
   {
     unsigned int  *p = &(textureDataBuf.front()) + dataOffsets[i];
@@ -286,16 +308,30 @@ void DDSTexture::loadTexture(FileBuffer& buf)
       w = 1;
     if (h < 1)
       h = 1;
-    if (i < mipLevelCnt && w >= 4 && h >= 4)
+    if (i < mipLevelCnt)
     {
-      unsigned int  tmpBuf[16];
-      for (unsigned int y = 0; y < h; y = y + 4)
+      if (w < 4 || h < 4)
       {
-        for (unsigned int x = 0; x < w; x = x + 4)
+        unsigned int  tmpBuf[16];
+        for (unsigned int y = 0; y < h; y = y + 4)
         {
-          srcPtr = srcPtr + decodeFunction(tmpBuf, srcPtr);
-          for (unsigned int j = 0; j < 16; j++)
-            p[(y + (j >> 2)) * w + (x + (j & 3))] = tmpBuf[j];
+          for (unsigned int x = 0; x < w; x = x + 4)
+          {
+            srcPtr = srcPtr + decodeFunction(tmpBuf, srcPtr, 4);
+            for (unsigned int j = 0; j < 16; j++)
+            {
+              if ((y + (j >> 2)) < h && (x + (j & 3)) < w)
+                p[(y + (j >> 2)) * w + (x + (j & 3))] = tmpBuf[j];
+            }
+          }
+        }
+      }
+      else
+      {
+        for (unsigned int y = 0; y < h; y = y + 4)
+        {
+          for (unsigned int x = 0; x < w; x = x + 4)
+            srcPtr = srcPtr + decodeFunction(p + (y * w + x), srcPtr, w);
         }
       }
     }
@@ -316,23 +352,30 @@ void DDSTexture::loadTexture(FileBuffer& buf)
       }
     }
   }
+  for ( ; mipOffset > 0; mipOffset--)
+  {
+    xSizeMip0 = (xSizeMip0 + 1) >> 1;
+    ySizeMip0 = (ySizeMip0 + 1) >> 1;
+    for (int i = 0; (i + 1) < 20; i++)
+      dataOffsets[i] = dataOffsets[i + 1];
+  }
 }
 
-DDSTexture::DDSTexture(const char *fileName)
+DDSTexture::DDSTexture(const char *fileName, int mipOffset)
 {
   FileBuffer  tmpBuf(fileName);
-  loadTexture(tmpBuf);
+  loadTexture(tmpBuf, mipOffset);
 }
 
-DDSTexture::DDSTexture(const unsigned char *buf, size_t bufSize)
+DDSTexture::DDSTexture(const unsigned char *buf, size_t bufSize, int mipOffset)
 {
   FileBuffer  tmpBuf(buf, bufSize);
-  loadTexture(tmpBuf);
+  loadTexture(tmpBuf, mipOffset);
 }
 
-DDSTexture::DDSTexture(FileBuffer& buf)
+DDSTexture::DDSTexture(FileBuffer& buf, int mipOffset)
 {
-  loadTexture(buf);
+  loadTexture(buf, mipOffset);
 }
 
 DDSTexture::~DDSTexture()
