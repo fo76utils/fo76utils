@@ -43,4 +43,4 @@ Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on 
 
 ### Example 3
 
-    ./esmview Skyrim/Data/Skyrim.esm "Skyrim/Data/Skyrim - Interface.bsa" skyrim_english -F tes5cell.txt
+    ./esmview Skyrim/Data/Skyrim.esm Skyrim/Data skyrim_english -F tes5cell.txt
