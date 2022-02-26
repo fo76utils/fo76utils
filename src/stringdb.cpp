@@ -20,30 +20,32 @@ void StringDB::clear()
 bool StringDB::loadFile(const char *fileName, const char *stringsPrefix)
 {
   strings.clear();
-  BA2File ba2File(fileName);
-  std::vector< unsigned char >  buf;
-  std::vector< std::string >    fileNames;
-  ba2File.getFileList(fileNames);
+  std::vector< std::string >  fileNames;
   std::string tmpName;
+  if (!stringsPrefix)
+    stringsPrefix = "strings/seventysix_en";
   for (int k = 0; k < 3; k++)
   {
-    tmpName = (stringsPrefix ? stringsPrefix : "strings/seventysix_en");
-    if (k == 0)
-      tmpName += ".strings";
-    else if (k == 1)
-      tmpName += ".dlstrings";
-    else
-      tmpName += ".ilstrings";
-    for (size_t i = 0; i < fileNames.size(); i++)
+    static const char *stringsSuffixTable[3] =
     {
-      if (fileNames[i].find(tmpName) != std::string::npos)
+      ".strings", ".dlstrings", ".ilstrings"
+    };
+    tmpName = stringsPrefix;
+    tmpName += stringsSuffixTable[k];
+    fileNames.push_back(tmpName);
+  }
+  BA2File ba2File(fileName, &fileNames);
+  std::vector< unsigned char >  buf;
+  std::vector< std::string >    namesFound;
+  ba2File.getFileList(namesFound);
+  for (int k = 0; k < 3; k++)
+  {
+    tmpName.clear();
+    for (size_t i = 0; i < namesFound.size(); i++)
+    {
+      if (namesFound[i].find(fileNames[k]) != std::string::npos)
       {
-        tmpName = fileNames[i];
-        break;
-      }
-      if ((i + 1) >= fileNames.size())
-      {
-        tmpName.clear();
+        tmpName = namesFound[i];
         break;
       }
     }
