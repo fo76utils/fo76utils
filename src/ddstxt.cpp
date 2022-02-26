@@ -174,8 +174,8 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   haveAlpha = false;
   ySizeMip0 = buf.readUInt32();
   xSizeMip0 = buf.readUInt32();
-  if (ySizeMip0 < 4 || ySizeMip0 > 32768 ||
-      xSizeMip0 < 4 || xSizeMip0 > 32768 ||
+  if (ySizeMip0 < 1 || ySizeMip0 > 32768 ||
+      xSizeMip0 < 1 || xSizeMip0 > 32768 ||
       (ySizeMip0 & (ySizeMip0 - 1)) != 0 || (xSizeMip0 & (xSizeMip0 - 1)) != 0)
   {
     throw errorMessage("invalid or unsupported texture dimensions");
