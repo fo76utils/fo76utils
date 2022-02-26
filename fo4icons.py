@@ -8,7 +8,7 @@ swfToolsPath = "Program Files (x86)/SWFTools"
 if "win" in sys.platform:
     magickPath = "C:/Program Files/ImageMagick-7.1.0-Q16-HDRI/magick.exe"
     baunpackPath = "./baunpack.exe"
-    fo76DataPath = "I:/SteamLibrary/steamapps/common/Fallout 4/Data"
+    fo76DataPath = "E:/SteamLibrary/steamapps/common/Fallout 4/Data"
 else:
     magickPath = "/usr/bin/magick"
     baunpackPath = "./baunpack"
