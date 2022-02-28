@@ -17,9 +17,8 @@ class BA2File
     int           archiveType;
     unsigned int  archiveFile;
   };
-  std::vector< FileDeclaration >  fileDecls;
-  std::map< std::string, size_t > fileMap;
-  std::vector< FileBuffer * > archiveFiles;
+  std::map< std::string, FileDeclaration >  fileMap;
+  std::vector< FileBuffer * >       archiveFiles;
   const std::vector< std::string >  *includePatternsPtr;
   const std::vector< std::string >  *excludePatternsPtr;
   const std::set< std::string > *fileNamesPtr;
@@ -33,11 +32,10 @@ class BA2File
       return '/';
     return char(c);
   }
-  size_t allocateFileDecls(size_t fileCnt);
-  bool addPackedFile(const std::string& fileName, size_t n);
-  void loadBA2General(FileBuffer& buf, FileDeclaration& fileDecl);
-  void loadBA2Textures(FileBuffer& buf, FileDeclaration& fileDecl);
-  void loadBSAFile(FileBuffer& buf, FileDeclaration& fileDecl);
+  FileDeclaration *addPackedFile(const std::string& fileName);
+  void loadBA2General(FileBuffer& buf, size_t archiveFile);
+  void loadBA2Textures(FileBuffer& buf, size_t archiveFile);
+  void loadBSAFile(FileBuffer& buf, size_t archiveFile, int archiveType);
   void loadArchivesFromDir(const char *pathName);
   void loadArchiveFile(const char *fileName);
  public:
@@ -51,6 +49,7 @@ class BA2File
           const std::set< std::string > *fileNames = 0);
   virtual ~BA2File();
   void getFileList(std::vector< std::string >& fileList) const;
+  // returns -1 if the file is not found
   long getFileSize(const std::string& fileName) const;
  protected:
   int extractBA2Texture(std::vector< unsigned char >& buf,
