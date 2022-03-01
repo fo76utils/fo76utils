@@ -49,11 +49,14 @@ class NIFFile : public FileBuffer
   enum
   {
     BlkTypeNiNode = -1,
-    BlkTypeBSTriShape = -2,
-    BlkTypeBSEffectShaderProperty = -3,
-    BlkTypeNiAlphaProperty = -4,
-    BlkTypeBSLightingShaderProperty = -5,
-    BlkTypeBSShaderTextureSet = -6
+    BlkTypeBSFadeNode = -2,
+    BlkTypeBSMultiBoundNode = -3,
+    BlkTypeBSTriShape = -4,
+    BlkTypeBSEffectShaderProperty = -5,
+    BlkTypeNiAlphaProperty = -6,
+    BlkTypeBSLightingShaderProperty = -7,
+    BlkTypeBSShaderTextureSet = -8,
+    BlkTypeBSWaterShaderProperty = -9
   };
   std::vector< std::string >  blockTypeStrings;
   std::vector< int >          blockTypes;
@@ -69,11 +72,15 @@ class NIFFile : public FileBuffer
     float   scale;
     void readFromBuffer(FileBuffer& buf);
     void transformVertex(NIFVertex& v);
+    void debugPrint();
   };
-  struct NIFBlock
+  struct NIFBlock : public FileBuffer
   {
-    int     type;
-    int     nameID;
+    NIFFile&  f;
+    int       type;
+    int       nameID;
+    NIFBlock(NIFFile& nifFile, int blockType,
+             const unsigned char *blockBuf, size_t blockBufSize);
     virtual ~NIFBlock();
   };
   struct NIFBlkNiNode : public NIFBlock
@@ -84,7 +91,8 @@ class NIFFile : public FileBuffer
     NIFVertexTransform  vertexTransform;
     int     collisionObject;
     std::vector< unsigned int > children;
-    NIFBlkNiNode(FileBuffer& buf, unsigned int bsVersion);
+    NIFBlkNiNode(NIFFile& nifFile,
+                 const unsigned char *blockBuf, size_t blockBufSize);
     virtual ~NIFBlkNiNode();
   };
   struct NIFBlkBSTriShape : public NIFBlock
@@ -102,7 +110,7 @@ class NIFFile : public FileBuffer
     int     shaderProperty;
     int     alphaProperty;
     // bits  0 -  3: vertex data size / 4
-    // bits  4 -  7: offset of vertex coordinates / 4
+    // bits  4 -  7: offset of vertex coordinates (X, Y, Z) / 4
     // bits  8 - 11: offset of texture coordinates (U, V) / 4
     // bits 12 - 15: offset of texture coordinates 2 / 4
     // bits 16 - 19: offset of vertex normals / 4
@@ -113,12 +121,22 @@ class NIFFile : public FileBuffer
     unsigned long long  vertexFmtDesc;
     std::vector< NIFVertex >    vertexData;
     std::vector< NIFTriangle >  triangleData;
-    static float readFloat16(FileBuffer& buf);
-    NIFBlkBSTriShape(FileBuffer& buf, unsigned int bsVersion);
+    float readFloat16();
+    NIFBlkBSTriShape(NIFFile& nifFile,
+                     const unsigned char *blockBuf, size_t blockBufSize);
     virtual ~NIFBlkBSTriShape();
   };
+  struct NIFBlkBSShaderTextureSet : public NIFBlock
+  {
+    std::vector< std::string >  texturePaths;
+    NIFBlkBSShaderTextureSet(NIFFile& nifFile,
+                             const unsigned char *blockBuf,
+                             size_t blockBufSize);
+    virtual ~NIFBlkBSShaderTextureSet();
+  };
   std::vector< NIFBlock * > blocks;
-  void readString(std::string& s, size_t stringLengthSize);
+  static void readString(std::string& s,
+                         FileBuffer& buf, size_t stringLengthSize);
   void loadNIFFile();
  public:
   NIFFile(const char *fileName);
