@@ -8,6 +8,40 @@
 #  include "ba2file.hpp"
 #endif
 
+NIFFile::NIFVertexTransform::NIFVertexTransform()
+  : offsX(0.0f), offsY(0.0f), offsZ(0.0f),
+    rotateXX(1.0f), rotateXY(0.0f), rotateXZ(0.0f),
+    rotateYX(0.0f), rotateYY(1.0f), rotateYZ(0.0f),
+    rotateZX(0.0f), rotateZY(0.0f), rotateZZ(1.0f),
+    scale(1.0f)
+{
+}
+
+NIFFile::NIFVertexTransform::NIFVertexTransform(
+    float xyzScale, float rx, float ry, float rz,
+    float offsetX, float offsetY, float offsetZ)
+{
+  offsX = offsetX;
+  offsY = offsetY;
+  offsZ = offsetZ;
+  float   rx_s = float(std::sin(rx));
+  float   rx_c = float(std::cos(rx));
+  float   ry_s = float(std::sin(ry));
+  float   ry_c = float(std::cos(ry));
+  float   rz_s = float(std::sin(rz));
+  float   rz_c = float(std::cos(rz));
+  rotateXX = ry_c * rz_c;
+  rotateXY = ry_c * rz_s;
+  rotateXZ = -ry_s;
+  rotateYX = (rx_s * ry_s * rz_c) - (rx_c * rz_s);
+  rotateYY = (rx_s * ry_s * rz_s) + (rx_c * rz_c);
+  rotateYZ = rx_s * ry_c;
+  rotateZX = (rx_c * ry_s * rz_c) + (rx_s * rz_s);
+  rotateZY = (rx_c * ry_s * rz_s) - (rx_s * rz_c);
+  rotateZZ = rx_c * ry_c;
+  scale = xyzScale;
+}
+
 void NIFFile::NIFVertexTransform::readFromBuffer(FileBuffer& buf)
 {
   offsX = buf.readFloat();
@@ -25,17 +59,60 @@ void NIFFile::NIFVertexTransform::readFromBuffer(FileBuffer& buf)
   scale = buf.readFloat();
 }
 
-void NIFFile::NIFVertexTransform::transformVertex(NIFVertex& v)
+NIFFile::NIFVertexTransform& NIFFile::NIFVertexTransform::operator*=(
+    const NIFVertexTransform& r)
 {
-  float   x = (v.x * rotateXX) + (v.y * rotateXY) + (v.z * rotateXZ);
-  float   y = (v.x * rotateYX) + (v.y * rotateYY) + (v.z * rotateYZ);
-  float   z = (v.x * rotateZX) + (v.y * rotateZY) + (v.z * rotateZZ);
-  v.x = x * scale + offsX;
-  v.y = y * scale + offsY;
-  v.z = z * scale + offsZ;
+  r.transformXYZ(offsX, offsY, offsZ);
+  float   r_xx = rotateXX;
+  float   r_xy = rotateXY;
+  float   r_xz = rotateXZ;
+  float   r_yx = rotateYX;
+  float   r_yy = rotateYY;
+  float   r_yz = rotateYZ;
+  float   r_zx = rotateZX;
+  float   r_zy = rotateZY;
+  float   r_zz = rotateZZ;
+  rotateXX = (r_xx * r.rotateXX) + (r_yx * r.rotateXY) + (r_zx * r.rotateXZ);
+  rotateXY = (r_xy * r.rotateXX) + (r_yy * r.rotateXY) + (r_zy * r.rotateXZ);
+  rotateXZ = (r_xz * r.rotateXX) + (r_yz * r.rotateXY) + (r_zz * r.rotateXZ);
+  rotateYX = (r_xx * r.rotateYX) + (r_yx * r.rotateYY) + (r_zx * r.rotateYZ);
+  rotateYY = (r_xy * r.rotateYX) + (r_yy * r.rotateYY) + (r_zy * r.rotateYZ);
+  rotateYZ = (r_xz * r.rotateYX) + (r_yz * r.rotateYY) + (r_zz * r.rotateYZ);
+  rotateZX = (r_xx * r.rotateZX) + (r_yx * r.rotateZY) + (r_zx * r.rotateZZ);
+  rotateZY = (r_xy * r.rotateZX) + (r_yy * r.rotateZY) + (r_zy * r.rotateZZ);
+  rotateZZ = (r_xz * r.rotateZX) + (r_yz * r.rotateZY) + (r_zz * r.rotateZZ);
+  scale = scale * r.scale;
+  return (*this);
 }
 
-void NIFFile::NIFVertexTransform::debugPrint()
+void NIFFile::NIFVertexTransform::transformXYZ(
+    float& x, float& y, float& z) const
+{
+  float   tmpX = (x * rotateXX) + (y * rotateXY) + (z * rotateXZ);
+  float   tmpY = (x * rotateYX) + (y * rotateYY) + (z * rotateYZ);
+  float   tmpZ = (x * rotateZX) + (y * rotateZY) + (z * rotateZZ);
+  x = tmpX * scale + offsX;
+  y = tmpY * scale + offsY;
+  z = tmpZ * scale + offsZ;
+}
+
+void NIFFile::NIFVertexTransform::transformVertex(NIFVertex& v) const
+{
+  float   x = v.x;
+  float   y = v.y;
+  float   z = v.z;
+  v.x = ((x * rotateXX) + (y * rotateXY) + (z * rotateXZ)) * scale + offsX;
+  v.y = ((x * rotateYX) + (y * rotateYY) + (z * rotateYZ)) * scale + offsY;
+  v.z = ((x * rotateZX) + (y * rotateZY) + (z * rotateZZ)) * scale + offsZ;
+  x = v.normalX;
+  y = v.normalY;
+  z = v.normalZ;
+  v.normalX = (x * rotateXX) + (y * rotateXY) + (z * rotateXZ);
+  v.normalY = (x * rotateYX) + (y * rotateYY) + (z * rotateYZ);
+  v.normalZ = (x * rotateZX) + (y * rotateZY) + (z * rotateZZ);
+}
+
+void NIFFile::NIFVertexTransform::debugPrint() const
 {
 #ifdef ENABLE_DEBUG
   std::printf("  NIFVertexTransform:\n");
@@ -57,9 +134,12 @@ NIFFile::NIFBlock::NIFBlock(NIFFile& nifFile, int blockType,
     type(blockType),
     nameID(-1)
 {
-  int     n = readInt32();
-  if (n >= 0 && n < int(nifFile.stringTable.size()))
-    nameID = n;
+  if (blockType != NIFFile::BlkTypeBSLightingShaderProperty)
+  {
+    int     n = readInt32();
+    if (n >= 0 && n < int(nifFile.stringTable.size()))
+      nameID = n;
+  }
 }
 
 NIFFile::NIFBlock::~NIFBlock()
@@ -108,19 +188,6 @@ NIFFile::NIFBlkNiNode::NIFBlkNiNode(NIFFile& nifFile,
 
 NIFFile::NIFBlkNiNode::~NIFBlkNiNode()
 {
-}
-
-float NIFFile::NIFBlkBSTriShape::readFloat16()
-{
-  unsigned int  tmp = readUInt16Fast();
-  int     e = int((tmp >> 10) & 0x1F);
-  if (e == 0x00)
-    return 0.0f;
-  double  m = double(int((tmp & 0x03FF) | 0x0400));
-  m = std::ldexp(m, e - 25);
-  if (tmp & 0x8000U)
-    m = -m;
-  return float(m);
 }
 
 NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
@@ -188,7 +255,6 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
   int     xyzOffs = -1;
   int     uvOffs = -1;
   int     normalsOffs = -1;
-  int     tangentsOffs = -1;
   int     vclrOffs = -1;
   bool    useFloat16 =
       (nifFile.bsVersion >= 0x80 && !(vertexFmtDesc & (1ULL << 54)));
@@ -198,14 +264,11 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
     uvOffs = int((vertexFmtDesc >> 8) & 0x0FU) << 2;
   if (vertexFmtDesc & (1ULL << 47))
     normalsOffs = int((vertexFmtDesc >> 16) & 0x0FU) << 2;
-  if (vertexFmtDesc & (1ULL << 48))
-    tangentsOffs = int((vertexFmtDesc >> 20) & 0x0FU) << 2;
   if (vertexFmtDesc & (1ULL << 49))
     vclrOffs = int((vertexFmtDesc >> 24) & 0x0FU) << 2;
   if ((xyzOffs >= 0 && (xyzOffs + (useFloat16 ? 6 : 12)) > int(vertexSize)) ||
       (uvOffs >= 0 && (uvOffs + 4) > int(vertexSize)) ||
       (normalsOffs >= 0 && (normalsOffs + 3) > int(vertexSize)) ||
-      (tangentsOffs >= 0 && (tangentsOffs + 3) > int(vertexSize)) ||
       (vclrOffs >= 0 && (vclrOffs + 4) > int(vertexSize)))
   {
     throw errorMessage("invalid vertex format in NIF file");
@@ -219,15 +282,11 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
     v.x = 0.0f;
     v.y = 0.0f;
     v.z = 0.0f;
-    v.u = 0.0f;
-    v.v = 0.0f;
-    v.textureID = (unsigned short) shaderProperty;
-    v.normalX = 0x80;
-    v.normalY = 0x80;
-    v.normalZ = 0x80;
-    v.tangentX = 0x80;
-    v.tangentY = 0x80;
-    v.tangentZ = 0x80;
+    v.normalX = 0.0f;
+    v.normalY = 0.0f;
+    v.normalZ = 1.0f;
+    v.u = 0;
+    v.v = 0;
     v.vertexColor = 0xFFFFFFFFU;
     if (xyzOffs >= 0)
     {
@@ -240,37 +299,29 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
       }
       else
       {
-        v.x = readFloat16();
-        v.y = readFloat16();
-        v.z = readFloat16();
+        v.x = NIFFile::NIFVertex::convertFloat16(readUInt16Fast());
+        v.y = NIFFile::NIFVertex::convertFloat16(readUInt16Fast());
+        v.z = NIFFile::NIFVertex::convertFloat16(readUInt16Fast());
       }
     }
     if (uvOffs >= 0)
     {
       setPosition(offs + size_t(uvOffs));
-      v.u = readFloat16();
-      v.v = readFloat16();
+      v.u = readUInt16Fast();
+      v.v = readUInt16Fast();
     }
     if (normalsOffs >= 0)
     {
       setPosition(offs + size_t(normalsOffs));
-      v.normalX = readUInt8Fast();
-      v.normalY = readUInt8Fast();
-      v.normalZ = readUInt8Fast();
-    }
-    if (tangentsOffs >= 0)
-    {
-      setPosition(offs + size_t(tangentsOffs));
-      v.tangentX = readUInt8Fast();
-      v.tangentY = readUInt8Fast();
-      v.tangentZ = readUInt8Fast();
+      v.normalX = (float(int(readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
+      v.normalY = (float(int(readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
+      v.normalZ = (float(int(readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
     }
     if (vclrOffs >= 0)
     {
       setPosition(offs + size_t(vclrOffs));
       v.vertexColor = readUInt32Fast();
     }
-    vertexTransform.transformVertex(v);
     setPosition(offs + vertexSize);
   }
   for (size_t i = 0; i < triangleCnt; i++)
@@ -314,7 +365,7 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
   {
     std::printf("    %4d: X: %f, Y: %f, Z: %f, U: %f, V: %f\n",
                 int(i), vertexData[i].x, vertexData[i].y, vertexData[i].z,
-                vertexData[i].u, vertexData[i].v);
+                vertexData[i].getU(), vertexData[i].getV());
   }
   std::printf("  Triangle list:\n");
   for (size_t i = 0; i < triangleCnt; i++)
@@ -330,6 +381,78 @@ NIFFile::NIFBlkBSTriShape::~NIFBlkBSTriShape()
 {
 }
 
+NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
+    NIFFile& nifFile, size_t blockNum,
+    const unsigned char *blockBuf, size_t blockBufSize)
+  : NIFBlock(nifFile, NIFFile::BlkTypeBSLightingShaderProperty,
+             blockBuf, blockBufSize)
+{
+  if (nifFile.bsVersion < 0x90)
+    type = readUInt32();
+  else
+    type = 0;
+  int     n = readInt32();
+  if (n >= 0 && n < int(nifFile.stringTable.size()))
+  {
+    nameID = n;
+    if (nifFile.bsVersion >= 0x80 && !nifFile.stringTable[n].empty())
+    {
+      materialName = nifFile.stringTable[n];
+      if (std::strncmp(materialName.c_str(), "materials/", 10) != 0)
+        materialName.insert(0, "materials/");
+    }
+  }
+  if (nifFile.bsVersion < 0x90)
+  {
+    for (unsigned int i = readUInt32(); i--; )
+      extraData.push_back(readUInt32());
+    controller = readInt32();
+    flags = readUInt64();
+    offsetU = readFloat();
+    offsetV = readFloat();
+    scaleU = readFloat();
+    scaleV = readFloat();
+    textureSet = readInt32();
+  }
+  else
+  {
+    controller = -1;
+    flags = 0ULL;
+    offsetU = 0.0f;
+    offsetV = 0.0f;
+    scaleU = 1.0f;
+    scaleV = 1.0f;
+    textureSet = -1;
+    if ((blockNum + 1) < nifFile.blockTypes.size() &&
+        nifFile.blockTypes[blockNum + 1] == NIFFile::BlkTypeBSShaderTextureSet)
+    {
+      textureSet = int(blockNum + 1);
+    }
+  }
+#ifdef ENABLE_DEBUG
+  std::printf("BSLightingShaderProperty:\n");
+  if (nameID >= 0)
+    std::printf("  Name: %s\n", f.stringTable[nameID].c_str());
+  std::printf("  Material: %s\n", materialName.c_str());
+  if (extraData.size() > 0)
+  {
+    std::printf("  Extra data:\n");
+    for (size_t i = 0; i < extraData.size(); i++)
+      std::printf("    %3u\n", extraData[i]);
+  }
+  if (controller >= 0)
+    std::printf("  Controller: %3d\n", controller);
+  std::printf("  Flags: 0x%016llX\n", flags);
+  std::printf("  UV offset: %f, %f\n", offsetU, offsetV);
+  std::printf("  UV scale: %f, %f\n", scaleU, scaleV);
+  std::printf("  Texture set: %3d\n", textureSet);
+#endif
+}
+
+NIFFile::NIFBlkBSLightingShaderProperty::~NIFBlkBSLightingShaderProperty()
+{
+}
+
 NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(
     NIFFile& nifFile, const unsigned char *blockBuf, size_t blockBufSize)
   : NIFBlock(nifFile, NIFFile::BlkTypeBSShaderTextureSet,
@@ -337,7 +460,14 @@ NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(
 {
   texturePaths.resize(f.bsVersion < 0x80 ? 9 : (f.bsVersion < 0x90 ? 10 : 13));
   for (size_t i = 0; i < texturePaths.size(); i++)
+  {
     NIFFile::readString(texturePaths[i], *this, 4);
+    if (texturePaths[i].length() > 0 &&
+        std::strncmp(texturePaths[i].c_str(), "textures/", 9) != 0)
+    {
+      texturePaths[i].insert(0, "textures/");
+    }
+  }
 #ifdef ENABLE_DEBUG
   std::printf("BSShaderTextureSet:\n");
   if (nameID >= 0)
@@ -501,6 +631,11 @@ void NIFFile::loadNIFFile()
         case BlkTypeBSTriShape:
           blocks[i] = new NIFBlkBSTriShape(*this, blockDataPtr, blockSize);
           break;
+        case BlkTypeBSLightingShaderProperty:
+          blocks[i] = new NIFBlkBSLightingShaderProperty(*this, i,
+                                                         blockDataPtr,
+                                                         blockSize);
+          break;
         case BlkTypeBSShaderTextureSet:
           blocks[i] = new NIFBlkBSShaderTextureSet(*this,
                                                    blockDataPtr, blockSize);
@@ -517,6 +652,97 @@ void NIFFile::loadNIFFile()
     }
     throw;
   }
+}
+
+void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
+                      std::vector< unsigned int >& parentBlocks) const
+{
+  if (blockNum >= blockTypes.size())
+    return;
+  if (blockTypes[blockNum] == BlkTypeNiNode ||
+      blockTypes[blockNum] == BlkTypeBSFadeNode ||
+      blockTypes[blockNum] == BlkTypeBSMultiBoundNode)
+  {
+    parentBlocks.push_back(blockNum);
+    const NIFBlkNiNode& b = *((const NIFBlkNiNode *) blocks[blockNum]);
+    for (size_t i = 0; i < b.children.size(); i++)
+    {
+      unsigned int  n = b.children[i];
+      bool    loopFound = false;
+      for (size_t j = 0; j < parentBlocks.size(); j++)
+      {
+        if (parentBlocks[j] == n)
+        {
+          loopFound = true;
+          break;
+        }
+      }
+      if (!loopFound)
+        getMesh(v, n, parentBlocks);
+    }
+    parentBlocks.resize(parentBlocks.size() - 1);
+    return;
+  }
+
+  if (blockTypes[blockNum] != BlkTypeBSTriShape)
+    return;
+  const NIFBlkBSTriShape& b = *((const NIFBlkBSTriShape *) blocks[blockNum]);
+  if (b.vertexData.size() < 1 || b.triangleData.size() < 1)
+    return;
+  NIFTriShape t;
+  t.vertexCnt = b.vertexData.size();
+  t.triangleCnt = b.triangleData.size();
+  t.vertexData = &(b.vertexData.front());
+  t.triangleData = &(b.triangleData.front());
+  t.vertexTransform = b.vertexTransform;
+  t.isWater = false;
+  t.texturePathCnt = 0;
+  t.texturePaths = (std::string *) 0;
+  t.materialPath = (std::string *) 0;
+  t.textureOffsetU = 0.0f;
+  t.textureOffsetV = 0.0f;
+  t.textureScaleU = 1.0f;
+  t.textureScaleV = 1.0f;
+  t.name = "";
+  if (b.nameID >= 0)
+    t.name = stringTable[b.nameID].c_str();
+  for (size_t i = parentBlocks.size(); i-- > 0; )
+  {
+    t.vertexTransform *=
+        ((const NIFBlkNiNode *) blocks[parentBlocks[i]])->vertexTransform;
+  }
+  size_t  n = size_t(b.shaderProperty);
+  if (b.shaderProperty >= 0 && n < blockTypes.size())
+  {
+    if (blockTypes[n] == BlkTypeBSWaterShaderProperty)
+    {
+      t.isWater = true;
+    }
+    else if (blockTypes[n] == BlkTypeBSLightingShaderProperty)
+    {
+      const NIFBlkBSLightingShaderProperty& lsBlock =
+          *((const NIFBlkBSLightingShaderProperty *) blocks[n]);
+      if (!lsBlock.materialName.empty())
+        t.materialPath = &(lsBlock.materialName);
+      t.textureOffsetU = lsBlock.offsetU;
+      t.textureOffsetV = lsBlock.offsetV;
+      t.textureScaleU = lsBlock.scaleU;
+      t.textureScaleV = lsBlock.scaleV;
+      if (lsBlock.textureSet >= 0 &&
+          size_t(lsBlock.textureSet) < blockTypes.size())
+      {
+        n = size_t(lsBlock.textureSet);
+      }
+    }
+    if (blockTypes[n] == BlkTypeBSShaderTextureSet)
+    {
+      const NIFBlkBSShaderTextureSet& tsBlock =
+          *((const NIFBlkBSShaderTextureSet *) blocks[n]);
+      t.texturePathCnt = (unsigned char) tsBlock.texturePaths.size();
+      t.texturePaths = &(tsBlock.texturePaths.front());
+    }
+  }
+  v.push_back(t);
 }
 
 NIFFile::NIFFile(const char *fileName)
@@ -546,6 +772,13 @@ NIFFile::~NIFFile()
   }
 }
 
+void NIFFile::getMesh(std::vector< NIFTriShape >& v) const
+{
+  v.clear();
+  std::vector< unsigned int > parentBlocks;
+  getMesh(v, 0U, parentBlocks);
+}
+
 #ifdef ENABLE_DEBUG
 int main(int argc, char **argv)
 {
@@ -573,6 +806,45 @@ int main(int argc, char **argv)
       std::vector< unsigned char >  fileBuf;
       ba2File.extractFile(fileBuf, fileNames[i]);
       NIFFile nifFile(&(fileBuf.front()), fileBuf.size());
+      std::vector< NIFFile::NIFTriShape > meshData;
+      nifFile.getMesh(meshData);
+      for (size_t j = 0; j < meshData.size(); j++)
+      {
+        std::printf("TriShape %3d (%s):\n", int(j), meshData[j].name);
+        std::printf("  Vertex count: %d\n", int(meshData[j].vertexCnt));
+        std::printf("  Triangle count: %d\n", int(meshData[j].triangleCnt));
+        std::printf("  Is water: %d\n", int(meshData[j].isWater));
+        meshData[j].vertexTransform.debugPrint();
+        if (meshData[j].materialPath)
+          std::printf("  Material: %s\n", meshData[j].materialPath->c_str());
+        std::printf("  Texture UV offset, scale: (%f, %f), (%f, %f)\n",
+                    meshData[j].textureOffsetU, meshData[j].textureOffsetV,
+                    meshData[j].textureScaleU, meshData[j].textureScaleV);
+        for (size_t k = 0; k < meshData[j].texturePathCnt; k++)
+        {
+          std::printf("  Texture %2d: %s\n",
+                      int(k), meshData[j].texturePaths[k].c_str());
+        }
+        std::printf("  Vertex list:\n");
+        for (size_t k = 0; k < meshData[j].vertexCnt; k++)
+        {
+          NIFFile::NIFVertex  v = meshData[j].vertexData[k];
+          meshData[j].vertexTransform.transformVertex(v);
+          std::printf("    %4d: XYZ: (%f, %f, %f), normals: (%f, %f, %f), "
+                      "UV: (%f, %f), color: 0x%08X\n",
+                      int(k), v.x, v.y, v.z, v.normalX, v.normalY, v.normalZ,
+                      v.getU(), v.getV(), v.vertexColor);
+        }
+        std::printf("  Triangle list:\n");
+        for (size_t k = 0; k < meshData[j].triangleCnt; k++)
+        {
+          std::printf("    %4d: %4u, %4u, %4u\n",
+                      int(k),
+                      meshData[j].triangleData[k].v0,
+                      meshData[j].triangleData[k].v1,
+                      meshData[j].triangleData[k].v2);
+        }
+      }
     }
   }
   catch (std::exception& e)

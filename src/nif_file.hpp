@@ -13,19 +13,27 @@ class NIFFile : public FileBuffer
     float   x;
     float   y;
     float   z;
-    float   u;
-    float   v;
-    unsigned short  textureID;
-    unsigned char   normalX;
-    unsigned char   normalY;
-    unsigned char   normalZ;
-    unsigned char   tangentX;
-    unsigned char   tangentY;
-    unsigned char   tangentZ;
+    float   normalX;
+    float   normalY;
+    float   normalZ;
+    unsigned short  u;
+    unsigned short  v;
     unsigned int    vertexColor;
-    static inline float normalToFloat(unsigned char n)
+    static inline float convertFloat16(unsigned short n)
     {
-      return ((float(int(n)) - 127.5f) * (2.0f / 255.0f));
+      unsigned char e = (unsigned char) ((n >> 10) & 0x1F);
+      if (!e)
+        return 0.0f;
+      long long m = (long long) ((n & 0x03FF) | 0x0400) << e;
+      return (float(!(n & 0x8000) ? m : -m) * (1.0f / 33554432.0f));
+    }
+    inline float getU() const
+    {
+      return convertFloat16(u);
+    }
+    inline float getV() const
+    {
+      return convertFloat16(v);
     }
   };
   struct NIFTriangle
@@ -33,6 +41,43 @@ class NIFFile : public FileBuffer
     unsigned short  v0;
     unsigned short  v1;
     unsigned short  v2;
+  };
+  struct NIFVertexTransform
+  {
+    float   offsX, offsY, offsZ;
+    float   rotateXX, rotateXY, rotateXZ;
+    float   rotateYX, rotateYY, rotateYZ;
+    float   rotateZX, rotateZY, rotateZZ;
+    float   scale;
+    NIFVertexTransform();
+    NIFVertexTransform(float xyzScale, float rx, float ry, float rz,
+                       float offsetX, float offsetY, float offsetZ);
+    void readFromBuffer(FileBuffer& buf);
+    NIFVertexTransform& operator*=(const NIFVertexTransform& r);
+    void transformXYZ(float& x, float& y, float& z) const;
+    void transformVertex(NIFVertex& v) const;
+    void debugPrint() const;
+  };
+  struct NIFTriShape
+  {
+    size_t  vertexCnt;
+    size_t  triangleCnt;
+    const NIFVertex     *vertexData;
+    const NIFTriangle   *triangleData;
+    NIFVertexTransform  vertexTransform;
+    bool    isWater;
+    // 9 for Skyrim, 10 for Fallout 4, 13 for Fallout 76
+    unsigned char texturePathCnt;
+    // texturePaths[0] = diffuse texture
+    // texturePaths[1] = normal map
+    const std::string   *texturePaths;
+    // BGSM file name for Fallout 4 and 76
+    const std::string   *materialPath;
+    float   textureOffsetU;
+    float   textureOffsetV;
+    float   textureScaleU;
+    float   textureScaleV;
+    const char  *name;
   };
  protected:
   // file version:
@@ -63,17 +108,6 @@ class NIFFile : public FileBuffer
   std::vector< unsigned int > blockSizes;
   std::vector< size_t >       blockOffsets;
   std::vector< std::string >  stringTable;
-  struct NIFVertexTransform
-  {
-    float   offsX, offsY, offsZ;
-    float   rotateXX, rotateXY, rotateXZ;
-    float   rotateYX, rotateYY, rotateYZ;
-    float   rotateZX, rotateZY, rotateZZ;
-    float   scale;
-    void readFromBuffer(FileBuffer& buf);
-    void transformVertex(NIFVertex& v);
-    void debugPrint();
-  };
   struct NIFBlock : public FileBuffer
   {
     NIFFile&  f;
@@ -121,10 +155,26 @@ class NIFFile : public FileBuffer
     unsigned long long  vertexFmtDesc;
     std::vector< NIFVertex >    vertexData;
     std::vector< NIFTriangle >  triangleData;
-    float readFloat16();
     NIFBlkBSTriShape(NIFFile& nifFile,
                      const unsigned char *blockBuf, size_t blockBufSize);
     virtual ~NIFBlkBSTriShape();
+  };
+  struct NIFBlkBSLightingShaderProperty : public NIFBlock
+  {
+    unsigned int  type;
+    std::string   materialName;
+    std::vector< unsigned int > extraData;
+    int     controller;
+    unsigned long long  flags;
+    float   offsetU;
+    float   offsetV;
+    float   scaleU;
+    float   scaleV;
+    int     textureSet;
+    NIFBlkBSLightingShaderProperty(NIFFile& nifFile, size_t blockNum,
+                                   const unsigned char *blockBuf,
+                                   size_t blockBufSize);
+    virtual ~NIFBlkBSLightingShaderProperty();
   };
   struct NIFBlkBSShaderTextureSet : public NIFBlock
   {
@@ -138,11 +188,22 @@ class NIFFile : public FileBuffer
   static void readString(std::string& s,
                          FileBuffer& buf, size_t stringLengthSize);
   void loadNIFFile();
+  void getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
+               std::vector< unsigned int >& parentBlocks) const;
  public:
   NIFFile(const char *fileName);
   NIFFile(const unsigned char *buf, size_t bufSize);
   NIFFile(FileBuffer& buf);
   virtual ~NIFFile();
+  inline unsigned int getVersion() const
+  {
+    return bsVersion;
+  }
+  inline const std::string& getAuthorName() const
+  {
+    return authorName;
+  }
+  void getMesh(std::vector< NIFTriShape >& v) const;
 };
 
 #endif
