@@ -1,12 +1,7 @@
 
 #include "common.hpp"
 #include "nif_file.hpp"
-
-#define ENABLE_DEBUG    1
-
-#ifdef ENABLE_DEBUG
-#  include "ba2file.hpp"
-#endif
+#include "nifblock.cpp"
 
 NIFFile::NIFVertexTransform::NIFVertexTransform()
   : offsX(0.0f), offsY(0.0f), offsZ(0.0f),
@@ -112,101 +107,57 @@ void NIFFile::NIFVertexTransform::transformVertex(NIFVertex& v) const
   v.normalZ = (x * rotateZX) + (y * rotateZY) + (z * rotateZZ);
 }
 
-void NIFFile::NIFVertexTransform::debugPrint() const
-{
-#ifdef ENABLE_DEBUG
-  std::printf("  NIFVertexTransform:\n");
-  std::printf("    Scale: %f\n", scale);
-  std::printf("    Rotation matrix: %8f, %8f, %8f\n",
-              rotateXX, rotateXY, rotateXZ);
-  std::printf("                     %8f, %8f, %8f\n",
-              rotateYX, rotateYY, rotateYZ);
-  std::printf("                     %8f, %8f, %8f\n",
-              rotateZX, rotateZY, rotateZZ);
-  std::printf("    Offset: %f, %f, %f\n", offsX, offsY, offsZ);
-#endif
-}
-
-NIFFile::NIFBlock::NIFBlock(NIFFile& nifFile, int blockType,
-                            const unsigned char *blockBuf, size_t blockBufSize)
-  : FileBuffer(blockBuf, blockBufSize),
-    f(nifFile),
-    type(blockType),
+NIFFile::NIFBlock::NIFBlock(int blockType)
+  : type(blockType),
     nameID(-1)
 {
-  if (blockType != NIFFile::BlkTypeBSLightingShaderProperty)
-  {
-    int     n = readInt32();
-    if (n >= 0 && n < int(nifFile.stringTable.size()))
-      nameID = n;
-  }
 }
 
 NIFFile::NIFBlock::~NIFBlock()
 {
 }
 
-NIFFile::NIFBlkNiNode::NIFBlkNiNode(NIFFile& nifFile,
-                                    const unsigned char *blockBuf,
-                                    size_t blockBufSize)
-  : NIFBlock(nifFile, NIFFile::BlkTypeNiNode, blockBuf, blockBufSize)
+NIFFile::NIFBlkNiNode::NIFBlkNiNode(NIFFile& f)
+  : NIFBlock(NIFFile::BlkTypeNiNode)
 {
-  unsigned int  n = readUInt32();
-  while (n--)
-    extraData.push_back(readUInt32());
-  controller = readInt32();
-  flags = readUInt32();
-  vertexTransform.readFromBuffer(*this);
-  collisionObject = readInt32();
-  n = readUInt32();
-  while (n--)
-    children.push_back(readUInt32());
-#ifdef ENABLE_DEBUG
-  std::printf("NiNode:\n");
-  if (nameID >= 0)
-    std::printf("  Name: %s\n", f.stringTable[nameID].c_str());
-  if (extraData.size() > 0)
+  nameID = f.readInt32();
+  if (nameID < 0 || size_t(nameID) >= f.stringTable.size())
+    nameID = -1;
+  for (unsigned int n = f.readUInt32(); n--; )
+    extraData.push_back(f.readUInt32());
+  controller = f.readBlockID();
+  flags = f.readUInt32();
+  vertexTransform.readFromBuffer(f);
+  collisionObject = f.readBlockID();
+  for (unsigned int n = f.readUInt32(); n--; )
   {
-    std::printf("  Extra data:\n");
-    for (size_t i = 0; i < extraData.size(); i++)
-      std::printf("    %3u\n", extraData[i]);
+    children.push_back(f.readUInt32());
+    if (children[children.size() - 1] >= f.blocks.size())
+      throw errorMessage("invalid child block number in NIF node");
   }
-  if (controller >= 0)
-    std::printf("  Controller: %3d\n", controller);
-  std::printf("  Flags: 0x%08X\n", flags);
-  vertexTransform.debugPrint();
-  if (collisionObject >= 0)
-    std::printf("  Collision object: %3d\n", collisionObject);
-  if (children.size() > 0)
-  {
-    std::printf("  Children:\n");
-    for (size_t i = 0; i < children.size(); i++)
-      std::printf("    %3u\n", children[i]);
-  }
-#endif
 }
 
 NIFFile::NIFBlkNiNode::~NIFBlkNiNode()
 {
 }
 
-NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
-                                            const unsigned char *blockBuf,
-                                            size_t blockBufSize)
-  : NIFBlock(nifFile, NIFFile::BlkTypeBSTriShape, blockBuf, blockBufSize)
+NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
+  : NIFBlock(NIFFile::BlkTypeBSTriShape)
 {
-  unsigned int  n = readUInt32();
-  while (n--)
-    extraData.push_back(readUInt32());
-  controller = readInt32();
-  flags = readUInt32();
-  vertexTransform.readFromBuffer(*this);
-  collisionObject = readInt32();
-  boundCenterX = readFloat();
-  boundCenterY = readFloat();
-  boundCenterZ = readFloat();
-  boundRadius = readFloat();
-  if (nifFile.bsVersion < 0x90)
+  nameID = f.readInt32();
+  if (nameID < 0 || size_t(nameID) >= f.stringTable.size())
+    nameID = -1;
+  for (unsigned int n = f.readUInt32(); n--; )
+    extraData.push_back(f.readUInt32());
+  controller = f.readBlockID();
+  flags = f.readUInt32();
+  vertexTransform.readFromBuffer(f);
+  collisionObject = f.readBlockID();
+  boundCenterX = f.readFloat();
+  boundCenterY = f.readFloat();
+  boundCenterZ = f.readFloat();
+  boundRadius = f.readFloat();
+  if (f.bsVersion < 0x90)
   {
     boundMinX = 0.0f;
     boundMinY = 0.0f;
@@ -217,26 +168,26 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
   }
   else
   {
-    boundMinX = readFloat();
-    boundMinY = readFloat();
-    boundMinZ = readFloat();
-    boundMaxX = readFloat();
-    boundMaxY = readFloat();
-    boundMaxZ = readFloat();
+    boundMinX = f.readFloat();
+    boundMinY = f.readFloat();
+    boundMinZ = f.readFloat();
+    boundMaxX = f.readFloat();
+    boundMaxY = f.readFloat();
+    boundMaxZ = f.readFloat();
   }
-  skinID = readInt32();
-  shaderProperty = readInt32();
-  alphaProperty = readInt32();
-  vertexFmtDesc = readUInt64();
+  skinID = f.readBlockID();
+  shaderProperty = f.readBlockID();
+  alphaProperty = f.readBlockID();
+  vertexFmtDesc = f.readUInt64();
   size_t  triangleCnt;
-  if (nifFile.bsVersion < 0x80)
-    triangleCnt = readUInt16();
+  if (f.bsVersion < 0x80)
+    triangleCnt = f.readUInt16();
   else
-    triangleCnt = readUInt32();
-  size_t  vertexCnt = readUInt16();
+    triangleCnt = f.readUInt32();
+  size_t  vertexCnt = f.readUInt16();
   size_t  vertexSize = size_t(vertexFmtDesc & 0x0FU) << 2;
-  size_t  dataSize = readUInt32();
-  if (vertexSize < 4 || (getPosition() + dataSize) > size() ||
+  size_t  dataSize = f.readUInt32();
+  if (vertexSize < 4 || (f.getPosition() + dataSize) > f.size() ||
       ((vertexCnt * vertexSize) + (triangleCnt * 6UL)) > dataSize)
   {
     if (!vertexSize || !vertexCnt || !triangleCnt)
@@ -256,8 +207,7 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
   int     uvOffs = -1;
   int     normalsOffs = -1;
   int     vclrOffs = -1;
-  bool    useFloat16 =
-      (nifFile.bsVersion >= 0x80 && !(vertexFmtDesc & (1ULL << 54)));
+  bool    useFloat16 = (f.bsVersion >= 0x80 && !(vertexFmtDesc & (1ULL << 54)));
   if (vertexFmtDesc & (1ULL << 44))
     xyzOffs = int((vertexFmtDesc >> 4) & 0x0FU) << 2;
   if (vertexFmtDesc & (1ULL << 45))
@@ -278,7 +228,7 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
   for (size_t i = 0; i < vertexCnt; i++)
   {
     NIFVertex&  v = vertexData[i];
-    size_t  offs = getPosition();
+    size_t  offs = f.getPosition();
     v.x = 0.0f;
     v.y = 0.0f;
     v.z = 0.0f;
@@ -290,91 +240,51 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& nifFile,
     v.vertexColor = 0xFFFFFFFFU;
     if (xyzOffs >= 0)
     {
-      setPosition(offs + size_t(xyzOffs));
+      f.setPosition(offs + size_t(xyzOffs));
       if (!useFloat16)
       {
-        v.x = readFloat();
-        v.y = readFloat();
-        v.z = readFloat();
+        v.x = f.readFloat();
+        v.y = f.readFloat();
+        v.z = f.readFloat();
       }
       else
       {
-        v.x = NIFFile::NIFVertex::convertFloat16(readUInt16Fast());
-        v.y = NIFFile::NIFVertex::convertFloat16(readUInt16Fast());
-        v.z = NIFFile::NIFVertex::convertFloat16(readUInt16Fast());
+        v.x = NIFFile::NIFVertex::convertFloat16(f.readUInt16Fast());
+        v.y = NIFFile::NIFVertex::convertFloat16(f.readUInt16Fast());
+        v.z = NIFFile::NIFVertex::convertFloat16(f.readUInt16Fast());
       }
     }
     if (uvOffs >= 0)
     {
-      setPosition(offs + size_t(uvOffs));
-      v.u = readUInt16Fast();
-      v.v = readUInt16Fast();
+      f.setPosition(offs + size_t(uvOffs));
+      v.u = f.readUInt16Fast();
+      v.v = f.readUInt16Fast();
     }
     if (normalsOffs >= 0)
     {
-      setPosition(offs + size_t(normalsOffs));
-      v.normalX = (float(int(readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
-      v.normalY = (float(int(readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
-      v.normalZ = (float(int(readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
+      f.setPosition(offs + size_t(normalsOffs));
+      v.normalX = (float(int(f.readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
+      v.normalY = (float(int(f.readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
+      v.normalZ = (float(int(f.readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
     }
     if (vclrOffs >= 0)
     {
-      setPosition(offs + size_t(vclrOffs));
-      v.vertexColor = readUInt32Fast();
+      f.setPosition(offs + size_t(vclrOffs));
+      v.vertexColor = f.readUInt32Fast();
     }
-    setPosition(offs + vertexSize);
+    f.setPosition(offs + vertexSize);
   }
   for (size_t i = 0; i < triangleCnt; i++)
   {
-    triangleData[i].v0 = readUInt16Fast();
-    triangleData[i].v1 = readUInt16Fast();
-    triangleData[i].v2 = readUInt16Fast();
+    triangleData[i].v0 = f.readUInt16Fast();
+    triangleData[i].v1 = f.readUInt16Fast();
+    triangleData[i].v2 = f.readUInt16Fast();
     if (triangleData[i].v0 >= vertexCnt || triangleData[i].v1 >= vertexCnt ||
         triangleData[i].v2 >= vertexCnt)
     {
       throw errorMessage("invalid triangle data in NIF file");
     }
   }
-#ifdef ENABLE_DEBUG
-  std::printf("BSTriShape:\n");
-  if (nameID >= 0)
-    std::printf("  Name: %s\n", f.stringTable[nameID].c_str());
-  if (extraData.size() > 0)
-  {
-    std::printf("  Extra data:\n");
-    for (size_t i = 0; i < extraData.size(); i++)
-      std::printf("    %3u\n", extraData[i]);
-  }
-  if (controller >= 0)
-    std::printf("  Controller: %3d\n", controller);
-  std::printf("  Flags: 0x%08X\n", flags);
-  vertexTransform.debugPrint();
-  if (collisionObject >= 0)
-    std::printf("  Collision object: %3d\n", collisionObject);
-  std::printf("  Bounding sphere: (%f, %f, %f), %f\n",
-              boundCenterX, boundCenterY, boundCenterZ, boundRadius);
-  if (skinID >= 0)
-    std::printf("  Skin: %3d\n", skinID);
-  if (shaderProperty >= 0)
-    std::printf("  Shader property: %3d\n", shaderProperty);
-  if (alphaProperty >= 0)
-    std::printf("  Alpha property: %3d\n", alphaProperty);
-  std::printf("  Vertex format: 0x%016llX\n", vertexFmtDesc);
-  std::printf("  Vertex list:\n");
-  for (size_t i = 0; i < vertexCnt; i++)
-  {
-    std::printf("    %4d: X: %f, Y: %f, Z: %f, U: %f, V: %f\n",
-                int(i), vertexData[i].x, vertexData[i].y, vertexData[i].z,
-                vertexData[i].getU(), vertexData[i].getV());
-  }
-  std::printf("  Triangle list:\n");
-  for (size_t i = 0; i < triangleCnt; i++)
-  {
-    std::printf("    %4d: %4u, %4u, %4u\n",
-                int(i),
-                triangleData[i].v0, triangleData[i].v1, triangleData[i].v2);
-  }
-#endif
 }
 
 NIFFile::NIFBlkBSTriShape::~NIFBlkBSTriShape()
@@ -382,37 +292,35 @@ NIFFile::NIFBlkBSTriShape::~NIFBlkBSTriShape()
 }
 
 NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
-    NIFFile& nifFile, size_t blockNum,
-    const unsigned char *blockBuf, size_t blockBufSize)
-  : NIFBlock(nifFile, NIFFile::BlkTypeBSLightingShaderProperty,
-             blockBuf, blockBufSize)
+    NIFFile& f, size_t nxtBlk, int nxtBlkType)
+  : NIFBlock(NIFFile::BlkTypeBSLightingShaderProperty)
 {
-  if (nifFile.bsVersion < 0x90)
-    type = readUInt32();
+  if (f.bsVersion < 0x90)
+    shaderType = f.readUInt32();
   else
-    type = 0;
-  int     n = readInt32();
-  if (n >= 0 && n < int(nifFile.stringTable.size()))
+    shaderType = 0;
+  int     n = f.readInt32();
+  if (n >= 0 && n < int(f.stringTable.size()))
   {
     nameID = n;
-    if (nifFile.bsVersion >= 0x80 && !nifFile.stringTable[n].empty())
+    if (f.bsVersion >= 0x80 && !f.stringTable[n].empty())
     {
-      materialName = nifFile.stringTable[n];
+      materialName = f.stringTable[n];
       if (std::strncmp(materialName.c_str(), "materials/", 10) != 0)
         materialName.insert(0, "materials/");
     }
   }
-  if (nifFile.bsVersion < 0x90)
+  if (f.bsVersion < 0x90)
   {
-    for (unsigned int i = readUInt32(); i--; )
-      extraData.push_back(readUInt32());
-    controller = readInt32();
-    flags = readUInt64();
-    offsetU = readFloat();
-    offsetV = readFloat();
-    scaleU = readFloat();
-    scaleV = readFloat();
-    textureSet = readInt32();
+    for (unsigned int i = f.readUInt32(); i--; )
+      extraData.push_back(f.readUInt32());
+    controller = f.readBlockID();
+    flags = f.readUInt64();
+    offsetU = f.readFloat();
+    offsetV = f.readFloat();
+    scaleU = f.readFloat();
+    scaleV = f.readFloat();
+    textureSet = f.readBlockID();
   }
   else
   {
@@ -422,80 +330,51 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
     offsetV = 0.0f;
     scaleU = 1.0f;
     scaleV = 1.0f;
-    textureSet = -1;
-    if ((blockNum + 1) < nifFile.blockTypes.size() &&
-        nifFile.blockTypes[blockNum + 1] == NIFFile::BlkTypeBSShaderTextureSet)
-    {
-      textureSet = int(blockNum + 1);
-    }
+    textureSet =
+        (nxtBlkType == NIFFile::BlkTypeBSShaderTextureSet ? int(nxtBlk) : -1);
   }
-#ifdef ENABLE_DEBUG
-  std::printf("BSLightingShaderProperty:\n");
-  if (nameID >= 0)
-    std::printf("  Name: %s\n", f.stringTable[nameID].c_str());
-  std::printf("  Material: %s\n", materialName.c_str());
-  if (extraData.size() > 0)
-  {
-    std::printf("  Extra data:\n");
-    for (size_t i = 0; i < extraData.size(); i++)
-      std::printf("    %3u\n", extraData[i]);
-  }
-  if (controller >= 0)
-    std::printf("  Controller: %3d\n", controller);
-  std::printf("  Flags: 0x%016llX\n", flags);
-  std::printf("  UV offset: %f, %f\n", offsetU, offsetV);
-  std::printf("  UV scale: %f, %f\n", scaleU, scaleV);
-  std::printf("  Texture set: %3d\n", textureSet);
-#endif
 }
 
 NIFFile::NIFBlkBSLightingShaderProperty::~NIFBlkBSLightingShaderProperty()
 {
 }
 
-NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(
-    NIFFile& nifFile, const unsigned char *blockBuf, size_t blockBufSize)
-  : NIFBlock(nifFile, NIFFile::BlkTypeBSShaderTextureSet,
-             blockBuf, blockBufSize)
+NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(NIFFile& f)
+  : NIFBlock(NIFFile::BlkTypeBSShaderTextureSet)
 {
+  nameID = f.readInt32();
+  if (nameID < 0 || size_t(nameID) >= f.stringTable.size())
+    nameID = -1;
   texturePaths.resize(f.bsVersion < 0x80 ? 9 : (f.bsVersion < 0x90 ? 10 : 13));
   for (size_t i = 0; i < texturePaths.size(); i++)
   {
-    NIFFile::readString(texturePaths[i], *this, 4);
+    f.readString(texturePaths[i], 4);
     if (texturePaths[i].length() > 0 &&
         std::strncmp(texturePaths[i].c_str(), "textures/", 9) != 0)
     {
       texturePaths[i].insert(0, "textures/");
     }
   }
-#ifdef ENABLE_DEBUG
-  std::printf("BSShaderTextureSet:\n");
-  if (nameID >= 0)
-    std::printf("  Name: %s\n", f.stringTable[nameID].c_str());
-  for (size_t i = 0; i < texturePaths.size(); i++)
-    std::printf("  Texture %2d: %s\n", int(i), texturePaths[i].c_str());
-#endif
 }
 
 NIFFile::NIFBlkBSShaderTextureSet::~NIFBlkBSShaderTextureSet()
 {
 }
 
-void NIFFile::readString(std::string& s,
-                         FileBuffer& buf, size_t stringLengthSize)
+void NIFFile::readString(std::string& s, size_t stringLengthSize)
 {
   s.clear();
   size_t  n = ~(size_t(0));
   if (stringLengthSize == 1)
-    n = buf.readUInt8();
+    n = readUInt8();
   else if (stringLengthSize == 2)
-    n = buf.readUInt16();
+    n = readUInt16();
   else if (stringLengthSize)
-    n = buf.readUInt32();
+    n = readUInt32();
   bool    isPath = false;
   while (n--)
   {
-    char    c = char(buf.readUInt8());
+    char    c = char(readUInt8());
     if (!c)
     {
       if (stringLengthSize)
@@ -533,118 +412,96 @@ void NIFFile::loadNIFFile()
     throw errorMessage("unsupported NIF file version or endianness");
   blockCnt = readUInt32Fast();
   bsVersion = readUInt32Fast();
-  readString(authorName, *this, 1);
+  readString(authorName, 1);
   if (bsVersion >= 0x90)
     (void) readUInt32();
-  readString(processScriptName, *this, 1);
-  readString(exportScriptName, *this, 1);
+  readString(processScriptName, 1);
+  readString(exportScriptName, 1);
   std::string tmp;
+  std::vector< unsigned char >  blockTypes;
   if (bsVersion >= 0x80 && bsVersion < 0x90)
-    readString(tmp, *this, 1);
-  for (size_t n = readUInt16(); n--; )
+    readString(tmp, 1);
   {
-    readString(tmp, *this, 4);
-    blockTypeStrings.push_back(tmp);
+    std::vector< int >  tmpBlkTypes;
+    for (size_t n = readUInt16(); n--; )
+    {
+      readString(tmp, 4);
+      tmpBlkTypes.push_back(stringToBlockType(tmp.c_str()));
+    }
+    if ((blockCnt * 6ULL + filePos) > fileBufSize)
+      throw errorMessage("end of input file");
+    blockTypes.resize(blockCnt);
+    for (size_t i = 0; i < blockCnt; i++)
+    {
+      unsigned int  blockType = readUInt16Fast();
+      if (blockType >= tmpBlkTypes.size())
+        throw errorMessage("invalid block type in NIF file");
+      blockTypes[i] = (unsigned char) tmpBlkTypes[blockType];
+    }
   }
-  for (size_t i = 0; i < blockCnt; i++)
+  blockOffsets.resize(blockCnt + 1, 0);
+  for (size_t i = 1; i <= blockCnt; i++)
   {
-    unsigned int  blockType = readUInt16();
-    if (blockType >= blockTypeStrings.size())
-      throw errorMessage("invalid block type in NIF file");
-    blockTypes.push_back(int(blockType));
-  }
-  for (size_t i = 0; i < blockCnt; i++)
-  {
-    unsigned int  blockSize = readUInt32();
-    blockSizes.push_back(blockSize);
+    unsigned int  blockSize = readUInt32Fast();
+    blockOffsets[i] = blockOffsets[i - 1] + blockSize;
   }
   size_t  stringCnt = readUInt32();
   (void) readUInt32();  // ignore maximum string length
   for (size_t i = 0; i < stringCnt; i++)
   {
-    readString(tmp, *this, 4);
+    readString(tmp, 4);
     stringTable.push_back(tmp);
   }
   if (readUInt32() != 0)
     throw errorMessage("NIFFile: number of groups > 0 is not supported");
-  for (size_t i = 0; i < blockCnt; i++)
+  for (size_t i = 0; i <= blockCnt; i++)
   {
-    if ((filePos + blockSizes[i]) > fileBufSize)
+    blockOffsets[i] = blockOffsets[i] + filePos;
+    if (blockOffsets[i] > fileBufSize)
       throw errorMessage("invalid block size in NIF file");
-    blockOffsets.push_back(filePos);
-    filePos = filePos + blockSizes[i];
-  }
-#ifdef ENABLE_DEBUG
-  std::printf("BS version: 0x%08X\n", bsVersion);
-  std::printf("Author name: %s\n", authorName.c_str());
-  std::printf("Process script: %s\n", processScriptName.c_str());
-  std::printf("Export script: %s\n", exportScriptName.c_str());
-
-  for (size_t i = 0; i < stringTable.size(); i++)
-    std::printf("String %3d: %s\n", int(i), stringTable[i].c_str());
-
-  std::printf("Block count: %u\n", blockCnt);
-  for (size_t i = 0; i < blockCnt; i++)
-  {
-    std::printf("  Block %3d: offset = 0x%08X, size = %7u, type = %d (%s)\n",
-                int(i), (unsigned int) blockOffsets[i], blockSizes[i],
-                blockTypes[i], blockTypeStrings[blockTypes[i]].c_str());
-  }
-#endif
-  for (size_t i = 0; i < blockCnt; i++)
-  {
-    const std::string&  blockTypeName = blockTypeStrings[blockTypes[i]];
-    if (blockTypeName == "NiNode")
-      blockTypes[i] = BlkTypeNiNode;
-    else if (blockTypeName == "BSFadeNode")
-      blockTypes[i] = BlkTypeBSFadeNode;
-    else if (blockTypeName == "BSMultiBoundNode")
-      blockTypes[i] = BlkTypeBSMultiBoundNode;
-    else if (blockTypeName == "BSTriShape")
-      blockTypes[i] = BlkTypeBSTriShape;
-    else if (blockTypeName == "BSEffectShaderProperty")
-      blockTypes[i] = BlkTypeBSEffectShaderProperty;
-    else if (blockTypeName == "NiAlphaProperty")
-      blockTypes[i] = BlkTypeNiAlphaProperty;
-    else if (blockTypeName == "BSLightingShaderProperty")
-      blockTypes[i] = BlkTypeBSLightingShaderProperty;
-    else if (blockTypeName == "BSShaderTextureSet")
-      blockTypes[i] = BlkTypeBSShaderTextureSet;
-    else if (blockTypeName == "BSWaterShaderProperty")
-      blockTypes[i] = BlkTypeBSWaterShaderProperty;
   }
 
   blocks.resize(blockCnt, (NIFBlock *) 0);
+  const unsigned char *savedFileBuf = fileBuf;
+  size_t  savedFileBufSize = fileBufSize;
   try
   {
     for (size_t i = 0; i < blockCnt; i++)
     {
-      const unsigned char *blockDataPtr = fileBuf + blockOffsets[i];
-      size_t  blockSize = blockSizes[i];
-      switch (blockTypes[i])
+      fileBuf = savedFileBuf + blockOffsets[i];
+      fileBufSize = blockOffsets[i + 1] - blockOffsets[i];
+      filePos = 0;
+      int     blockType = blockTypes[i];
+      if (isNodeBlock(blockType))
       {
-        case BlkTypeNiNode:
-        case BlkTypeBSFadeNode:
-        case BlkTypeBSMultiBoundNode:
-          blocks[i] = new NIFBlkNiNode(*this, blockDataPtr, blockSize);
-          break;
-        case BlkTypeBSTriShape:
-          blocks[i] = new NIFBlkBSTriShape(*this, blockDataPtr, blockSize);
-          break;
-        case BlkTypeBSLightingShaderProperty:
-          blocks[i] = new NIFBlkBSLightingShaderProperty(*this, i,
-                                                         blockDataPtr,
-                                                         blockSize);
-          break;
-        case BlkTypeBSShaderTextureSet:
-          blocks[i] = new NIFBlkBSShaderTextureSet(*this,
-                                                   blockDataPtr, blockSize);
-          break;
+        blocks[i] = new NIFBlkNiNode(*this);
+      }
+      else if (isTriShapeBlock(blockType))
+      {
+        blocks[i] = new NIFBlkBSTriShape(*this);
+      }
+      else if (blockType == BlkTypeBSLightingShaderProperty)
+      {
+        int     t = BlkTypeUnknown;
+        if ((i + 1) < blockCnt)
+          t = blockTypes[i + 1];
+        blocks[i] = new NIFBlkBSLightingShaderProperty(*this, i + 1, t);
+      }
+      else if (blockType == BlkTypeBSShaderTextureSet)
+      {
+        blocks[i] = new NIFBlkBSShaderTextureSet(*this);
+      }
+      else
+      {
+        blocks[i] = new NIFBlock(blockType);
       }
     }
   }
   catch (...)
   {
+    fileBuf = savedFileBuf;
+    fileBufSize = savedFileBufSize;
+    filePos = savedFileBufSize;
     for (size_t i = 0; i < blocks.size(); i++)
     {
       if (blocks[i])
@@ -652,16 +509,17 @@ void NIFFile::loadNIFFile()
     }
     throw;
   }
+  fileBuf = savedFileBuf;
+  fileBufSize = savedFileBufSize;
+  filePos = savedFileBufSize;
 }
 
 void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
                       std::vector< unsigned int >& parentBlocks) const
 {
-  if (blockNum >= blockTypes.size())
+  if (blockNum >= blocks.size())
     return;
-  if (blockTypes[blockNum] == BlkTypeNiNode ||
-      blockTypes[blockNum] == BlkTypeBSFadeNode ||
-      blockTypes[blockNum] == BlkTypeBSMultiBoundNode)
+  if (blocks[blockNum]->isNode())
   {
     parentBlocks.push_back(blockNum);
     const NIFBlkNiNode& b = *((const NIFBlkNiNode *) blocks[blockNum]);
@@ -684,7 +542,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
     return;
   }
 
-  if (blockTypes[blockNum] != BlkTypeBSTriShape)
+  if (!blocks[blockNum]->isTriShape())
     return;
   const NIFBlkBSTriShape& b = *((const NIFBlkBSTriShape *) blocks[blockNum]);
   if (b.vertexData.size() < 1 || b.triangleData.size() < 1)
@@ -711,14 +569,14 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
     t.vertexTransform *=
         ((const NIFBlkNiNode *) blocks[parentBlocks[i]])->vertexTransform;
   }
-  size_t  n = size_t(b.shaderProperty);
-  if (b.shaderProperty >= 0 && n < blockTypes.size())
+  if (b.shaderProperty >= 0)
   {
-    if (blockTypes[n] == BlkTypeBSWaterShaderProperty)
+    size_t  n = size_t(b.shaderProperty);
+    if (blocks[n]->type == BlkTypeBSWaterShaderProperty)
     {
       t.isWater = true;
     }
-    else if (blockTypes[n] == BlkTypeBSLightingShaderProperty)
+    else if (blocks[n]->type == BlkTypeBSLightingShaderProperty)
     {
       const NIFBlkBSLightingShaderProperty& lsBlock =
           *((const NIFBlkBSLightingShaderProperty *) blocks[n]);
@@ -728,13 +586,10 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       t.textureOffsetV = lsBlock.offsetV;
       t.textureScaleU = lsBlock.scaleU;
       t.textureScaleV = lsBlock.scaleV;
-      if (lsBlock.textureSet >= 0 &&
-          size_t(lsBlock.textureSet) < blockTypes.size())
-      {
+      if (lsBlock.textureSet >= 0)
         n = size_t(lsBlock.textureSet);
-      }
     }
-    if (blockTypes[n] == BlkTypeBSShaderTextureSet)
+    if (blocks[n]->type == BlkTypeBSShaderTextureSet)
     {
       const NIFBlkBSShaderTextureSet& tsBlock =
           *((const NIFBlkBSShaderTextureSet *) blocks[n]);
@@ -772,87 +627,11 @@ NIFFile::~NIFFile()
   }
 }
 
-void NIFFile::getMesh(std::vector< NIFTriShape >& v) const
+void NIFFile::getMesh(std::vector< NIFTriShape >& v,
+                      unsigned int rootNode) const
 {
   v.clear();
   std::vector< unsigned int > parentBlocks;
-  getMesh(v, 0U, parentBlocks);
+  getMesh(v, rootNode, parentBlocks);
 }
-
-#ifdef ENABLE_DEBUG
-int main(int argc, char **argv)
-{
-  if (argc < 3)
-  {
-    std::fprintf(stderr, "Usage: %s ARCHIVEPATH PATTERN...\n", argv[0]);
-    return 1;
-  }
-  try
-  {
-    std::vector< std::string >  fileNames;
-    for (int i = 2; i < argc; i++)
-      fileNames.push_back(argv[i]);
-    BA2File ba2File(argv[1], &fileNames);
-    ba2File.getFileList(fileNames);
-    for (size_t i = 0; i < fileNames.size(); i++)
-    {
-      if (fileNames[i].length() < 5 ||
-          std::strcmp(fileNames[i].c_str() + fileNames[i].length() - 4, ".nif")
-          != 0)
-      {
-        continue;
-      }
-      std::printf("==== %s ====\n", fileNames[i].c_str());
-      std::vector< unsigned char >  fileBuf;
-      ba2File.extractFile(fileBuf, fileNames[i]);
-      NIFFile nifFile(&(fileBuf.front()), fileBuf.size());
-      std::vector< NIFFile::NIFTriShape > meshData;
-      nifFile.getMesh(meshData);
-      for (size_t j = 0; j < meshData.size(); j++)
-      {
-        std::printf("TriShape %3d (%s):\n", int(j), meshData[j].name);
-        std::printf("  Vertex count: %d\n", int(meshData[j].vertexCnt));
-        std::printf("  Triangle count: %d\n", int(meshData[j].triangleCnt));
-        std::printf("  Is water: %d\n", int(meshData[j].isWater));
-        meshData[j].vertexTransform.debugPrint();
-        if (meshData[j].materialPath)
-          std::printf("  Material: %s\n", meshData[j].materialPath->c_str());
-        std::printf("  Texture UV offset, scale: (%f, %f), (%f, %f)\n",
-                    meshData[j].textureOffsetU, meshData[j].textureOffsetV,
-                    meshData[j].textureScaleU, meshData[j].textureScaleV);
-        for (size_t k = 0; k < meshData[j].texturePathCnt; k++)
-        {
-          std::printf("  Texture %2d: %s\n",
-                      int(k), meshData[j].texturePaths[k].c_str());
-        }
-        std::printf("  Vertex list:\n");
-        for (size_t k = 0; k < meshData[j].vertexCnt; k++)
-        {
-          NIFFile::NIFVertex  v = meshData[j].vertexData[k];
-          meshData[j].vertexTransform.transformVertex(v);
-          std::printf("    %4d: XYZ: (%f, %f, %f), normals: (%f, %f, %f), "
-                      "UV: (%f, %f), color: 0x%08X\n",
-                      int(k), v.x, v.y, v.z, v.normalX, v.normalY, v.normalZ,
-                      v.getU(), v.getV(), v.vertexColor);
-        }
-        std::printf("  Triangle list:\n");
-        for (size_t k = 0; k < meshData[j].triangleCnt; k++)
-        {
-          std::printf("    %4d: %4u, %4u, %4u\n",
-                      int(k),
-                      meshData[j].triangleData[k].v0,
-                      meshData[j].triangleData[k].v1,
-                      meshData[j].triangleData[k].v2);
-        }
-      }
-    }
-  }
-  catch (std::exception& e)
-  {
-    std::fprintf(stderr, "%s: %s\n", argv[0], e.what());
-    return 1;
-  }
-  return 0;
-}
-#endif
 

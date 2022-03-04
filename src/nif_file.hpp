@@ -56,7 +56,6 @@ class NIFFile : public FileBuffer
     NIFVertexTransform& operator*=(const NIFVertexTransform& r);
     void transformXYZ(float& x, float& y, float& z) const;
     void transformVertex(NIFVertex& v) const;
-    void debugPrint() const;
   };
   struct NIFTriShape
   {
@@ -79,43 +78,30 @@ class NIFFile : public FileBuffer
     float   textureScaleV;
     const char  *name;
   };
- protected:
-  // file version:
-  //      11: Oblivion
-  //      34: Fallout 3
-  //     100: Skyrim
-  //     130: Fallout 4
-  //     155: Fallout 76
-  unsigned int  bsVersion;
-  unsigned int  blockCnt;
-  std::string   authorName;
-  std::string   processScriptName;
-  std::string   exportScriptName;
   enum
   {
-    BlkTypeNiNode = -1,
-    BlkTypeBSFadeNode = -2,
-    BlkTypeBSMultiBoundNode = -3,
-    BlkTypeBSTriShape = -4,
-    BlkTypeBSEffectShaderProperty = -5,
-    BlkTypeNiAlphaProperty = -6,
-    BlkTypeBSLightingShaderProperty = -7,
-    BlkTypeBSShaderTextureSet = -8,
-    BlkTypeBSWaterShaderProperty = -9
+    // the complete list of block types is in nifblock.cpp
+    BlkTypeUnknown = 0,
+    BlkTypeNiNode = 88,
+    BlkTypeBSFadeNode = 17,
+    BlkTypeBSMultiBoundNode = 31,
+    BlkTypeBSLeafAnimNode = 23,
+    BlkTypeBSTriShape = 55,
+    BlkTypeBSMeshLODTriShape = 28,
+    BlkTypeBSEffectShaderProperty = 13,
+    BlkTypeNiAlphaProperty = 60,
+    BlkTypeBSLightingShaderProperty = 24,
+    BlkTypeBSShaderTextureSet = 47,
+    BlkTypeBSWaterShaderProperty = 57
   };
-  std::vector< std::string >  blockTypeStrings;
-  std::vector< int >          blockTypes;
-  std::vector< unsigned int > blockSizes;
-  std::vector< size_t >       blockOffsets;
-  std::vector< std::string >  stringTable;
-  struct NIFBlock : public FileBuffer
+  struct NIFBlock
   {
-    NIFFile&  f;
     int       type;
     int       nameID;
-    NIFBlock(NIFFile& nifFile, int blockType,
-             const unsigned char *blockBuf, size_t blockBufSize);
+    NIFBlock(int blockType);
     virtual ~NIFBlock();
+    inline bool isNode() const;
+    inline bool isTriShape() const;
   };
   struct NIFBlkNiNode : public NIFBlock
   {
@@ -125,8 +111,7 @@ class NIFFile : public FileBuffer
     NIFVertexTransform  vertexTransform;
     int     collisionObject;
     std::vector< unsigned int > children;
-    NIFBlkNiNode(NIFFile& nifFile,
-                 const unsigned char *blockBuf, size_t blockBufSize);
+    NIFBlkNiNode(NIFFile& f);
     virtual ~NIFBlkNiNode();
   };
   struct NIFBlkBSTriShape : public NIFBlock
@@ -155,13 +140,12 @@ class NIFFile : public FileBuffer
     unsigned long long  vertexFmtDesc;
     std::vector< NIFVertex >    vertexData;
     std::vector< NIFTriangle >  triangleData;
-    NIFBlkBSTriShape(NIFFile& nifFile,
-                     const unsigned char *blockBuf, size_t blockBufSize);
+    NIFBlkBSTriShape(NIFFile& f);
     virtual ~NIFBlkBSTriShape();
   };
   struct NIFBlkBSLightingShaderProperty : public NIFBlock
   {
-    unsigned int  type;
+    unsigned int  shaderType;
     std::string   materialName;
     std::vector< unsigned int > extraData;
     int     controller;
@@ -171,22 +155,40 @@ class NIFFile : public FileBuffer
     float   scaleU;
     float   scaleV;
     int     textureSet;
-    NIFBlkBSLightingShaderProperty(NIFFile& nifFile, size_t blockNum,
-                                   const unsigned char *blockBuf,
-                                   size_t blockBufSize);
+    NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType);
     virtual ~NIFBlkBSLightingShaderProperty();
   };
   struct NIFBlkBSShaderTextureSet : public NIFBlock
   {
     std::vector< std::string >  texturePaths;
-    NIFBlkBSShaderTextureSet(NIFFile& nifFile,
-                             const unsigned char *blockBuf,
-                             size_t blockBufSize);
+    NIFBlkBSShaderTextureSet(NIFFile& f);
     virtual ~NIFBlkBSShaderTextureSet();
   };
-  std::vector< NIFBlock * > blocks;
-  static void readString(std::string& s,
-                         FileBuffer& buf, size_t stringLengthSize);
+ protected:
+  static const char *blockTypeStrings[168];
+  static int stringToBlockType(const char *s);
+  static inline bool isNodeBlock(int blockType);
+  static inline bool isTriShapeBlock(int blockType);
+  // file version:
+  //      11: Oblivion
+  //      34: Fallout 3
+  //     100: Skyrim
+  //     130: Fallout 4
+  //     155: Fallout 76
+  unsigned int  bsVersion;
+  unsigned int  blockCnt;
+  std::string   authorName;
+  std::string   processScriptName;
+  std::string   exportScriptName;
+  std::vector< size_t >       blockOffsets;
+  std::vector< std::string >  stringTable;
+  std::vector< NIFBlock * >   blocks;
+  void readString(std::string& s, size_t stringLengthSize);
+  inline int readBlockID()
+  {
+    int     n = readInt32();
+    return (n >= 0 && size_t(n) < blocks.size() ? n : -1);
+  }
   void loadNIFFile();
   void getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
                std::vector< unsigned int >& parentBlocks) const;
@@ -195,16 +197,140 @@ class NIFFile : public FileBuffer
   NIFFile(const unsigned char *buf, size_t bufSize);
   NIFFile(FileBuffer& buf);
   virtual ~NIFFile();
-  inline unsigned int getVersion() const
-  {
-    return bsVersion;
-  }
-  inline const std::string& getAuthorName() const
-  {
-    return authorName;
-  }
-  void getMesh(std::vector< NIFTriShape >& v) const;
+  inline unsigned int getVersion() const;
+  inline const std::string& getAuthorName() const;
+  inline const std::string& getProcessScriptName() const;
+  inline const std::string& getExportScriptName() const;
+  inline size_t getBlockCount() const;
+  inline int getBlockType(size_t n) const;
+  inline const char *getBlockTypeAsString(size_t n) const;
+  inline const char *getBlockName(size_t n) const;
+  inline size_t getBlockOffset(size_t n) const;
+  inline size_t getBlockSize(size_t n) const;
+  inline const std::vector< unsigned int > *getNodeChildren(size_t n) const;
+  // these functions return NULL if the block is not of the requested type
+  inline const NIFBlkNiNode *getNode(size_t n) const;
+  inline const NIFBlkBSTriShape *getTriShape(size_t n) const;
+  inline const NIFBlkBSLightingShaderProperty *
+      getLightingShaderProperty(size_t n) const;
+  inline const NIFBlkBSShaderTextureSet *getShaderTextureSet(size_t n) const;
+  void getMesh(std::vector< NIFTriShape >& v, unsigned int rootNode = 0U) const;
 };
+
+inline bool NIFFile::isNodeBlock(int blockType)
+{
+  return (blockType == BlkTypeNiNode ||
+          ((1ULL << (unsigned char) blockType)
+           & ((1ULL << BlkTypeBSFadeNode) | (1ULL << BlkTypeBSMultiBoundNode)
+              | (1ULL << BlkTypeBSLeafAnimNode))) != 0ULL);
+}
+
+inline bool NIFFile::isTriShapeBlock(int blockType)
+{
+  return (((1ULL << (unsigned char) blockType)
+           & ((1ULL << BlkTypeBSTriShape)
+              | (1ULL << BlkTypeBSMeshLODTriShape))) != 0ULL);
+}
+
+inline bool NIFFile::NIFBlock::isNode() const
+{
+  return NIFFile::isNodeBlock(type);
+}
+
+inline bool NIFFile::NIFBlock::isTriShape() const
+{
+  return NIFFile::isTriShapeBlock(type);
+}
+
+inline unsigned int NIFFile::getVersion() const
+{
+  return bsVersion;
+}
+
+inline const std::string& NIFFile::getAuthorName() const
+{
+  return authorName;
+}
+
+inline const std::string& NIFFile::getProcessScriptName() const
+{
+  return processScriptName;
+}
+
+inline const std::string& NIFFile::getExportScriptName() const
+{
+  return exportScriptName;
+}
+
+inline size_t NIFFile::getBlockCount() const
+{
+  return blockCnt;
+}
+
+inline int NIFFile::getBlockType(size_t n) const
+{
+  return blocks[n]->type;
+}
+
+inline const char * NIFFile::getBlockTypeAsString(size_t n) const
+{
+  return blockTypeStrings[blocks[n]->type];
+}
+
+inline const char * NIFFile::getBlockName(size_t n) const
+{
+  if (blocks[n]->nameID >= 0)
+    return stringTable[blocks[n]->nameID].c_str();
+  return "";
+}
+
+inline size_t NIFFile::getBlockOffset(size_t n) const
+{
+  return blockOffsets[n];
+}
+
+inline size_t NIFFile::getBlockSize(size_t n) const
+{
+  return (blockOffsets[n + 1] - blockOffsets[n]);
+}
+
+inline const std::vector< unsigned int > *
+    NIFFile::getNodeChildren(size_t n) const
+{
+  if (!blocks[n]->isNode())
+    return (std::vector< unsigned int > *) 0;
+  return &(((const NIFBlkNiNode *) blocks[n])->children);
+}
+
+inline const NIFFile::NIFBlkNiNode * NIFFile::getNode(size_t n) const
+{
+  if (!blocks[n]->isNode())
+    return (NIFBlkNiNode *) 0;
+  return ((const NIFBlkNiNode *) blocks[n]);
+}
+
+inline const NIFFile::NIFBlkBSTriShape * NIFFile::getTriShape(size_t n) const
+{
+  if (!blocks[n]->isTriShape())
+    return (NIFBlkBSTriShape *) 0;
+  return ((const NIFBlkBSTriShape *) blocks[n]);
+}
+
+inline const NIFFile::NIFBlkBSLightingShaderProperty *
+    NIFFile::getLightingShaderProperty(size_t n) const
+{
+  if (blocks[n]->type != BlkTypeBSLightingShaderProperty)
+    return (NIFBlkBSLightingShaderProperty *) 0;
+  return ((const NIFBlkBSLightingShaderProperty *) blocks[n]);
+}
+
+inline const NIFFile::NIFBlkBSShaderTextureSet *
+    NIFFile::getShaderTextureSet(size_t n) const
+{
+  if (blocks[n]->type != BlkTypeBSShaderTextureSet)
+    return (NIFBlkBSShaderTextureSet *) 0;
+  return ((const NIFBlkBSShaderTextureSet *) blocks[n]);
+}
 
 #endif
 
