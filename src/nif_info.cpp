@@ -267,8 +267,8 @@ int main(int argc, char **argv)
   }
   if (argc < 3)
   {
-    std::fprintf(stderr, "Usage: %s [-q|-v|-obj|-mtl] ARCHIVEPATH PATTERN...\n",
-                 argv[0]);
+    std::fprintf(stderr, "Usage: nif_info [-q|-v|-obj|-mtl] "
+                         "ARCHIVEPATH PATTERN...\n");
     std::fprintf(stderr, "    -q      Print author name, file name, "
                          "and file size only\n");
     std::fprintf(stderr, "    -v      Verbose mode, print block list, "
@@ -327,7 +327,7 @@ int main(int argc, char **argv)
   }
   catch (std::exception& e)
   {
-    std::fprintf(stderr, "%s: %s\n", argv[0], e.what());
+    std::fprintf(stderr, "nif_info: %s\n", e.what());
     return 1;
   }
   return 0;

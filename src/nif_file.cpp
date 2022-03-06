@@ -131,9 +131,12 @@ NIFFile::NIFBlkNiNode::NIFBlkNiNode(NIFFile& f)
   collisionObject = f.readBlockID();
   for (unsigned int n = f.readUInt32(); n--; )
   {
-    children.push_back(f.readUInt32());
-    if (children[children.size() - 1] >= f.blocks.size())
+    unsigned int  childBlock = f.readUInt32();
+    if (childBlock == 0xFFFFFFFFU)
+      continue;
+    if (childBlock >= f.blocks.size())
       throw errorMessage("invalid child block number in NIF node");
+    children.push_back(childBlock);
   }
 }
 
@@ -229,15 +232,6 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
   {
     NIFVertex&  v = vertexData[i];
     size_t  offs = f.getPosition();
-    v.x = 0.0f;
-    v.y = 0.0f;
-    v.z = 0.0f;
-    v.normalX = 0.0f;
-    v.normalY = 0.0f;
-    v.normalZ = 1.0f;
-    v.u = 0;
-    v.v = 0;
-    v.vertexColor = 0xFFFFFFFFU;
     if (xyzOffs >= 0)
     {
       f.setPosition(offs + size_t(xyzOffs));
@@ -413,13 +407,13 @@ void NIFFile::loadNIFFile()
   blockCnt = readUInt32Fast();
   bsVersion = readUInt32Fast();
   readString(authorName, 1);
-  if (bsVersion >= 0x90)
+  if (bsVersion >= 0x84)
     (void) readUInt32();
   readString(processScriptName, 1);
   readString(exportScriptName, 1);
   std::string tmp;
   std::vector< unsigned char >  blockTypes;
-  if (bsVersion >= 0x80 && bsVersion < 0x90)
+  if (bsVersion >= 0x80 && bsVersion < 0x84)
     readString(tmp, 1);
   {
     std::vector< int >  tmpBlkTypes;
@@ -472,29 +466,31 @@ void NIFFile::loadNIFFile()
       fileBufSize = blockOffsets[i + 1] - blockOffsets[i];
       filePos = 0;
       int     blockType = blockTypes[i];
-      if (isNodeBlock(blockType))
+      int     baseBlockType = blockTypeBaseTable[blockType];
+      switch (baseBlockType)
       {
-        blocks[i] = new NIFBlkNiNode(*this);
+        case BlkTypeNiNode:
+          blocks[i] = new NIFBlkNiNode(*this);
+          break;
+        case BlkTypeBSTriShape:
+          blocks[i] = new NIFBlkBSTriShape(*this);
+          break;
+        case BlkTypeBSLightingShaderProperty:
+          {
+            int     t = BlkTypeUnknown;
+            if ((i + 1) < blockCnt)
+              t = blockTypeBaseTable[blockTypes[i + 1]];
+            blocks[i] = new NIFBlkBSLightingShaderProperty(*this, i + 1, t);
+          }
+          break;
+        case BlkTypeBSShaderTextureSet:
+          blocks[i] = new NIFBlkBSShaderTextureSet(*this);
+          break;
+        default:
+          blocks[i] = new NIFBlock(blockType);
+          break;
       }
-      else if (isTriShapeBlock(blockType))
-      {
-        blocks[i] = new NIFBlkBSTriShape(*this);
-      }
-      else if (blockType == BlkTypeBSLightingShaderProperty)
-      {
-        int     t = BlkTypeUnknown;
-        if ((i + 1) < blockCnt)
-          t = blockTypes[i + 1];
-        blocks[i] = new NIFBlkBSLightingShaderProperty(*this, i + 1, t);
-      }
-      else if (blockType == BlkTypeBSShaderTextureSet)
-      {
-        blocks[i] = new NIFBlkBSShaderTextureSet(*this);
-      }
-      else
-      {
-        blocks[i] = new NIFBlock(blockType);
-      }
+      blocks[i]->type = blockType;
     }
   }
   catch (...)
@@ -515,7 +511,8 @@ void NIFFile::loadNIFFile()
 }
 
 void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
-                      std::vector< unsigned int >& parentBlocks) const
+                      std::vector< unsigned int >& parentBlocks,
+                      unsigned int switchActive) const
 {
   if (blockNum >= blocks.size())
     return;
@@ -535,8 +532,8 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
           break;
         }
       }
-      if (!loopFound)
-        getMesh(v, n, parentBlocks);
+      if (!(loopFound || (b.type == BlkTypeNiSwitchNode && i != switchActive)))
+        getMesh(v, n, parentBlocks, switchActive);
     }
     parentBlocks.resize(parentBlocks.size() - 1);
     return;
@@ -553,15 +550,6 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   t.vertexData = &(b.vertexData.front());
   t.triangleData = &(b.triangleData.front());
   t.vertexTransform = b.vertexTransform;
-  t.isWater = false;
-  t.texturePathCnt = 0;
-  t.texturePaths = (std::string *) 0;
-  t.materialPath = (std::string *) 0;
-  t.textureOffsetU = 0.0f;
-  t.textureOffsetV = 0.0f;
-  t.textureScaleU = 1.0f;
-  t.textureScaleV = 1.0f;
-  t.name = "";
   if (b.nameID >= 0)
     t.name = stringTable[b.nameID].c_str();
   for (size_t i = parentBlocks.size(); i-- > 0; )
@@ -572,11 +560,11 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   if (b.shaderProperty >= 0)
   {
     size_t  n = size_t(b.shaderProperty);
-    if (blocks[n]->type == BlkTypeBSWaterShaderProperty)
+    if (getBaseBlockType(n) == BlkTypeBSWaterShaderProperty)
     {
       t.isWater = true;
     }
-    else if (blocks[n]->type == BlkTypeBSLightingShaderProperty)
+    else if (getBaseBlockType(n) == BlkTypeBSLightingShaderProperty)
     {
       const NIFBlkBSLightingShaderProperty& lsBlock =
           *((const NIFBlkBSLightingShaderProperty *) blocks[n]);
@@ -589,7 +577,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       if (lsBlock.textureSet >= 0)
         n = size_t(lsBlock.textureSet);
     }
-    if (blocks[n]->type == BlkTypeBSShaderTextureSet)
+    if (getBaseBlockType(n) == BlkTypeBSShaderTextureSet)
     {
       const NIFBlkBSShaderTextureSet& tsBlock =
           *((const NIFBlkBSShaderTextureSet *) blocks[n]);
@@ -627,11 +615,11 @@ NIFFile::~NIFFile()
   }
 }
 
-void NIFFile::getMesh(std::vector< NIFTriShape >& v,
-                      unsigned int rootNode) const
+void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int rootNode,
+                      unsigned int switchActive) const
 {
   v.clear();
   std::vector< unsigned int > parentBlocks;
-  getMesh(v, rootNode, parentBlocks);
+  getMesh(v, rootNode, parentBlocks, switchActive);
 }
 
