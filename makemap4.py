@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import os, sys, subprocess
 
@@ -63,8 +63,12 @@ def createMap(gameNum, scale):
         runCmd(args1 + [gameName + "vclr.dds", "6"] + args2)
     else:
         runCmd(args1 + [gameName + "vclr.dds", "4"] + args2)
-    runCmd(["findwater", gamePath + "/" + esmName, gameName + "wmap.dds",
-            gameName + "hmap.dds", str(worldID)])
+    if gameNum < 3:
+        runCmd(["findwater", gamePath + "/" + esmName, gameName + "wmap.dds",
+                gameName + "hmap.dds", str(worldID)])
+    else:
+        runCmd(["findwater", gamePath + "/" + esmName, gameName + "wmap.dds",
+                gameName + "hmap.dds", str(worldID), gamePath])
     landtxtOptions = [gameName + "ltex.dds", gameName + "ltx2.dds"]
     landtxtOptions += ["ltex/" + gameName + ".txt", "-d", gamePath]
     landtxtOptions += ["-mult", "1.25", "-vclr", gameName + "vclr.dds"]

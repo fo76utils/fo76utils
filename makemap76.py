@@ -202,7 +202,7 @@ def createMap(gameName, gamePath, btdName, esmName, worldID, defTxtID):
             else:
                 runCmd(args1 + [gameName + "vclr.dds", "6"] + args2)
     runCmd(["findwater", gamePath + "/" + esmName, gameName + "wmap.dds",
-            gameName + "hmap.dds", worldID])
+            gameName + "hmap.dds", worldID, gamePath])
     landtxtOptions = [gameName + "ltex.dds", gameName + "ltx2.dds"]
     landtxtOptions += ["ltex/" + gameName + ".txt", "-d", gamePath]
     landtxtOptions += ["-mip", mipLevel + textureMip]
