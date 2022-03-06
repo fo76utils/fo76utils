@@ -1,6 +1,9 @@
 
 #include "filebuf.hpp"
 #include "esmfile.hpp"
+#include "ba2file.hpp"
+#include "nif_file.hpp"
+#include "plot3d.hpp"
 
 static int    landWidth = 25728;
 static int    landHeight = 25728;
@@ -18,6 +21,13 @@ static int    cellSize = 128;
 static int    cellOffsetX = 12864;
 static int    cellOffsetY = 12863;
 static unsigned int worldFormID = 0x0025DA15;
+
+static BA2File  *meshArchiveFile = (BA2File *) 0;
+static std::vector< NIFFile * > nifFiles;
+static std::map< unsigned int, std::vector< NIFFile::NIFTriShape > >
+    waterMeshes;
+static std::vector< std::vector< NIFFile::NIFVertex > > obndVertexBuf;
+static std::vector< NIFFile::NIFTriangle >  obndTriangleBuf;
 
 static std::vector< unsigned short >  waterHeightMap;
 
@@ -38,97 +48,201 @@ static inline unsigned int convertZ(float z)
   return (unsigned int) tmp;
 }
 
+struct WaterHeightMap
+{
+  static inline void drawPixel(int x, int y, float z)
+  {
+    if (x < 0 || x >= landWidth || y < 0 || y >= landHeight)
+      return;
+    size_t  offs = (unsigned int) y * (unsigned int) landWidth + size_t(x);
+    unsigned short  zi = (unsigned short) convertZ(z);
+    if (zi > waterHeightMap[offs])
+      waterHeightMap[offs] = zi;
+  }
+};
+
 static void fillWaterCell(int x0, int y0, int z0)
 {
-  unsigned int  zz = convertZ(float(z0));
-  int     d = 4096 / cellSize;
-  for (int y = 0; y < 4096; y = y + d)
+  int     x1 = convertX(float(x0 + 4096)) - 1;
+  int     y1 = convertY(float(y0 + 4096)) + 1;
+  x0 = convertX(float(x0));
+  y0 = convertY(float(y0));
+  if (x0 > x1 || x1 < 0 || x0 >= landWidth ||
+      y0 < y1 || y0 < 0 || y1 >= landHeight)
   {
-    for (int x = 0; x < 4096; x = x + d)
+    return;
+  }
+  Plot3D< WaterHeightMap, float > plot3d;
+  plot3d.drawRectangle(x0, y0, x1, y1, float(z0));
+}
+
+static void fillWaterMesh(const NIFFile::NIFTriShape *meshData, size_t meshCnt,
+                          const NIFFile::NIFVertexTransform& vertexTransform)
+{
+  for (size_t i = 0; i < meshCnt; i++)
+  {
+#if 0
+    if (!meshData[i].isWater)
+      continue;
+#endif
+    NIFFile::NIFVertexTransform t = meshData[i].vertexTransform;
+    t *= vertexTransform;
+    for (size_t j = 0; j < meshData[i].triangleCnt; j++)
     {
-      int     xx = convertX(float(x0 + x));
-      int     yy = convertY(float(y0 + y));
-      if (xx >= 0 && xx < landWidth && yy >= 0 && yy < landHeight)
+      NIFFile::NIFVertex  v0 =
+          meshData[i].vertexData[meshData[i].triangleData[j].v0];
+      NIFFile::NIFVertex  v1 =
+          meshData[i].vertexData[meshData[i].triangleData[j].v1];
+      NIFFile::NIFVertex  v2 =
+          meshData[i].vertexData[meshData[i].triangleData[j].v2];
+      t.transformVertex(v0);
+      t.transformVertex(v1);
+      t.transformVertex(v2);
+      int     x0 = convertX(v0.x);
+      int     y0 = convertY(v0.y);
+      int     x1 = convertX(v1.x);
+      int     y1 = convertY(v1.y);
+      int     x2 = convertX(v2.x);
+      int     y2 = convertY(v2.y);
+      if (!((x0 < 0 && x1 < 0 && x2 < 0) || (y0 < 0 && y1 < 0 && y2 < 0) ||
+            (x0 >= landWidth && x1 >= landWidth && x2 >= landWidth) ||
+            (y0 >= landHeight && y1 >= landHeight && y2 >= landHeight)))
       {
-        if (zz > waterHeightMap[yy * landWidth + xx])
-          waterHeightMap[yy * landWidth + xx] = (unsigned short) zz;
+        Plot3D< WaterHeightMap, float > plot3d;
+        plot3d.drawTriangle(x0, y0, v0.z, x1, y1, v1.z, x2, y2, v2.z);
       }
     }
   }
 }
 
-static void fillPolygon(float x1, float y1, float z1,
-                        float x2, float y2, float z2,
-                        float x3, float y3, float z3,
-                        float x4, float y4, float z4)
+static void createMeshFromOBND(std::vector< NIFFile::NIFTriShape >& meshData,
+                               int x1, int y1, int z1, int x2, int y2, int z2)
 {
-  float   d1 = ((x3 - x1) * (x3 - x1)) + ((y3 - y1) * (y3 - y1));
-  float   d2 = ((x4 - x2) * (x4 - x2)) + ((y4 - y2) * (y4 - y2));
-  int     n = int(std::sqrt(d1 > d2 ? d1 : d2) * xyRangeScale + 1.5);
-  float   f = 1.0f / float(n);
-  for (int i = 0; i <= n; i++)
+  meshData.resize(1);
+  obndVertexBuf.push_back(std::vector< NIFFile::NIFVertex >());
+  std::vector< NIFFile::NIFVertex >&  vertexData =
+      obndVertexBuf[obndVertexBuf.size() - 1];
+  vertexData.resize(8);
+  for (unsigned char i = 0; i < 8; i++)
   {
-    for (int j = 0; j <= n; j++)
+    vertexData[i].x = float(!(i & 1) ? x1 : x2);
+    vertexData[i].y = float(!(i & 2) ? y1 : y2);
+    vertexData[i].z = float(!(i & 4) ? z1 : z2);
+  }
+  if (obndTriangleBuf.size() != 12)
+  {
+    obndTriangleBuf.resize(12);
+    for (unsigned char i = 0; i < 12; i++)
     {
-      float   m1 = (float(n - i) * f) * (float(n - j) * f);
-      float   m2 = (float(i) * f) * (float(n - j) * f);
-      float   m3 = (float(i) * f) * (float(j) * f);
-      float   m4 = (float(n - i) * f) * (float(j) * f);
-      int     x = convertX((x1 * m1) + (x2 * m2) + (x3 * m3) + (x4 * m4));
-      int     y = convertY((y1 * m1) + (y2 * m2) + (y3 * m3) + (y4 * m4));
-      unsigned int  z = convertZ((z1 * m1) + (z2 * m2) + (z3 * m3) + (z4 * m4));
-      if (x >= 0 && x < landWidth && y >= 0 && y < landHeight)
-      {
-        if (z > waterHeightMap[y * landWidth + x])
-          waterHeightMap[y * landWidth + x] = (unsigned short) z;
-      }
+      obndTriangleBuf[i].v0 =
+          (unsigned short) ((0x0000442211000000ULL >> (i << 2)) & 7U);
+      obndTriangleBuf[i].v1 =
+          (unsigned short) ((0x0000656353424121ULL >> (i << 2)) & 7U);
+      obndTriangleBuf[i].v2 =
+          (unsigned short) ((0x0000777777665533ULL >> (i << 2)) & 7U);
     }
   }
+  meshData[0].vertexCnt = vertexData.size();
+  meshData[0].triangleCnt = obndTriangleBuf.size();
+  meshData[0].vertexData = &(vertexData.front());
+  meshData[0].triangleData = &(obndTriangleBuf.front());
+  meshData[0].isWater = true;
 }
 
-static void fillWater(int x0, int y0, int z0, int x1, int y1, int z1,
-                      int x2, int y2, int z2, float rx, float ry, float rz)
+static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
+                                                        unsigned int formID)
 {
-  float   rx_s = float(std::sin(rx));
-  float   rx_c = float(std::cos(rx));
-  float   ry_s = float(std::sin(ry));
-  float   ry_c = float(std::cos(ry));
-  float   rz_s = float(std::sin(rz));
-  float   rz_c = float(std::cos(rz));
-  float   r_xx = ry_c * rz_c;
-  float   r_xy = ry_c * rz_s;
-  float   r_xz = -ry_s;
-  float   r_yx = (rx_s * ry_s * rz_c) - (rx_c * rz_s);
-  float   r_yy = (rx_s * ry_s * rz_s) + (rx_c * rz_c);
-  float   r_yz = rx_s * ry_c;
-  float   r_zx = (rx_c * ry_s * rz_c) + (rx_s * rz_s);
-  float   r_zy = (rx_c * ry_s * rz_s) - (rx_s * rz_c);
-  float   r_zz = rx_c * ry_c;
-  float   x[8];
-  float   y[8];
-  float   z[8];
-  for (int i = 0; i < 8; i++)
+  std::map< unsigned int, std::vector< NIFFile::NIFTriShape > >::iterator i =
+      waterMeshes.find(formID);
+  if (i != waterMeshes.end())
+    return i->second;
+  i = waterMeshes.insert(
+          std::pair< unsigned int, std::vector< NIFFile::NIFTriShape > >(
+              formID, std::vector< NIFFile::NIFTriShape >())).first;
+  const ESMFile::ESMRecord& r = esmFile.getRecord(formID);
+  if (!(r == "ACTI" || r == "MSTT" || r == "PWAT" || r == "STAT"))
+    return i->second;
+  ESMFile::ESMField f(esmFile, r);
+  int     x1 = 0;
+  int     y1 = 0;
+  int     z1 = 0;
+  int     x2 = 0;
+  int     y2 = 0;
+  int     z2 = 0;
+  std::string modelPath;
+  bool    isWater = (r == "PWAT");
+  while (f.next())
   {
-    float   xf = float(!(i & 1) ? x1 : x2);
-    float   yf = float(!(i & 2) ? y1 : y2);
-    float   zf = float(!(i & 4) ? z1 : z2);
-    x[i] = float(x0) + (xf * r_xx) + (yf * r_xy) + (zf * r_xz);
-    y[i] = float(y0) + (xf * r_yx) + (yf * r_yy) + (zf * r_yz);
-    z[i] = float(z0) + (xf * r_zx) + (yf * r_zy) + (zf * r_zz);
+    if (f == "OBND" && f.size() >= 12)
+    {
+      x1 = uint16ToSigned(f.readUInt16Fast());
+      y1 = uint16ToSigned(f.readUInt16Fast());
+      z1 = uint16ToSigned(f.readUInt16Fast());
+      x2 = uint16ToSigned(f.readUInt16Fast());
+      y2 = uint16ToSigned(f.readUInt16Fast());
+      z2 = uint16ToSigned(f.readUInt16Fast());
+    }
+    else if (f == "MODL" && f.size() >= 1)
+    {
+      modelPath.clear();
+      for (size_t j = 0; j < f.size(); j++)
+      {
+        char    c = char(f.readUInt8Fast());
+        if (!c)
+          break;
+        if ((unsigned char) c < 0x20)
+          c = ' ';
+        else if (c >= 'A' && c <= 'Z')
+          c = c + ('a' - 'A');
+        else if (c == '\\')
+          c = '/';
+        modelPath += c;
+      }
+    }
+    else if (f == "WNAM" && f.size() >= 4)
+    {
+      isWater = true;
+    }
   }
-  static const unsigned char v[24] =
+  if (modelPath.length() < 8 ||
+      std::strncmp(modelPath.c_str(), "meshes/", 7) != 0)
   {
-    0, 1, 3, 2,  0, 1, 5, 4,  0, 2, 6, 4,  1, 3, 7, 5,  2, 3, 7, 6,  4, 5, 7, 6
-  };
-  for (int i = 0; i < 6; i++)
-  {
-    unsigned char c1 = v[i << 2];
-    unsigned char c2 = v[(i << 2) + 1];
-    unsigned char c3 = v[(i << 2) + 2];
-    unsigned char c4 = v[(i << 2) + 3];
-    fillPolygon(x[c1], y[c1], z[c1], x[c2], y[c2], z[c2],
-                x[c3], y[c3], z[c3], x[c4], y[c4], z[c4]);
+    modelPath.insert(0, "meshes/");
   }
+  if (meshArchiveFile && modelPath.length() >= 18 &&
+      (std::strncmp(modelPath.c_str(), "meshes/water/", 13) == 0 ||
+       modelPath.find("/fxwaterfall") != std::string::npos) &&
+      std::strcmp(modelPath.c_str() + (modelPath.length() - 4), ".nif") == 0)
+  {
+    isWater = true;
+  }
+  else
+  {
+    modelPath.clear();
+  }
+  if (meshArchiveFile && !modelPath.empty())
+  {
+    NIFFile *nifFile = (NIFFile *) 0;
+    try
+    {
+      std::vector< unsigned char >  fileBuf;
+      meshArchiveFile->extractFile(fileBuf, modelPath);
+      nifFile = new NIFFile(&(fileBuf.front()), fileBuf.size());
+      nifFile->getMesh(i->second);
+      nifFiles.push_back(nifFile);
+      return i->second;
+    }
+    catch (...)
+    {
+      if (nifFile)
+        delete nifFile;
+      i->second.clear();
+      return i->second;
+    }
+  }
+  if (isWater && (x1 | y1 | z1 | x2 | y2 | z2) != 0)
+    createMeshFromOBND(i->second, x1, y1, z1, x2, y2, z2);
+  return i->second;
 }
 
 void findWater(ESMFile& esmFile, unsigned int formID)
@@ -153,17 +267,10 @@ void findWater(ESMFile& esmFile, unsigned int formID)
       float   x = 0.0f;
       float   y = 0.0f;
       float   z = 0.0f;
-      int     x1 = 0;
-      int     y1 = 0;
-      int     z1 = 0;
-      int     x2 = 0;
-      int     y2 = 0;
-      int     z2 = 0;
       float   rx = 0.0f;
       float   ry = 0.0f;
       float   rz = 0.0f;
       float   scale = 1.0f;
-      bool    isWater = false;
       ESMFile::ESMField f(esmFile, r);
       while (f.next())
       {
@@ -186,36 +293,16 @@ void findWater(ESMFile& esmFile, unsigned int formID)
         }
       }
       const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(n);
-      if (r2 && (*r2 == "ACTI" || *r2 == "PWAT"))
+      if (r2 &&
+          (*r2 == "ACTI" || *r2 == "MSTT" || *r2 == "PWAT" || *r2 == "STAT"))
       {
-        isWater = (*r2 == "PWAT");
-        ESMFile::ESMField f2(esmFile, *r2);
-        while (f2.next())
+        std::vector< NIFFile::NIFTriShape >&  meshData =
+            getMeshData(esmFile, n);
+        if (meshData.size() > 0)
         {
-          if (f2 == "WNAM" && f2.size() >= 4)
-          {
-            isWater = true;
-          }
-          else if (f2 == "OBND" && f2.size() >= 12)
-          {
-            x1 = f2.readInt16();
-            y1 = f2.readInt16();
-            z1 = f2.readInt16();
-            x2 = f2.readInt16();
-            y2 = f2.readInt16();
-            z2 = f2.readInt16();
-          }
+          NIFFile::NIFVertexTransform t(scale, rx, ry, rz, x, y, z);
+          fillWaterMesh(&(meshData.front()), meshData.size(), t);
         }
-      }
-      if (isWater)
-      {
-        x1 = roundFloat(float(x1) * scale);
-        y1 = roundFloat(float(y1) * scale);
-        z1 = roundFloat(float(z1) * scale);
-        x2 = roundFloat(float(x2) * scale);
-        y2 = roundFloat(float(y2) * scale);
-        z2 = roundFloat(float(z2) * scale);
-        fillWater(int(x), int(y), int(z), x1, y1, z1, x2, y2, z2, rx, ry, rz);
       }
     }
     if (r == "CELL")
@@ -253,22 +340,63 @@ void findWater(ESMFile& esmFile, unsigned int formID)
 
 int main(int argc, char **argv)
 {
-  if (argc < 3 || argc > 5)
+  if (argc < 3)
   {
     std::fprintf(stderr,
                  "Usage: findwater INFILE.ESM[,...] OUTFILE.DDS "
-                 "[HMAPFILE.DDS [worldID]]\n");
+                 "[OPTIONS...]\n");
+    std::fprintf(stderr, "Options:\n");
+    std::fprintf(stderr, "    HMAPFILE.DDS    Height map input file\n");
+    std::fprintf(stderr, "    ARCHIVEPATH     Path to water mesh archive(s)\n");
+    std::fprintf(stderr, "    worldID         Form ID of world\n");
     return 1;
   }
   try
   {
+    std::string   hmapFileName;
+    std::vector< std::string >  meshArchivePaths;
+    unsigned int  worldID = 0U;
+    for (int i = 3; i < argc; i++)
+    {
+      try
+      {
+        worldID = (unsigned int) parseInteger(argv[i]);
+      }
+      catch (...)
+      {
+        std::string tmp(argv[i]);
+        std::string s;
+        size_t  n = tmp.rfind('.');
+        if (n != std::string::npos)
+        {
+          for ( ; n < tmp.length(); n++)
+          {
+            char    c = tmp[n];
+            if (c >= 'A' && c <= 'Z')
+              c = c + ('a' - 'A');
+            s += c;
+          }
+        }
+        if (s == ".ba2" || s == ".bsa" || s.empty() || s.length() > 5)
+          meshArchivePaths.push_back(tmp);
+        else
+          hmapFileName = tmp;
+      }
+    }
+    if (meshArchivePaths.size() > 0)
+    {
+      std::vector< std::string >  includePatterns;
+      includePatterns.push_back(std::string("water"));
+      meshArchiveFile = new BA2File(meshArchivePaths, &includePatterns);
+    }
     unsigned int  hdrBuf[11];
     hdrBuf[0] = 0x36374F46;             // "FO76"
     hdrBuf[10] = 0;
-    if (argc > 3)
+    if (!hmapFileName.empty())
     {
       int     pixelFormat = 0;
-      DDSInputFile  inFile(argv[3], landWidth, landHeight, pixelFormat, hdrBuf);
+      DDSInputFile  inFile(hmapFileName.c_str(),
+                           landWidth, landHeight, pixelFormat, hdrBuf);
       // "FO", "LAND"
       if ((hdrBuf[0] & 0xFFFF) == 0x4F46 && hdrBuf[1] == 0x444E414C)
       {
@@ -288,11 +416,11 @@ int main(int argc, char **argv)
         hdrBuf[0] = 0x36374F46;         // default to "FO76"
       }
     }
-    if (argc > 4)
+    if (worldID)
     {
-      worldFormID = (unsigned int) parseInteger(argv[4], 0,
-                                                "invalid world form ID",
-                                                0L, 0x0FFFFFFFL);
+      if (worldID & ~0x0FFFFFFFU)
+        throw errorMessage("invalid world form ID");
+      worldFormID = worldID;
     }
     hdrBuf[1] = 0x444E414C;             // "LAND"
     hdrBuf[2] = (unsigned int) cellMinX;
@@ -333,9 +461,23 @@ int main(int argc, char **argv)
   }
   catch (std::exception& e)
   {
+    for (size_t i = 0; i < nifFiles.size(); i++)
+    {
+      if (nifFiles[i])
+        delete nifFiles[i];
+    }
+    if (meshArchiveFile)
+      delete meshArchiveFile;
     std::fprintf(stderr, "findwater: %s\n", e.what());
     return 1;
   }
+  for (size_t i = 0; i < nifFiles.size(); i++)
+  {
+    if (nifFiles[i])
+      delete nifFiles[i];
+  }
+  if (meshArchiveFile)
+    delete meshArchiveFile;
   return 0;
 }
 
