@@ -193,9 +193,6 @@ void renderLine2D(unsigned long long *lineBufRGB, int x0, int y0)
   for (int offs = 0; offs < int(renderHeight << 6);
        offs = offs + d, y0 = y0 - d)
   {
-    int     zDiff = 0;
-    if (checkLandXY(x0 + lightOffsX, y0 + lightOffsY))
-      zDiff = int(getVertexHeight(x0 + lightOffsX, y0 + lightOffsY, hmapBuf));
     unsigned int  z = 0;
     unsigned int  w = waterLevel;
     unsigned long long  c = 0;
@@ -206,12 +203,30 @@ void renderLine2D(unsigned long long *lineBufRGB, int x0, int y0)
         w = getVertexHeight(x0, y0, wmapBuf);
       c = getVertexColor(x0, y0);
     }
+    int     zDiff = 0;
+    if (checkLandXY(x0 + lightOffsX, y0 + lightOffsY))
+      zDiff = int(getVertexHeight(x0 + lightOffsX, y0 + lightOffsY, hmapBuf));
     zDiff = int(z) + 65536 - zDiff;
     zDiff = (zDiff >= 0 ? (zDiff <= 131071 ? zDiff : 131071) : 0);
     c = c * (unsigned int) zDiffColorMult[zDiff];
     c = ((c + 0x0000800008000080ULL) >> 8) & 0x0003FF003FF003FFULL;
     if (z < w)
-      c = ((c * waterAlpha + waterRGB) >> 8) & 0x0003FF003FF003FFULL;
+    {
+      unsigned long long  c2 = waterRGB;
+      if (checkLandXY(x0 + lightOffsX, y0 + lightOffsY))
+      {
+        zDiff = int(getVertexHeight(x0 + lightOffsX, y0 + lightOffsY, wmapBuf));
+        if (zDiff != int(w) && zDiff > int(waterLevel))
+        {
+          zDiff = int(w) + 65536 - zDiff;
+          zDiff = (zDiff >= 0 ? (zDiff <= 131071 ? zDiff : 131071) : 0);
+          c2 = (c2 >> 8) & 0x0003FF003FF003FFULL;
+          c2 = c2 * (unsigned int) zDiffColorMult[zDiff];
+          c2 = c2 + 0x0000800008000080ULL;
+        }
+      }
+      c = ((c * waterAlpha + c2) >> 8) & 0x0003FF003FF003FFULL;
+    }
     renderPixels(lineBufRGB,
                  (unsigned int) offs << 8, (unsigned int) (offs + d) << 8, c);
   }
@@ -268,14 +283,30 @@ void renderLineIsometric(unsigned long long *lineBufRGB, int x0, int y0)
       wasLand = isLand;
       continue;
     }
-    int     zDiff = int(z) + 65536;
+    int     zDiff = 0;
     if (checkLandXY(x + lightOffsX, y + lightOffsY))
-      zDiff -= int(getVertexHeight(x + lightOffsX, y + lightOffsY, hmapBuf));
+      zDiff = int(getVertexHeight(x + lightOffsX, y + lightOffsY, hmapBuf));
+    zDiff = int(z) + 65536 - zDiff;
     zDiff = (zDiff >= 0 ? (zDiff <= 131071 ? zDiff : 131071) : 0);
     c = c * (unsigned int) zDiffColorMult[zDiff];
     c = ((c + 0x0000800008000080ULL) >> 8) & 0x0003FF003FF003FFULL;
     if (z < w)
-      c = ((c * waterAlpha + waterRGB) >> 8) & 0x0003FF003FF003FFULL;
+    {
+      unsigned long long  c2 = waterRGB;
+      if (checkLandXY(x + lightOffsX, y + lightOffsY))
+      {
+        zDiff = int(getVertexHeight(x + lightOffsX, y + lightOffsY, wmapBuf));
+        if (zDiff != int(w) && zDiff > int(waterLevel))
+        {
+          zDiff = int(w) + 65536 - zDiff;
+          zDiff = (zDiff >= 0 ? (zDiff <= 131071 ? zDiff : 131071) : 0);
+          c2 = (c2 >> 8) & 0x0003FF003FF003FFULL;
+          c2 = c2 * (unsigned int) zDiffColorMult[zDiff];
+          c2 = c2 + 0x0000800008000080ULL;
+        }
+      }
+      c = ((c * waterAlpha + c2) >> 8) & 0x0003FF003FF003FFULL;
+    }
     if (lineOffs > int(renderHeight << 13))
       lineOffs = int(renderHeight << 13);
     renderPixels(lineBufRGB,
