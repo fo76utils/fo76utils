@@ -1,12 +1,13 @@
 # fo76utils
 
-Simple command line utilities for extracting data from Fallout 4 and 76 files.
+Simple command line utilities for extracting data from Elder Scrolls and Fallout game files, from Oblivion to Fallout 76.
 
-* baunpack - list the contents of, or extract from .BA2 archives. Also includes limited support for .BSA files.
-* btddump - extract terrain data from Fallout 76 .BTD files to raw height map, land textures, or ground cover.
-* esmdump - list records from Skyrim, Fallout 4, and Fallout 76 .ESM files.
+* baunpack - list the contents of, or extract from .BA2 or .BSA archives.
+* bcdecode - convert BC1 to BC5 block compressed DDS textures to headerless RGBA image data.
+* btddump - extract terrain data from Fallout 76 .BTD files to raw height map, land textures, ground cover, or terrain color.
+* esmdump - list records from .ESM files in text or TSV format.
 * esmview - interactive version of esmdump.
-* findwater - create a (currently not accurate) height map of water bodies in Fallout 76.
+* findwater - create a height map of water bodies, optionally using .NIF meshes for Skyrim and newer games.
 * fo4land - extract landscape data from Oblivion, Fallout 3, Skyrim, and Fallout 4.
 * landtxt - create an RGB land texture from the output of btddump or fo4land formats 2 and 4, and a set of DDS files.
 * markers - find references to a set of form IDs defined in a text file, and mark their locations on an RGBA format map, optionally using DDS icon files.
@@ -14,6 +15,8 @@ Simple command line utilities for extracting data from Fallout 4 and 76 files.
 * terrain - render terrain to an RGB image, using files created by btddump, findwater, or fo4land. Includes 2D and isometric mode.
 
 Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on Linux. Run "scons" to compile. mman.c and mman.h are from mman-win32 (https://github.com/alitrack/mman-win32). All source code is under the MIT license.
+
+Running any of the programs without arguments prints detailed usage information.
 
 ### Building from source code on Windows
 
@@ -34,7 +37,7 @@ Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on 
     ./btddump Fallout76/Data/Terrain/Appalachia.btd fo76ltex.dds 2 -80 -80 80 80 1
     ./btddump Fallout76/Data/Terrain/Appalachia.btd fo76gcvr.dds 4 -80 -80 80 80 1
     ./btddump Fallout76/Data/Terrain/Appalachia.btd fo76vclr.dds 6 -80 -80 80 80 2
-    ./findwater Fallout76/Data/SeventySix.esm fo76wmap.dds fo76hmap.dds
+    ./findwater Fallout76/Data/SeventySix.esm fo76wmap.dds fo76hmap.dds Fallout76/Data
     ./landtxt fo76ltex.dds fo76ltx2.dds ltex/fo76.txt -d Fallout76/Data -gcvr fo76gcvr.dds -vclr fo76vclr.dds -mip 6
     ./terrain fo76hmap.dds fo76terr.dds 9216 6144 -ltex fo76ltx2.dds -light 150 100 35 -wmap fo76wmap.dds -watercolor 0x60102030
 
@@ -44,4 +47,9 @@ Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on 
 
 ### Example 3
 
+    ./esmdump Fallout4/Data/Fallout4.esm -u | python3 scripts/esmvcdisp.py -h 69 60 184 -
+
+### Example 4
+
     ./esmview Skyrim/Data/Skyrim.esm Skyrim/Data skyrim_english -F tes5cell.txt
+
