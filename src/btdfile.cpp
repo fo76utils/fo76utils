@@ -53,21 +53,18 @@
 
 #include <thread>
 
-void BTDFile::loadBlockLines_8(unsigned short *dst, const unsigned char *src,
-                               unsigned char l)
+void BTDFile::loadBlockLines_8(unsigned char *dst, const unsigned char *src)
 {
-  size_t  xd = 1 << l;
-  for (size_t i = 0; i < 128; i++, dst = dst + xd, src++)
+  for (size_t i = 0; i < 128; i++, dst++, src++)
     *dst = *src;
-  dst = dst + ((1024 - 128) << l);
-  for (size_t i = 0; i < 128; i++, dst = dst + xd, src++)
+  dst = dst + (1024 - 128);
+  for (size_t i = 0; i < 128; i++, dst++, src++)
     *dst = *src;
 }
 
 void BTDFile::loadBlockLines_16(unsigned short *dst, const unsigned char *src,
-                                unsigned char l)
+                                size_t xd, size_t yd)
 {
-  size_t  xd = 1 << l;
   unsigned short  tmp = 1;
   if (sizeof(unsigned short) == 2 &&
       *(reinterpret_cast< unsigned char * >(&tmp)) == 1)
@@ -77,7 +74,7 @@ void BTDFile::loadBlockLines_16(unsigned short *dst, const unsigned char *src,
       dst = dst + xd;
       *dst = *(reinterpret_cast< const unsigned short * >(src));
     }
-    dst = dst + ((1024 - 128) << l);
+    dst = dst + yd;
     for (size_t i = 0; i < 128; i++, dst = dst + xd, src = src + 2)
       *dst = *(reinterpret_cast< const unsigned short * >(src));
   }
@@ -88,14 +85,14 @@ void BTDFile::loadBlockLines_16(unsigned short *dst, const unsigned char *src,
       dst = dst + xd;
       *dst = (unsigned short) src[0] | ((unsigned short) src[1] << 8);
     }
-    dst = dst + ((1024 - 128) << l);
+    dst = dst + yd;
     for (size_t i = 0; i < 128; i++, dst = dst + xd, src = src + 2)
       *dst = (unsigned short) src[0] | ((unsigned short) src[1] << 8);
   }
 }
 
-void BTDFile::loadBlock(unsigned short *tileData, size_t n,
-                        unsigned char l, unsigned char b,
+void BTDFile::loadBlock(TileData& tileData, size_t dataOffs,
+                        size_t n, unsigned char l, unsigned char b,
                         std::vector< unsigned short >& zlibBuf)
 {
   if (l >= 2)
@@ -123,21 +120,25 @@ void BTDFile::loadBlock(unsigned short *tileData, size_t n,
   {
     throw errorMessage("error in compressed landscape data");
   }
+  size_t  xd = 1 << (b == 0 || l == 0 ? l : (l - 2));
+  size_t  yd = (b == 0 || l == 0 ? (1024 - 128) : ((256 - 128) >> 2)) << l;
   for (size_t y = 0; y < 128; y = y + 2)
   {
     if (b == 0)                 // vertex height
     {
-      loadBlockLines_16(tileData + (y << (l + 10)), p, l);
+      loadBlockLines_16(&(tileData.hmapData.front())
+                        + dataOffs + (y << (l + 10)), p, xd, yd);
       p = p + 384;
     }
     else if (l == 0)            // ground cover
     {
-      loadBlockLines_8(tileData + (y << (l + 10)) + 0x00200000, p, l);
+      loadBlockLines_8(&(tileData.gcvrData.front()) + dataOffs + (y << 10), p);
       p = p + 256;
     }
     else                        // vertex color
     {
-      loadBlockLines_16(tileData + (y << (l + 10)) + 0x00300000, p, l);
+      loadBlockLines_16(&(tileData.vclrData.front())
+                        + dataOffs + (y << (l + 6)), p, xd, yd);
       p = p + 384;
     }
   }
@@ -146,13 +147,15 @@ void BTDFile::loadBlock(unsigned short *tileData, size_t n,
   for (size_t y = 0; y < 128; y = y + 2)
   {
     // landscape textures
-    loadBlockLines_16(tileData + (y << (l + 10)) + 0x00100000, p, l);
+    loadBlockLines_16(&(tileData.ltexData.front())
+                      + dataOffs + (y << (l + 10)), p, xd, yd);
     p = p + 384;
   }
 }
 
-void BTDFile::loadBlocks(unsigned short *tileData, size_t x, size_t y,
-                         size_t threadIndex, size_t threadCnt)
+void BTDFile::loadBlocks(TileData& tileData, size_t x, size_t y,
+                         size_t threadIndex, size_t threadCnt,
+                         unsigned int blockMask)
 {
   std::vector< unsigned short > zlibBuf(0x6000, 0);
   size_t  t = 0;
@@ -172,11 +175,12 @@ void BTDFile::loadBlocks(unsigned short *tileData, size_t x, size_t y,
         if (t == threadIndex)
         {
           size_t  n = yc * ((nCellsX + (1 << l) - 1) >> l) + xc;
-          unsigned short  *p =
-              tileData + (((yy << l) << 17) + ((xx << l) << 7));
-          loadBlock(p, n, l, 0, zlibBuf);
-          if (l != 1)
-            loadBlock(p, n, l, 1, zlibBuf);
+          if (blockMask & (1 << (l + l)))
+            loadBlock(tileData, ((yy << 10) + xx) << (l + 7), n, l, 0, zlibBuf);
+          if ((blockMask & 0xA0) & (1 << (l + l + 1)))
+            loadBlock(tileData, ((yy << 8) + xx) << (l + 5), n, l, 1, zlibBuf);
+          if ((blockMask & 0x02) & (1 << (l + l + 1)))
+            loadBlock(tileData, ((yy << 10) + xx) << (l + 7), n, l, 1, zlibBuf);
         }
         if (++t >= threadCnt)
           t = 0;
@@ -186,12 +190,13 @@ void BTDFile::loadBlocks(unsigned short *tileData, size_t x, size_t y,
 }
 
 void BTDFile::loadBlocksThread(BTDFile *p, std::string *errMsg,
-                               unsigned short *tileData, size_t x, size_t y,
-                               size_t threadIndex, size_t threadCnt)
+                               TileData *tileData, size_t x, size_t y,
+                               size_t threadIndex, size_t threadCnt,
+                               unsigned int blockMask)
 {
   try
   {
-    p->loadBlocks(tileData, x, y, threadIndex, threadCnt);
+    p->loadBlocks(*tileData, x, y, threadIndex, threadCnt, blockMask);
   }
   catch (std::exception& e)
   {
@@ -199,51 +204,69 @@ void BTDFile::loadBlocksThread(BTDFile *p, std::string *errMsg,
   }
 }
 
-void BTDFile::loadTile(int cellX, int cellY)
+const BTDFile::TileData& BTDFile::loadTile(int cellX, int cellY,
+                                           unsigned int blockMask)
 {
-  if (cellX >= curTileX && cellX <= (curTileX + 7) &&
-      cellY >= curTileY && cellY <= (curTileY + 7))
+  unsigned int  x0 = (unsigned int) (cellX - cellMinX) & 0xFFF8U;
+  unsigned int  y0 = (unsigned int) (cellY - cellMinY) & 0xFFF8U;
+  unsigned int  cacheKey = (y0 << 16) | x0;
+  std::map< unsigned int, TileData * >::iterator  t =
+      tileCacheMap.find(cacheKey);
+  if (t == tileCacheMap.end())
   {
-    return;
+    TileData& tmp = tileCache[tileCacheIndex];
+    t = tileCacheMap.find(((unsigned int) tmp.y0 << 16) | tmp.x0);
+    if (t != tileCacheMap.end())
+      tileCacheMap.erase(t);
+    tmp.x0 = (unsigned short) x0;
+    tmp.y0 = (unsigned short) y0;
+    tmp.blockMask = 0U;
+    t = tileCacheMap.insert(std::pair< unsigned int, TileData * >(
+                                cacheKey, &tmp)).first;
+    tileCacheIndex++;
+    if (tileCacheIndex >= tileCache.size())
+      tileCacheIndex = 0;
   }
+  TileData& tileData = *(t->second);
+  blockMask = (blockMask & ~(tileData.blockMask)) & 0xF7;
+  if (!blockMask)
+    return tileData;
+
+  if (blockMask & 0x55)
   {
-    int     tmp = curTileX;
-    curTileX = prvTileX;
-    prvTileX = tmp;
-    tmp = curTileY;
-    curTileY = prvTileY;
-    prvTileY = tmp;
-    unsigned short  *tmp2 = curTileData;
-    curTileData = prvTileData;
-    prvTileData = tmp2;
+    tileData.hmapData.resize(0x00100000);
+    tileData.ltexData.resize(0x00100000);
   }
-  if (cellX >= curTileX && cellX <= (curTileX + 7) &&
-      cellY >= curTileY && cellY <= (curTileY + 7))
-  {
-    return;
-  }
-  size_t  x = size_t(cellX - cellMinX) & ~7U;
-  size_t  y = size_t(cellY - cellMinY) & ~7U;
-  curTileX = int(x) + cellMinX;
-  curTileY = int(y) + cellMinY;
+  if (blockMask & 0x02)
+    tileData.gcvrData.resize(0x00100000);
+  if (blockMask & 0xA0)
+    tileData.vclrData.resize(0x00010000);
+
   // LOD4
-  for (size_t yy = 0; yy < 64; yy++)
+  if (blockMask & 0xC0)
   {
-    if ((curTileY + int(yy >> 3)) > cellMaxY)
-      break;
-    for (size_t xx = 0; xx < 64; xx++)
+    for (size_t yy = 0; yy < 64; yy++)
     {
-      if ((curTileX + int(xx >> 3)) > cellMaxX)
+      if ((cellMinY + int((yy >> 3) + y0)) > cellMaxY)
         break;
-      filePos = heightMapLOD4
-                + (((((y << 3) + yy) * (nCellsX << 3)) + ((x << 3) + xx)) << 1);
-      curTileData[(((yy << 10) + xx) << 4) + 0x00000000] = readUInt16();
-      filePos = landTexturesLOD4
-                + (((((y << 3) + yy) * (nCellsX << 3)) + ((x << 3) + xx)) << 1);
-      curTileData[(((yy << 10) + xx) << 4) + 0x00100000] = readUInt16();
-      filePos = vertexColorLOD4
-                + (((((y << 3) + yy) * (nCellsX << 3)) + ((x << 3) + xx)) << 1);
-      curTileData[(((yy << 10) + xx) << 4) + 0x00300000] = readUInt16();
+      for (size_t xx = 0; xx < 64; xx++)
+      {
+        if ((cellMinX + int((xx >> 3) + x0)) > cellMaxX)
+          break;
+        size_t  offs = (yy + (y0 << 3)) * (nCellsX << 3) + (xx + (x0 << 3));
+        if (blockMask & 0x55)
+        {
+          filePos = heightMapLOD4 + (offs << 1);
+          tileData.hmapData[((yy << 10) + xx) << 4] = readUInt16();
+          filePos = landTexturesLOD4 + (offs << 1);
+          tileData.ltexData[((yy << 10) + xx) << 4] = readUInt16();
+        }
+        if (blockMask & 0xA0)
+        {
+          filePos = vertexColorLOD4 + (offs << 1);
+          tileData.vclrData[((yy << 8) + xx) << 2] = readUInt16();
+        }
+      }
     }
   }
   // LOD3..LOD0
@@ -259,8 +282,8 @@ void BTDFile::loadTile(int cellX, int cellY)
     try
     {
       threads[i] = new std::thread(loadBlocksThread,
-                                   this, &(errMsgs.front()) + i, curTileData,
-                                   x, y, i, threadCnt);
+                                   this, &(errMsgs.front()) + i, &tileData,
+                                   x0, y0, i, threadCnt, blockMask);
     }
     catch (std::exception& e)
     {
@@ -281,6 +304,8 @@ void BTDFile::loadTile(int cellX, int cellY)
     if (!errMsgs[i].empty())
       throw errorMessage("%s", errMsgs[i].c_str());
   }
+  tileData.blockMask = tileData.blockMask | blockMask;
+  return tileData;
 }
 
 BTDFile::BTDFile(const char *fileName)
@@ -290,6 +315,7 @@ BTDFile::BTDFile(const char *fileName)
     throw errorMessage("input file format is not BTD");
   if (readUInt32() != 6U)
     throw errorMessage("unsupported BTD format version");
+  tileCacheIndex = 0;
   // TODO: check header data for errors
   worldHeightMin = readFloat();
   worldHeightMax = readFloat();
@@ -333,17 +359,39 @@ BTDFile::BTDFile(const char *fileName)
   zlibBlocksDataOffs = filePos;
   nCompressedBlocks = (filePos - zlibBlocksTableOffs) >> 3;
   (void) readUInt8();
-  curTileX = 0x7FFFFFF0;
-  curTileY = 0x7FFFFFF0;
-  prvTileX = 0x7FFFFFF0;
-  prvTileY = 0x7FFFFFF0;
-  tileBuf.resize(128 * 128 * 4 * 8 * 8 * 2, 0);
-  curTileData = &(tileBuf.front());
-  prvTileData = curTileData + (128 * 128 * 4 * 8 * 8);
+  setTileCacheSize(2);
 }
 
 BTDFile::~BTDFile()
 {
+}
+
+void BTDFile::setTileCacheSize(size_t n)
+{
+  size_t  prvSize = tileCache.size();
+  if (n <= prvSize)
+    return;
+  tileCacheMap.clear();
+  tileCache.resize(n);
+  for (size_t i = prvSize; i < n; i++)
+  {
+    tileCache[i].x0 = 0x8000;
+    tileCache[i].y0 = 0x8000;
+    tileCache[i].blockMask = 0U;
+  }
+  for (size_t i = 0; i < prvSize; i++)
+  {
+    TileData  *t = &(tileCache.front()) + i;
+    unsigned int  cacheKey = ((unsigned int) t->y0 << 16) | t->x0;
+    if (bool(cacheKey & 0x80008000U) || !(t->blockMask))
+    {
+      t->x0 = 0x8000;
+      t->y0 = 0x8000;
+      t->blockMask = 0U;
+      continue;
+    }
+    tileCacheMap.insert(std::pair< unsigned int, TileData * >(cacheKey, t));
+  }
 }
 
 unsigned int BTDFile::getLandTexture(size_t n)
@@ -362,31 +410,41 @@ unsigned int BTDFile::getGroundCover(size_t n)
   return readUInt32();
 }
 
-void BTDFile::getCellHeightMap(unsigned short *buf, int cellX, int cellY)
+void BTDFile::getCellHeightMap(unsigned short *buf, int cellX, int cellY,
+                               unsigned char l)
 {
-  loadTile(cellX, cellY);
+  const TileData& tileData =
+      loadTile(cellX, cellY, (unsigned char) ((~0U << (l + l)) & 0x55));
   size_t  x0 = size_t((cellX - cellMinX) & 7) << 7;
   size_t  y0 = size_t((cellY - cellMinY) & 7) << 7;
-  for (size_t yc = 0; yc < 128; yc++)
+  size_t  n = 128 >> l;
+  unsigned char m = 7 - l;
+  for (size_t yc = 0; yc < n; yc++)
   {
-    for (size_t xc = 0; xc < 128; xc++)
-      buf[(yc << 7) + xc] = curTileData[((y0 + yc) << 10) + x0 + xc];
+    for (size_t xc = 0; xc < n; xc++)
+    {
+      buf[(yc << m) | xc] =
+          tileData.hmapData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
+    }
   }
 }
 
-void BTDFile::getCellLandTexture(unsigned char *buf, int cellX, int cellY)
+void BTDFile::getCellLandTexture(unsigned int *buf, int cellX, int cellY,
+                                 unsigned char l)
 {
-  loadTile(cellX, cellY);
+  const TileData& tileData =
+      loadTile(cellX, cellY, (unsigned char) ((~0U << (l + l)) & 0x55));
   size_t  x = size_t(cellX - cellMinX);
   size_t  y = size_t(cellY - cellMinY);
   size_t  x0 = (x & 7) << 7;
   size_t  y0 = (y & 7) << 7;
-  unsigned char l[8];
+  size_t  n = 64 >> l;
+  unsigned char m = 7 - l;
+  unsigned char t[8];
   for (size_t i = 0; i < 8; i++)
-    l[i] = 0xFF;
+    t[i] = 0xFF;
   for (size_t q = 0; q < 4; q++)
   {
-    unsigned char defaultTexture = 0xFF;
     size_t  offs =
         ((y << 1) | (q >> 1)) * (nCellsX << 1) + ((x << 1) | (q & 1));
     filePos = (offs << 3) + ltexMapOffs;
@@ -397,41 +455,38 @@ void BTDFile::getCellLandTexture(unsigned char *buf, int cellX, int cellY)
         tmp = 0xFF;
       else
         tmp = (unsigned char) (ltexCnt - tmp);
-      l[i] = tmp;
+      if (i < 5)
+        t[5 - i] = tmp;
       if (tmp != 0xFF)
-        defaultTexture = tmp;
+        t[0] = tmp;             // default texture
     }
-    for (size_t yy = 0; yy < 64; yy++)
+    for (size_t yy = 0; yy < n; yy++)
     {
-      for (size_t xx = 0; xx < 64; xx++)
+      for (size_t xx = 0; xx < n; xx++)
       {
-        size_t  xc = ((q & 1) << 6) | xx;
-        size_t  yc = ((q & 2) << 5) | yy;
-        unsigned char *bufp = buf + ((((yc << 7) | xc) << 4) + 12);
-        for (size_t i = 0; i < 4; i++)
-          bufp[i] = (unsigned char) (((i & 1) - 1) & 0xFF);
+        size_t  xc = ((q & 1) << (m - 1)) | xx;
+        size_t  yc = ((q & 2) << (m - 2)) | yy;
         unsigned int  tmp =
-            curTileData[((y0 + yc) << 10) + x0 + xc + 0x00100000];
-        for (int i = 0; i < 5; i++, tmp = tmp >> 3)
-        {
-          bufp = bufp - 2;
-          bufp[0] = l[i];
-          bufp[1] = (unsigned char) (((tmp & 7) * 73) >> 1);
-        }
-        *(bufp - 2) = defaultTexture;
-        *(bufp - 1) = 0xFF;
+            tileData.ltexData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
+        tmp = ((tmp & 0x7E00) >> 9) | (tmp & 0x01C0) | ((tmp & 0x003F) << 9);
+        tmp = ((tmp & 0x7038) >> 3) | (tmp & 0x01C0) | ((tmp & 0x0E07) << 3);
+        buf[(yc << m) | xc] = (tmp << 11) | 0x0700U | t[xx & 7];
       }
     }
   }
 }
 
-void BTDFile::getCellGroundCover(unsigned char *buf, int cellX, int cellY)
+void BTDFile::getCellGroundCover(unsigned short *buf, int cellX, int cellY,
+                                 unsigned char l)
 {
-  loadTile(cellX, cellY);
+  const TileData& tileData = loadTile(cellX, cellY, 0x02);
   size_t  x = size_t(cellX - cellMinX);
   size_t  y = size_t(cellY - cellMinY);
   size_t  x0 = (x & 7) << 7;
   size_t  y0 = (y & 7) << 7;
+  size_t  n = 64 >> l;
+  unsigned char m = 7 - l;
+  unsigned char gcvrMask = 0;
   unsigned char g[8];
   for (size_t i = 0; i < 8; i++)
     g[i] = 0xFF;
@@ -443,42 +498,46 @@ void BTDFile::getCellGroundCover(unsigned char *buf, int cellX, int cellY)
     for (size_t i = 0; i < 8; i++)
     {
       unsigned char tmp = readUInt8();
+      gcvrMask = gcvrMask << 1;
       if (tmp >= gcvrCnt)
         tmp = 0xFF;
-      g[i] = tmp;
+      else
+        gcvrMask++;
+      g[7 - i] = tmp;
     }
-    for (size_t yy = 0; yy < 64; yy++)
+    for (size_t yy = 0; yy < n; yy++)
     {
-      for (size_t xx = 0; xx < 64; xx++)
+      for (size_t xx = 0; xx < n; xx++)
       {
-        size_t  xc = ((q & 1) << 6) | xx;
-        size_t  yc = ((q & 2) << 5) | yy;
-        unsigned char *bufp = buf + (((yc << 7) | xc) << 3);
+        size_t  xc = ((q & 1) << (m - 1)) | xx;
+        size_t  yc = ((q & 2) << (m - 2)) | yy;
         unsigned int  tmp =
-            curTileData[((y0 + yc) << 10) + x0 + xc + 0x00200000];
-        for (int i = 0; i < 8; i++)
-          bufp[7 - i] = g[i] | (unsigned char) (~(tmp << (7 - i)) & 0x80);
+            tileData.gcvrData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
+        tmp = ((tmp & 0xF0) >> 4) | ((tmp & 0x0F) << 4);
+        tmp = ((tmp & 0xCC) >> 2) | ((tmp & 0x33) << 2);
+        tmp = (((tmp & 0xAA) >> 1) | ((tmp & 0x55) << 1)) & gcvrMask;
+        buf[(yc << m) | xc] = (unsigned short) ((tmp << 8) | g[xx & 7]);
       }
     }
   }
 }
 
-void BTDFile::getCellData4(unsigned short *buf, int cellX, int cellY)
+void BTDFile::getCellTerrainColor(unsigned short *buf, int cellX, int cellY,
+                                  unsigned char l)
 {
-  loadTile(cellX, cellY);
-  size_t  x = size_t(cellX - cellMinX);
-  size_t  y = size_t(cellY - cellMinY);
-  size_t  x0 = (x & 7) << 7;
-  size_t  y0 = (y & 7) << 7;
-  for (size_t yc = 0; yc < 128; yc = yc + 4)
+  const TileData& tileData =
+      loadTile(cellX, cellY, (unsigned char) ((~0U << (l + l)) & 0xA0));
+  size_t  x0 = size_t((cellX - cellMinX) & 7) << 5;
+  size_t  y0 = size_t((cellY - cellMinY) & 7) << 5;
+  size_t  n = 128 >> l;
+  unsigned char m = 7 - l;
+  for (size_t yc = 0; yc < n; yc++)
   {
-    for (size_t xc = 0; xc < 128; xc = xc + 4)
+    size_t  yy = (l >= 2 ? (yc << (l - 2)) : (yc >> (2 - l)));
+    for (size_t xc = 0; xc < n; xc++)
     {
-      unsigned short  *bufp = buf + ((yc << 7) | xc);
-      unsigned short  tmp =
-          curTileData[((y0 + yc) << 10) + x0 + xc + 0x00300000];
-      for (int i = 0; i < 16; i++)
-        bufp[((i >> 2) << 7) | (i & 3)] = tmp;
+      size_t  xx = (l >= 2 ? (xc << (l - 2)) : (xc >> (2 - l)));
+      buf[(yc << m) | xc] = tileData.vclrData[((y0 + yy) << 8) + x0 + xx];
     }
   }
 }

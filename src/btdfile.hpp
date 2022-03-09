@@ -35,37 +35,45 @@ class BTDFile : public FileBuffer
   size_t  zlibBlkTableOffsLOD2;
   size_t  zlibBlkTableOffsLOD1;
   size_t  zlibBlkTableOffsLOD0;
-  // current 8x8 group of cells loaded
-  int     curTileX;
-  int     curTileY;
-  // previous 8x8 group of cells (cached)
-  int     prvTileX;
-  int     prvTileY;
-  // 8x8 cells:
-  //   curTileData[y * 1024 + x + 0x00000000] = vertex height
-  //   curTileData[y * 1024 + x + 0x00100000] = landscape textures
-  //   curTileData[y * 1024 + x + 0x00200000] = ground cover
-  //   curTileData[y * 1024 + x + 0x00300000] = terrain color
-  unsigned short  *curTileData;
-  unsigned short  *prvTileData;
-  std::vector< unsigned short > tileBuf;
+  struct TileData
+  {
+    unsigned short  x0;
+    unsigned short  y0;
+    // bit 0: LOD0 vertex height and land textures are loaded
+    // bit 1: LOD0 ground cover is loaded
+    // bit 2: LOD1 vertex height and land textures are loaded
+    // bit 4: LOD2 vertex height and land textures are loaded
+    // bit 5: LOD2 terrain color is loaded
+    // bit 6: LOD3 vertex height and land textures are loaded
+    // bit 7: LOD3 terrain color is loaded
+    unsigned int  blockMask;
+    std::vector< unsigned short > hmapData;     // vertex height, 1024 * 1024
+    std::vector< unsigned short > ltexData;     // land textures, 1024 * 1024
+    std::vector< unsigned char >  gcvrData;     // ground cover, 1024 * 1024
+    std::vector< unsigned short > vclrData;     // terrain color, 256 * 256
+  };
+  std::map< unsigned int, TileData * >  tileCacheMap;
+  std::vector< TileData > tileCache;
+  size_t  tileCacheIndex;
   // ----------------
-  static void loadBlockLines_8(unsigned short *dst, const unsigned char *src,
-                               unsigned char l);
+  static void loadBlockLines_8(unsigned char *dst, const unsigned char *src);
   static void loadBlockLines_16(unsigned short *dst, const unsigned char *src,
-                                unsigned char l);
-  void loadBlock(unsigned short *tileData, size_t n,
-                 unsigned char l, unsigned char b,
+                                size_t xd, size_t yd);
+  void loadBlock(TileData& tileData, size_t dataOffs,
+                 size_t n, unsigned char l, unsigned char b,
                  std::vector< unsigned short >& zlibBuf);
-  void loadBlocks(unsigned short *tileData, size_t x, size_t y,
-                  size_t threadIndex, size_t threadCnt);
+  void loadBlocks(TileData& tileData, size_t x, size_t y,
+                  size_t threadIndex, size_t threadCnt, unsigned int blockMask);
   static void loadBlocksThread(BTDFile *p, std::string *errMsg,
-                               unsigned short *tileData, size_t x, size_t y,
-                               size_t threadIndex, size_t threadCnt);
-  void loadTile(int cellX, int cellY);
+                               TileData *tileData, size_t x, size_t y,
+                               size_t threadIndex, size_t threadCnt,
+                               unsigned int blockMask);
+  const TileData& loadTile(int cellX, int cellY, unsigned int blockMask);
  public:
   BTDFile(const char *fileName);
   virtual ~BTDFile();
+  // set the number of 8x8 cell (5.125 MiB) tiles to keep decompressed
+  void setTileCacheSize(size_t n);
   inline int getCellMinX() const
   {
     return cellMinX;
@@ -90,18 +98,30 @@ class BTDFile : public FileBuffer
   {
     return worldHeightMax;
   }
+  inline size_t getLandTextureCount() const
+  {
+    return ltexCnt;
+  }
+  inline size_t getGroundCoverCount() const
+  {
+    return gcvrCnt;
+  }
   unsigned int getLandTexture(size_t n);
   unsigned int getGroundCover(size_t n);
-  // buf[128 * 128]
-  void getCellHeightMap(unsigned short *buf, int cellX, int cellY);
-  // buf[128 * 128 * 16], for each vertex, the data format is:
-  //   (texture, opacity) * 6, reserved * 4
-  //   texture = 0xFF or opacity = 0: no texture
-  void getCellLandTexture(unsigned char *buf, int cellX, int cellY);
-  // buf[128 * 128 * 8], bit 7 is transparency (no ground cover if set)
-  void getCellGroundCover(unsigned char *buf, int cellX, int cellY);
-  // buf[128 * 128], vertex colors in packed 16-bit format
-  void getCellData4(unsigned short *buf, int cellX, int cellY);
+  // N = 128 >> l, buffer size = N * N
+  // height map in pixelFormatGRAY16 format
+  void getCellHeightMap(unsigned short *buf, int cellX, int cellY,
+                        unsigned char l = 0);
+  // land textures in pixelFormatL8A24 format (see filebuf.hpp), l <= 3
+  // texture = 0xFF or opacity = 0: no texture
+  void getCellLandTexture(unsigned int *buf, int cellX, int cellY,
+                          unsigned char l = 0);
+  // ground cover in pixelFormatL8A8 format, l <= 3
+  void getCellGroundCover(unsigned short *buf, int cellX, int cellY,
+                          unsigned char l = 0);
+  // vertex colors in pixelFormatRGBA16 format, l >= 2
+  void getCellTerrainColor(unsigned short *buf, int cellX, int cellY,
+                           unsigned char l = 2);
 };
 
 #endif
