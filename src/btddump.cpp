@@ -52,12 +52,14 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "    FMT = 0: raw 16-bit height map\n");
     std::fprintf(stderr, "    FMT = 1: dithered 8-bit height map\n");
     std::fprintf(stderr, "    FMT = 2: raw landscape textures "
-                         "(4 bytes / vertex)\n");
+                         "(2 bytes / vertex)\n");
     std::fprintf(stderr, "    FMT = 3: dithered 8-bit landscape texture\n");
-    std::fprintf(stderr, "    FMT = 4: raw ground cover (2 bytes / vertex)\n");
+    std::fprintf(stderr, "    FMT = 4: raw ground cover (1 byte / vertex)\n");
     std::fprintf(stderr, "    FMT = 5: dithered 8-bit ground cover\n");
     std::fprintf(stderr, "    FMT = 6: raw 16-bit terrain color\n");
     std::fprintf(stderr, "    FMT = 7: terrain color in 24-bit RGB format\n");
+    std::fprintf(stderr, "    FMT = 8: cell texture sets as 8-bit IDs\n");
+    std::fprintf(stderr, "    FMT = 9: cell texture sets as 32-bit form IDs\n");
     std::fprintf(stderr, "Using a palette file changes formats 3 and 5 "
                          "from dithered 8-bit to RGB\n");
     return 1;
@@ -66,7 +68,7 @@ int main(int argc, char **argv)
   {
     BTDFile btdFile(argv[1]);
     int     outFmt =
-        int(parseInteger(argv[3], 10, "invalid output format", 0, 7));
+        int(parseInteger(argv[3], 10, "invalid output format", 0, 9));
     int     xMin =
         int(parseInteger(argv[4], 10, "invalid X range",
                          btdFile.getCellMinX(), btdFile.getCellMaxX()));
@@ -84,17 +86,14 @@ int main(int argc, char **argv)
       std::printf("Minimum height = %f, maximum height = %f\n",
                   btdFile.getMinHeight(), btdFile.getMaxHeight());
     }
-    if (outFmt == 2 || outFmt == 3)
+    unsigned int  gcvrOffset = 0;
+    if (outFmt == 3 || outFmt == 5 || outFmt == 8)
     {
       for (size_t i = 0; i < btdFile.getLandTextureCount(); i++)
       {
         unsigned int  n = btdFile.getLandTexture(i);
         std::printf("Land texture %d: 0x%08X\n", int(i), n);
       }
-    }
-    unsigned int  gcvrOffset = 0;
-    if (outFmt == 4 || outFmt == 5)
-    {
       gcvrOffset = (unsigned int) btdFile.getLandTextureCount();
       for (size_t i = 0; i < btdFile.getGroundCoverCount(); i++)
       {
@@ -106,32 +105,35 @@ int main(int argc, char **argv)
     if (argc > 8)
     {
       l = (unsigned char) parseInteger(argv[8], 10, "invalid level of detail",
-                                       (outFmt < 6 ? 0 : 2),
-                                       (outFmt >= 2 && outFmt <= 5 ? 3 : 4));
+                                       ((outFmt & 14) != 6 ? 0 : 2), 4);
     }
+    if (outFmt == 8 || outFmt == 9)
+      l = 6;
     unsigned char m = 7 - l;
     std::vector< unsigned char >  outBuf;
     std::vector< unsigned long long > ltexPalette;
     if (argc > 9 && (outFmt == 3 || outFmt == 5))
     {
-      outFmt = (outFmt >> 1) + 7;       // 8: LTEX RGB, 9: GCVR RGB
+      outFmt = (outFmt >> 1) + 9;       // 10: LTEX RGB, 11: GCVR RGB
       ltexPalette.resize(256);
       loadPalette(&(ltexPalette.front()), argv[9]);
     }
     std::vector< unsigned short > heightBuf;
-    std::vector< unsigned int >   ltexBuf;
-    std::vector< unsigned short > gcvrBuf;
+    std::vector< unsigned short > ltexBuf;
+    std::vector< unsigned char >  gcvrBuf;
     std::vector< unsigned short > vclrBuf;
-    static const unsigned int outFmtDataSizes[10] =
+    std::vector< unsigned char >  txtSetBuf(64, 0xFF);
+    static const unsigned int outFmtDataSizes[12] =
     {
-      2, 1, 4, 1, 2, 1, 2, 3, 3, 3
+      2, 1, 2, 1, 1, 1, 2, 3, 16, 64, 3, 3
     };
-    static const int  outFmtPixelFormats[10] =
+    static const int  outFmtPixelFormats[12] =
     {
       DDSInputFile::pixelFormatGRAY16,  DDSInputFile::pixelFormatGRAY8,
-      DDSInputFile::pixelFormatL8A24,   DDSInputFile::pixelFormatGRAY8,
-      DDSInputFile::pixelFormatL8A8,    DDSInputFile::pixelFormatGRAY8,
+      DDSInputFile::pixelFormatA16,     DDSInputFile::pixelFormatGRAY8,
+      DDSInputFile::pixelFormatA8,      DDSInputFile::pixelFormatGRAY8,
       DDSInputFile::pixelFormatRGBA16,  DDSInputFile::pixelFormatRGB24,
+      DDSInputFile::pixelFormatR8,      DDSInputFile::pixelFormatR32,
       DDSInputFile::pixelFormatRGB24,   DDSInputFile::pixelFormatRGB24
     };
     unsigned int  hdrBuf[11];
@@ -145,9 +147,10 @@ int main(int argc, char **argv)
     hdrBuf[7] = (unsigned int) int(btdFile.getMaxHeight() + 0.5f);
     hdrBuf[8] = 0;                      // water level
     hdrBuf[9] = 1U << m;
-    hdrBuf[10] = gcvrOffset;
+    hdrBuf[10] = (outFmt >= 2 ? gcvrOffset : 1024U);    // default land level
     DDSOutputFile outFile(argv[2],
-                          (xMax + 1 - xMin) << m, (yMax + 1 - yMin) << m,
+                          (xMax + 1 - xMin) << ((outFmt & 14) != 8 ? m : 5),
+                          (yMax + 1 - yMin) << m,
                           outFmtPixelFormats[outFmt], hdrBuf, 0);
     int     x0 = xMin;
     int     y0 = yMax;
@@ -161,7 +164,7 @@ int main(int argc, char **argv)
         size_t  h = size_t(((y0 - btdFile.getCellMinY()) & 7) + 1);
         if (h > size_t(y0 + 1 - yMin))
           h = size_t(y0 + 1 - yMin);
-        outBuf.resize(w * h * (outFmtDataSizes[outFmt] << (14 - (l << 1))), 0);
+        outBuf.resize(w * h * (outFmtDataSizes[outFmt] << (m << 1)), 0);
       }
       size_t  cellBufSize = 16384 >> (l + l);
       switch (outFmt)
@@ -173,13 +176,13 @@ int main(int argc, char **argv)
           break;
         case 2:
         case 3:
-        case 8:
+        case 10:
           ltexBuf.resize(cellBufSize);
           btdFile.getCellLandTexture(&(ltexBuf.front()), x, y, l);
           break;
         case 4:
         case 5:
-        case 9:
+        case 11:
           gcvrBuf.resize(cellBufSize);
           btdFile.getCellGroundCover(&(gcvrBuf.front()), x, y, l);
           break;
@@ -189,6 +192,8 @@ int main(int argc, char **argv)
           btdFile.getCellTerrainColor(&(vclrBuf.front()), x, y, l);
           break;
       }
+      if (outFmt == 3 || outFmt == 5 || outFmt >= 8)
+        btdFile.getCellTextureSet(&(txtSetBuf.front()), x, y);
       for (size_t yy = 0; yy < (1U << m); yy++)
       {
         size_t  offs = size_t((y0 - y) << m) | ((127U >> l) - yy);
@@ -217,63 +222,57 @@ int main(int argc, char **argv)
             }
             break;
           case 2:               // raw land textures
-            for (size_t xx = 0; xx < (1U << m); xx++, p = p + 4)
+            for (size_t xx = 0; xx < (1U << m); xx++, p = p + 2)
             {
               unsigned int  tmp = ltexBuf[(yy << m) | xx];
               p[0] = (unsigned char) (tmp & 0xFF);
               p[1] = (unsigned char) ((tmp >> 8) & 0xFF);
-              p[2] = (unsigned char) ((tmp >> 16) & 0xFF);
-              p[3] = (unsigned char) ((tmp >> 24) & 0xFF);
             }
             break;
           case 3:               // dithered 8-bit land texture
             for (size_t xx = 0; xx < (1U << m); xx++, p++)
             {
-              const unsigned int  *ltexPtr =
-                  &(ltexBuf.front()) + ((yy << m) | (xx & ~7U));
-              unsigned int  tmp = ltexPtr[0] & 0xFFU;
-              unsigned int  a = ltexBuf[(yy << m) | xx] >> 11;
+              const unsigned char *txtSetPtr =
+                  &(txtSetBuf.front())
+                  + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4));
+              unsigned char tmp = txtSetPtr[0];
+              unsigned int  a = ltexBuf[(yy << m) | xx];
               for (size_t i = 1; i < 6; i++, a = a >> 3)
               {
-                tmp = blendDithered((unsigned char) tmp,
-                                    (unsigned char) (ltexPtr[i] & 0xFFU),
+                tmp = blendDithered(tmp, txtSetPtr[i],
                                     (unsigned char) (((a & 7) * 73U) >> 1),
                                     int(xx), int(127U - yy));
               }
-              p[0] = (unsigned char) tmp;
+              p[0] = tmp;
             }
             break;
           case 4:               // raw ground cover
-            for (size_t xx = 0; xx < (1U << m); xx++, p = p + 2)
-            {
-              unsigned int  tmp = gcvrBuf[(yy << m) | xx];
-              if (!(~tmp & 0xFF))
-                p[0] = 0xFF;
-              else
-                p[0] = (unsigned char) ((tmp + gcvrOffset) & 0xFF);
-              p[1] = (unsigned char) ((tmp >> 8) & 0xFF);
-            }
+            for (size_t xx = 0; xx < (1U << m); xx++, p++)
+              p[0] = gcvrBuf[(yy << m) | xx];
             break;
           case 5:               // dithered 8-bit ground cover
             for (size_t xx = 0; xx < (1U << m); xx++, p++)
             {
               const unsigned long long  ditherGCVR = 0x0110028041145AFFULL;
-              unsigned int  tmp = 0xFF;
+              const unsigned char *txtSetPtr =
+                  &(txtSetBuf.front())
+                  + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4) + 8);
+              unsigned char tmp = 0xFF;
               unsigned char dx = (unsigned char) (xx & 3);
               unsigned char dy = (unsigned char) ((127U - yy) & 1);
               unsigned char n = (dy << 2) | dx;
               for (unsigned int i = 0; i < 8; i++)
               {
-                if (gcvrBuf[(yy << m) | xx] & (0x0100U << i))
+                if (gcvrBuf[(yy << m) | xx] & (1U << i))
                 {
                   if (ditherGCVR & (1ULL << n))
-                    tmp = gcvrBuf[(yy << m) | (xx & ~7U) | i] & 0xFFU;
+                    tmp = txtSetPtr[i];
                   n = n + 8;
                 }
               }
               if (tmp != 0xFF)
-                tmp = gcvrOffset + tmp;
-              p[0] = (unsigned char) tmp;
+                tmp = (unsigned char) (gcvrOffset + tmp);
+              p[0] = tmp;
             }
             break;
           case 6:               // raw vertex colors
@@ -293,16 +292,48 @@ int main(int argc, char **argv)
               p[2] = (unsigned char) (((tmp & 0x7C00) * 1053U + 65536) >> 17);
             }
             break;
-          case 8:               // RGB land texture
+          case 8:               // texture set as 8-bit IDs
+            for (size_t xx = 0; xx < (1U << m); xx++, p = p + 16)
+            {
+              for (size_t i = 0; i < 16; i++)
+              {
+                unsigned int  tmp = txtSetBuf[(((yy << m) | xx) << 4) | i];
+                if (i >= 8 && tmp != 0xFF)
+                  tmp += gcvrOffset;
+                p[i] = (unsigned char) tmp;
+              }
+            }
+            break;
+          case 9:               // texture set as 32-bit form IDs
+            for (size_t xx = 0; xx < (1U << m); xx++, p = p + 64)
+            {
+              for (size_t i = 0; i < 16; i++)
+              {
+                unsigned int  tmp = txtSetBuf[(((yy << m) | xx) << 4) | i];
+                if (tmp == 0xFF)
+                  tmp = 0U;
+                else if (i < 8)
+                  tmp = btdFile.getLandTexture(tmp);
+                else
+                  tmp = btdFile.getGroundCover(tmp);
+                p[i << 2] = (unsigned char) (tmp & 0xFF);
+                p[(i << 2) + 1] = (unsigned char) ((tmp >> 8) & 0xFF);
+                p[(i << 2) + 2] = (unsigned char) ((tmp >> 16) & 0xFF);
+                p[(i << 2) + 3] = (unsigned char) ((tmp >> 24) & 0xFF);
+              }
+            }
+            break;
+          case 10:              // RGB land texture
             for (size_t xx = 0; xx < (1U << m); xx++, p = p + 3)
             {
-              const unsigned int  *ltexPtr =
-                  &(ltexBuf.front()) + ((yy << m) | (xx & ~7U));
-              unsigned long long  tmp = ltexPalette[ltexPtr[0] & 0xFFU];
-              unsigned int  a = ltexBuf[(yy << m) | xx] >> 11;
+              const unsigned char *txtSetPtr =
+                  &(txtSetBuf.front())
+                  + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4));
+              unsigned long long  tmp = ltexPalette[txtSetPtr[0]];
+              unsigned int  a = ltexBuf[(yy << m) | xx];
               for (size_t i = 1; i < 6; i++, a = a >> 3)
               {
-                tmp = blendRGB64(tmp, ltexPalette[ltexPtr[i] & 0xFFU],
+                tmp = blendRGB64(tmp, ltexPalette[txtSetPtr[i]],
                                  ((a & 7) * 73U) >> 1);
               }
               tmp = tmp + 0x0000080000800008ULL;
@@ -311,16 +342,19 @@ int main(int argc, char **argv)
               p[2] = (unsigned char) ((tmp >> 44) & 0xFF);
             }
             break;
-          case 9:               // RGB ground cover
+          case 11:              // RGB ground cover
             for (size_t xx = 0; xx < (1U << m); xx++, p = p + 3)
             {
+              const unsigned char *txtSetPtr =
+                  &(txtSetBuf.front())
+                  + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4) + 8);
               unsigned long long  tmp = ltexPalette[0xFF];
               unsigned int  n = 0;
               for (unsigned int i = 0; i < 8; i++)
               {
-                if (!(gcvrBuf[(yy << m) | xx] & (0x0100U << i)))
+                unsigned int  g = txtSetPtr[i];
+                if (g == 0xFF || !(gcvrBuf[(yy << m) | xx] & (1U << i)))
                   continue;
-                unsigned int  g = gcvrBuf[(yy << m) | (xx & ~7U) | i];
                 g = (gcvrOffset + g) & 0xFFU;
                 n++;
                 tmp = blendRGB64(tmp, ltexPalette[g], (256U + (n >> 1)) / n);
