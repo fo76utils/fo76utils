@@ -311,57 +311,70 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
           if (bitsPerPixel == 32)
             pixelFormat = pixelFormatRGBA32;
           break;
+        case 0x41:                      // DXGI_FORMAT_A8_UNORM
+          if (bitsPerPixel == 8)
+            pixelFormat = pixelFormatA8;
+          break;
+        case 0x2A:                      // DXGI_FORMAT_R32_UINT
+          if (bitsPerPixel == 32)
+            pixelFormat = pixelFormatR32;
+          break;
       }
     }
     else
     {
-      if (!(hdrBuf[20] & 0x00020240))   // RGB, YUV, luminance
+      if (!(hdrBuf[20] & 0x00020243))   // RGB, YUV, luminance, alpha
         throw errorMessage("invalid or unsupported DDS format");
       if (!(hdrBuf[20] & 0x03))         // no alpha channel
         hdrBuf[26] = 0;
       if (hdrBuf[22] != (unsigned int) bitsPerPixel)
         throw errorMessage("DDS_PIXELFORMAT bit count inconsistent with pitch");
-      if (bitsPerPixel == 8 && hdrBuf[23] == 0xFF)
+      unsigned long long  rgMask, baMask;
+      rgMask = ((unsigned long long) hdrBuf[24] << 32) | hdrBuf[23];
+      baMask = ((unsigned long long) hdrBuf[26] << 32) | hdrBuf[25];
+      switch (bitsPerPixel)
       {
-        pixelFormat = pixelFormatGRAY8;
-      }
-      else if (bitsPerPixel == 16 && hdrBuf[23] == 0xFFFF)
-      {
-        pixelFormat = pixelFormatGRAY16;
-      }
-      else if (bitsPerPixel == 16 &&
-               hdrBuf[23] == 0x7C00 && hdrBuf[24] == 0x03E0 &&
-               hdrBuf[25] == 0x001F && hdrBuf[26] == 0x8000)
-      {
-        pixelFormat = pixelFormatRGBA16;
-      }
-      else if (bitsPerPixel == 16 &&
-               hdrBuf[23] == 0x00FF && hdrBuf[26] == 0xFF00)
-      {
-        pixelFormat = pixelFormatL8A8;
-      }
-      else if (bitsPerPixel == 24 &&
-               hdrBuf[23] == 0x00FF0000 && hdrBuf[24] == 0x0000FF00 &&
-               hdrBuf[25] == 0x000000FF)
-      {
-        pixelFormat = pixelFormatRGB24;
-      }
-      else if (bitsPerPixel == 32 &&
-               hdrBuf[23] == 0x00FF0000 && hdrBuf[24] == 0x0000FF00 &&
-               hdrBuf[25] == 0x000000FF && hdrBuf[26] == 0xFF000000U)
-      {
-        pixelFormat = pixelFormatRGBA32;
-      }
-      else if (bitsPerPixel == 32 &&
-               hdrBuf[23] == 0x000000FF && hdrBuf[26] == 0xFFFFFF00U)
-      {
-        pixelFormat = pixelFormatL8A24;
+        case 8:
+          if (hdrBuf[23] == 0xFF)
+            pixelFormat = pixelFormatGRAY8;
+          else if (hdrBuf[26] == 0xFF)
+            pixelFormat = pixelFormatA8;
+          break;
+        case 16:
+          if (hdrBuf[23] == 0xFFFF)
+            pixelFormat = pixelFormatGRAY16;
+          else if (rgMask == 0x03E000007C00ULL && baMask == 0x80000000001FULL)
+            pixelFormat = pixelFormatRGBA16;
+          else if (hdrBuf[23] == 0x00FF && hdrBuf[26] == 0xFF00)
+            pixelFormat = pixelFormatL8A8;
+          else if (hdrBuf[26] == 0xFFFF)
+            pixelFormat = pixelFormatA16;
+          break;
+        case 24:
+          if (rgMask == 0xFF0000FF0000ULL && hdrBuf[25] == 0x000000FF)
+            pixelFormat = pixelFormatRGB24;
+          break;
+        case 32:
+          if (rgMask == 0xFF0000FF0000ULL && baMask == 0xFF000000000000FFULL)
+            pixelFormat = pixelFormatRGBA32;
+          else if (hdrBuf[23] == 0x000000FF && hdrBuf[26] == 0xFFFFFF00U)
+            pixelFormat = pixelFormatL8A24;
+          else if (hdrBuf[26] == 0xFFFFFFFFU)
+            pixelFormat = pixelFormatA32;
+          else if (hdrBuf[23] == 0xFFFFFFFFU)
+            pixelFormat = pixelFormatR32;
+          break;
       }
     }
     if (fileBufSize < (ddsHeaderSize + (size_t(height) * hdrBuf[5])))
       throw errorMessage("DDS file is shorter than expected");
     if (!(hdrBuf[27] & 0x1000))         // DDSCAPS_TEXTURE
       throw errorMessage("invalid or unsupported DDS format");
+    if (pixelFormat == pixelFormatGRAY8 &&
+        hdrBuf[9] == 0x444E414C && hdrBuf[17] == 2)     // "LAND"
+    {
+      pixelFormat = pixelFormatR8;
+    }
   }
   catch (...)
   {
@@ -456,6 +469,26 @@ DDSOutputFile::DDSOutputFile(const char *fileName,
     case DDSInputFile::pixelFormatL8A24:
       rMask = 0x000000FF;
       aMask = 0xFFFFFF00U;
+      bitsPerPixel = 32;
+      break;
+    case DDSInputFile::pixelFormatA8:
+      aMask = 0x000000FF;
+      bitsPerPixel = 8;
+      break;
+    case DDSInputFile::pixelFormatA16:
+      aMask = 0x0000FFFF;
+      bitsPerPixel = 16;
+      break;
+    case DDSInputFile::pixelFormatA32:
+      aMask = 0xFFFFFFFFU;
+      bitsPerPixel = 32;
+      break;
+    case DDSInputFile::pixelFormatR8:
+      rMask = 0x000000FF;
+      bitsPerPixel = 8;
+      break;
+    case DDSInputFile::pixelFormatR32:
+      rMask = 0xFFFFFFFFU;
       bitsPerPixel = 32;
       break;
     default:

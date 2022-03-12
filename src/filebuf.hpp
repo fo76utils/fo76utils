@@ -135,6 +135,19 @@ class DDSInputFile : public FileBuffer
     // opacities at this vertex, layer 0 is in bits 8 to 10, and layer 7 is
     // in bits 29 to 31.
     pixelFormatL8A24 = 7,
+    // Ground cover opacities only (8 layers).
+    pixelFormatA8 = 8,
+    // 3-bit opacities for 5 additional texture layers.
+    pixelFormatA16 = 9,
+    // 4-bit opacities for 8 additional texture layers.
+    pixelFormatA32 = 10,
+    // 8-bit texture IDs, 16 for the texture layers of each cell quadrant.
+    // Image width is nCellsX * 2 * 16, height is nCellsY * 2. Layer 0 is the
+    // base texture, layers 1 to 5 or 8 are additional textures.
+    // If ground cover is present, it is defined in layers 8 to 15.
+    pixelFormatR8 = 11,
+    // Similar to pixelFormatR8, but with 32-bit texture form IDs.
+    pixelFormatR32 = 12,
     pixelFormatUnknown = 0x40000000
   };
   // If the input file is in an uncompressed format that is not one of the
@@ -145,12 +158,15 @@ class DDSInputFile : public FileBuffer
   // as 11 32-bit unsigned integers in hdrReserved if it is not NULL.
   // Files created by btddump or fo4land use this for storing information
   // about the landscape:
-  //   0-1:  "FO76LAND" or "FO4_LAND"
+  //   0-1:  "FO76LAND" or "FO4_LAND", the origin of the world is in the
+  //         center or the SW corner of cell 0,0, respectively
   //   2-4:  minimum X, Y, and Z coordinates (X and Y in cells)
   //   5-7:  maximum X, Y, and Z coordinates
   //     8:  water level
-  //     9:  cell size in vertices (128 for FO76, 32 for others)
-  //    10:  offset added to texture numbers (non-zero for ground cover)
+  //     9:  cell size in vertices (8 to 128 for FO76, 32 for other games,
+  //         2 for texture set images)
+  //    10:  offset added to texture numbers (non-zero for ground cover),
+  //         or default land level if the image is a height map
   DDSInputFile(const unsigned char *fileData, size_t fileSize,
                int& width, int& height, int& pixelFormat,
                unsigned int *hdrReserved = (unsigned int *) 0);
