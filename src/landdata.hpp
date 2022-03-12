@@ -18,11 +18,13 @@ class LandscapeData
   int     cellResolution;
   int     cellOffset;
   unsigned short  *hmapData;
-  unsigned int    *ltexData;
+  unsigned int    *ltexData32;
   unsigned char   *vnmlData;
   unsigned char   *vclrData24;
-  unsigned short  *gcvrData;
+  unsigned short  *ltexData16;
+  unsigned char   *gcvrData;
   unsigned short  *vclrData16;
+  unsigned char   *txtSetData;
   float   zMin;
   float   zMax;
   float   waterLevel;
@@ -59,7 +61,7 @@ class LandscapeData
   LandscapeData(ESMFile *esmFile, const char *btdFileName,
                 const BA2File *ba2File, unsigned int formatMask = 31U,
                 unsigned int worldID = 0U, unsigned int defTxtID = 0U,
-                int mipLevel = 0, int xMin = -32768, int yMin = -32768,
+                int mipLevel = 2, int xMin = -32768, int yMin = -32768,
                 int xMax = 32767, int yMax = 32767);
   virtual ~LandscapeData();
   inline int getXMin() const
@@ -143,15 +145,24 @@ class LandscapeData
   {
     return ltexNPaths[n];
   }
+  // txtSetData[y * nCellsX * 32 + (x * 16) + n] =
+  //     texture ID for layer n of cell quadrant x,y
+  // TES4 to FO4 use layers 0 to 8, and 8x4 bit additional layer opacities.
+  // FO76 uses layers 0 to 5 with 5x3 bit additional layer opacities, and
+  // layers 8 to 15 as ground cover with 8x1 bit opacity mask.
+  inline const unsigned char *getCellTextureSets() const
+  {
+    return txtSetData;
+  }
   inline const unsigned short *getHeightMap() const
   {
     return hmapData;
   }
-  inline const unsigned int *getLandTexture() const
-  {
-    return ltexData;
-  }
   // for Fallout 4 and older
+  inline const unsigned int *getLandTexture32() const
+  {
+    return ltexData32;
+  }
   inline const unsigned char *getVertexNormals() const
   {
     return vnmlData;
@@ -161,7 +172,11 @@ class LandscapeData
     return vclrData24;
   }
   // for Fallout 76
-  inline const unsigned short *getGroundCover() const
+  inline const unsigned short *getLandTexture16() const
+  {
+    return ltexData16;
+  }
+  inline const unsigned char *getGroundCover() const
   {
     return gcvrData;
   }

@@ -429,54 +429,29 @@ void BTDFile::getCellHeightMap(unsigned short *buf, int cellX, int cellY,
   }
 }
 
-void BTDFile::getCellLandTexture(unsigned int *buf, int cellX, int cellY,
+void BTDFile::getCellLandTexture(unsigned short *buf, int cellX, int cellY,
                                  unsigned char l)
 {
   const TileData& tileData =
       loadTile(cellX, cellY, (unsigned char) ((~0U << (l + l)) & 0x55));
-  size_t  x = size_t(cellX - cellMinX);
-  size_t  y = size_t(cellY - cellMinY);
-  size_t  x0 = (x & 7) << 7;
-  size_t  y0 = (y & 7) << 7;
-  size_t  n = 64 >> l;
+  size_t  x0 = size_t((cellX - cellMinX) & 7) << 7;
+  size_t  y0 = size_t((cellY - cellMinY) & 7) << 7;
+  size_t  n = 128 >> l;
   unsigned char m = 7 - l;
-  unsigned char t[8];
-  for (size_t i = 0; i < 8; i++)
-    t[i] = 0xFF;
-  for (size_t q = 0; q < 4; q++)
+  for (size_t yc = 0; yc < n; yc++)
   {
-    size_t  offs =
-        ((y << 1) | (q >> 1)) * (nCellsX << 1) + ((x << 1) | (q & 1));
-    filePos = (offs << 3) + ltexMapOffs;
-    for (size_t i = 0; i < 8; i++)
+    for (size_t xc = 0; xc < n; xc++)
     {
-      unsigned char tmp = readUInt8();
-      if (tmp == 0 || tmp > ltexCnt)
-        tmp = 0xFF;
-      else
-        tmp = (unsigned char) (ltexCnt - tmp);
-      if (i < 5)
-        t[5 - i] = tmp;
-      if (tmp != 0xFF)
-        t[0] = tmp;             // default texture
-    }
-    for (size_t yy = 0; yy < n; yy++)
-    {
-      for (size_t xx = 0; xx < n; xx++)
-      {
-        size_t  xc = ((q & 1) << (m - 1)) | xx;
-        size_t  yc = ((q & 2) << (m - 2)) | yy;
-        unsigned int  tmp =
-            tileData.ltexData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
-        tmp = ((tmp & 0x7E00) >> 9) | (tmp & 0x01C0) | ((tmp & 0x003F) << 9);
-        tmp = ((tmp & 0x7038) >> 3) | (tmp & 0x01C0) | ((tmp & 0x0E07) << 3);
-        buf[(yc << m) | xc] = (tmp << 11) | 0x0700U | t[xx & 7];
-      }
+      unsigned int  tmp =
+          tileData.ltexData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
+      tmp = ((tmp & 0x7E00) >> 9) | (tmp & 0x01C0) | ((tmp & 0x003F) << 9);
+      tmp = ((tmp & 0x7038) >> 3) | (tmp & 0x01C0) | ((tmp & 0x0E07) << 3);
+      buf[(yc << m) | xc] = (unsigned short) tmp;
     }
   }
 }
 
-void BTDFile::getCellGroundCover(unsigned short *buf, int cellX, int cellY,
+void BTDFile::getCellGroundCover(unsigned char *buf, int cellX, int cellY,
                                  unsigned char l)
 {
   const TileData& tileData = loadTile(cellX, cellY, 0x02);
@@ -484,40 +459,27 @@ void BTDFile::getCellGroundCover(unsigned short *buf, int cellX, int cellY,
   size_t  y = size_t(cellY - cellMinY);
   size_t  x0 = (x & 7) << 7;
   size_t  y0 = (y & 7) << 7;
-  size_t  n = 64 >> l;
+  size_t  n = 128 >> l;
   unsigned char m = 7 - l;
-  unsigned char gcvrMask = 0;
-  unsigned char g[8];
-  for (size_t i = 0; i < 8; i++)
-    g[i] = 0xFF;
-  for (size_t q = 0; q < 4; q++)
+  unsigned int  gcvrMask = 0;
+  for (size_t yc = 0; yc < n; yc++)
   {
-    size_t  offs =
-        ((y << 1) | (q >> 1)) * (nCellsX << 1) + ((x << 1) | (q & 1));
-    filePos = (offs << 3) + gcvrMapOffs;
-    for (size_t i = 0; i < 8; i++)
+    for (size_t xc = 0; xc < n; xc++)
     {
-      unsigned char tmp = readUInt8();
-      gcvrMask = gcvrMask << 1;
-      if (tmp >= gcvrCnt)
-        tmp = 0xFF;
-      else
-        gcvrMask++;
-      g[7 - i] = tmp;
-    }
-    for (size_t yy = 0; yy < n; yy++)
-    {
-      for (size_t xx = 0; xx < n; xx++)
+      if (!(xc & ((n >> 1) - 1)))
       {
-        size_t  xc = ((q & 1) << (m - 1)) | xx;
-        size_t  yc = ((q & 2) << (m - 2)) | yy;
-        unsigned int  tmp =
-            tileData.gcvrData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
-        tmp = ((tmp & 0xF0) >> 4) | ((tmp & 0x0F) << 4);
-        tmp = ((tmp & 0xCC) >> 2) | ((tmp & 0x33) << 2);
-        tmp = (((tmp & 0xAA) >> 1) | ((tmp & 0x55) << 1)) & gcvrMask;
-        buf[(yc << m) | xc] = (unsigned short) ((tmp << 8) | g[xx & 7]);
+        size_t  offs = ((y << 1) | (yc >> (m - 1))) * (nCellsX << 1)
+                       + ((x << 1) | (xc >> (m - 1)));
+        filePos = (offs << 3) + gcvrMapOffs;
+        for (size_t i = 0; i < 8; i++)
+          gcvrMask = (gcvrMask << 1) | (unsigned int) (readUInt8() < gcvrCnt);
       }
+      unsigned int  tmp =
+          tileData.gcvrData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
+      tmp = ((tmp & 0xF0) >> 4) | ((tmp & 0x0F) << 4);
+      tmp = ((tmp & 0xCC) >> 2) | ((tmp & 0x33) << 2);
+      tmp = (((tmp & 0xAA) >> 1) | ((tmp & 0x55) << 1)) & gcvrMask;
+      buf[(yc << m) | xc] = (unsigned char) tmp;
     }
   }
 }
@@ -538,6 +500,42 @@ void BTDFile::getCellTerrainColor(unsigned short *buf, int cellX, int cellY,
     {
       size_t  xx = (l >= 2 ? (xc << (l - 2)) : (xc >> (2 - l)));
       buf[(yc << m) | xc] = tileData.vclrData[((y0 + yy) << 8) + x0 + xx];
+    }
+  }
+}
+
+void BTDFile::getCellTextureSet(unsigned char *buf, int cellX, int cellY)
+{
+  size_t  x = size_t(cellX - cellMinX);
+  size_t  y = size_t(cellY - cellMinY);
+  for (size_t q = 0; q < 4; q++)
+  {
+    size_t  offs =
+        ((y << 1) | (q >> 1)) * (nCellsX << 1) + ((x << 1) | (q & 1));
+    filePos = (offs << 3) + ltexMapOffs;
+    unsigned char *t = buf + (q << 4);
+    for (size_t i = 0; i < 8; i++)
+    {
+      unsigned char tmp = readUInt8();
+      if (tmp == 0 || tmp > ltexCnt)
+        tmp = 0xFF;
+      else
+        tmp = (unsigned char) (ltexCnt - tmp);
+      if (i < 5)
+        t[5 - i] = tmp;
+      if (tmp != 0xFF)
+        t[0] = tmp;             // default texture
+    }
+    t[6] = 0xFF;
+    t[7] = 0xFF;
+    filePos = (offs << 3) + gcvrMapOffs;
+    unsigned char *g = buf + ((q << 4) + 8);
+    for (size_t i = 0; i < 8; i++)
+    {
+      unsigned char tmp = readUInt8();
+      if (tmp >= gcvrCnt)
+        tmp = 0xFF;
+      g[7 - i] = tmp;
     }
   }
 }

@@ -5,18 +5,20 @@
 void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
 {
   size_t  hmapDataSize = 0;
-  size_t  ltexDataSize = 0;
+  size_t  ltexData32Size = 0;
   size_t  vnmlDataSize = 0;
   size_t  vclrData24Size = 0;
+  size_t  ltexData16Size = 0;
   size_t  vclrData16Size = 0;
   size_t  gcvrDataSize = 0;
+  size_t  txtSetDataSize = 0;
   size_t  vertexCnt = size_t(getImageWidth()) * size_t(getImageHeight());
   if (formatMask & 0x01)
     hmapDataSize = vertexCnt * sizeof(unsigned short);
-  if (formatMask & 0x02)
-    ltexDataSize = vertexCnt * sizeof(unsigned int);
   if (!isFO76)
   {
+    if (formatMask & 0x02)
+      ltexData32Size = vertexCnt * sizeof(unsigned int);
     if (formatMask & 0x04)
       vnmlDataSize = vertexCnt * 3;
     if (formatMask & 0x08)
@@ -24,6 +26,8 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
   }
   else
   {
+    if (formatMask & 0x02)
+      ltexData16Size = vertexCnt * sizeof(unsigned short);
     if (formatMask & 0x08)
     {
       vclrData16Size = vertexCnt * sizeof(unsigned short);
@@ -33,11 +37,17 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
         vclrData16Size = vclrData16Size >> 2;
     }
     if (formatMask & 0x10)
-      gcvrDataSize = vertexCnt * sizeof(unsigned short);
+      gcvrDataSize = vertexCnt;
   }
-  size_t  totalDataSize = (hmapDataSize + ltexDataSize) / sizeof(unsigned int);
-  totalDataSize += ((vnmlDataSize + vclrData24Size) / sizeof(unsigned int));
-  totalDataSize += ((vclrData16Size + gcvrDataSize) / sizeof(unsigned int));
+  if (formatMask & 0x12)
+  {
+    txtSetDataSize =
+        size_t(cellMaxX + 1 - cellMinX) * size_t(cellMaxY + 1 - cellMinY) * 64;
+  }
+  size_t  totalDataSize =
+      (hmapDataSize + ltexData32Size + vnmlDataSize + vclrData24Size
+       + ltexData16Size + vclrData16Size + gcvrDataSize + txtSetDataSize)
+      / sizeof(unsigned int);
   if (totalDataSize < 1)
     return;
   dataBuf.resize(totalDataSize);
@@ -47,10 +57,12 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
     hmapData = reinterpret_cast< unsigned short * >(p);
     p = p + hmapDataSize;
   }
-  if (ltexDataSize)
+  if (ltexData32Size)
   {
-    ltexData = reinterpret_cast< unsigned int * >(p);
-    p = p + ltexDataSize;
+    ltexData32 = reinterpret_cast< unsigned int * >(p);
+    for (size_t i = 0; i < (ltexData32Size / sizeof(unsigned int)); i++)
+      ltexData32[i] = 0U;
+    p = p + ltexData32Size;
   }
   if (vnmlDataSize)
   {
@@ -62,23 +74,34 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
     vclrData24 = p;
     p = p + vclrData24Size;
   }
+  if (ltexData16Size)
+  {
+    ltexData16 = reinterpret_cast< unsigned short * >(p);
+    p = p + ltexData16Size;
+  }
   if (vclrData16Size)
   {
     vclrData16 = reinterpret_cast< unsigned short * >(p);
     p = p + vclrData16Size;
   }
   if (gcvrDataSize)
-    gcvrData = reinterpret_cast< unsigned short * >(p);
+  {
+    gcvrData = p;
+    p = p + gcvrDataSize;
+  }
+  if (txtSetDataSize)
+  {
+    txtSetData = p;
+    for (size_t i = 0; i < txtSetDataSize; i++)
+      txtSetData[i] = 0xFF;
+  }
 }
 
 void LandscapeData::loadBTDFile(const char *btdFileName,
                                 unsigned int formatMask, unsigned char mipLevel)
 {
-  if (mipLevel < ((formatMask & 0x1B) == 0x08 ? 2 : 0) ||
-      mipLevel > (!(formatMask & 0x12) ? 4 : 3))
-  {
+  if (mipLevel < (formatMask == 0x08 ? 2 : 0) || mipLevel > 4)
     throw errorMessage("LandscapeData: invalid mip level");
-  }
   cellResolution = 128 >> mipLevel;
   cellOffset = 64 >> mipLevel;
   BTDFile btdFile(btdFileName);
@@ -94,10 +117,11 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
   zMax = btdFile.getMaxHeight();
   size_t  ltexCnt = 0;
   size_t  gcvrCnt = 0;
-  if (formatMask & 0x02)
+  if (formatMask & 0x12)
+  {
     ltexCnt = btdFile.getLandTextureCount();
-  if (formatMask & 0x10)
     gcvrCnt = btdFile.getGroundCoverCount();
+  }
   ltexFormIDs.resize(ltexCnt + gcvrCnt);
   for (size_t i = 0; i < ltexCnt; i++)
     ltexFormIDs[i] = btdFile.getLandTexture(i);
@@ -110,19 +134,17 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
   allocateDataBuf(formatMask, true);
   size_t  n = size_t(cellResolution);
   unsigned char m = 7 - mipLevel;
-  std::vector< unsigned int > tmpBuf(n * n);
+  std::vector< unsigned short > tmpBuf(n * n);
   int     x0 = cellMinX;
   int     y0 = cellMaxY;
   int     x = cellMinX;
   int     y = cellMaxY;
   while (true)
   {
-    unsigned int    *bufp32 = &(tmpBuf.front());
-    unsigned char   *bufp8 = reinterpret_cast< unsigned char * >(bufp32);
-    unsigned short  *bufp16 = reinterpret_cast< unsigned short * >(bufp8);
     size_t  w = size_t(cellMaxX + 1 - cellMinX);
     if (formatMask & 0x01)              // height map
     {
+      unsigned short  *bufp16 = &(tmpBuf.front());
       btdFile.getCellHeightMap(bufp16, x, y, mipLevel);
       for (size_t yy = 0; yy < n; yy++)
       {
@@ -134,17 +156,19 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
     }
     if (formatMask & 0x02)              // land texture
     {
-      btdFile.getCellLandTexture(bufp32, x, y, mipLevel);
+      unsigned short  *bufp16 = &(tmpBuf.front());
+      btdFile.getCellLandTexture(bufp16, x, y, mipLevel);
       for (size_t yy = 0; yy < n; yy++)
       {
         size_t  offs = size_t((cellMaxY - y) << m) | (~yy & (n - 1));
         offs = ((offs * w) + size_t(x - cellMinX)) << m;
-        for (size_t xx = 0; xx < n; xx++, bufp32++, offs++)
-          ltexData[offs] = *bufp32;
+        for (size_t xx = 0; xx < n; xx++, bufp16++, offs++)
+          ltexData16[offs] = *bufp16;
       }
     }
     if (formatMask & 0x08)              // terrain color
     {
+      unsigned short  *bufp16 = &(tmpBuf.front());
       if (mipLevel > 2)
       {
         btdFile.getCellTerrainColor(bufp16, x, y, mipLevel);
@@ -170,17 +194,32 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
     }
     if (formatMask & 0x10)              // ground cover
     {
-      btdFile.getCellGroundCover(bufp16, x, y, mipLevel);
+      unsigned char   *bufp8 =
+          reinterpret_cast< unsigned char * >(&(tmpBuf.front()));
+      btdFile.getCellGroundCover(bufp8, x, y, mipLevel);
       for (size_t yy = 0; yy < n; yy++)
       {
         size_t  offs = size_t((cellMaxY - y) << m) | (~yy & (n - 1));
         offs = ((offs * w) + size_t(x - cellMinX)) << m;
-        for (size_t xx = 0; xx < n; xx++, bufp16++, offs++)
+        for (size_t xx = 0; xx < n; xx++, bufp8++, offs++)
+          gcvrData[offs] = *bufp8;
+      }
+    }
+    if (formatMask & 0x12)              // texture set
+    {
+      unsigned char   *bufp8 =
+          reinterpret_cast< unsigned char * >(&(tmpBuf.front()));
+      btdFile.getCellTextureSet(bufp8, x, y);
+      for (size_t yy = 0; yy < 2; yy++)
+      {
+        size_t  offs = size_t((cellMaxY - y) << 1) | (~yy & 1);
+        offs = ((offs * w) + size_t(x - cellMinX)) << 5;
+        for (size_t xx = 0; xx < 32; xx++, bufp8++, offs++)
         {
-          unsigned int  tmp = *bufp16;
-          if (~tmp & 0xFFU)
-            tmp += (unsigned int) ltexCnt;
-          gcvrData[offs] = (unsigned short) tmp;
+          unsigned char tmp = *bufp8;
+          if ((xx & 8) && tmp != 0xFF)
+            tmp = (unsigned char) ((ltexCnt + tmp) & 0xFF);
+          txtSetData[offs] = tmp;
         }
       }
     }
@@ -265,7 +304,6 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
 {
   if (mipLevel != 2)
     throw errorMessage("LandscapeData: invalid mip level");
-  formatMask = formatMask & 0x0F;
   std::vector< unsigned long long > landList;
   {
     const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(worldID);
@@ -306,7 +344,6 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
   }
   zMin = landLevel;
   zMax = landLevel;
-  std::vector< unsigned int > cellTextures(1024, 0xFFU);
   for (size_t i = 0; i < landList.size(); i++)
   {
     unsigned int  k = (unsigned int) ((landList[i] >> 32) & 0xFFFFFFFFU);
@@ -324,11 +361,6 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
     unsigned int  cellDataValidMask = 0;
     unsigned int  textureQuadrant = 0;
     unsigned int  textureLayer = 0;
-    if (formatMask & 0x02)
-    {
-      for (size_t l = 0; l < cellTextures.size(); l++)
-        cellTextures[l] = 0xFFU;
-    }
     ESMFile::ESMField f(esmFile, *r);
     while (f.next())
     {
@@ -399,17 +431,14 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
         // vertex textures
         if (f == "BTXT" || f == "ATXT")
         {
-          unsigned int  textureID = findTextureID(f.readUInt32Fast());
+          unsigned char textureID = findTextureID(f.readUInt32Fast());
           textureQuadrant = f.readUInt16Fast() & 3U;
           textureLayer = 0;
           if (f == "ATXT")
             textureLayer = (f.readUInt16Fast() & 7U) + 1;
-          for (unsigned int yy = 0; yy < 16; yy++)
-          {
-            size_t  offs = ((31U - (yy + ((textureQuadrant & 2U) << 3))) << 5)
-                           | ((textureQuadrant & 1U) << 4) | textureLayer;
-            cellTextures[offs] = (cellTextures[offs] & ~0xFFU) | textureID;
-          }
+          size_t  yy = (size_t(y) >> 4) - ((textureQuadrant & 2U) >> 1);
+          size_t  xx = (size_t(x) >> 4) + (textureQuadrant & 1U);
+          txtSetData[(yy * w) + (xx << 4) + textureLayer] = textureID;
           cellDataValidMask |= 2U;
         }
         else if (f == "VTXT" && textureLayer)
@@ -417,69 +446,17 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
           while ((f.getPosition() + 8) <= f.size())
           {
             unsigned int  n = f.readUInt32Fast() & 0xFFFFU;
-            int     a = int(f.readFloat() * 7.0f + 0.5f);
-            a = (a >= 0 ? (a <= 7 ? a : 7) : 0);
+            int     a = int(f.readFloat() * 15.0f + 0.5f);
+            a = (a >= 0 ? (a <= 15 ? a : 15) : 0);
             unsigned int  xx = n % 17U;
             unsigned int  yy = (n / 17U) % 17U;
             if ((xx | yy) & 16)
               continue;
-            size_t  offs = ((31U - (yy + ((textureQuadrant & 2U) << 3))) << 5)
-                           | (xx + ((textureQuadrant & 1U) << 4));
-            unsigned int  m = 0x00E0U << (textureLayer * 3U);
-            cellTextures[offs] = (cellTextures[offs] & ~m)
-                                 | (((unsigned int) a * 0x24924900U) & m);
-          }
-        }
-      }
-    }
-    if (cellDataValidMask & 0x02)
-    {
-      // convert texture set from 9 to 8 layers
-      unsigned int  *p = ltexData + dataOffs;
-      for (int yy = 31; yy >= 0; yy--, p = p - (w + 32))
-      {
-        for (int xx = 0; xx < 32; xx = xx + 8)
-        {
-          unsigned char blockLayerAlphas[8];
-          for (int l = 0; l < 8; l++)
-            blockLayerAlphas[l] = 0;
-          for (int n = 0; n < 8; n++)
-          {
-            unsigned int  m = cellTextures[(yy << 5) | xx | n] >> 8;
-            for (int l = 0; l < 8; l++, m = m >> 3)
-              blockLayerAlphas[l] += (unsigned char) (m & 7U);
-          }
-          // find the least visible layer, and remove it
-          int     removedLayer = 7;
-          unsigned char removedLayerAlpha = 255;
-          for (int l = 0; l < 8; l++)
-          {
-            if (blockLayerAlphas[l] <= removedLayerAlpha)
-            {
-              removedLayer = l;
-              removedLayerAlpha = blockLayerAlphas[l];
-            }
-          }
-          if (removedLayerAlpha > 1)
-          {
-            std::fprintf(stderr,
-                         "LandscapeData: warning: too many layers at %d,%d\n",
-                         x + xx, y + yy);
-          }
-          for (int n = 0; n < 8; n++)
-          {
-            unsigned int  tmp = cellTextures[(yy << 5) | xx | n];
-            unsigned int  m = 0xE0000000U;
-            for (int l = 0; l < 8; l++, tmp = tmp >> 3)
-            {
-              if (l != removedLayer)
-                m = (m >> 3) | ((tmp & 0x0700U) << 21);
-            }
-            if (n <= removedLayer)
-              m = m | (cellTextures[(yy << 5) | (xx & 16) | n] & 0xFFU);
-            else
-              m = m | (cellTextures[(yy << 5) | (xx & 16) | (n + 1)] & 0xFFU);
-            *(p++) = m;
+            unsigned int  *p = ltexData32 + dataOffs;
+            p = p + (xx + ((textureQuadrant & 1U) << 4));
+            p = p - ((yy + ((textureQuadrant & 2U) << 3)) * w);
+            unsigned int  m = 15U << ((textureLayer - 1U) << 2);
+            *p = (*p & ~m) | (((unsigned int) a * 0x11111111U) & m);
           }
         }
       }
@@ -503,7 +480,7 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
         if (i->second & 0x01)
           hmapData[dataOffs] = 0x8000;
         if (i->second & 0x02)
-          ltexData[dataOffs] = 0x07FFU;
+          ltexData32[dataOffs] = 0U;
         if (i->second & 0x04)
         {
           vnmlData[dataOffs * 3] = 0xFF;
@@ -550,12 +527,13 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
     if (defTxtID)
     {
       // replace missing textures with default texture ID
-      unsigned int  defaultTexture = ~0xFFU | findTextureID(defTxtID);
-      size_t  n = size_t(getImageWidth()) * size_t(getImageHeight());
+      unsigned char defaultTexture = findTextureID(defTxtID);
+      size_t  n = (size_t(cellMaxX + 1 - cellMinX)
+                   * size_t(cellMaxY + 1 - cellMinY)) << 6;
       for (size_t i = 0; i < n; i++)
       {
-        if (!(~(ltexData[i]) & 0xFFU))
-          ltexData[i] = ltexData[i] & defaultTexture;
+        if (txtSetData[i] == 0xFF && (i & 15) <= 8)
+          txtSetData[i] = defaultTexture;
       }
     }
     ltexEDIDs.resize(ltexFormIDs.size());
@@ -732,11 +710,13 @@ LandscapeData::LandscapeData(
     cellResolution(32),
     cellOffset(0),
     hmapData((unsigned short *) 0),
-    ltexData((unsigned int *) 0),
+    ltexData32((unsigned int *) 0),
     vnmlData((unsigned char *) 0),
     vclrData24((unsigned char *) 0),
-    gcvrData((unsigned short *) 0),
+    ltexData16((unsigned short *) 0),
+    gcvrData((unsigned char *) 0),
     vclrData16((unsigned short *) 0),
+    txtSetData((unsigned char *) 0),
     zMin(1.0e9f),
     zMax(-1.0e9f),
     waterLevel(0.0f),
@@ -753,9 +733,9 @@ LandscapeData::LandscapeData(
     loadWorldInfo(*esmFile, worldID);
   }
   if (btdFileName && *btdFileName)
-    loadBTDFile(btdFileName, formatMask, l);
+    loadBTDFile(btdFileName, formatMask & 0x1B, l);
   else if (esmFile)
-    loadESMFile(*esmFile, formatMask, worldID, defTxtID, l);
+    loadESMFile(*esmFile, formatMask & 0x0F, worldID, defTxtID, l);
   else
     throw errorMessage("LandscapeData: no input file");
   if (esmFile)
