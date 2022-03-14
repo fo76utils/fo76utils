@@ -92,7 +92,8 @@ int main(int argc, char **argv)
     if (ba2Path && *ba2Path)
     {
       std::vector< std::string >  includePatterns;
-      includePatterns.push_back("landscape/");
+      includePatterns.push_back(std::string("landscape/"));
+      includePatterns.push_back(std::string("/props/"));
       ba2File = new BA2File(ba2Path, &includePatterns);
     }
     ESMFile   esmFile(args[0]);
