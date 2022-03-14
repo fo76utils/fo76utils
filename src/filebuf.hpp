@@ -29,6 +29,19 @@ class FileBuffer
   int readInt32();
   float readFloat();
   unsigned long long readUInt64();
+  float readFloat16();
+  // read n bytes of string data, or until '\0' or end of buffer by default
+  void readString(std::string& s, size_t n = std::string::npos);
+  // read string with upper case letters converted to lower case, '\\'
+  // to '/', and ensuring that it begins with prefix and ends with suffix
+  void readPath(std::string& s, size_t n = std::string::npos,
+                const char *prefix = 0, const char *suffix = 0);
+  // read data from specified offset or pointer
+  unsigned char readUInt8(size_t offs) const;
+  unsigned short readUInt16(size_t offs) const;
+  unsigned int readUInt32(size_t offs) const;
+  static inline unsigned short readUInt16Fast(const void *p);
+  static inline unsigned int readUInt32Fast(const void *p);
   static inline bool checkType(unsigned int id, const char *s);
   inline size_t size() const
   {
@@ -77,6 +90,27 @@ inline unsigned int FileBuffer::readUInt32Fast()
 #else
   return ((unsigned int) p[0] | ((unsigned int) p[1] << 8)
           | ((unsigned int) p[2] << 16) | ((unsigned int) p[3] << 24));
+#endif
+}
+
+inline unsigned short FileBuffer::readUInt16Fast(const void *p)
+{
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  return *(reinterpret_cast< const unsigned short * >(p));
+#else
+  const unsigned char *q = reinterpret_cast< const unsigned char * >(p);
+  return ((unsigned short) q[0] | ((unsigned short) q[1] << 8));
+#endif
+}
+
+inline unsigned int FileBuffer::readUInt32Fast(const void *p)
+{
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  return *(reinterpret_cast< const unsigned int * >(p));
+#else
+  const unsigned char *q = reinterpret_cast< const unsigned char * >(p);
+  return ((unsigned int) q[0] | ((unsigned int) q[1] << 8)
+          | ((unsigned int) q[2] << 16) | ((unsigned int) q[3] << 24));
 #endif
 }
 

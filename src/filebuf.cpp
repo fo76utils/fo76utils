@@ -87,6 +87,98 @@ unsigned long long FileBuffer::readUInt64()
   return tmp;
 }
 
+float FileBuffer::readFloat16()
+{
+  if ((filePos + 2) > fileBufSize)
+    throw errorMessage("end of input file");
+  unsigned int  tmp = readUInt16Fast();
+  unsigned char e = (unsigned char) ((tmp >> 10) & 0x1F);
+  if (!e)
+    return 0.0f;
+  long long m = (long long) ((tmp & 0x03FF) | 0x0400) << e;
+  return (float(!(tmp & 0x8000) ? m : -m) * (1.0f / 33554432.0f));
+}
+
+void FileBuffer::readString(std::string& s, size_t n)
+{
+  s.clear();
+  if (n == std::string::npos)
+  {
+    while (filePos < fileBufSize)
+    {
+      char    c = char(fileBuf[filePos++]);
+      if (!c)
+        break;
+      if ((unsigned char) c < 0x20)
+        c = ' ';
+      s += c;
+    }
+    return;
+  }
+  if (((unsigned long long) filePos + n) > fileBufSize)
+    throw errorMessage("end of input file");
+  for (size_t i = 0; i < n; i++)
+  {
+    char    c = char(fileBuf[filePos + i]);
+    if (!c)
+      break;
+    if ((unsigned char) c < 0x20)
+      c = ' ';
+    s += c;
+  }
+  filePos = filePos + n;
+}
+
+void FileBuffer::readPath(std::string& s, size_t n,
+                          const char *prefix, const char *suffix)
+{
+  readString(s, n);
+  if (s.empty())
+    return;
+  for (size_t i = 0; i < s.length(); i++)
+  {
+    if (s[i] >= 'A' && s[i] <= 'Z')
+      s[i] = s[i] + ('a' - 'A');
+    else if (s[i] == '\\')
+      s[i] = '/';
+  }
+  if (prefix && prefix[0] != '\0')
+  {
+    if (std::strncmp(s.c_str(), prefix, std::strlen(prefix)) != 0)
+      s.insert(0, prefix);
+  }
+  if (suffix && suffix[0] != '\0')
+  {
+    size_t  suffixLen = std::strlen(suffix);
+    if (s.length() < suffixLen ||
+        std::strcmp(s.c_str() + (s.length() - suffixLen), suffix) != 0)
+    {
+      s += suffix;
+    }
+  }
+}
+
+unsigned char FileBuffer::readUInt8(size_t offs) const
+{
+  if ((offs + 1) > fileBufSize)
+    throw errorMessage("end of input file");
+  return fileBuf[offs];
+}
+
+unsigned short FileBuffer::readUInt16(size_t offs) const
+{
+  if ((offs + 2) > fileBufSize)
+    throw errorMessage("end of input file");
+  return readUInt16Fast(fileBuf + offs);
+}
+
+unsigned int FileBuffer::readUInt32(size_t offs) const
+{
+  if ((offs + 4) > fileBufSize)
+    throw errorMessage("end of input file");
+  return readUInt32Fast(fileBuf + offs);
+}
+
 void FileBuffer::setBuffer(const unsigned char *fileData, size_t fileSize)
 {
   if (fileStream)
