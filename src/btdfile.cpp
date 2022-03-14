@@ -65,30 +65,14 @@ void BTDFile::loadBlockLines_8(unsigned char *dst, const unsigned char *src)
 void BTDFile::loadBlockLines_16(unsigned short *dst, const unsigned char *src,
                                 size_t xd, size_t yd)
 {
-  unsigned short  tmp = 1;
-  if (sizeof(unsigned short) == 2 &&
-      *(reinterpret_cast< unsigned char * >(&tmp)) == 1)
+  for (size_t i = 0; i < 64; i++, dst = dst + xd, src = src + 2)
   {
-    for (size_t i = 0; i < 64; i++, dst = dst + xd, src = src + 2)
-    {
-      dst = dst + xd;
-      *dst = *(reinterpret_cast< const unsigned short * >(src));
-    }
-    dst = dst + yd;
-    for (size_t i = 0; i < 128; i++, dst = dst + xd, src = src + 2)
-      *dst = *(reinterpret_cast< const unsigned short * >(src));
+    dst = dst + xd;
+    *dst = FileBuffer::readUInt16Fast(src);
   }
-  else
-  {
-    for (size_t i = 0; i < 64; i++, dst = dst + xd, src = src + 2)
-    {
-      dst = dst + xd;
-      *dst = (unsigned short) src[0] | ((unsigned short) src[1] << 8);
-    }
-    dst = dst + yd;
-    for (size_t i = 0; i < 128; i++, dst = dst + xd, src = src + 2)
-      *dst = (unsigned short) src[0] | ((unsigned short) src[1] << 8);
-  }
+  dst = dst + yd;
+  for (size_t i = 0; i < 128; i++, dst = dst + xd, src = src + 2)
+    *dst = FileBuffer::readUInt16Fast(src);
 }
 
 void BTDFile::loadBlock(TileData& tileData, size_t dataOffs,
@@ -175,7 +159,7 @@ void BTDFile::loadBlocks(TileData& tileData, size_t x, size_t y,
         if (t == threadIndex)
         {
           size_t  n = yc * ((nCellsX + (1 << l) - 1) >> l) + xc;
-          if (blockMask & (1 << (l + l)))
+          if ((blockMask & 0x55) & (1 << (l + l)))
             loadBlock(tileData, ((yy << 10) + xx) << (l + 7), n, l, 0, zlibBuf);
           if ((blockMask & 0xA0) & (1 << (l + l + 1)))
             loadBlock(tileData, ((yy << 8) + xx) << (l + 5), n, l, 1, zlibBuf);
@@ -228,22 +212,22 @@ const BTDFile::TileData& BTDFile::loadTile(int cellX, int cellY,
       tileCacheIndex = 0;
   }
   TileData& tileData = *(t->second);
-  blockMask = (blockMask & ~(tileData.blockMask)) & 0xF7;
+  blockMask = (blockMask & ~(tileData.blockMask)) & 0x03F7;
   if (!blockMask)
     return tileData;
 
-  if (blockMask & 0x55)
+  if (blockMask & 0x0155)
   {
     tileData.hmapData.resize(0x00100000);
     tileData.ltexData.resize(0x00100000);
   }
-  if (blockMask & 0x02)
+  if (blockMask & 0x0002)
     tileData.gcvrData.resize(0x00100000);
-  if (blockMask & 0xA0)
+  if (blockMask & 0x02A0)
     tileData.vclrData.resize(0x00010000);
 
   // LOD4
-  if (blockMask & 0xC0)
+  if (blockMask & 0x0300)
   {
     for (size_t yy = 0; yy < 64; yy++)
     {
@@ -254,17 +238,17 @@ const BTDFile::TileData& BTDFile::loadTile(int cellX, int cellY,
         if ((cellMinX + int((xx >> 3) + x0)) > cellMaxX)
           break;
         size_t  offs = (yy + (y0 << 3)) * (nCellsX << 3) + (xx + (x0 << 3));
-        if (blockMask & 0x55)
+        if (blockMask & 0x0155)
         {
-          filePos = heightMapLOD4 + (offs << 1);
-          tileData.hmapData[((yy << 10) + xx) << 4] = readUInt16();
-          filePos = landTexturesLOD4 + (offs << 1);
-          tileData.ltexData[((yy << 10) + xx) << 4] = readUInt16();
+          tileData.hmapData[((yy << 10) + xx) << 4] =
+              readUInt16(heightMapLOD4 + (offs << 1));
+          tileData.ltexData[((yy << 10) + xx) << 4] =
+              readUInt16(landTexturesLOD4 + (offs << 1));
         }
-        if (blockMask & 0xA0)
+        if (blockMask & 0x02A0)
         {
-          filePos = vertexColorLOD4 + (offs << 1);
-          tileData.vclrData[((yy << 8) + xx) << 2] = readUInt16();
+          tileData.vclrData[((yy << 8) + xx) << 2] =
+              readUInt16(vertexColorLOD4 + (offs << 1));
         }
       }
     }
@@ -394,27 +378,24 @@ void BTDFile::setTileCacheSize(size_t n)
   }
 }
 
-unsigned int BTDFile::getLandTexture(size_t n)
+unsigned int BTDFile::getLandTexture(size_t n) const
 {
   if (n >= ltexCnt)
     return 0U;
-  filePos = ltexOffs + (n << 2);
-  return readUInt32();
+  return readUInt32(ltexOffs + (n << 2));
 }
 
-unsigned int BTDFile::getGroundCover(size_t n)
+unsigned int BTDFile::getGroundCover(size_t n) const
 {
   if (n >= gcvrCnt)
     return 0U;
-  filePos = gcvrOffs + (n << 2);
-  return readUInt32();
+  return readUInt32(gcvrOffs + (n << 2));
 }
 
 void BTDFile::getCellHeightMap(unsigned short *buf, int cellX, int cellY,
                                unsigned char l)
 {
-  const TileData& tileData =
-      loadTile(cellX, cellY, (unsigned char) ((~0U << (l + l)) & 0x55));
+  const TileData& tileData = loadTile(cellX, cellY, (~0U << (l + l)) & 0x0155U);
   size_t  x0 = size_t((cellX - cellMinX) & 7) << 7;
   size_t  y0 = size_t((cellY - cellMinY) & 7) << 7;
   size_t  n = 128 >> l;
@@ -432,8 +413,7 @@ void BTDFile::getCellHeightMap(unsigned short *buf, int cellX, int cellY,
 void BTDFile::getCellLandTexture(unsigned short *buf, int cellX, int cellY,
                                  unsigned char l)
 {
-  const TileData& tileData =
-      loadTile(cellX, cellY, (unsigned char) ((~0U << (l + l)) & 0x55));
+  const TileData& tileData = loadTile(cellX, cellY, (~0U << (l + l)) & 0x0155U);
   size_t  x0 = size_t((cellX - cellMinX) & 7) << 7;
   size_t  y0 = size_t((cellY - cellMinY) & 7) << 7;
   size_t  n = 128 >> l;
@@ -454,7 +434,7 @@ void BTDFile::getCellLandTexture(unsigned short *buf, int cellX, int cellY,
 void BTDFile::getCellGroundCover(unsigned char *buf, int cellX, int cellY,
                                  unsigned char l)
 {
-  const TileData& tileData = loadTile(cellX, cellY, 0x02);
+  const TileData& tileData = loadTile(cellX, cellY, 0x0002);
   size_t  x = size_t(cellX - cellMinX);
   size_t  y = size_t(cellY - cellMinY);
   size_t  x0 = (x & 7) << 7;
@@ -468,11 +448,10 @@ void BTDFile::getCellGroundCover(unsigned char *buf, int cellX, int cellY,
     {
       if (!(xc & ((n >> 1) - 1)))
       {
-        size_t  offs = ((y << 1) | (yc >> (m - 1))) * (nCellsX << 1)
-                       + ((x << 1) | (xc >> (m - 1)));
-        filePos = (offs << 3) + gcvrMapOffs;
-        for (size_t i = 0; i < 8; i++)
-          gcvrMask = (gcvrMask << 1) | (unsigned int) (readUInt8() < gcvrCnt);
+        size_t  offs = ((((y << 1) | (yc >> (m - 1))) * (nCellsX << 1)
+                         + ((x << 1) | (xc >> (m - 1)))) << 3) + gcvrMapOffs;
+        for (unsigned char i = 8; i-- > 0; offs++)
+          gcvrMask |= ((unsigned int) (readUInt8(offs) < gcvrCnt) << i);
       }
       unsigned int  tmp =
           tileData.gcvrData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
@@ -487,8 +466,7 @@ void BTDFile::getCellGroundCover(unsigned char *buf, int cellX, int cellY,
 void BTDFile::getCellTerrainColor(unsigned short *buf, int cellX, int cellY,
                                   unsigned char l)
 {
-  const TileData& tileData =
-      loadTile(cellX, cellY, (unsigned char) ((~0U << (l + l)) & 0xA0));
+  const TileData& tileData = loadTile(cellX, cellY, (~0U << (l + l)) & 0x02A0U);
   size_t  x0 = size_t((cellX - cellMinX) & 7) << 5;
   size_t  y0 = size_t((cellY - cellMinY) & 7) << 5;
   size_t  n = 128 >> l;
@@ -504,19 +482,18 @@ void BTDFile::getCellTerrainColor(unsigned short *buf, int cellX, int cellY,
   }
 }
 
-void BTDFile::getCellTextureSet(unsigned char *buf, int cellX, int cellY)
+void BTDFile::getCellTextureSet(unsigned char *buf, int cellX, int cellY) const
 {
   size_t  x = size_t(cellX - cellMinX);
   size_t  y = size_t(cellY - cellMinY);
   for (size_t q = 0; q < 4; q++)
   {
     size_t  offs =
-        ((y << 1) | (q >> 1)) * (nCellsX << 1) + ((x << 1) | (q & 1));
-    filePos = (offs << 3) + ltexMapOffs;
+        (((y << 1) | (q >> 1)) * (nCellsX << 1) + ((x << 1) | (q & 1))) << 3;
     unsigned char *t = buf + (q << 4);
     for (size_t i = 0; i < 8; i++)
     {
-      unsigned char tmp = readUInt8();
+      unsigned char tmp = readUInt8(ltexMapOffs + offs + i);
       if (tmp == 0 || tmp > ltexCnt)
         tmp = 0xFF;
       else
@@ -528,11 +505,10 @@ void BTDFile::getCellTextureSet(unsigned char *buf, int cellX, int cellY)
     }
     t[6] = 0xFF;
     t[7] = 0xFF;
-    filePos = (offs << 3) + gcvrMapOffs;
     unsigned char *g = buf + ((q << 4) + 8);
     for (size_t i = 0; i < 8; i++)
     {
-      unsigned char tmp = readUInt8();
+      unsigned char tmp = readUInt8(gcvrMapOffs + offs + i);
       if (tmp >= gcvrCnt)
         tmp = 0xFF;
       g[7 - i] = tmp;

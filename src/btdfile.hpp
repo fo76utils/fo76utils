@@ -46,6 +46,8 @@ class BTDFile : public FileBuffer
     // bit 5: LOD2 terrain color is loaded
     // bit 6: LOD3 vertex height and land textures are loaded
     // bit 7: LOD3 terrain color is loaded
+    // bit 8: LOD4 vertex height and land textures are loaded
+    // bit 9: LOD4 terrain color is loaded
     unsigned int  blockMask;
     std::vector< unsigned short > hmapData;     // vertex height, 1024 * 1024
     std::vector< unsigned short > ltexData;     // land textures, 1024 * 1024
@@ -106,8 +108,8 @@ class BTDFile : public FileBuffer
   {
     return gcvrCnt;
   }
-  unsigned int getLandTexture(size_t n);
-  unsigned int getGroundCover(size_t n);
+  unsigned int getLandTexture(size_t n) const;
+  unsigned int getGroundCover(size_t n) const;
   // N = 128 >> l, buffer size = N * N
   // height map in pixelFormatGRAY16 format
   void getCellHeightMap(unsigned short *buf, int cellX, int cellY,
@@ -126,7 +128,7 @@ class BTDFile : public FileBuffer
   // buf[8..15]  = SW quadrant ground cover IDs (0xFF: none)
   // buf[16..31] = SE quadrant land texture and ground cover IDs
   // buf[32..63] = NW and NE quadrants
-  void getCellTextureSet(unsigned char *buf, int cellX, int cellY);
+  void getCellTextureSet(unsigned char *buf, int cellX, int cellY) const;
 };
 
 #endif
