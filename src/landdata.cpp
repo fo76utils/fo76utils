@@ -543,55 +543,6 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
   }
 }
 
-void LandscapeData::readString(std::string& s, size_t n, FileBuffer& buf)
-{
-  s.clear();
-  if ((buf.getPosition() + n) > buf.size())
-  {
-    if (buf.getPosition() >= buf.size())
-      return;
-    n = buf.size() - buf.getPosition();
-  }
-  for (size_t i = 0; i < n; i++)
-  {
-    char    c = char(buf.readUInt8Fast());
-    if (!c)
-      break;
-    if ((unsigned char) c < 0x20)
-      c = ' ';
-    s += c;
-  }
-}
-
-void LandscapeData::readPath(std::string& s, size_t n, FileBuffer& buf,
-                             const char *prefix, const char *suffix)
-{
-  readString(s, n, buf);
-  if (s.empty())
-    return;
-  for (size_t i = 0; i < s.length(); i++)
-  {
-    if (s[i] >= 'A' && s[i] <= 'Z')
-      s[i] = s[i] + ('a' - 'A');
-    else if (s[i] == '\\')
-      s[i] = '/';
-  }
-  if (prefix && prefix[0] != '\0')
-  {
-    if (std::strncmp(s.c_str(), prefix, std::strlen(prefix)) != 0)
-      s.insert(0, prefix);
-  }
-  if (suffix && suffix[0] != '\0')
-  {
-    size_t  suffixLen = std::strlen(suffix);
-    if (s.length() < suffixLen ||
-        std::strcmp(s.c_str() + (s.length() - suffixLen), suffix) != 0)
-    {
-      s += suffix;
-    }
-  }
-}
-
 void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
                                     size_t n)
 {
@@ -603,12 +554,12 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
   {
     if (f == "EDID" && ltexEDIDs[n].empty())
     {
-      readString(ltexEDIDs[n], f.size(), f);
+      f.readString(ltexEDIDs[n]);
     }
     else if ((f == "BNAM" && *r == "LTEX") ||
              (f == "MNAM" && *r == "TXST"))
     {
-      readPath(ltexBGSMPaths[n], f.size(), f, "materials/", ".bgsm");
+      f.readPath(ltexBGSMPaths[n], std::string::npos, "materials/", ".bgsm");
     }
     else if (f.size() >= 4 &&
              ltexBGSMPaths[n].empty() && ltexDPaths[n].empty() &&
@@ -628,15 +579,16 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
     }
     else if (f == "TX00" && *r == "TXST")
     {
-      readPath(ltexDPaths[n], f.size(), f, "textures/", ".dds");
+      f.readPath(ltexDPaths[n], std::string::npos, "textures/", ".dds");
     }
     else if (f == "TX01" && *r == "TXST")
     {
-      readPath(ltexNPaths[n], f.size(), f, "textures/", ".dds");
+      f.readPath(ltexNPaths[n], std::string::npos, "textures/", ".dds");
     }
     else if (f == "ICON" && *r == "LTEX")
     {
-      readPath(ltexDPaths[n], f.size(), f, "textures/landscape/", ".dds");
+      f.readPath(ltexDPaths[n], std::string::npos,
+                 "textures/landscape/", ".dds");
       if (ba2File && !ltexDPaths[n].empty())
       {
         ltexNPaths[n] = ltexDPaths[n];
@@ -667,14 +619,12 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
       if ((bgsmFile.getPosition() + 4) > bgsmFile.size())
         break;
       size_t  nameLen = bgsmFile.readUInt32Fast();
-      size_t  nextPos = bgsmFile.getPosition() + nameLen;
-      if (nextPos > bgsmFile.size())
+      if ((bgsmFile.getPosition() + nameLen) > bgsmFile.size())
         break;
       if (!i)
-        readPath(ltexDPaths[n], nameLen, bgsmFile, "textures/", ".dds");
+        bgsmFile.readPath(ltexDPaths[n], nameLen, "textures/", ".dds");
       else
-        readPath(ltexNPaths[n], nameLen, bgsmFile, "textures/", ".dds");
-      bgsmFile.setPosition(nextPos);
+        bgsmFile.readPath(ltexNPaths[n], nameLen, "textures/", ".dds");
     }
   }
 }

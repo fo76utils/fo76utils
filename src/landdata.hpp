@@ -47,9 +47,6 @@ class LandscapeData
   void loadESMFile(ESMFile& esmFile,
                    unsigned int formatMask, unsigned int worldID,
                    unsigned int defTxtID, unsigned char mipLevel);
-  static void readString(std::string& s, size_t n, FileBuffer& buf);
-  static void readPath(std::string& s, size_t n, FileBuffer& buf,
-                       const char *prefix = 0, const char *suffix = 0);
   void loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File, size_t n);
   void loadWorldInfo(ESMFile& esmFile, unsigned int worldID);
  public:

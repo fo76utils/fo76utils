@@ -83,32 +83,15 @@ static inline bool checkLandXY(int x, int y)
 static inline unsigned int getVertexHeight(int x, int y,
                                            const unsigned char *buf)
 {
+  unsigned int  w = (unsigned int) landWidth;
   unsigned int  x0 = (unsigned int) x >> 8;
-  unsigned int  x1 = x0 + (unsigned int) ((x0 + 1) < (unsigned int) landWidth);
+  unsigned int  x1 = x0 + (unsigned int) ((x0 + 1) < w);
   unsigned int  y0 = (unsigned int) y >> 8;
   unsigned int  y1 = y0 + (unsigned int) ((y0 + 1) < (unsigned int) landHeight);
-  unsigned int  z0, z1, z2, z3;
-  unsigned int  tmp = 1;
-  if (sizeof(unsigned short) == 2 &&
-      *(reinterpret_cast< unsigned char * >(&tmp)) != 0)
-  {
-    const unsigned short  *p = reinterpret_cast< const unsigned short * >(buf);
-    z0 = p[y0 * (unsigned int) landWidth + x0];
-    z1 = p[y0 * (unsigned int) landWidth + x1];
-    z2 = p[y1 * (unsigned int) landWidth + x0];
-    z3 = p[y1 * (unsigned int) landWidth + x1];
-  }
-  else
-  {
-    const unsigned char *p = buf + ((y0 * (unsigned int) landWidth + x0) << 1);
-    z0 = ((unsigned int) p[1] << 8) | p[0];
-    p = buf + ((y0 * (unsigned int) landWidth + x1) << 1);
-    z1 = ((unsigned int) p[1] << 8) | p[0];
-    p = buf + ((y1 * (unsigned int) landWidth + x0) << 1);
-    z2 = ((unsigned int) p[1] << 8) | p[0];
-    p = buf + ((y1 * (unsigned int) landWidth + x1) << 1);
-    z3 = ((unsigned int) p[1] << 8) | p[0];
-  }
+  unsigned int  z0 = FileBuffer::readUInt16Fast(buf + ((y0 * w + x0) << 1));
+  unsigned int  z1 = FileBuffer::readUInt16Fast(buf + ((y0 * w + x1) << 1));
+  unsigned int  z2 = FileBuffer::readUInt16Fast(buf + ((y1 * w + x0) << 1));
+  unsigned int  z3 = FileBuffer::readUInt16Fast(buf + ((y1 * w + x1) << 1));
   unsigned int  xf = x & 0xFF;
   z0 = (z0 * (256U - xf)) + (z1 * xf);
   z2 = (z2 * (256U - xf)) + (z3 * xf);
