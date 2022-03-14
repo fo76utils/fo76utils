@@ -9,7 +9,7 @@ Simple command line utilities for extracting data from Elder Scrolls and Fallout
 * esmview - interactive version of esmdump.
 * findwater - create a height map of water bodies, optionally using .NIF meshes for Skyrim and newer games.
 * fo4land - extract landscape data from Oblivion, Fallout 3, Skyrim, and Fallout 4.
-* landtxt - create an RGB land texture from the output of btddump or fo4land formats 2 and 4, and a set of DDS files.
+* landtxt - create an RGB land texture from the output of btddump (formats 2, 4, 6, and 8) or fo4land (formats 2, 4, and 5), or directly from terrain data in ESM/BTD file(s), using a set of DDS texture files.
 * markers - find references to a set of form IDs defined in a text file, and mark their locations on an RGBA format map, optionally using DDS icon files.
 * nif\_info - list data from a set of .NIF files in .BA2 or .BSA archives.
 * terrain - render terrain to an RGB image, using files created by btddump, findwater, or fo4land. Includes 2D and isometric mode.
@@ -37,8 +37,16 @@ Running any of the programs without arguments prints detailed usage information.
     ./btddump Fallout76/Data/Terrain/Appalachia.btd fo76ltex.dds 2 -80 -80 80 80 1
     ./btddump Fallout76/Data/Terrain/Appalachia.btd fo76gcvr.dds 4 -80 -80 80 80 1
     ./btddump Fallout76/Data/Terrain/Appalachia.btd fo76vclr.dds 6 -80 -80 80 80 2
+    ./btddump Fallout76/Data/Terrain/Appalachia.btd fo76txts.dds 8 -80 -80 80 80
     ./findwater Fallout76/Data/SeventySix.esm fo76wmap.dds fo76hmap.dds Fallout76/Data
-    ./landtxt fo76ltex.dds fo76ltx2.dds ltex/fo76.txt -d Fallout76/Data -gcvr fo76gcvr.dds -vclr fo76vclr.dds -mip 6
+    ./landtxt fo76ltex.dds fo76ltx2.dds fo76txts.dds ltex/fo76.txt -d Fallout76/Data -gcvr fo76gcvr.dds -vclr fo76vclr.dds -mip 6
+    ./terrain fo76hmap.dds fo76terr.dds 9216 6144 -ltex fo76ltx2.dds -light 150 100 35 -wmap fo76wmap.dds -watercolor 0x60102030
+
+## Example 1 without extracting raw land texture data
+
+    ./btddump Fallout76/Data/Terrain/Appalachia.btd fo76hmap.dds 0 -80 -80 80 80 1
+    ./findwater Fallout76/Data/SeventySix.esm fo76wmap.dds fo76hmap.dds Fallout76/Data
+    ./landtxt Fallout76/Data/SeventySix.esm fo76ltx2.dds -d Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -r -80 -80 80 80 -l 1 -mip 6
     ./terrain fo76hmap.dds fo76terr.dds 9216 6144 -ltex fo76ltx2.dds -light 150 100 35 -wmap fo76wmap.dds -watercolor 0x60102030
 
 ### Example 2
