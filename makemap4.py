@@ -55,25 +55,22 @@ def createMap(gameNum, scale):
         args2 = ["-100", "-100", "100", "100", "2"]
     else:
         args1 = ["fo4land", gamePath + "/" + esmName]
-        args2 = [str(worldID), str(defTxtID)]
+        args2 = [str(worldID)]
     runCmd(args1 + [gameName + "hmap.dds", "0"] + args2)
-    runCmd(args1 + [gameName + "ltex.dds", "2"] + args2)
-    if btdName:
-        runCmd(args1 + [gameName + "gcvr.dds", "4"] + args2)
-        runCmd(args1 + [gameName + "vclr.dds", "6"] + args2)
-    else:
-        runCmd(args1 + [gameName + "vclr.dds", "4"] + args2)
     if gameNum < 3:
         runCmd(["findwater", gamePath + "/" + esmName, gameName + "wmap.dds",
                 gameName + "hmap.dds", str(worldID)])
     else:
         runCmd(["findwater", gamePath + "/" + esmName, gameName + "wmap.dds",
                 gameName + "hmap.dds", str(worldID), gamePath])
-    landtxtOptions = [gameName + "ltex.dds", gameName + "ltx2.dds"]
-    landtxtOptions += ["ltex/" + gameName + ".txt", "-d", gamePath]
-    landtxtOptions += ["-mult", "1.25", "-vclr", gameName + "vclr.dds"]
+    landtxtOptions = [gamePath + "/" + esmName, gameName + "ltx2.dds"]
+    landtxtOptions += ["-d", gamePath]
     if btdName:
-        landtxtOptions += ["-mip", "7.0"]   # ["-gcvr", gameName + "gcvr.dds"]
+        landtxtOptions += ["-btd", gamePath + "/Terrain/" + btdName]
+    landtxtOptions += ["-w", worldID, "-deftxt", defTxtID]
+    landtxtOptions += ["-mult", "1.25"]
+    if btdName:
+        landtxtOptions += ["-mip", "7.0"]       # + ["-no-gcvr"]
     else:
         landtxtOptions += ["-mip", "5.0"]
     landtxtOptions += ["-scale", str(scale)]
