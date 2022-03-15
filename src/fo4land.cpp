@@ -90,12 +90,7 @@ int main(int argc, char **argv)
                                       0L, 0x0FFFFFFFL);
     }
     if (ba2Path && *ba2Path)
-    {
-      std::vector< std::string >  includePatterns;
-      includePatterns.push_back(std::string("landscape/"));
-      includePatterns.push_back(std::string("/props/"));
-      ba2File = new BA2File(ba2Path, &includePatterns);
-    }
+      ba2File = new BA2File(ba2Path, ".dds\t.bgsm", "/lod/\t/actors/");
     ESMFile   esmFile(args[0]);
     LandscapeData landData(&esmFile, (char *) 0, ba2File,
                            formatMask, worldFormID, defaultTexture, 2,
@@ -111,10 +106,6 @@ int main(int argc, char **argv)
     yMax = landData.getYMax();
     float   zMin = landData.getZMin();
     float   zMax = landData.getZMax();
-    std::printf("Image size = %dx%d, "
-                "cell X range = %d to %d, Y range = %d to %d\n",
-                (xMax + 1 - xMin) * 32, (yMax + 1 - yMin) * 32,
-                xMin, xMax, yMin, yMax);
     static const int  outFmtPixelFormats[7] =
     {
       DDSInputFile::pixelFormatGRAY16,  DDSInputFile::pixelFormatRGB24,
@@ -136,6 +127,10 @@ int main(int argc, char **argv)
     hdrBuf[10] = 0;
     if (outFmt == 0)
       hdrBuf[10] = (unsigned int) roundFloat(landData.getDefaultLandLevel());
+    std::printf("Image size = %dx%d, "
+                "cell X range = %d to %d, Y range = %d to %d\n",
+                (xMax + 1 - xMin) << 5, (yMax + 1 - yMin) * int(hdrBuf[9]),
+                xMin, xMax, yMin, yMax);
     DDSOutputFile outFile(args[1],
                           (xMax + 1 - xMin) << 5,
                           (yMax + 1 - yMin) * int(hdrBuf[9]),

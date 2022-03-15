@@ -555,12 +555,7 @@ int main(int argc, char **argv)
     threads.resize(size_t(threadCnt), (std::thread *) 0);
 
     if (archivePath)
-    {
-      std::vector< std::string >  includePatterns;
-      includePatterns.push_back(std::string("landscape/"));
-      includePatterns.push_back(std::string("/props/"));
-      ba2File = new BA2File(archivePath, &includePatterns);
-    }
+      ba2File = new BA2File(archivePath, ".dds\t.bgsm", "/lod/\t/actors/");
     int     width = 0;
     int     height = 0;
     if (!checkNameExtension(args[0], ".esm"))
