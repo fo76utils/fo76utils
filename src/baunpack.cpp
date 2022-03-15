@@ -101,13 +101,17 @@ int main(int argc, char **argv)
     std::vector< std::string >  excludePatterns;
     int     archiveCnt = argc - 1;
     bool    extractingFiles = false;
+    bool    listPackedSizes = false;
     for (int i = 1; i < argc; i++)
     {
       if (std::strcmp(argv[i], "--") == 0 ||
-          std::strcmp(argv[i], "--list") == 0)
+          std::strcmp(argv[i], "--list") == 0 ||
+          std::strcmp(argv[i], "--list-packed") == 0)
       {
         archiveCnt = i - 1;
         extractingFiles = (argv[i][2] == '\0');
+        if (!extractingFiles)
+          listPackedSizes = (argv[i][6] != '\0');
         while (++i < argc)
         {
           if (argv[i][0] == '@' && argv[i][1] != '\0')
@@ -148,7 +152,9 @@ int main(int argc, char **argv)
       std::fprintf(stderr, "%s ARCHIVES... --list [PATTERNS...]\n", argv[0]);
       std::fprintf(stderr, "%s ARCHIVES... --list @LISTFILE\n", argv[0]);
       std::fprintf(stderr, "    List archive contents, filtered by name "
-                           "patterns or list file\n");
+                           "patterns or list file.\n");
+      std::fprintf(stderr, "    Using --list-packed instead of --list "
+                           "prints compressed file sizes\n");
       std::fprintf(stderr, "%s ARCHIVES... -- [PATTERNS...]\n", argv[0]);
       std::fprintf(stderr, "    Extract files with a name including "
                            "any of the patterns, archives\n");
@@ -182,7 +188,8 @@ int main(int argc, char **argv)
             namesFound.insert(fileList[j]);
           std::printf("%s\t%8u bytes\n",
                       fileList[j].c_str(),
-                      (unsigned int) ba2File.getFileSize(fileList[j]));
+                      (unsigned int) ba2File.getFileSize(fileList[j],
+                                                         listPackedSizes));
         }
       }
     }
