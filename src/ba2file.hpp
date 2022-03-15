@@ -13,7 +13,8 @@ class BA2File
     const unsigned char *fileData;
     unsigned int  packedSize;
     unsigned int  unpackedSize;
-    // 0: BA2 general, 1: BA2 textures, 103-105: BSA
+    // 0: BA2 general, 1: BA2 textures,
+    // >= 103: BSA (version + flags, 0x40000000: compressed, 0x0100: full name)
     int           archiveType;
     unsigned int  archiveFile;
   };
@@ -38,6 +39,8 @@ class BA2File
   void loadBSAFile(FileBuffer& buf, size_t archiveFile, int archiveType);
   void loadArchivesFromDir(const char *pathName);
   void loadArchiveFile(const char *fileName);
+  unsigned int getBSAUnpackedSize(const unsigned char*& dataPtr,
+                                  const FileDeclaration& fd) const;
  public:
   BA2File(const char *pathName,
           const std::vector< std::string > *includePatterns = 0,
@@ -47,10 +50,13 @@ class BA2File
           const std::vector< std::string > *includePatterns = 0,
           const std::vector< std::string > *excludePatterns = 0,
           const std::set< std::string > *fileNames = 0);
+  // includePatterns, excludePatterns, and fileNames are tab separated lists
+  BA2File(const char *pathName, const char *includePatterns,
+          const char *excludePatterns = 0, const char *fileNames = 0);
   virtual ~BA2File();
   void getFileList(std::vector< std::string >& fileList) const;
   // returns -1 if the file is not found
-  long getFileSize(const std::string& fileName) const;
+  long getFileSize(const std::string& fileName, bool packedSize = false) const;
  protected:
   int extractBA2Texture(std::vector< unsigned char >& buf,
                         const FileDeclaration& fileDecl,
