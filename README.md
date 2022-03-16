@@ -42,7 +42,7 @@ Running any of the programs without arguments prints detailed usage information.
     ./landtxt fo76ltex.dds fo76ltx2.dds fo76txts.dds ltex/fo76.txt -d Fallout76/Data -gcvr fo76gcvr.dds -vclr fo76vclr.dds -mip 6
     ./terrain fo76hmap.dds fo76terr.dds 9216 6144 -ltex fo76ltx2.dds -light 150 100 35 -wmap fo76wmap.dds -watercolor 0x60102030
 
-## Example 1 without extracting raw land texture data
+#### Example 1 without extracting raw land texture data
 
     ./btddump Fallout76/Data/Terrain/Appalachia.btd fo76hmap.dds 0 -80 -80 80 80 1
     ./findwater Fallout76/Data/SeventySix.esm fo76wmap.dds fo76hmap.dds Fallout76/Data
