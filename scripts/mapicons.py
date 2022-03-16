@@ -242,7 +242,7 @@ def extractMapIcons(gameName, gamePath, baunpackFunc, swfToolFunc, magickFunc):
         swfToolFunc(["swfextract.exe", "-i", i[1], swfName])
         swfToolFunc(["swfbbox.exe", "-e", "output.swf"])
         swfToolFunc(["swfrender.exe", "-o", "output.png", "output.swf"])
-        removeFileList = ["output.swf"]
+        removeFileList = ["output.swf", "output.png"]
         if gameName == "fo4":
             convertOptions = ["-background", "transparent"]
             convertOptions += ["-gravity", "center", "-fill", "black"]
@@ -255,7 +255,7 @@ def extractMapIcons(gameName, gamePath, baunpackFunc, swfToolFunc, magickFunc):
                             "-extent", "256x256", "PNG:tmp2.png"])
             magickFunc(["composite", "-compose", "dst-over",
                             "tmp1.png", "tmp2.png", "DDS:" + iconFileName])
-            removeFileList += ["output.png", "tmp1.png", "tmp2.png"]
+            removeFileList += ["tmp1.png", "tmp2.png"]
         else:
             convertOptions = ["-gravity", "center"]
             convertOptions += ["-background", "transparent"]
@@ -265,14 +265,15 @@ def extractMapIcons(gameName, gamePath, baunpackFunc, swfToolFunc, magickFunc):
                 convertOptions += ["-draw", "color " + i[j] + " floodfill"]
             convertOptions += ["-filter", "Mitchell"]
             if gameName == "tes5":
-                convertOptions += ["-channel", "rgb", "-negate", "-normalize"]
+                convertOptions += ["-channel", "rgb", "-level"]
+                # Raven Rock icon needs different white level
+                convertOptions += [["75%,0%", "75%,12%"][int(n == 0x0036)]]
                 convertOptions += ["-channel", "rgba"]
-            elif i[0] == 0x0042:        # fissure site
+            elif n == 0x0042:           # fissure site
                 convertOptions += ["-modulate", "100,200,3"]
             convertOptions += ["-resize", "35x35%", "-extent", "256x256"]
             convertOptions += ["DDS:" + iconFileName]
             magickFunc(["convert", "output.png"] + convertOptions)
-            removeFileList += ["output.png"]
         for j in removeFileList:
             try:
                 os.remove(j)
