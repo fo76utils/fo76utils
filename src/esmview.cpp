@@ -7,6 +7,7 @@ class ESMView : public ESMDump
  public:
   ESMView(const char *fileName, std::FILE *outFile = 0);
   virtual ~ESMView();
+  unsigned int findPreviousRecord(unsigned int formID) const;
   unsigned int findNextRecord(unsigned int formID) const;
   unsigned int findNextGroup(unsigned int formID, const char *pattern) const;
   unsigned int findNextRef(unsigned int formID, const char *pattern);
@@ -24,6 +25,29 @@ ESMView::ESMView(const char *fileName, std::FILE *outFile)
 
 ESMView::~ESMView()
 {
+}
+
+unsigned int ESMView::findPreviousRecord(unsigned int formID) const
+{
+  const ESMRecord *r = findRecord(formID);
+  if (r)
+  {
+    unsigned int  prvFormID = r->parent;
+    r = findRecord(prvFormID);
+    if (r)
+    {
+      prvFormID = (r->children ? r->children : r->next);
+      for ( ; prvFormID; prvFormID = r->next)
+      {
+        r = findRecord(prvFormID);
+        if (!r)
+          break;
+        if (r->next == formID)
+          return prvFormID;
+      }
+    }
+  }
+  return 0xFFFFFFFFU;
 }
 
 unsigned int ESMView::findNextRecord(unsigned int formID) const
@@ -184,9 +208,13 @@ unsigned int ESMView::findNextRef(unsigned int formID, const char *pattern)
           (void) f.readUInt32Fast();
         while ((f.getPosition() + 4) <= f.size())
         {
-          if (f.readUInt32Fast() == n)
+          if (f.readUInt32Fast() == n &&
+              !((f == "LCSR" && (f.getPosition() % 16U) == 0) ||
+                (f == "LCEP" && (f.getPosition() % 12U) == 0)))
+          {
             return formID;
-          if (f.type != 0x4144574B && f.type != 0x5051434D) // "KWDA", "MCQP"
+          }
+          if (!(f == "KWDA" || f == "MCQP" || f == "LCSR" || f == "LCEP"))
             break;
         }
       }
@@ -560,33 +588,6 @@ int main(int argc, char **argv)
           esmFile.printRecordHdr(r->next);
         }
       }
-      else if (cmdBuf == "c")
-      {
-        unsigned int  newFormID = esmFile.getRecord(formID).children;
-        if (newFormID)
-        {
-          prvRecords.push_back(formID);
-          formID = newFormID;
-        }
-      }
-      else if (cmdBuf == "n")
-      {
-        unsigned int  newFormID = esmFile.getRecord(formID).next;
-        if (newFormID)
-        {
-          prvRecords.push_back(formID);
-          formID = newFormID;
-        }
-      }
-      else if (cmdBuf == "p")
-      {
-        unsigned int  newFormID = esmFile.getRecord(formID).parent;
-        if (formID)
-        {
-          prvRecords.push_back(formID);
-          formID = newFormID;
-        }
-      }
       else if (cmdBuf[0] == 'd' && cmdBuf.length() > 1)
       {
         helpFlag = true;
@@ -720,6 +721,47 @@ int main(int argc, char **argv)
           formID = newFormID;
         }
       }
+      else if (std::strchr("cnpv", cmdBuf[0]))
+      {
+        unsigned int  prvFormID = 0xFFFFFFFFU;
+        for (size_t i = 0; i < cmdBuf.length(); i++)
+        {
+          unsigned int  newFormID = 0xFFFFFFFFU;
+          switch (cmdBuf[i])
+          {
+            case 'c':
+              newFormID = esmFile.getRecord(formID).children;
+              break;
+            case 'n':
+              newFormID = esmFile.getRecord(formID).next;
+              break;
+            case 'p':
+              if (formID)
+                newFormID = esmFile.getRecord(formID).parent;
+              break;
+            case 'v':
+              newFormID = esmFile.findPreviousRecord(formID);
+              break;
+            default:
+              if ((unsigned char) cmdBuf[i] > 0x20)
+              {
+                std::printf("Invalid command: %c\n", cmdBuf[i]);
+                if (prvFormID != 0xFFFFFFFFU)
+                  formID = prvFormID;
+                helpFlag = true;
+                i = cmdBuf.length() - 1;
+              }
+              break;
+          }
+          if (newFormID != (cmdBuf[i] < 'p' ? 0U : 0xFFFFFFFFU))
+          {
+            prvFormID = (prvFormID == 0xFFFFFFFFU ? formID : prvFormID);
+            formID = newFormID;
+          }
+        }
+        if (prvFormID != 0xFFFFFFFFU)
+          prvRecords.push_back(prvFormID);
+      }
       else
       {
         std::printf("0xxxxxx:        hexadecimal form ID\n");
@@ -746,7 +788,10 @@ int main(int argc, char **argv)
                     "pattern\n");
         std::printf("U:              toggle hexadecimal display of unknown "
                     "field types\n");
-        std::printf("Q:              quit\n\n");
+        std::printf("Q:              quit\n");
+        std::printf("V:              previous record in current group\n\n");
+        std::printf("C, N, P, and V can be grouped and used as a single "
+                    "command\n\n");
         helpFlag = true;
       }
     }
