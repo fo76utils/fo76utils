@@ -259,6 +259,7 @@ class MapImage : public ESMFile
     unsigned int  xtel;
     unsigned int  tnam;
     bool    isInterior;
+    bool    isChildWorld;
     bool    isMapMarker;
     bool    isDoor;
     float   x;
@@ -266,7 +267,8 @@ class MapImage : public ESMFile
     float   z;
     REFRRecord(unsigned int n = 0U)
       : formID(n), name(0U), xtel(0U), tnam(0xFFFFU),
-        isInterior(false), isMapMarker(false), isDoor(false),
+        isInterior(false), isChildWorld(false),
+        isMapMarker(false), isDoor(false),
         x(0.0f), y(0.0f), z(0.0f)
     {
     }
@@ -284,6 +286,7 @@ class MapImage : public ESMFile
   float   yOffset;
   float   xyScale;
   unsigned int  priorityMask;
+  unsigned int  worldFormID;
   std::set< unsigned int >  formIDs;
   struct CellOffset
   {
@@ -296,8 +299,12 @@ class MapImage : public ESMFile
     {
     }
   };
-  std::map< unsigned int, CellOffset >  interiorCellOffsets;
+  std::map< unsigned int, CellOffset >  cellOffsets;
+  std::set< unsigned int >  disabledMarkers;
+  bool checkParentWorld(const ESMRecord& r);
+  void setWorldCellOffsets(unsigned int formID, float x, float y, float z);
   void setInteriorCellOffset(const REFRRecord& refr);
+  void findDisabledMarkers(const ESMRecord& r);
  public:
   MapImage(const char *esmFileName, const std::vector< MarkerDef >& m,
            int w, int h, int xMin, int yMax, int cellSize, bool isFO76);
@@ -305,12 +312,83 @@ class MapImage : public ESMFile
   const ESMRecord *getParentCell(unsigned int formID) const;
   bool getREFRRecord(REFRRecord& r, unsigned int formID);
   void drawIcon(size_t n, float x, float y);
-  void findMarkers(unsigned int worldFormID = 0U);
+  void findMarkers(unsigned int worldID = 0U);
   inline const std::vector< unsigned int >& getImageData() const
   {
     return buf;
   }
 };
+
+bool MapImage::checkParentWorld(const ESMRecord& r)
+{
+  const ESMRecord *r2 = findRecord(r.flags);
+  if (!r2)
+    return false;
+  float   onamS = 1.0f;
+  float   onamX = 0.0f;
+  float   onamY = 0.0f;
+  float   onamZ = 0.0f;
+  unsigned int  parentWorld = 0U;
+  unsigned char worldFlags = 0;
+  ESMField  f(*this, *r2);
+  while (f.next())
+  {
+    if (f == "WNAM" && f.size() >= 4)
+    {
+      parentWorld = f.readUInt32Fast();
+    }
+    else if (f == "DATA" && f.size() >= 1)
+    {
+      worldFlags = f.readUInt8Fast();
+    }
+    else if (f == "ONAM" && f.size() >= 16)
+    {
+      onamS = f.readFloat();
+      onamX = f.readFloat();
+      onamY = f.readFloat();
+      onamZ = f.readFloat();
+    }
+  }
+  if (!(parentWorld == worldFormID && r.children &&
+        onamS >= 0.0f && !(worldFlags & 0x20)))
+  {
+    return false;
+  }
+  if (!(onamX == 0.0f && onamY == 0.0f && onamZ == 0.0f))
+    setWorldCellOffsets(r.children, onamX, onamY, onamZ);
+  return true;
+}
+
+void MapImage::setWorldCellOffsets(unsigned int formID,
+                                   float x, float y, float z)
+{
+  while (formID)
+  {
+    const ESMRecord *r = getRecordPtr(formID);
+    if (!r)
+      break;
+    if (*r == "GRUP")
+    {
+      if (r->formID == 4 || r->formID == 5)
+        setWorldCellOffsets(r->children, x, y, z);
+    }
+    else if (*r == "CELL")
+    {
+      std::map< unsigned int, CellOffset >::iterator  i =
+          cellOffsets.find(formID);
+      if (i == cellOffsets.end())
+      {
+        i = cellOffsets.insert(std::pair< unsigned int, CellOffset >(
+                                   formID, CellOffset())).first;
+      }
+      i->second.weight++;
+      i->second.x = x;
+      i->second.y = y;
+      i->second.z = z;
+    }
+    formID = r->next;
+  }
+}
 
 void MapImage::setInteriorCellOffset(const REFRRecord& refr)
 {
@@ -329,11 +407,11 @@ void MapImage::setInteriorCellOffset(const REFRRecord& refr)
   float   yOffs = refr.y - refr2.y;
   float   zOffs = refr.z - refr2.z;
   std::map< unsigned int, CellOffset >::iterator  i =
-      interiorCellOffsets.find(cellFormID);
-  if (i == interiorCellOffsets.end())
+      cellOffsets.find(cellFormID);
+  if (i == cellOffsets.end())
   {
-    i = interiorCellOffsets.insert(std::pair< unsigned int, CellOffset >(
-                                       cellFormID, CellOffset())).first;
+    i = cellOffsets.insert(std::pair< unsigned int, CellOffset >(
+                               cellFormID, CellOffset())).first;
   }
   // use average offset if there are multiple entrances
   i->second.weight++;
@@ -342,6 +420,27 @@ void MapImage::setInteriorCellOffset(const REFRRecord& refr)
   i->second.x = (i->second.x * w0 + xOffs) * w1;
   i->second.y = (i->second.y * w0 + yOffs) * w1;
   i->second.z = (i->second.z * w0 + zOffs) * w1;
+}
+
+void MapImage::findDisabledMarkers(const ESMRecord& r)
+{
+  ESMField  f(*this, r);
+  while (f.next())
+  {
+    if (f == "LCEP")
+    {
+      while ((f.getPosition() + 12) <= f.size())
+      {
+        unsigned int  formID = f.readUInt32Fast();
+        if (f.readUInt32Fast() == 0x001C26C2)   // ZCellEnableMarker
+        {
+          if (disabledMarkers.find(formID) == disabledMarkers.end())
+            disabledMarkers.insert(formID);
+        }
+        (void) f.readUInt32Fast();
+      }
+    }
+  }
 }
 
 MapImage::MapImage(const char *esmFileName, const std::vector< MarkerDef >& m,
@@ -363,6 +462,7 @@ MapImage::MapImage(const char *esmFileName, const std::vector< MarkerDef >& m,
   xOffset = float(-x0) * xyScale;
   yOffset = float(y1) * xyScale - 1.0f;
   priorityMask = 0;
+  worldFormID = 0;
   for (size_t i = 0; i < markerDefs.size(); i++)
   {
     if (formIDs.find(markerDefs[i].formID) == formIDs.end())
@@ -424,18 +524,29 @@ bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
   }
   while (f.next());
   r.isInterior = false;
+  r.isChildWorld = false;
   while (p->parent)
   {
     p = getRecordPtr(p->parent);
     if (!p)
       break;
-    if (*p == "GRUP" && (p->formID == 2 || p->formID == 3))
+    if (*p == "GRUP")
     {
-      r.isInterior = true;
-      break;
+      if (p->formID == 2 || p->formID == 3)
+      {
+        r.isInterior = true;
+        break;
+      }
+      else if (p->formID == 1)
+      {
+        r.isChildWorld = (worldFormID && p->flags != worldFormID);
+        break;
+      }
     }
   }
   r.isMapMarker = (r.name == 0x00000010);       // MapMarker
+  if (r.isChildWorld && !r.isMapMarker)
+    return false;
   if (r.xtel)
   {
     p = getRecordPtr(r.name);
@@ -540,22 +651,15 @@ void MapImage::drawIcon(size_t n, float x, float y)
   }
 }
 
-void MapImage::findMarkers(unsigned int worldFormID)
+void MapImage::findMarkers(unsigned int worldID)
 {
+  worldFormID = worldID;
   std::set< REFRRecord >  objectsFound;
   const ESMRecord *r = getRecordPtr(0U);
   while (r)
   {
     bool    searchChildRecords = bool(r->children);
-    if (*r == "GRUP")
-    {
-      if (r->formID == 7 || r->formID >= 10 ||
-          (worldFormID != 0U && r->formID == 1 && r->flags != worldFormID))
-      {
-        searchChildRecords = false;
-      }
-    }
-    else if (*r == "REFR" || *r == "ACHR")
+    if (BRANCH_EXPECT(*r == "REFR" || *r == "ACHR", true))
     {
       bool    matchFlag = (formIDs.find(r->formID) != formIDs.end());
       ESMField  f(*this, *r);
@@ -580,6 +684,18 @@ void MapImage::findMarkers(unsigned int worldFormID)
         if (getREFRRecord(refr, r->formID))
           objectsFound.insert(refr);
       }
+    }
+    else if (*r == "GRUP")
+    {
+      if (r->formID == 7 || r->formID >= 10 ||
+          (worldID != 0U && r->formID == 1 && r->flags != worldID))
+      {
+        searchChildRecords = (r->formID == 1 && checkParentWorld(*r));
+      }
+    }
+    else if (*r == "LCTN")
+    {
+      findDisabledMarkers(*r);
     }
     unsigned int  nextFormID = 0U;
     if (searchChildRecords)
@@ -606,17 +722,22 @@ void MapImage::findMarkers(unsigned int worldFormID)
       REFRRecord    refr = *i;
       unsigned int  formID = refr.formID;
       unsigned int  n = refr.name;
-      if (refr.isInterior)
+      if (refr.isInterior || refr.isChildWorld)
       {
         const ESMRecord *c = getParentCell(formID);
         if (!c)
           continue;
         std::map< unsigned int, CellOffset >::const_iterator  k =
-            interiorCellOffsets.find(c->formID);
-        if (k == interiorCellOffsets.end())
+            cellOffsets.find(c->formID);
+        if (k != cellOffsets.end())
+        {
+          refr.x = refr.x + k->second.x;
+          refr.y = refr.y + k->second.y;
+        }
+        else if (refr.isInterior)
+        {
           continue;
-        refr.x = refr.x + k->second.x;
-        refr.y = refr.y + k->second.y;
+        }
       }
       for (std::vector< MarkerDef >::const_iterator m = markerDefs.begin();
            m != markerDefs.end(); m++)
@@ -633,7 +754,8 @@ void MapImage::findMarkers(unsigned int worldFormID)
                 continue;
             }
           }
-          else if (refr.tnam != (unsigned int) m->flags)
+          else if (refr.tnam != (unsigned int) m->flags ||
+                   disabledMarkers.find(refr.formID) != disabledMarkers.end())
           {
             continue;
           }
@@ -692,18 +814,17 @@ int main(int argc, char **argv)
     int     yMax = uint32ToSigned(hdrBuf[6]);
     int     cellSize = int(hdrBuf[9]);
     bool    isFO76 = (hdrBuf[0] == 0x36374F46);
-    unsigned int  worldFormID = (!isFO76 ? 0x0000003C : 0x0025DA15);
+    unsigned int  worldID = (!isFO76 ? 0x0000003C : 0x0025DA15);
     if (argc > 5)
     {
-      worldFormID =
-          (unsigned int) parseInteger(argv[5], 0, "invalid world form ID",
-                                      0L, 0x0FFFFFFFL);
+      worldID = (unsigned int) parseInteger(argv[5], 0, "invalid world form ID",
+                                            0L, 0x0FFFFFFFL);
     }
     loadTextures(markerDefs, argv[4]);
 
     MapImage  mapImage(argv[1], markerDefs, imageWidth, imageHeight,
                        xMin, yMax, cellSize, isFO76);
-    mapImage.findMarkers(worldFormID);
+    mapImage.findMarkers(worldID);
 
     DDSOutputFile outFile(argv[2], imageWidth, imageHeight,
                           DDSInputFile::pixelFormatRGBA32);
