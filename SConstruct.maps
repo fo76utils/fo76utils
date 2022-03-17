@@ -1,0 +1,261 @@
+
+import os, sys, subprocess
+
+listVariables = int(ARGUMENTS.get("listvars", 0))
+
+def addVariable(varName, defVal):
+    v = ARGUMENTS.get(varName, defVal)
+    if listVariables:
+        print(varName + " = " + str(v) + " (default: " + str(defVal) + ")")
+    return v
+
+gameInfo = [["tes4", "Oblivion/Data",
+             "Oblivion.esm", "", "0x0000003C", "0x000008C0",
+             -64, -69, 69, 59, 110, "0x60003048", ""],
+            ["fo3", "Fallout3/Data",
+             "Fallout3.esm", "", "0x0000003C", "0x000357BA",
+             -99, -99, 97, 100, 125, "0x60102030", ""],
+            ["fonv", "FalloutNV/Data",
+             "FalloutNV.esm", "", "0x000DA726", "0x000357BA",
+             -64, -65, 63, 64, 125, "0x60102030", ""],
+            ["tes5", "Skyrim/Data",
+             "Skyrim.esm", "", "0x0000003C", "0x00000C16",
+             -57, -43, 61, 50, 160, "0x60003048", "tes5"],
+            ["tes5db", "Skyrim/Data",
+             "Skyrim.esm,Dragonborn.esm", "", "0x02000800", "0x00000C16",
+             -64, -64, 127, 127, 160, "0x60003048", "tes5"],
+            ["fo4", "Fallout4/Data",
+             "Fallout4.esm", "", "0x0000003C", "0x000BE9B6",
+             -96, -96, 95, 95, 125, "0x60102030", "fo4"],
+            ["fo4fh", "Fallout4/Data",
+             "Fallout4.esm,DLCCoast.esm", "", "0x01000B0F", "0x000BE9B6",
+             -29, -22, 20, 31, 125, "0x60102030", "fo4"],
+            ["fo76", "Fallout76/Data",
+             "SeventySix.esm", "Terrain/Appalachia.btd", "0x0025DA15", "0",
+             -100, -100, 100, 100, 125, "0x60102030", "fo76"]]
+
+gameName = str(addVariable("game", "fo76")).lower()
+gameNum = -1
+for i in range(len(gameInfo)):
+    if gameInfo[i][0] == gameName:
+        gameNum = i
+        break
+if gameNum < 0:
+    print("Invalid game name: " + gameName)
+    raise SystemExit(1)
+
+if "win" in sys.platform:
+    magickPath = "C:/Program Files/ImageMagick-7.1.0-Q16-HDRI/magick.exe"
+    swfToolsPath = "C:/"
+else:
+    magickPath = "/usr/bin/magick"
+    swfToolsPath = os.environ["HOME"] + "/.wine/drive_c/"
+swfToolsPath += "Program Files (x86)/SWFTools"
+magickPath = str(addVariable("magick", magickPath))
+swfToolsPath = str(addVariable("swftools", swfToolsPath))
+gamePath = str(addVariable("datapath", gameInfo[gameNum][1]))
+esmPath = gamePath + "/" + gameInfo[gameNum][2]
+esmPath = esmPath.replace(",", "," + gamePath + "/")
+esmPath = str(addVariable("esmfile", esmPath))
+btdPath = gameInfo[gameNum][3]
+if btdPath:
+    btdPath = gamePath + "/" + btdPath
+btdPath = str(addVariable("btdfile", btdPath))
+worldFormID = int(addVariable("worldid", gameInfo[gameNum][4]), 0)
+defTxtID = int(addVariable("deftxt", gameInfo[gameNum][5]), 0)
+cellMinX = int(addVariable("xmin", gameInfo[gameNum][6]))
+cellMinY = int(addVariable("ymin", gameInfo[gameNum][7]))
+cellMaxX = int(addVariable("xmax", gameInfo[gameNum][8]))
+cellMaxY = int(addVariable("ymax", gameInfo[gameNum][9]))
+isometricMode = str(addVariable("iso", "0")).lower()
+if isometricMode in ["0", "1", "2d"]:
+    isometricMode = ["-2d", "-iso"][int(isometricMode == "1")]
+elif isometricMode in ["se", "sw", "nw", "ne"]:
+    isometricMode = "-iso_" + isometricMode
+else:
+    print("Invalid view type: " + isometricMode
+          + ", must be one of 0 (2d), 1 (se), sw, nw, and ne")
+    raise SystemExit(1)
+lightLevel = int(addVariable("light", gameInfo[gameNum][10]))
+lightDirection = str(addVariable("lightdir", "nw")).lower()
+if not lightDirection in ["nw", "w", "sw", "s", "se", "e", "ne", "n"]:
+    print("Invalid light direction: " + lightDirection)
+    raise SystemExit(1)
+lightDirection = "-light_" + lightDirection
+waterColor = int(addVariable("watercolor", gameInfo[gameNum][11]), 0)
+mapIconsType = str(addVariable("mapicons", gameInfo[gameNum][12]))
+mapIconAlpha = int(addVariable("iconalpha", 75))
+if isometricMode != "-2d" or not mapIconAlpha:
+    mapIconsType = ""
+mipLevel = int(addVariable("miplevel", 2))
+textureMip = float(addVariable("texturemip", 4.0))
+enableGCVR = int(addVariable("gcvr", 1))
+enableVCLR = int(addVariable("vclr", 1))
+jpegResize = int(addVariable("jpegresize", 100))
+jpegQuality = int(addVariable("jpegquality", 90))
+
+if listVariables:
+    raise SystemExit(0)
+
+env = Environment(ENV = { "PATH" : os.environ["PATH"],
+                          "HOME" : os.environ["HOME"] })
+env.Decider("timestamp-match")
+
+exec(open("./scripts/mapicons.py", "r").read())
+
+def runCmd(args):
+    tmpArgs = []
+    for i in args:
+        tmpArgs += [str(i)]
+    if not "/" in tmpArgs[0]:
+        tmpArgs[0] = "./" + tmpArgs[0]
+    return subprocess.run(tmpArgs)
+
+def runBaunpack(args):
+    runCmd(["./baunpack"] + args)
+
+def runSWFTool(args):
+    cmdPath = [swfToolsPath + "/" + args[0]]
+    if not ("win" in sys.platform):
+        cmdPath = ["/usr/bin/wine"] + cmdPath
+    runCmd(cmdPath + args[1:])
+
+def runMagick(args):
+    runCmd([magickPath] + args)
+
+def commandString(args):
+    s = ""
+    for i in range(len(args)):
+        if i > 0:
+            s += " "
+        s += str(args[i]).replace("\\", "/").replace(" ", "\\ ")
+    return s
+
+def btddumpCommand(target, source, outFmt):
+    return commandString(["./btddump", source, target, outFmt,
+                          cellMinX, cellMinY, cellMaxX, cellMaxY, mipLevel])
+
+def fo4landCommand(target, source, outFmt):
+    return commandString(["./fo4land", source, target, outFmt,
+                          cellMinX, cellMinY, cellMaxX, cellMaxY, worldFormID,
+                          defTxtID])
+
+def landtxtCommand(target, source):
+    cmdOpts = ["./landtxt", source, target, "-d", gamePath]
+    cmdOpts += ["-w", worldFormID, "-deftxt", defTxtID]
+    cmdOpts += ["-r", cellMinX, cellMinY, cellMaxX, cellMaxY]
+    if btdPath:
+        cmdOpts += ["-btd", btdPath, "-l", mipLevel, "-mult", 1.2]
+    else:
+        cmdOpts += ["-mult", 1.25]
+        if mipLevel < 2:
+            cmdOpts += ["-scale", 2 - mipLevel]
+    cmdOpts += ["-mip", textureMip + mipLevel]
+    if not enableGCVR:
+        cmdOpts += ["-no-gcvr"]
+    if not enableVCLR:
+        cmdOpts += ["-no-vclr"]
+    return commandString(cmdOpts)
+
+def markersCommand(target, esmName, ltx2Name, iconDefsName):
+    return commandString(["./markers", esmName, target, ltx2Name, iconDefsName,
+                          worldFormID])
+
+def terrainCommand(target, hmapName, wmapName, ltx2Name):
+    cmdOpts = ["./terrain", hmapName, target]
+    w = (cellMaxX + 1 - cellMinX) << (7 - mipLevel)
+    h = (cellMaxY + 1 - cellMinY) << (7 - mipLevel)
+    if isometricMode != "-2d":
+        w = (w * 3) >> 1
+        h = (h * 15) >> 4
+    cmdOpts += [w, h, isometricMode]
+    if isometricMode != "-2d":
+        xyOffs = 256 >> [mipLevel, 2][int(not btdPath)]
+        cmdOpts += ["-xoffs", [-xyOffs, xyOffs][int("w" in isometricMode)]]
+        cmdOpts += ["-yoffs", [-xyOffs, xyOffs][int("n" in isometricMode)]]
+    if mipLevel < 2 and not btdPath:
+        cmdOpts += ["-lod", mipLevel - 2]
+    cmdOpts += ["-ltex", ltx2Name, "-wmap", wmapName]
+    cmdOpts += ["-watercolor", waterColor]
+    cmdOpts += [lightDirection, lightLevel, 100, 35]
+    return commandString(cmdOpts)
+
+def compositeCommand(target, source, mmapName):
+    if mmapName:
+        cmdOpts = [magickPath, "composite", "-dissolve", mapIconAlpha]
+        cmdOpts += [mmapName, source]
+    else:
+        cmdOpts = [magickPath, "convert", source]
+    if jpegResize > 0 and jpegResize != 100:
+        cmdOpts += ["-filter", "Lanczos"]
+        cmdOpts += ["-resize", "%d%%x%d%%" % (jpegResize, jpegResize)]
+    cmdOpts += ["-interlace", "Plane", "-sampling-factor", "1x1"]
+    cmdOpts += ["-quality", jpegQuality, "JPEG:" + target]
+    return commandString(cmdOpts)
+
+hmapFileName = gameName + "hmap.dds"
+ltx2FileName = gameName + "ltx2.dds"
+wmapFileName = gameName + "wmap.dds"
+mmapFileName = gameName + "mmap.dds"
+outFileName1 = gameName + "_map.dds"
+outFileName2 = gameName + "_map.jpg"
+
+if btdPath:
+    hmapFile = env.Command(hmapFileName, btdPath,
+                           btddumpCommand(hmapFileName, btdPath, 0))
+    ltx2File = env.Command(ltx2FileName, esmPath.split(',') + [btdPath],
+                           landtxtCommand(ltx2FileName, esmPath))
+else:
+    hmapFile = env.Command(hmapFileName, esmPath.split(','),
+                           fo4landCommand(hmapFileName, esmPath, 0))
+    ltx2File = env.Command(ltx2FileName, esmPath.split(','),
+                           landtxtCommand(ltx2FileName, esmPath))
+
+findwaterOptions = ["./findwater", esmPath, wmapFileName, hmapFileName]
+findwaterOptions += [worldFormID]
+if gameName[:4] == "tes5" or gameName[:3] == "fo4" or gameName[:4] == "fo76":
+    findwaterOptions += [gamePath]
+wmapFile = env.Command(wmapFileName, esmPath.split(',') + [hmapFile],
+                       commandString(findwaterOptions))
+
+if mapIconsType:
+    markerList = getMapMarkerDefs(mapIconsType, 0.5 + mipLevel, 7)
+    tmpMarkerFileNames = markerList.split('\n')
+    markerFileNames = []
+    for i in tmpMarkerFileNames:
+        if '\t' in i:
+            markerFileNames += [i.split('\t')[2]]
+
+def createIconDefsFile(target, source, env):
+    for i in target:
+        f = open(str(i), "w")
+        f.write(markerList)
+        f.close()
+    return None
+
+def extractIconFiles(target, source, env):
+    extractMapIcons(mapIconsType, gamePath, runBaunpack, runSWFTool, runMagick)
+    return None
+
+if mapIconsType:
+    iconDefsFile = env.Command(mapIconsType + "icondefs.txt", ltx2File,
+                               createIconDefsFile)
+    markerFiles = env.Command(markerFileNames, gamePath, extractIconFiles)
+    mmapFile = env.Command(mmapFileName,
+                           esmPath.split(',')
+                           + [ltx2File, iconDefsFile] + markerFiles,
+                           markersCommand(mmapFileName, esmPath, ltx2FileName,
+                                          mapIconsType + "icondefs.txt"))
+
+terrFile = env.Command(outFileName1, [hmapFile, ltx2File, wmapFile],
+                       terrainCommand(outFileName1, hmapFileName, wmapFileName,
+                                      ltx2FileName))
+
+if mapIconsType:
+    jpegFile = env.Command(outFileName2, [terrFile, mmapFile],
+                           compositeCommand(outFileName2, outFileName1,
+                                            mmapFileName))
+else:
+    jpegFile = env.Command(outFileName2, terrFile,
+                           compositeCommand(outFileName2, outFileName1, ""))
+
