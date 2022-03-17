@@ -12,12 +12,27 @@ def addVariable(varName, defVal):
 gameInfo = [["tes4", "Oblivion/Data",
              "Oblivion.esm", "", "0x0000003C", "0x000008C0",
              -64, -69, 69, 59, 110, "0x60003048", ""],
+            ["tes4si", "Oblivion/Data",
+             "Oblivion.esm", "", "0x00009F18", "0x000008C0",
+             -32, -32, 31, 31, 110, "0x60003048", ""],
             ["fo3", "Fallout3/Data",
              "Fallout3.esm", "", "0x0000003C", "0x000357BA",
              -99, -99, 97, 100, 125, "0x60102030", ""],
+            ["fo3pl", "Fallout3/Data",
+             "Fallout3.esm,PointLookout.esm", "", "0x01000802", "0x000357BA",
+             -34, -18, 44, 26, 125, "0x60102030", ""],
+            ["fo3tp", "Fallout3/Data",
+             "Fallout3.esm,ThePitt.esm", "", "0x010008C0", "0x000357BA",
+             -11, -7, 12, 19, 125, "0x60102030", ""],
             ["fonv", "FalloutNV/Data",
              "FalloutNV.esm", "", "0x000DA726", "0x000357BA",
              -64, -65, 63, 64, 125, "0x60102030", ""],
+            ["fonvowb", "FalloutNV/Data",
+             "FalloutNV.esm,OldWorldBlues.esm", "", "0x01000E81", "0x000357BA",
+             -32, -32, 31, 31, 125, "0x60102030", ""],
+            ["fonvhh", "FalloutNV/Data",
+             "FalloutNV.esm,HonestHearts.esm", "", "0x0100683B", "0x000357BA",
+             -32, -32, 31, 31, 125, "0x60102030", ""],
             ["tes5", "Skyrim/Data",
              "Skyrim.esm", "", "0x0000003C", "0x00000C16",
              -57, -43, 61, 50, 160, "0x60003048", "tes5"],
@@ -30,6 +45,9 @@ gameInfo = [["tes4", "Oblivion/Data",
             ["fo4fh", "Fallout4/Data",
              "Fallout4.esm,DLCCoast.esm", "", "0x01000B0F", "0x000BE9B6",
              -29, -22, 20, 31, 125, "0x60102030", "fo4"],
+            ["fo4nw", "Fallout4/Data",
+             "Fallout4.esm,DLCNukaWorld.esm", "", "0x0100290F", "0x000BE9B6",
+             -32, -32, 32, 32, 125, "0x60102030", "fo4"],
             ["fo76", "Fallout76/Data",
              "SeventySix.esm", "Terrain/Appalachia.btd", "0x0025DA15", "0",
              -100, -100, 100, 100, 125, "0x60102030", "fo76"]]
@@ -91,6 +109,7 @@ mipLevel = int(addVariable("miplevel", 2))
 textureMip = float(addVariable("texturemip", 4.0))
 enableGCVR = int(addVariable("gcvr", 1))
 enableVCLR = int(addVariable("vclr", 1))
+# percentage if <= 200, pixels if > 200
 jpegResize = int(addVariable("jpegresize", 100))
 jpegQuality = int(addVariable("jpegquality", 90))
 
@@ -188,7 +207,10 @@ def compositeCommand(target, source, mmapName):
         cmdOpts = [magickPath, "convert", source]
     if jpegResize > 0 and jpegResize != 100:
         cmdOpts += ["-filter", "Lanczos"]
-        cmdOpts += ["-resize", "%d%%x%d%%" % (jpegResize, jpegResize)]
+        if jpegResize <= 200:
+            cmdOpts += ["-resize", "%d%%x%d%%" % (jpegResize, jpegResize)]
+        else:
+            cmdOpts += ["-resize", "%dx%d" % (jpegResize, jpegResize)]
     cmdOpts += ["-interlace", "Plane", "-sampling-factor", "1x1"]
     cmdOpts += ["-quality", jpegQuality, "JPEG:" + target]
     return commandString(cmdOpts)
@@ -223,7 +245,7 @@ if mapIconsType:
     tmpMarkerFileNames = markerList.split('\n')
     markerFileNames = []
     for i in tmpMarkerFileNames:
-        if '\t' in i:
+        if ".dds\t" in i:
             markerFileNames += [i.split('\t')[2]]
 
 def createIconDefsFile(target, source, env):
@@ -240,7 +262,8 @@ def extractIconFiles(target, source, env):
 if mapIconsType:
     iconDefsFile = env.Command(mapIconsType + "icondefs.txt", ltx2File,
                                createIconDefsFile)
-    markerFiles = env.Command(markerFileNames, gamePath, extractIconFiles)
+    markerFiles = env.Command(markerFileNames, "scripts/mapicons.py",
+                              extractIconFiles)
     mmapFile = env.Command(mmapFileName,
                            esmPath.split(',')
                            + [ltx2File, iconDefsFile] + markerFiles,
