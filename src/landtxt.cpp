@@ -94,7 +94,7 @@ static void loadTextures(
     }
     catch (...)
     {
-      if (checkNameExtension(fileNames[i].c_str(), ".dds"))
+      if (checkNameExtension(fileNames[i].c_str(), ".dds") && !(ba2File && i))
       {
         if (verboseMode)
           std::fputc('\n', stderr);
