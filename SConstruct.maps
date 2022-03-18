@@ -3,54 +3,57 @@ import os, sys, subprocess
 
 listVariables = int(ARGUMENTS.get("listvars", 0))
 
-def addVariable(varName, defVal):
+def addVariable(varName, defVal, descString = ""):
     v = ARGUMENTS.get(varName, defVal)
     if listVariables:
-        print(varName + " = " + str(v) + " (default: " + str(defVal) + ")")
+        if descString:
+            print(varName + " = \"" + str(v) + "\" (" + descString + ")")
+        else:
+            print(varName + " = \"" + str(v) + "\"")
     return v
 
 gameInfo = [["tes4", "Oblivion/Data",
              "Oblivion.esm", "", "0x0000003C", "0x000008C0",
-             -64, -69, 69, 59, 110, "0x60003048", ""],
+             -64, -69, 69, 59, 110, "0x60003357", ""],
             ["tes4si", "Oblivion/Data",
              "Oblivion.esm", "", "0x00009F18", "0x000008C0",
-             -32, -32, 31, 31, 110, "0x60003048", ""],
+             -32, -32, 31, 31, 110, "0x60003357", ""],
             ["fo3", "Fallout3/Data",
              "Fallout3.esm", "", "0x0000003C", "0x000357BA",
-             -99, -99, 97, 100, 125, "0x60102030", ""],
+             -99, -99, 97, 100, 125, "0x600C2028", ""],
             ["fo3pl", "Fallout3/Data",
              "Fallout3.esm,PointLookout.esm", "", "0x01000802", "0x000357BA",
-             -34, -18, 44, 26, 125, "0x60102030", ""],
+             -34, -18, 44, 26, 125, "0x600C2028", ""],
             ["fo3tp", "Fallout3/Data",
              "Fallout3.esm,ThePitt.esm", "", "0x010008C0", "0x000357BA",
-             -11, -7, 12, 19, 125, "0x60102030", ""],
+             -11, -7, 12, 19, 125, "0x600C2028", ""],
             ["fonv", "FalloutNV/Data",
              "FalloutNV.esm", "", "0x000DA726", "0x000357BA",
-             -64, -65, 63, 64, 125, "0x60102030", ""],
+             -64, -65, 63, 64, 125, "0x600C2028", ""],
             ["fonvowb", "FalloutNV/Data",
              "FalloutNV.esm,OldWorldBlues.esm", "", "0x01000E81", "0x000357BA",
-             -32, -32, 31, 31, 125, "0x60102030", ""],
+             -32, -32, 31, 31, 125, "0x600C2028", ""],
             ["fonvhh", "FalloutNV/Data",
              "FalloutNV.esm,HonestHearts.esm", "", "0x0100683B", "0x000357BA",
-             -32, -32, 31, 31, 125, "0x60102030", ""],
+             -32, -32, 31, 31, 125, "0x600C2028", ""],
             ["tes5", "Skyrim/Data",
              "Skyrim.esm", "", "0x0000003C", "0x00000C16",
-             -57, -43, 61, 50, 160, "0x60003048", "tes5"],
+             -57, -43, 61, 50, 160, "0x6000233C", "tes5"],
             ["tes5db", "Skyrim/Data",
              "Skyrim.esm,Dragonborn.esm", "", "0x02000800", "0x00000C16",
-             -64, -64, 127, 127, 160, "0x60003048", "tes5"],
+             -64, -64, 127, 127, 160, "0x6000233C", "tes5"],
             ["fo4", "Fallout4/Data",
              "Fallout4.esm", "", "0x0000003C", "0x000BE9B6",
-             -96, -96, 95, 95, 125, "0x60102030", "fo4"],
+             -96, -96, 95, 95, 125, "0x600C2028", "fo4"],
             ["fo4fh", "Fallout4/Data",
              "Fallout4.esm,DLCCoast.esm", "", "0x01000B0F", "0x000BE9B6",
-             -29, -22, 20, 31, 125, "0x60102030", "fo4"],
+             -29, -22, 20, 31, 125, "0x600C2028", "fo4"],
             ["fo4nw", "Fallout4/Data",
              "Fallout4.esm,DLCNukaWorld.esm", "", "0x0100290F", "0x000BE9B6",
-             -32, -32, 32, 32, 125, "0x60102030", "fo4"],
+             -32, -32, 32, 32, 125, "0x600C2028", "fo4"],
             ["fo76", "Fallout76/Data",
              "SeventySix.esm", "Terrain/Appalachia.btd", "0x0025DA15", "0",
-             -100, -100, 100, 100, 125, "0x60102030", "fo76"]]
+             -100, -100, 100, 100, 125, "0x600C2028", "fo76"]]
 
 gameName = str(addVariable("game", "fo76")).lower()
 gameNum = -1
@@ -74,18 +77,26 @@ swfToolsPath = str(addVariable("swftools", swfToolsPath))
 gamePath = str(addVariable("datapath", gameInfo[gameNum][1]))
 esmPath = gamePath + "/" + gameInfo[gameNum][2]
 esmPath = esmPath.replace(",", "," + gamePath + "/")
-esmPath = str(addVariable("esmfile", esmPath))
+esmPath = str(addVariable("esmfile", esmPath, "path to ESM file(s)"))
 btdPath = gameInfo[gameNum][3]
 if btdPath:
     btdPath = gamePath + "/" + btdPath
-btdPath = str(addVariable("btdfile", btdPath))
+btdPath = str(addVariable("btdfile", btdPath, "Fallout 76 BTD terrain file"))
 worldFormID = int(addVariable("worldid", gameInfo[gameNum][4]), 0)
-defTxtID = int(addVariable("deftxt", gameInfo[gameNum][5]), 0)
-cellMinX = int(addVariable("xmin", gameInfo[gameNum][6]))
-cellMinY = int(addVariable("ymin", gameInfo[gameNum][7]))
-cellMaxX = int(addVariable("xmax", gameInfo[gameNum][8]))
-cellMaxY = int(addVariable("ymax", gameInfo[gameNum][9]))
-isometricMode = str(addVariable("iso", "0")).lower()
+defTxtID = int(addVariable("deftxt", gameInfo[gameNum][5],
+                           "form ID of default texture"), 0)
+cellRangeString = "%d,%d,%d,%d" % (gameInfo[gameNum][6], gameInfo[gameNum][7],
+                                   gameInfo[gameNum][8], gameInfo[gameNum][9])
+cellRangeStrings = str(addVariable("cells", cellRangeString,
+                                   "limit range of cells, "
+                                   + "SW and NE corner")).split(',')
+cellMinX = int(cellRangeStrings[0])
+cellMinY = int(cellRangeStrings[1])
+cellMaxX = int(cellRangeStrings[2])
+cellMaxY = int(cellRangeStrings[3])
+isometricMode = str(addVariable("iso", "0",
+                                "0/2D: 2D view, "
+                                + "1/SE, SW, NW, NE: isometric")).lower()
 if isometricMode in ["0", "1", "2d"]:
     isometricMode = ["-2d", "-iso"][int(isometricMode == "1")]
 elif isometricMode in ["se", "sw", "nw", "ne"]:
@@ -100,17 +111,29 @@ if not lightDirection in ["nw", "w", "sw", "s", "se", "e", "ne", "n"]:
     print("Invalid light direction: " + lightDirection)
     raise SystemExit(1)
 lightDirection = "-light_" + lightDirection
-waterColor = int(addVariable("watercolor", gameInfo[gameNum][11]), 0)
-mapIconsType = str(addVariable("mapicons", gameInfo[gameNum][12]))
+waterColor = int(addVariable("watercolor", gameInfo[gameNum][11],
+                             "water color, RGBA with 7-bit alpha, "
+                             + "0 to disable"), 0)
+mapIconsType = str(addVariable("mapicons", gameInfo[gameNum][12],
+                               "map icon type: tes5/fo4/fo76, "
+                               + "or empty to disable"))
 mapIconAlpha = int(addVariable("iconalpha", 75))
 if isometricMode != "-2d" or not mapIconAlpha:
     mapIconsType = ""
-mipLevel = int(addVariable("miplevel", 2))
-textureMip = float(addVariable("texturemip", 4.0))
-enableGCVR = int(addVariable("gcvr", 1))
-enableVCLR = int(addVariable("vclr", 1))
-# percentage if <= 200, pixels if > 200
-jpegResize = int(addVariable("jpegresize", 100))
+additionalMarkerFiles = []
+for i in str(addVariable("markers", "",
+                         "comma separated list of "
+                         + "custom marker definition files")).split(','):
+    if i:
+        additionalMarkerFiles += [i]
+mipLevel = int(addVariable("miplevel", 2, "cell size is 128 >> mipLevel"))
+textureMip = float(addVariable("texturemip", 4.0,
+                               "texture mip level, -1: disable textures"))
+enableGCVR = int(addVariable("gcvr", 1, "enable ground cover"))
+enableVCLR = int(addVariable("vclr", 1, "enable vertex color"))
+jpegResize = int(addVariable("jpegresize", 100,
+                             "resize JPEG file by percentage, "
+                             + "or to pixels if > 200"))
 jpegQuality = int(addVariable("jpegquality", 90))
 
 if listVariables:
@@ -156,12 +179,13 @@ def btddumpCommand(target, source, outFmt):
 
 def fo4landCommand(target, source, outFmt):
     return commandString(["./fo4land", source, target, outFmt,
-                          cellMinX, cellMinY, cellMaxX, cellMaxY, worldFormID,
-                          defTxtID])
+                          cellMinX, cellMinY, cellMaxX, cellMaxY,
+                          "0x%08X" % (worldFormID), "0x%08X" % (defTxtID)])
 
 def landtxtCommand(target, source):
     cmdOpts = ["./landtxt", source, target, "-d", gamePath]
-    cmdOpts += ["-w", worldFormID, "-deftxt", defTxtID]
+    cmdOpts += ["-w", "0x%08X" % (worldFormID)]
+    cmdOpts += ["-deftxt", "0x%08X" % (defTxtID)]
     cmdOpts += ["-r", cellMinX, cellMinY, cellMaxX, cellMaxY]
     if btdPath:
         cmdOpts += ["-btd", btdPath, "-l", mipLevel, "-mult", 1.2]
@@ -178,7 +202,7 @@ def landtxtCommand(target, source):
 
 def markersCommand(target, esmName, ltx2Name, iconDefsName):
     return commandString(["./markers", esmName, target, ltx2Name, iconDefsName,
-                          worldFormID])
+                          "0x%08X" % (worldFormID)])
 
 def terrainCommand(target, hmapName, wmapName, ltx2Name):
     cmdOpts = ["./terrain", hmapName, target]
@@ -194,8 +218,11 @@ def terrainCommand(target, hmapName, wmapName, ltx2Name):
         cmdOpts += ["-yoffs", [-xyOffs, xyOffs][int("n" in isometricMode)]]
     if mipLevel < 2 and not btdPath:
         cmdOpts += ["-lod", mipLevel - 2]
-    cmdOpts += ["-ltex", ltx2Name, "-wmap", wmapName]
-    cmdOpts += ["-watercolor", waterColor]
+    if textureMip > -1.0:
+        cmdOpts += ["-ltex", ltx2Name]
+    if (waterColor & 0x7F000000) != 0:
+        cmdOpts += ["-wmap", wmapName]
+    cmdOpts += ["-watercolor", "0x%08X" % (waterColor)]
     cmdOpts += [lightDirection, lightLevel, 100, 35]
     return commandString(cmdOpts)
 
@@ -234,7 +261,7 @@ else:
                            landtxtCommand(ltx2FileName, esmPath))
 
 findwaterOptions = ["./findwater", esmPath, wmapFileName, hmapFileName]
-findwaterOptions += [worldFormID]
+findwaterOptions += ["0x%08X" % (worldFormID)]
 if gameName[:4] == "tes5" or gameName[:3] == "fo4" or gameName[:4] == "fo76":
     findwaterOptions += [gamePath]
 wmapFile = env.Command(wmapFileName, esmPath.split(',') + [hmapFile],
@@ -242,6 +269,11 @@ wmapFile = env.Command(wmapFileName, esmPath.split(',') + [hmapFile],
 
 if mapIconsType:
     markerList = getMapMarkerDefs(mapIconsType, 0.5 + mipLevel, 7)
+    for i in additionalMarkerFiles:
+        f = open(str(i))
+        markerList += f.read()
+        f.close()
+        markerList += "\n"
     tmpMarkerFileNames = markerList.split('\n')
     markerFileNames = []
     for i in tmpMarkerFileNames:
@@ -260,10 +292,17 @@ def extractIconFiles(target, source, env):
     return None
 
 if mapIconsType:
-    iconDefsFile = env.Command(mapIconsType + "icondefs.txt", ltx2File,
+    markerDeps = ["scripts/mapicons.py"]
+    iconDefsFile = env.Command(mapIconsType + "icondefs.txt",
+                               markerDeps + additionalMarkerFiles,
                                createIconDefsFile)
-    markerFiles = env.Command(markerFileNames, "scripts/mapicons.py",
-                              extractIconFiles)
+    if mapIconsType == "tes5":
+        markerDeps += [gamePath + "/Skyrim - Interface.bsa"]
+    elif mapIconsType == "fo4":
+        markerDeps += [gamePath + "/Fallout4 - Interface.ba2"]
+    elif mapIconsType == "fo76":
+        markerDeps += [gamePath + "/SeventySix - Interface.ba2"]
+    markerFiles = env.Command(markerFileNames, markerDeps, extractIconFiles)
     mmapFile = env.Command(mmapFileName,
                            esmPath.split(',')
                            + [ltx2File, iconDefsFile] + markerFiles,
