@@ -170,7 +170,8 @@ void renderLine2D(unsigned long long *lineBufRGB, int x0, int y0)
       ((unsigned long long) (waterColor & 0x00FF0000) << 24)
       | ((unsigned long long) (waterColor & 0x0000FF00) << 12)
       | (unsigned long long) (waterColor & 0x000000FF);
-  waterRGB = waterRGB * waterAlpha + 0x0000800008000080ULL;
+  waterRGB = waterRGB * ((waterAlpha * zDiffColorMult[65536] + 128U) >> 8)
+             + 0x0000800008000080ULL;
   waterAlpha = 256 - waterAlpha;
   int     d = (renderScale >= 7 ? 128 : (1 << renderScale));
   for (int offs = 0; offs < int(renderHeight << 6);
@@ -201,10 +202,10 @@ void renderLine2D(unsigned long long *lineBufRGB, int x0, int y0)
         zDiff = int(getVertexHeight(x0 + lightOffsX, y0 + lightOffsY, wmapBuf));
         if (zDiff != int(w) && zDiff > int(waterLevel))
         {
-          zDiff = int(w) + 65536 - zDiff;
-          zDiff = (zDiff >= 0 ? (zDiff <= 131071 ? zDiff : 131071) : 0);
+          zDiff = int(w) - zDiff;
+          zDiff = (zDiff >= -65536 ? (zDiff <= 65535 ? zDiff : 65535) : -65536);
           c2 = (c2 >> 8) & 0x0003FF003FF003FFULL;
-          c2 = c2 * (unsigned int) zDiffColorMult[zDiff];
+          c2 = c2 * (unsigned int) zDiffColorMult[zDiff + 196608];
           c2 = c2 + 0x0000800008000080ULL;
         }
       }
@@ -222,7 +223,8 @@ void renderLineIsometric(unsigned long long *lineBufRGB, int x0, int y0)
       ((unsigned long long) (waterColor & 0x00FF0000) << 24)
       | ((unsigned long long) (waterColor & 0x0000FF00) << 12)
       | (unsigned long long) (waterColor & 0x000000FF);
-  waterRGB = waterRGB * waterAlpha + 0x0000800008000080ULL;
+  waterRGB = waterRGB * ((waterAlpha * zDiffColorMult[65536] + 128U) >> 8)
+             + 0x0000800008000080ULL;
   waterAlpha = 256 - waterAlpha;
   int     d = 4730;
   if (renderScale < 7)
@@ -281,10 +283,10 @@ void renderLineIsometric(unsigned long long *lineBufRGB, int x0, int y0)
         zDiff = int(getVertexHeight(x + lightOffsX, y + lightOffsY, wmapBuf));
         if (zDiff != int(w) && zDiff > int(waterLevel))
         {
-          zDiff = int(w) + 65536 - zDiff;
-          zDiff = (zDiff >= 0 ? (zDiff <= 131071 ? zDiff : 131071) : 0);
+          zDiff = int(w) - zDiff;
+          zDiff = (zDiff >= -65536 ? (zDiff <= 65535 ? zDiff : 65535) : -65536);
           c2 = (c2 >> 8) & 0x0003FF003FF003FFULL;
-          c2 = c2 * (unsigned int) zDiffColorMult[zDiff];
+          c2 = c2 * (unsigned int) zDiffColorMult[zDiff + 196608];
           c2 = c2 + 0x0000800008000080ULL;
         }
       }
@@ -599,7 +601,7 @@ int main(int argc, char **argv)
       throw errorMessage("invalid output image dimensions");
     }
 
-    zDiffColorMult.resize(131072);
+    zDiffColorMult.resize(262144);
     for (int i = 0; i < 131072; i++)
     {
       double  x = double(i - 65536) * double(lightMultZ * int(heightScale));
@@ -611,9 +613,11 @@ int main(int argc, char **argv)
         x = (x * 2.0 - 1.0) / (x - 1.0);
       else
         x = 1.0 / (x + 1.0);
-      x = std::pow(x, double(lightPow) / 100.0) * (double(lightMultL) / 100.0);
-      int     tmp = int(x * 256.0 + 0.5);
+      x = std::pow(x, double(lightPow) / 100.0);
+      int     tmp = int(x * 256.0 * (double(lightMultL) / 100.0) + 0.5);
       zDiffColorMult[i] = (unsigned short) (tmp < 1023 ? tmp : 1023);
+      tmp = int(x * 256.0 + 0.5);
+      zDiffColorMult[i + 131072] = (unsigned short) (tmp < 1023 ? tmp : 1023);
     }
     outBuf.resize(size_t(imageWidth) * imageHeight * 3);
 
