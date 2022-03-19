@@ -129,6 +129,11 @@ for i in str(addVariable("markers", "",
 mipLevel = int(addVariable("miplevel", 2, "cell size is 128 >> mipLevel"))
 textureMip = float(addVariable("texturemip", 4.0,
                                "texture mip level, -1: disable textures"))
+mapIconMip = 0.5 + mipLevel
+if mapIconsType == "fo4":
+    mapIconMip += 0.25
+elif mapIconsType == "fo76":
+    mapIconMip -= 0.25
 enableGCVR = int(addVariable("gcvr", 1, "enable ground cover"))
 enableVCLR = int(addVariable("vclr", 1, "enable vertex color"))
 jpegResize = int(addVariable("jpegresize", 100,
@@ -268,15 +273,14 @@ wmapFile = env.Command(wmapFileName, esmPath.split(',') + [hmapFile],
                        commandString(findwaterOptions))
 
 if mapIconsType:
-    markerList = getMapMarkerDefs(mapIconsType, 0.5 + mipLevel, 7)
+    markerList = getMapMarkerDefs(mapIconsType, mapIconMip, 7)
     for i in additionalMarkerFiles:
         f = open(str(i))
         markerList += f.read()
         f.close()
         markerList += "\n"
-    tmpMarkerFileNames = markerList.split('\n')
     markerFileNames = []
-    for i in tmpMarkerFileNames:
+    for i in markerList.split('\n'):
         if ".dds\t" in i:
             markerFileNames += [i.split('\t')[2]]
 
