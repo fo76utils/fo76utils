@@ -279,6 +279,11 @@ def extractMapIcons(gameName, gamePath, baunpackFunc, swfToolFunc, magickFunc):
                 os.remove(j)
             except:
                 pass
+    for i in swfNames:
+        try:
+            os.remove(i)
+        except:
+            pass
 
 def getMapMarkerDefs(gameName, markerMip, markerPriority):
     swfNames, iconList = getMapIconList(gameName)
