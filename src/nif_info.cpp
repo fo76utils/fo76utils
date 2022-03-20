@@ -2,6 +2,8 @@
 #include "common.hpp"
 #include "nif_file.hpp"
 #include "ba2file.hpp"
+#include "ddstxt.hpp"
+#include "plot3d.hpp"
 
 static void printAuthorName(std::FILE *f,
                             const std::vector< unsigned char >& fileBuf,
@@ -243,6 +245,126 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
   }
 }
 
+static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
+                             const BA2File& ba2File,
+                             int imageWidth, int imageHeight)
+{
+  std::map< std::string, DDSTexture * > textures;
+  try
+  {
+    size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
+    std::vector< unsigned int > outBufRGBW(imageDataSize, 0U);
+    std::vector< float >  outBufZ(imageDataSize, 16777216.0f);
+    std::vector< unsigned char >  fileBuf;
+    std::vector< NIFFile::NIFTriShape > meshData;
+    nifFile.getMesh(meshData);
+    NIFFile::NIFVertexTransform viewTransform;
+    // isometric view
+    viewTransform.rotateXX =   float(std::sqrt(1.0 / 2.0));
+    viewTransform.rotateXY =   float(std::sqrt(1.0 / 2.0));
+    viewTransform.rotateXZ =   0.0f;
+    viewTransform.rotateYX =   float(std::sqrt(1.0 / 6.0));
+    viewTransform.rotateYY = -(float(std::sqrt(1.0 / 6.0)));
+    viewTransform.rotateYZ = -(float(std::sqrt(2.0 / 3.0)));
+    viewTransform.rotateZX = -(float(std::sqrt(1.0 / 3.0)));
+    viewTransform.rotateZY =   float(std::sqrt(1.0 / 3.0));
+    viewTransform.rotateZZ = -(float(std::sqrt(1.0 / 3.0)));
+    {
+      float   xMin = 1.0e9f;
+      float   yMin = 1.0e9f;
+      float   zMin = 1.0e9f;
+      float   xMax = -1.0e9f;
+      float   yMax = -1.0e9f;
+      float   zMax = -1.0e9f;
+      for (size_t i = 0; i < meshData.size(); i++)
+      {
+        NIFFile::NIFVertexTransform vt = meshData[i].vertexTransform;
+        vt *= viewTransform;
+        for (size_t j = 0; j < meshData[i].vertexCnt; j++)
+        {
+          NIFFile::NIFVertex  v = meshData[i].vertexData[j];
+          vt.transformXYZ(v.x, v.y, v.z);
+          xMin = (v.x < xMin ? v.x : xMin);
+          yMin = (v.y < yMin ? v.y : yMin);
+          zMin = (v.z < zMin ? v.z : zMin);
+          xMax = (v.x > xMax ? v.x : xMax);
+          yMax = (v.y > yMax ? v.y : yMax);
+          zMax = (v.z > zMax ? v.z : zMax);
+        }
+      }
+      if (xMax > xMin && yMax > yMin && zMax > zMin)
+      {
+        float   xScale = float(imageWidth) * 0.875f / (xMax - xMin);
+        float   yScale = float(imageHeight) * 0.875f / (yMax - yMin);
+        viewTransform.scale = (xScale < yScale ? xScale : yScale);
+        viewTransform.offsX =
+            (float(imageWidth) - ((xMin + xMax) * viewTransform.scale)) * 0.5f;
+        viewTransform.offsY =
+            (float(imageHeight) - ((yMin + yMax) * viewTransform.scale)) * 0.5f;
+        viewTransform.offsZ = 1.0f - (zMin * viewTransform.scale);
+      }
+    }
+    for (size_t i = 0; i < meshData.size(); i++)
+    {
+      const DDSTexture  *textureD = (DDSTexture *) 0;
+      const DDSTexture  *textureN = (DDSTexture *) 0;
+      for (size_t j = 0; j < meshData[i].texturePathCnt && j < 2; j++)
+      {
+        if (meshData[i].texturePaths[j].empty())
+          continue;
+        if (textures.find(meshData[i].texturePaths[j]) != textures.end())
+          continue;
+        ba2File.extractFile(fileBuf, meshData[i].texturePaths[j]);
+        DDSTexture  *texture =
+            new DDSTexture(&(fileBuf.front()), fileBuf.size());
+        textures.insert(std::pair< std::string, DDSTexture * >(
+                            meshData[i].texturePaths[j], texture));
+        if (j == 0)
+          textureD = texture;
+        else
+          textureN = texture;
+      }
+      Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
+                             imageWidth, imageHeight,
+                             meshData[i], viewTransform);
+      plot3d.drawTriShape(-0.57735f, 0.57735f, 0.57735f, textureD, textureN);
+    }
+    DDSOutputFile outFile(outFileName, imageWidth, imageHeight,
+                          DDSInputFile::pixelFormatRGB24);
+    for (size_t i = 0; i < imageDataSize; i++)
+    {
+      unsigned int  c = outBufRGBW[i];
+      unsigned int  a = c >> 24;
+      if (a >= 1 && a <= 254)
+      {
+        unsigned int  waterColor = 0x00804000U;
+        unsigned int  lightLevel = (a - 1) << 2;
+        unsigned int  r = ((waterColor & 0xFF) * lightLevel + 0x80) >> 8;
+        unsigned int  g = (((waterColor >> 8) & 0xFF) * lightLevel + 0x80) >> 8;
+        unsigned int  b = ((waterColor >> 16) * lightLevel + 0x80) >> 8;
+        c = blendRGBA32(c, 0xC0000000U | (b << 16) | (g << 8) | r, 0xC0);
+      }
+      outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
+      outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
+      outFile.writeByte((unsigned char) (c & 0xFF));
+    }
+    for (std::map< std::string, DDSTexture * >::iterator i = textures.begin();
+         i != textures.end(); i++)
+    {
+      delete i->second;
+    }
+  }
+  catch (...)
+  {
+    for (std::map< std::string, DDSTexture * >::iterator i = textures.begin();
+         i != textures.end(); i++)
+    {
+      delete i->second;
+    }
+    throw;
+  }
+}
+
 int main(int argc, char **argv)
 {
   // 0: default (block list)
@@ -250,10 +372,14 @@ int main(int argc, char **argv)
   // 2: verbose (block list and model data)
   // 3: .obj format
   // 4: .mtl format
+  // 5: render to DDS file
   int     outFmt = 0;
   if (argc >= 2)
   {
-    static const char *formatOptions[4] = { "-q", "-v", "-obj", "-mtl" };
+    static const char *formatOptions[5] =
+    {
+      "-q", "-v", "-obj", "-mtl", "-render"
+    };
     for (size_t i = 0; i < (sizeof(formatOptions) / sizeof(char *)); i++)
     {
       if (std::strcmp(argv[1], formatOptions[i]) == 0)
@@ -265,9 +391,9 @@ int main(int argc, char **argv)
       }
     }
   }
-  if (argc < 3)
+  if (argc < (outFmt != 5 ? 3 : 4))
   {
-    std::fprintf(stderr, "Usage: nif_info [-q|-v|-obj|-mtl] "
+    std::fprintf(stderr, "Usage: nif_info [-q|-v|-obj|-mtl|-render DDSFILE] "
                          "ARCHIVEPATH PATTERN...\n");
     std::fprintf(stderr, "    -q      Print author name, file name, "
                          "and file size only\n");
@@ -275,6 +401,8 @@ int main(int argc, char **argv)
                          "and vertex and triangle data\n");
     std::fprintf(stderr, "    -obj    Print model data in .obj format\n");
     std::fprintf(stderr, "    -mtl    Print material data in .mtl format\n");
+    std::fprintf(stderr, "    -render Render model to DDS file "
+                         "(experimental)\n");
     return 1;
   }
   std::FILE *outFile = stdout;
@@ -283,6 +411,12 @@ int main(int argc, char **argv)
     std::vector< std::string >  fileNames;
     for (int i = 2; i < argc; i++)
       fileNames.push_back(argv[i]);
+    if (outFmt == 5)
+    {
+      fileNames.push_back(".dds");
+      argc--;
+      argv++;
+    }
     BA2File ba2File(argv[1], &fileNames);
     ba2File.getFileList(fileNames);
     for (size_t i = 0; i < fileNames.size(); i++)
@@ -323,6 +457,12 @@ int main(int argc, char **argv)
       }
       if (outFmt == 4)
         printMTLData(outFile, nifFile);
+      if (outFmt == 5)
+      {
+        std::fprintf(stderr, "%s\n", fileNames[i].c_str());
+        renderMeshToFile(argv[0], nifFile, ba2File, 1200, 800);
+        break;
+      }
     }
   }
   catch (std::exception& e)
