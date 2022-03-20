@@ -2,37 +2,9 @@
 #ifndef PLOT3D_HPP_INCLUDED
 #define PLOT3D_HPP_INCLUDED
 
-struct ColorZRGB
-{
-  float   z;
-  float   r;
-  float   g;
-  float   b;
-  inline ColorZRGB& operator+=(const ColorZRGB& d)
-  {
-    z += d.z;
-    r += d.r;
-    g += d.g;
-    b += d.b;
-    return (*this);
-  }
-  inline ColorZRGB& operator-=(const ColorZRGB& d)
-  {
-    z -= d.z;
-    r -= d.r;
-    g -= d.g;
-    b -= d.b;
-    return (*this);
-  }
-  inline ColorZRGB& operator*=(float d)
-  {
-    z *= d;
-    r *= d;
-    g *= d;
-    b *= d;
-    return (*this);
-  }
-};
+#include "common.hpp"
+#include "ddstxt.hpp"
+#include "nif_file.hpp"
 
 template< typename T, typename ColorType > class Plot3D : public T
 {
@@ -252,6 +224,127 @@ template< typename T, typename ColorType > class Plot3D : public T
     }
     while (++y0 <= y1);
   }
+};
+
+struct ColorZUVL
+{
+  float   z;
+  float   u;
+  float   v;
+  float   l;
+  inline ColorZUVL& operator+=(const ColorZUVL& d)
+  {
+    z += d.z;
+    u += d.u;
+    v += d.v;
+    l += d.l;
+    return (*this);
+  }
+  inline ColorZUVL& operator-=(const ColorZUVL& d)
+  {
+    z -= d.z;
+    u -= d.u;
+    v -= d.v;
+    l -= d.l;
+    return (*this);
+  }
+  inline ColorZUVL& operator*=(float d)
+  {
+    z *= d;
+    u *= d;
+    v *= d;
+    l *= d;
+    return (*this);
+  }
+};
+
+class Plot3D_TriShape : public NIFFile::NIFTriShape
+{
+ private:
+  class Plot3DTS_Base
+  {
+   public:
+    unsigned int  *outBufRGBW;
+    float   *outBufZ;
+    int     width;
+    int     height;
+    float   mipLevel;
+    float   normalX;
+    float   normalY;
+    float   normalZ;
+    const DDSTexture  *textureD;
+    const DDSTexture  *textureN;
+    static inline unsigned int multiplyWithLight(unsigned int c,
+                                                 float lightLevel);
+  };
+  class Plot3DTS_Water : public Plot3DTS_Base
+  {
+   public:
+    // fill with water
+    inline void drawPixel(int x, int y, const ColorZUVL& z);
+  };
+  class Plot3DTS_TextureN : public Plot3DTS_Base
+  {
+   public:
+    // fill with solid color (1x1 texture)
+    inline void drawPixel(int x, int y, const ColorZUVL& z);
+  };
+  class Plot3DTS_TextureB : public Plot3DTS_Base
+  {
+   public:
+    // diffuse texture with bilinear filtering
+    inline void drawPixel(int x, int y, const ColorZUVL& z);
+  };
+  class Plot3DTS_TextureT : public Plot3DTS_Base
+  {
+   public:
+    // diffuse texture with trilinear filtering
+    inline void drawPixel(int x, int y, const ColorZUVL& z);
+  };
+  class Plot3DTS_NormalsT : public Plot3DTS_Base
+  {
+   public:
+    // diffuse + normal map with trilinear filtering
+    inline void drawPixel(int x, int y, const ColorZUVL& z);
+  };
+ protected:
+  unsigned int  *bufRGBW;
+  float   *bufZ;
+  int     width;
+  int     height;
+  int     xMin;
+  int     yMin;
+  int     zMin;
+  int     xMax;
+  int     yMax;
+  int     zMax;
+  std::vector< NIFFile::NIFVertex >   vertexBuf;
+  std::vector< NIFFile::NIFTriangle > triangleBuf;
+ public:
+  // the alpha channel is 255 for solid geometry, 0 for air, and 1 to 254
+  // for water with light level converted to RGB multiplier of (alpha - 1) / 64
+  Plot3D_TriShape(unsigned int *outBufRGBW, float *outBufZ,
+                  int imageWidth, int imageHeight,
+                  const NIFFile::NIFTriShape& t,
+                  const NIFFile::NIFVertexTransform& viewTransform);
+  virtual ~Plot3D_TriShape();
+  inline void getBounds(int& x0, int& y0, int& z0,
+                        int& x1, int& y1, int& z1) const
+  {
+    x0 = xMin;
+    y0 = yMin;
+    z0 = zMin;
+    x1 = xMax;
+    y1 = yMax;
+    z1 = zMax;
+  }
+  // calculate RGB multiplier from normals and light direction
+  virtual float
+      calculateLighting(float normalX, float normalY, float normalZ,
+                        float lightX, float lightY, float lightZ) const;
+  void drawTriShape(float lightX, float lightY, float lightZ,
+                    const DDSTexture *textureD,
+                    const DDSTexture *textureN = (DDSTexture *) 0);
 };
 
 #endif
