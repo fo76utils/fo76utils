@@ -20,9 +20,8 @@ static inline unsigned long long decodeBC3Alpha(unsigned int *a,
     a[6] = 0;
     a[7] = 255;
   }
-  unsigned long long  ba = 0;
-  for (unsigned int i = 0; i < 6; i++)
-    ba = ba | ((unsigned long long) src[i + 2] << (i << 3));
+  unsigned long long  ba = FileBuffer::readUInt16Fast(src + 2);
+  ba = ba | ((unsigned long long) FileBuffer::readUInt32Fast(src + 4) << 16);
   return ba;
 }
 
@@ -30,8 +29,8 @@ static inline unsigned int decodeBC1Colors(unsigned int *c,
                                            const unsigned char *src,
                                            unsigned int a = 0U)
 {
-  unsigned int  c0 = ((unsigned int) src[1] << 8) | src[0];
-  unsigned int  c1 = ((unsigned int) src[3] << 8) | src[2];
+  unsigned int  c0 = FileBuffer::readUInt16Fast(src);
+  unsigned int  c1 = FileBuffer::readUInt16Fast(src + 2);
   unsigned int  r0 = (((c0 >> 11) & 0x1F) * 255 + 15) / 31;
   unsigned int  g0 = (((c0 >> 5) & 0x3F) * 255 + 31) / 63;
   unsigned int  b0 = ((c0 & 0x1F) * 255 + 15) / 31;
@@ -40,13 +39,20 @@ static inline unsigned int decodeBC1Colors(unsigned int *c,
   unsigned int  b1 = ((c1 & 0x1F) * 255 + 15) / 31;
   c[0] = r0 | (g0 << 8) | (b0 << 16) | a;
   c[1] = r1 | (g1 << 8) | (b1 << 16) | a;
-  c[2] = ((r0 + r0 + r1 + 1) / 3) | (((g0 + g0 + g1 + 1) / 3) << 8)
-         | (((b0 + b0 + b1 + 1) / 3) << 16) | a;
-  c[3] = ((r0 + r1 + r1 + 1) / 3) | (((g0 + g1 + g1 + 1) / 3) << 8)
-         | (((b0 + b1 + b1 + 1) / 3) << 16) | a;
-  unsigned int  bc = 0;
-  for (unsigned int i = 0; i < 4; i++)
-    bc = bc | ((unsigned long long) src[i + 4] << (i << 3));
+  if (BRANCH_EXPECT(c0 > c1, true))
+  {
+    c[2] = ((r0 + r0 + r1 + 1) / 3) | (((g0 + g0 + g1 + 1) / 3) << 8)
+           | (((b0 + b0 + b1 + 1) / 3) << 16) | a;
+    c[3] = ((r0 + r1 + r1 + 1) / 3) | (((g0 + g1 + g1 + 1) / 3) << 8)
+           | (((b0 + b1 + b1 + 1) / 3) << 16) | a;
+  }
+  else
+  {
+    c[3] = ((r0 + r1 + 1) / 2) | (((g0 + g1 + 1) / 2) << 8)
+           | (((b0 + b1 + 1) / 2) << 16);
+    c[2] = c[3] | a;
+  }
+  unsigned int  bc = FileBuffer::readUInt32Fast(src + 4);
   return bc;
 }
 
