@@ -166,6 +166,104 @@ size_t DDSTexture::decodeBlock_BC5S(unsigned int *dst, const unsigned char *src,
   return 16;
 }
 
+static inline unsigned int bgraToRGBA(unsigned int c)
+{
+  return ((c & 0xFF00FF00U)
+          | ((c << 16) & 0x00FF0000U) | ((c >> 16) & 0x000000FFU));
+}
+
+size_t DDSTexture::decodeBlock_RGB(unsigned int *dst, const unsigned char *src,
+                                   unsigned int w)
+{
+  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w * 3U))
+  {
+    unsigned int  c0 = FileBuffer::readUInt32Fast(src);
+    unsigned int  c1 = FileBuffer::readUInt32Fast(src + 4);
+    unsigned int  c2 = FileBuffer::readUInt32Fast(src + 8);
+    unsigned int  c3 = ((c2 >> 8) & 0x00FFFFFFU) | 0xFF000000U;
+    c2 = ((c2 << 16) & 0x00FF0000U) | ((c1 >> 16) & 0x0000FFFFU) | 0xFF000000U;
+    c1 = ((c1 << 8) & 0x00FFFF00U) | ((c0 >> 24) & 0x000000FFU) | 0xFF000000U;
+    c0 = (c0 & 0x00FFFFFFU) | 0xFF000000U;
+    dst[0] = c0;
+    dst[1] = c1;
+    dst[2] = c2;
+    dst[3] = c3;
+  }
+  return 12;
+}
+
+size_t DDSTexture::decodeBlock_BGR(unsigned int *dst, const unsigned char *src,
+                                   unsigned int w)
+{
+  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w * 3U))
+  {
+    unsigned int  c0 = FileBuffer::readUInt32Fast(src);
+    unsigned int  c1 = FileBuffer::readUInt32Fast(src + 4);
+    unsigned int  c2 = FileBuffer::readUInt32Fast(src + 8);
+    unsigned int  c3 = ((c2 >> 8) & 0x00FFFFFFU) | 0xFF000000U;
+    c2 = ((c2 << 16) & 0x00FF0000U) | ((c1 >> 16) & 0x0000FFFFU) | 0xFF000000U;
+    c1 = ((c1 << 8) & 0x00FFFF00U) | ((c0 >> 24) & 0x000000FFU) | 0xFF000000U;
+    c0 = (c0 & 0x00FFFFFFU) | 0xFF000000U;
+    dst[0] = bgraToRGBA(c0);
+    dst[1] = bgraToRGBA(c1);
+    dst[2] = bgraToRGBA(c2);
+    dst[3] = bgraToRGBA(c3);
+  }
+  return 12;
+}
+
+size_t DDSTexture::decodeBlock_RGB32(unsigned int *dst,
+                                     const unsigned char *src, unsigned int w)
+{
+  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w << 2))
+  {
+    dst[0] = FileBuffer::readUInt32Fast(src) | 0xFF000000U;
+    dst[1] = FileBuffer::readUInt32Fast(src + 4) | 0xFF000000U;
+    dst[2] = FileBuffer::readUInt32Fast(src + 8) | 0xFF000000U;
+    dst[3] = FileBuffer::readUInt32Fast(src + 12) | 0xFF000000U;
+  }
+  return 16;
+}
+
+size_t DDSTexture::decodeBlock_BGR32(unsigned int *dst,
+                                     const unsigned char *src, unsigned int w)
+{
+  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w << 2))
+  {
+    dst[0] = bgraToRGBA(FileBuffer::readUInt32Fast(src) | 0xFF000000U);
+    dst[1] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 4) | 0xFF000000U);
+    dst[2] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 8) | 0xFF000000U);
+    dst[3] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 12) | 0xFF000000U);
+  }
+  return 16;
+}
+
+size_t DDSTexture::decodeBlock_RGBA(unsigned int *dst, const unsigned char *src,
+                                    unsigned int w)
+{
+  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w << 2))
+  {
+    dst[0] = FileBuffer::readUInt32Fast(src);
+    dst[1] = FileBuffer::readUInt32Fast(src + 4);
+    dst[2] = FileBuffer::readUInt32Fast(src + 8);
+    dst[3] = FileBuffer::readUInt32Fast(src + 12);
+  }
+  return 16;
+}
+
+size_t DDSTexture::decodeBlock_BGRA(unsigned int *dst, const unsigned char *src,
+                                    unsigned int w)
+{
+  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w << 2))
+  {
+    dst[0] = bgraToRGBA(FileBuffer::readUInt32Fast(src));
+    dst[1] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 4));
+    dst[2] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 8));
+    dst[3] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 12));
+  }
+  return 16;
+}
+
 void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
 {
   buf.setPosition(0);
@@ -197,74 +295,107 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   buf.setPosition(0x4C);                // ddspf
   if (buf.readUInt32() != 0x20)         // size of DDS_PIXELFORMAT
     throw errorMessage("unsupported texture file format");
-  if (!(buf.readUInt32() & 0x04))       // DDPF_FOURCC is required
-    throw errorMessage("unsupported texture file format");
-  unsigned int  fourCC = buf.readUInt32();
   unsigned int  dataOffs = 128;
   size_t  blockSize = 8;
   size_t  (*decodeFunction)(unsigned int *, const unsigned char *,
                             unsigned int) = &decodeBlock_BC1;
-  if (FileBuffer::checkType(fourCC, "DX10"))
+  unsigned int  formatFlags = buf.readUInt32();
+  unsigned int  fourCC = buf.readUInt32();
+  if (!(formatFlags & 0x04))            // DDPF_FOURCC
   {
-    dataOffs = 148;
-    buf.setPosition(0x80);
-    unsigned int  tmp = buf.readUInt32();
-    switch (tmp)
+    if (!(formatFlags & 0x40))          // DDPF_RGB
+      throw errorMessage("unsupported texture file format");
+    blockSize = buf.readUInt32();
+    if (blockSize != 24 && blockSize != 32)
+      throw errorMessage("unsupported texture file format");
+    blockSize = blockSize << 1;
+    unsigned long long  rgMask = buf.readUInt64();
+    unsigned long long  baMask = buf.readUInt64();
+    if (blockSize < 64 || !(formatFlags & 0x03))
+      baMask = baMask & ~0xFF00000000000000ULL;
+    else
+      haveAlpha = true;
+    if (rgMask == 0x0000FF00000000FFULL && baMask == 0x0000000000FF0000ULL)
+      decodeFunction = (blockSize < 64 ? &decodeBlock_RGB : &decodeBlock_RGB32);
+    else if (rgMask == 0x0000FF0000FF0000ULL && baMask == 0x00000000000000FFULL)
+      decodeFunction = (blockSize < 64 ? &decodeBlock_BGR : &decodeBlock_BGR32);
+    else if (rgMask == 0x0000FF00000000FFULL && baMask == 0xFF00000000FF0000ULL)
+      decodeFunction = &decodeBlock_RGBA;
+    else if (rgMask == 0x0000FF0000FF0000ULL && baMask == 0xFF000000000000FFULL)
+      decodeFunction = &decodeBlock_BGRA;
+    else
+      throw errorMessage("unsupported texture file format");
+    while ((xSizeMip0 >> (unsigned int) (mipLevelCnt - 1)) < 4U ||
+           (ySizeMip0 >> (unsigned int) (mipLevelCnt - 1)) < 4U)
     {
-      case 0x47:                        // DXGI_FORMAT_BC1_UNORM
-      case 0x48:                        // DXGI_FORMAT_BC1_UNORM_SRGB
-        break;
-      case 0x4A:                        // DXGI_FORMAT_BC2_UNORM
-      case 0x4B:                        // DXGI_FORMAT_BC2_UNORM_SRGB
-        haveAlpha = true;
-        blockSize = 16;
-        decodeFunction = &decodeBlock_BC2;
-        break;
-      case 0x4D:                        // DXGI_FORMAT_BC3_UNORM
-      case 0x4E:                        // DXGI_FORMAT_BC3_UNORM_SRGB
-        haveAlpha = true;
-        blockSize = 16;
-        decodeFunction = &decodeBlock_BC3;
-        break;
-      case 0x50:                        // DXGI_FORMAT_BC4_UNORM
-        decodeFunction = &decodeBlock_BC4;
-        break;
-      case 0x51:                        // DXGI_FORMAT_BC4_SNORM
-        decodeFunction = &decodeBlock_BC4S;
-        break;
-      case 0x53:                        // DXGI_FORMAT_BC5_UNORM
-        blockSize = 16;
-        decodeFunction = &decodeBlock_BC5;
-        break;
-      case 0x54:                        // DXGI_FORMAT_BC5_SNORM
-        blockSize = 16;
-        decodeFunction = &decodeBlock_BC5S;
-        break;
-      default:
-        throw errorMessage("unsupported DXGI_FORMAT: 0x%08X", tmp);
+      if (--mipLevelCnt < 1)
+        throw errorMessage("unsupported RGB texture dimensions");
     }
   }
   else
   {
-    switch (fourCC)
+    if (FileBuffer::checkType(fourCC, "DX10"))
     {
-      case 0x31545844:                  // "DXT1"
-        break;
-      case 0x32545844:                  // "DXT2"
-      case 0x33545844:                  // "DXT3"
-        haveAlpha = true;
-        blockSize = 16;
-        decodeFunction = &decodeBlock_BC2;
-        break;
-      case 0x34545844:                  // "DXT4"
-      case 0x35545844:                  // "DXT5"
-        haveAlpha = true;
-        blockSize = 16;
-        decodeFunction = &decodeBlock_BC3;
-        break;
-      default:
-        throw errorMessage("unsupported DDS fourCC: 0x%08X",
-                           FileBuffer::swapUInt32(fourCC));
+      dataOffs = 148;
+      buf.setPosition(0x80);
+      unsigned int  tmp = buf.readUInt32();
+      switch (tmp)
+      {
+        case 0x47:                      // DXGI_FORMAT_BC1_UNORM
+        case 0x48:                      // DXGI_FORMAT_BC1_UNORM_SRGB
+          break;
+        case 0x4A:                      // DXGI_FORMAT_BC2_UNORM
+        case 0x4B:                      // DXGI_FORMAT_BC2_UNORM_SRGB
+          haveAlpha = true;
+          blockSize = 16;
+          decodeFunction = &decodeBlock_BC2;
+          break;
+        case 0x4D:                      // DXGI_FORMAT_BC3_UNORM
+        case 0x4E:                      // DXGI_FORMAT_BC3_UNORM_SRGB
+          haveAlpha = true;
+          blockSize = 16;
+          decodeFunction = &decodeBlock_BC3;
+          break;
+        case 0x50:                      // DXGI_FORMAT_BC4_UNORM
+          decodeFunction = &decodeBlock_BC4;
+          break;
+        case 0x51:                      // DXGI_FORMAT_BC4_SNORM
+          decodeFunction = &decodeBlock_BC4S;
+          break;
+        case 0x53:                      // DXGI_FORMAT_BC5_UNORM
+          blockSize = 16;
+          decodeFunction = &decodeBlock_BC5;
+          break;
+        case 0x54:                      // DXGI_FORMAT_BC5_SNORM
+          blockSize = 16;
+          decodeFunction = &decodeBlock_BC5S;
+          break;
+        default:
+          throw errorMessage("unsupported DXGI_FORMAT: 0x%08X", tmp);
+      }
+    }
+    else
+    {
+      switch (fourCC)
+      {
+        case 0x31545844:                // "DXT1"
+          break;
+        case 0x32545844:                // "DXT2"
+        case 0x33545844:                // "DXT3"
+          haveAlpha = true;
+          blockSize = 16;
+          decodeFunction = &decodeBlock_BC2;
+          break;
+        case 0x34545844:                // "DXT4"
+        case 0x35545844:                // "DXT5"
+          haveAlpha = true;
+          blockSize = 16;
+          decodeFunction = &decodeBlock_BC3;
+          break;
+        default:
+          throw errorMessage("unsupported DDS fourCC: 0x%08X",
+                             FileBuffer::swapUInt32(fourCC));
+      }
     }
   }
   size_t  sizeRequired = dataOffs;
@@ -316,10 +447,13 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       h = 1;
     if (i < mipLevelCnt)
     {
+      unsigned int  b = 0;
+      if (blockSize > 16)
+        b = w * (((unsigned int) blockSize * 3U) >> 4);
       if (w < 4 || h < 4)
       {
         unsigned int  tmpBuf[16];
-        for (unsigned int y = 0; y < h; y = y + 4)
+        for (unsigned int y = 0; y < h; y = y + 4, srcPtr = srcPtr + b)
         {
           for (unsigned int x = 0; x < w; x = x + 4)
           {
@@ -334,7 +468,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       }
       else
       {
-        for (unsigned int y = 0; y < h; y = y + 4)
+        for (unsigned int y = 0; y < h; y = y + 4, srcPtr = srcPtr + b)
         {
           for (unsigned int x = 0; x < w; x = x + 4)
             srcPtr = srcPtr + decodeFunction(p + (y * w + x), srcPtr, w);

@@ -28,6 +28,18 @@ class DDSTexture
                                 unsigned int w);
   static size_t decodeBlock_BC5S(unsigned int *dst, const unsigned char *src,
                                  unsigned int w);
+  static size_t decodeBlock_RGB(unsigned int *dst, const unsigned char *src,
+                                unsigned int w);
+  static size_t decodeBlock_BGR(unsigned int *dst, const unsigned char *src,
+                                unsigned int w);
+  static size_t decodeBlock_RGB32(unsigned int *dst, const unsigned char *src,
+                                  unsigned int w);
+  static size_t decodeBlock_BGR32(unsigned int *dst, const unsigned char *src,
+                                  unsigned int w);
+  static size_t decodeBlock_RGBA(unsigned int *dst, const unsigned char *src,
+                                 unsigned int w);
+  static size_t decodeBlock_BGRA(unsigned int *dst, const unsigned char *src,
+                                 unsigned int w);
   void loadTexture(FileBuffer& buf, int mipOffset);
  public:
   DDSTexture(const char *fileName, int mipOffset = 0);
