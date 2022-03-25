@@ -350,11 +350,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     unsigned int  alphaThreshold;
     const DDSTexture  *textureD;
     const DDSTexture  *textureN;
-    Plot3D_TriShape *p;
     float   mipLevel_n;
     float   lightX;
     float   lightY;
     float   lightZ;
+    const float *lightingPolynomial;
   };
   class Plot3DTS_Water : public Plot3DTS_Base
   {
@@ -387,11 +387,13 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     void drawPixel(int x, int y, const ColorV6& z);
   };
  protected:
+  static const float  defaultLightingPolynomial[6];
   unsigned int  *bufRGBW;
   float   *bufZ;
   int     width;
   int     height;
   std::vector< NIFFile::NIFVertex > vertexBuf;
+  float   lightingPolynomial[6];
   bool transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                            const NIFFile::NIFVertexTransform& viewTransform,
                            float& lightX, float& lightY, float& lightZ);
@@ -402,10 +404,15 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                   int imageWidth, int imageHeight,
                   const NIFFile::NIFTriShape& t);
   virtual ~Plot3D_TriShape();
+  // set polynomial a[0..5] for mapping dot product (-1.0 to 1.0)
+  // to RGB multiplier
+  void setLightingFunction(const float *a);
+  void getLightingFunction(float *a) const;
+  static void getDefaultLightingFunction(float *a);
   // calculate RGB multiplier from normals and light direction
-  virtual float
-      calculateLighting(float normalX, float normalY, float normalZ,
-                        float lightX, float lightY, float lightZ) const;
+  static float calculateLighting(float normalX, float normalY, float normalZ,
+                                 float lightX, float lightY, float lightZ,
+                                 const float *a);
   void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,
                     const NIFFile::NIFVertexTransform& viewTransform,
                     float lightX, float lightY, float lightZ,
