@@ -11,7 +11,7 @@ inline void Plot3D_TriShape::Plot3DTS_Water::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   outBufZ[offs] = z.v0;
-  unsigned int  lightLevel = (unsigned int) int(z.v1 * 64.0f + 1.5f);
+  unsigned int  lightLevel = (unsigned int) int(z.v1);
   outBufRGBW[offs] = (outBufRGBW[offs] & 0x00FFFFFFU) | (lightLevel << 24);
 }
 
@@ -251,27 +251,33 @@ void Plot3D_TriShape::drawTriShape(
     }
     ColorV6 z0, z1, z2;
     z0.v0 = v0.z;
-    z0.v1 = calculateLighting(v0.normalX, v0.normalY, v0.normalZ,
-                              lightX, lightY, lightZ) * 256.0f + 0.5f;
-    z0.v2 = v0.getU() * textureScaleU + textureOffsetU;
-    z0.v3 = v0.getV() * textureScaleV + textureOffsetV;
     z1.v0 = v1.z;
-    z1.v1 = calculateLighting(v1.normalX, v1.normalY, v1.normalZ,
-                              lightX, lightY, lightZ) * 256.0f + 0.5f;
-    z1.v2 = v1.getU() * textureScaleU + textureOffsetU;
-    z1.v3 = v1.getV() * textureScaleV + textureOffsetV;
     z2.v0 = v2.z;
-    z2.v1 = calculateLighting(v2.normalX, v2.normalY, v2.normalZ,
-                              lightX, lightY, lightZ) * 256.0f + 0.5f;
-    z2.v2 = v2.getU() * textureScaleU + textureOffsetU;
-    z2.v3 = v2.getV() * textureScaleV + textureOffsetV;
     if (isWater)
     {
+      z0.v1 = calculateLighting(v0.normalX, v0.normalY, v0.normalZ,
+                                lightX, lightY, lightZ) * 64.0f + 1.5f;
+      z1.v1 = calculateLighting(v1.normalX, v1.normalY, v1.normalZ,
+                                lightX, lightY, lightZ) * 64.0f + 1.5f;
+      z2.v1 = calculateLighting(v2.normalX, v2.normalY, v2.normalZ,
+                                lightX, lightY, lightZ) * 64.0f + 1.5f;
       reinterpret_cast< Plot3D< Plot3DTS_Water, ColorV2 > * >(
           &plot3d)->drawTriangle(x0, y0, z0, x1, y1, z1, x2, y2, z2);
     }
     else if (textureD)
     {
+      z0.v1 = calculateLighting(v0.normalX, v0.normalY, v0.normalZ,
+                                lightX, lightY, lightZ) * 256.0f + 0.5f;
+      z1.v1 = calculateLighting(v1.normalX, v1.normalY, v1.normalZ,
+                                lightX, lightY, lightZ) * 256.0f + 0.5f;
+      z2.v1 = calculateLighting(v2.normalX, v2.normalY, v2.normalZ,
+                                lightX, lightY, lightZ) * 256.0f + 0.5f;
+      z0.v2 = v0.getU() * textureScaleU + textureOffsetU;
+      z0.v3 = v0.getV() * textureScaleV + textureOffsetV;
+      z1.v2 = v1.getU() * textureScaleU + textureOffsetU;
+      z1.v3 = v1.getV() * textureScaleV + textureOffsetV;
+      z2.v2 = v2.getU() * textureScaleU + textureOffsetU;
+      z2.v3 = v2.getV() * textureScaleV + textureOffsetV;
       float   xyArea = float(std::fabs((v1.x - v0.x) * (v1.y - v0.y)))
                        + float(std::fabs((v2.x - v0.x) * (v2.y - v0.y)))
                        + float(std::fabs((v2.x - v1.x) * (v2.y - v1.y)));
