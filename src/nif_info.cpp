@@ -270,6 +270,49 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
   }
 }
 
+static void filterImage(unsigned int *buf, int imageWidth, int imageHeight,
+                        bool isVertical)
+{
+  static const int  filterTable[14] =
+  {
+    -5,  1, -3, -3, -1, 10,  0, 16,  1, 10,  3, -3,  5,  1
+  };
+  for (int y = 0; y < imageHeight; y++)
+  {
+    for (int x = 0; x < imageWidth; x++, buf++)
+    {
+      int     tmpRB = 0x40004000;
+      int     tmpG = 0x00400000;
+      for (int i = 0; i < 14; i = i + 2)
+      {
+        int     offs = 0;
+        if (!isVertical)
+        {
+          int     xx = x + filterTable[i];
+          xx = (xx > 0 ? (xx < (imageWidth - 1) ? xx : (imageWidth - 1)) : 0);
+          offs = xx - x;
+        }
+        else
+        {
+          int     yy = y + filterTable[i];
+          yy = (yy > 0 ? (yy < (imageHeight - 1) ? yy : (imageHeight - 1)) : 0);
+          offs = (yy - y) * imageWidth;
+        }
+        unsigned int  c = *(buf + offs);
+        tmpRB = tmpRB + (int(c & 0x00FF00FFU) * filterTable[i + 1]);
+        tmpG = tmpG + (int(c & 0x0000FF00U) * filterTable[i + 1]);
+      }
+      int     r = (tmpRB & 0x0000FFFF) - 0x00003FF0;
+      int     g = (tmpG & 0x00FFFF00) - 0x003FF000;
+      int     b = (tmpRB & 0x7FFF0000) - 0x3FF00000;
+      r = (r > 0 ? (r < 0x00001FE0 ? r : 0x00001FE0) : 0) & 0x00001FE0;
+      g = (g > 0 ? (g < 0x001FE000 ? g : 0x001FE000) : 0) & 0x001FE000;
+      b = (b > 0 ? (b < 0x1FE00000 ? b : 0x1FE00000) : 0) & 0x1FE00000;
+      *buf = (*buf & 0xFF000000U) | ((unsigned int) (r | g | b) >> 5);
+    }
+  }
+}
+
 static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                              const BA2File& ba2File,
                              int imageWidth, int imageHeight)
@@ -295,8 +338,8 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         meshData[i].calculateBounds(b, &viewTransform);
       if (b.xMax > b.xMin && b.yMax > b.yMin)
       {
-        float   xScale = float(imageWidth) * 0.875f / (b.xMax - b.xMin);
-        float   yScale = float(imageHeight) * 0.875f / (b.yMax - b.yMin);
+        float   xScale = float(imageWidth) * 0.9375f / (b.xMax - b.xMin);
+        float   yScale = float(imageHeight) * 0.9375f / (b.yMax - b.yMin);
         viewTransform.scale = (xScale < yScale ? xScale : yScale);
         viewTransform.offsX =
             (float(imageWidth) - ((b.xMin + b.xMax) * viewTransform.scale))
@@ -341,8 +384,6 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                           tmp.rotateXZ, tmp.rotateYZ, tmp.rotateZZ,
                           textureD, textureN);
     }
-    DDSOutputFile outFile(outFileName, imageWidth, imageHeight,
-                          DDSInputFile::pixelFormatRGB24);
     for (size_t i = 0; i < imageDataSize; i++)
     {
       unsigned int  c = outBufRGBW[i];
@@ -352,11 +393,25 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         unsigned int  waterColor = Plot3D_TriShape::multiplyWithLight(
                                        0xFF804000U, 0U, int((a - 1) << 2));
         waterColor = (waterColor & 0x00FFFFFFU) | 0xC0000000U;
-        c = blendRGBA32(c, waterColor, int(waterColor >> 24));
+        outBufRGBW[i] = blendRGBA32(c, waterColor, int(waterColor >> 24));
       }
-      outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
-      outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
-      outFile.writeByte((unsigned char) (c & 0xFF));
+    }
+    filterImage(&(outBufRGBW.front()), imageWidth, imageHeight, false);
+    filterImage(&(outBufRGBW.front()), imageWidth, imageHeight, true);
+    DDSOutputFile outFile(outFileName, imageWidth >> 1, imageHeight >> 1,
+                          DDSInputFile::pixelFormatRGB24);
+    const unsigned int  *p = &(outBufRGBW.front());
+    for (int y = 0; y < imageHeight; y++)
+    {
+      for (int x = 0; x < imageWidth; x++, p++)
+      {
+        if ((x | y) & 1)
+          continue;
+        unsigned int  c = *p;
+        outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
+        outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
+        outFile.writeByte((unsigned char) (c & 0xFF));
+      }
     }
     for (std::map< const std::string *, DDSTexture * >::iterator
              i = textures.begin(); i != textures.end(); i++)
@@ -387,8 +442,8 @@ int main(int argc, char **argv)
     // 4: .mtl format
     // 5: render to DDS file
     int     outFmt = 0;
-    int     renderWidth = 1200;
-    int     renderHeight = 800;
+    int     renderWidth = 2400;
+    int     renderHeight = 1600;
     if (argc >= 2)
     {
       static const char *formatOptions[5] =
@@ -415,10 +470,12 @@ int main(int argc, char **argv)
         if (n != std::string::npos)
         {
           renderHeight = int(parseInteger(tmp.c_str() + (n + 1), 10,
-                                          "invalid image height", 8, 32768));
+                                          "invalid image height", 8, 16384));
           tmp.resize(n);
           renderWidth = int(parseInteger(tmp.c_str(), 10,
-                                         "invalid image width", 8, 32768));
+                                         "invalid image width", 8, 16384));
+          renderWidth = renderWidth << 1;
+          renderHeight = renderHeight << 1;
         }
         else
         {
@@ -454,9 +511,11 @@ int main(int argc, char **argv)
     ba2File.getFileList(fileNames);
     for (size_t i = 0; i < fileNames.size(); i++)
     {
-      if (fileNames[i].length() < 5 ||
-          std::strcmp(fileNames[i].c_str() + fileNames[i].length() - 4, ".nif")
-          != 0)
+      if (fileNames[i].length() < 5)
+        continue;
+      const char  *suffix = fileNames[i].c_str() + (fileNames[i].length() - 4);
+      if (std::strcmp(suffix, ".nif") != 0 &&
+          std::strcmp(suffix, ".btr") != 0 && std::strcmp(suffix, ".bto") != 0)
       {
         continue;
       }
