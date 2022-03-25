@@ -1,6 +1,7 @@
 
 #include "common.hpp"
 #include "landdata.hpp"
+#include "bgsmfile.hpp"
 
 void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
 {
@@ -600,31 +601,17 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
   }
   if (ltexDPaths[n].empty() && ba2File && !ltexBGSMPaths[n].empty())
   {
-    if (ba2File->getFileSize(ltexBGSMPaths[n]) < 68)
-      return;
-    std::vector< unsigned char >  tmpBuf;
-    ba2File->extractFile(tmpBuf, ltexBGSMPaths[n]);
-    FileBuffer  bgsmFile(&(tmpBuf.front()), tmpBuf.size());
-    if (bgsmFile.readUInt32Fast() != 0x4D534742U)       // "BGSM"
-      return;
-    unsigned int  bgsmVersion = bgsmFile.readUInt32Fast();
-    if (bgsmVersion == 2)               // Fallout 4
-      bgsmFile.setPosition(63);
-    else if (bgsmVersion == 20)         // Fallout 76
-      bgsmFile.setPosition(60);
-    else
-      return;
-    for (int i = 0; i < 2; i++)
+    try
     {
-      if ((bgsmFile.getPosition() + 4) > bgsmFile.size())
-        break;
-      size_t  nameLen = bgsmFile.readUInt32Fast();
-      if ((bgsmFile.getPosition() + nameLen) > bgsmFile.size())
-        break;
-      if (!i)
-        bgsmFile.readPath(ltexDPaths[n], nameLen, "textures/", ".dds");
-      else
-        bgsmFile.readPath(ltexNPaths[n], nameLen, "textures/", ".dds");
+      BGSMFile  bgsmFile(*ba2File, ltexBGSMPaths[n]);
+      if (bgsmFile.texturePaths.size() >= 2)
+      {
+        ltexDPaths[n] = bgsmFile.texturePaths[0];
+        ltexNPaths[n] = bgsmFile.texturePaths[1];
+      }
+    }
+    catch (...)
+    {
     }
   }
 }
