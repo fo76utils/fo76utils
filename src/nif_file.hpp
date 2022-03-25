@@ -4,6 +4,7 @@
 
 #include "common.hpp"
 #include "filebuf.hpp"
+#include "ba2file.hpp"
 
 class NIFFile : public FileBuffer
 {
@@ -63,6 +64,42 @@ class NIFFile : public FileBuffer
     void transformXYZ(float& x, float& y, float& z) const;
     void transformVertex(NIFVertex& v) const;
   };
+  struct NIFBounds
+  {
+    float   xMin;
+    float   yMin;
+    float   zMin;
+    float   xMax;
+    float   yMax;
+    float   zMax;
+    NIFBounds()
+    {
+      xMin = float(0x40000000);
+      yMin = xMin;
+      zMin = xMin;
+      xMax = -xMin;
+      yMax = xMax;
+      zMax = xMax;
+    }
+    inline NIFBounds& operator+=(const NIFVertex& v)
+    {
+      xMin = (v.x < xMin ? v.x : xMin);
+      yMin = (v.y < yMin ? v.y : yMin);
+      zMin = (v.z < zMin ? v.z : zMin);
+      xMax = (v.x > xMax ? v.x : xMax);
+      yMax = (v.y > yMax ? v.y : yMax);
+      zMax = (v.z > zMax ? v.z : zMax);
+      return (*this);
+    }
+    inline bool operator<(const NIFBounds& r) const
+    {
+      return (xMax < r.xMin || yMax < r.yMin || zMax < r.zMin);
+    }
+    inline bool operator>(const NIFBounds& r) const
+    {
+      return (xMin > r.xMax || yMin > r.yMax || zMin > r.zMax);
+    }
+  };
   struct NIFTriShape
   {
     size_t  vertexCnt;
@@ -71,11 +108,12 @@ class NIFFile : public FileBuffer
     const NIFTriangle   *triangleData;
     NIFVertexTransform  vertexTransform;
     bool    isWater;
+    unsigned char alphaThreshold;
     // 9 for Skyrim, 10 for Fallout 4, 13 for Fallout 76
     unsigned char texturePathCnt;
     // texturePaths[0] = diffuse texture
     // texturePaths[1] = normal map
-    const std::string   *texturePaths;
+    const std::string * const * texturePaths;
     // BGSM file name for Fallout 4 and 76
     const std::string   *materialPath;
     float   textureOffsetU;
@@ -86,12 +124,13 @@ class NIFFile : public FileBuffer
     NIFTriShape()
       : vertexCnt(0), triangleCnt(0),
         vertexData((NIFVertex *) 0), triangleData((NIFTriangle *) 0),
-        isWater(false), texturePathCnt(0), texturePaths((std::string *) 0),
-        materialPath((std::string *) 0),
+        isWater(false), alphaThreshold(1), texturePathCnt(0),
+        texturePaths((std::string **) 0), materialPath((std::string *) 0),
         textureOffsetU(0.0f), textureOffsetV(0.0f),
         textureScaleU(1.0f), textureScaleV(1.0f), name("")
     {
     }
+    void calculateBounds(NIFBounds& b, const NIFVertexTransform *vt = 0) const;
   };
   enum
   {
@@ -162,7 +201,7 @@ class NIFFile : public FileBuffer
   struct NIFBlkBSLightingShaderProperty : public NIFBlock
   {
     unsigned int  shaderType;
-    std::string   materialName;
+    const std::string *materialName;
     std::vector< unsigned int > extraData;
     int     controller;
     unsigned long long  flags;
@@ -171,14 +210,29 @@ class NIFFile : public FileBuffer
     float   scaleU;
     float   scaleV;
     int     textureSet;
-    NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType);
+    unsigned short  bgsmVersion;
+    unsigned short  bgsmFlags;
+    unsigned short  bgsmAlphaBlendMode;
+    signed short    bgsmAlphaThreshold;         // < 0: threshold disabled
+    std::vector< const std::string * >  bgsmTextures;
+    NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType,
+                                   const BA2File *ba2File);
     virtual ~NIFBlkBSLightingShaderProperty();
   };
   struct NIFBlkBSShaderTextureSet : public NIFBlock
   {
-    std::vector< std::string >  texturePaths;
+    std::vector< const std::string * >  texturePaths;
     NIFBlkBSShaderTextureSet(NIFFile& f);
     virtual ~NIFBlkBSShaderTextureSet();
+  };
+  struct NIFBlkNiAlphaProperty : public NIFBlock
+  {
+    std::vector< unsigned int > extraData;
+    int     controller;
+    unsigned short  flags;
+    unsigned char   alphaThreshold;
+    NIFBlkNiAlphaProperty(NIFFile& f);
+    virtual ~NIFBlkNiAlphaProperty();
   };
  protected:
   static const char *blockTypeStrings[168];
@@ -194,26 +248,30 @@ class NIFFile : public FileBuffer
   //     155: Fallout 76
   unsigned int  bsVersion;
   unsigned int  blockCnt;
-  std::string   authorName;
-  std::string   processScriptName;
-  std::string   exportScriptName;
-  std::vector< size_t >       blockOffsets;
-  std::vector< std::string >  stringTable;
-  std::vector< NIFBlock * >   blocks;
-  void readString(std::string& s, size_t stringLengthSize);
+  const std::string *authorName;
+  const std::string *processScriptName;
+  const std::string *exportScriptName;
+  std::vector< size_t >     blockOffsets;
+  std::vector< NIFBlock * > blocks;
+  std::vector< const std::string * >  stringTable;
+  std::set< std::string >   stringSet;
+  std::string   stringBuf;
+  void readString(size_t stringLengthSize);
+  const std::string *storeString(std::string& s);
   inline int readBlockID()
   {
     int     n = readInt32();
     return (n >= 0 && size_t(n) < blocks.size() ? n : -1);
   }
-  void loadNIFFile();
+  void loadNIFFile(const BA2File *ba2File);
   void getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
                std::vector< unsigned int >& parentBlocks,
                unsigned int switchActive) const;
  public:
-  NIFFile(const char *fileName);
-  NIFFile(const unsigned char *buf, size_t bufSize);
-  NIFFile(FileBuffer& buf);
+  NIFFile(const char *fileName, const BA2File *ba2File = (BA2File *) 0);
+  NIFFile(const unsigned char *buf, size_t bufSize,
+          const BA2File *ba2File = (BA2File *) 0);
+  NIFFile(FileBuffer& buf, const BA2File *ba2File = (BA2File *) 0);
   virtual ~NIFFile();
   inline unsigned int getVersion() const;
   inline const std::string& getAuthorName() const;
@@ -233,6 +291,7 @@ class NIFFile : public FileBuffer
   inline const NIFBlkBSLightingShaderProperty *
       getLightingShaderProperty(size_t n) const;
   inline const NIFBlkBSShaderTextureSet *getShaderTextureSet(size_t n) const;
+  inline const NIFBlkNiAlphaProperty *getAlphaProperty(size_t n) const;
   void getMesh(std::vector< NIFTriShape >& v, unsigned int rootNode = 0U,
                unsigned int switchActive = 0U) const;
 };
@@ -264,17 +323,17 @@ inline unsigned int NIFFile::getVersion() const
 
 inline const std::string& NIFFile::getAuthorName() const
 {
-  return authorName;
+  return *authorName;
 }
 
 inline const std::string& NIFFile::getProcessScriptName() const
 {
-  return processScriptName;
+  return *processScriptName;
 }
 
 inline const std::string& NIFFile::getExportScriptName() const
 {
-  return exportScriptName;
+  return *exportScriptName;
 }
 
 inline size_t NIFFile::getBlockCount() const
@@ -300,7 +359,7 @@ inline const char * NIFFile::getBlockTypeAsString(size_t n) const
 inline const char * NIFFile::getBlockName(size_t n) const
 {
   if (blocks[n]->nameID >= 0)
-    return stringTable[blocks[n]->nameID].c_str();
+    return stringTable[blocks[n]->nameID]->c_str();
   return "";
 }
 
@@ -350,6 +409,14 @@ inline const NIFFile::NIFBlkBSShaderTextureSet *
   if (getBaseBlockType(n) != BlkTypeBSShaderTextureSet)
     return (NIFBlkBSShaderTextureSet *) 0;
   return ((const NIFBlkBSShaderTextureSet *) blocks[n]);
+}
+
+inline const NIFFile::NIFBlkNiAlphaProperty *
+    NIFFile::getAlphaProperty(size_t n) const
+{
+  if (getBaseBlockType(n) != BlkTypeNiAlphaProperty)
+    return (NIFBlkNiAlphaProperty *) 0;
+  return ((const NIFBlkNiAlphaProperty *) blocks[n]);
 }
 
 #endif

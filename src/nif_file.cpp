@@ -1,6 +1,9 @@
 
 #include "common.hpp"
 #include "nif_file.hpp"
+#include "ba2file.hpp"
+#include "bgsmfile.hpp"
+
 #include "nifblock.cpp"
 
 NIFFile::NIFVertexTransform::NIFVertexTransform()
@@ -105,6 +108,34 @@ void NIFFile::NIFVertexTransform::transformVertex(NIFVertex& v) const
   v.normalX = (x * rotateXX) + (y * rotateXY) + (z * rotateXZ);
   v.normalY = (x * rotateYX) + (y * rotateYY) + (z * rotateYZ);
   v.normalZ = (x * rotateZX) + (y * rotateZY) + (z * rotateZZ);
+}
+
+void NIFFile::NIFTriShape::calculateBounds(NIFBounds& b,
+                                           const NIFVertexTransform *vt) const
+{
+  NIFVertexTransform  t(vertexTransform);
+  if (vt)
+    t *= *vt;
+  NIFBounds tmp;
+  NIFVertex v;
+  for (size_t i = 0; i < vertexCnt; i++)
+  {
+    float   x = vertexData[i].x;
+    float   y = vertexData[i].y;
+    float   z = vertexData[i].z;
+    v.x = (x * t.rotateXX) + (y * t.rotateXY) + (z * t.rotateXZ);
+    v.y = (x * t.rotateYX) + (y * t.rotateYY) + (z * t.rotateYZ);
+    v.z = (x * t.rotateZX) + (y * t.rotateZY) + (z * t.rotateZZ);
+    tmp += v;
+  }
+  v.x = tmp.xMin * t.scale + t.offsX;
+  v.y = tmp.yMin * t.scale + t.offsY;
+  v.z = tmp.zMin * t.scale + t.offsZ;
+  b += v;
+  v.x = tmp.xMax * t.scale + t.offsX;
+  v.y = tmp.yMax * t.scale + t.offsY;
+  v.z = tmp.zMax * t.scale + t.offsZ;
+  b += v;
 }
 
 NIFFile::NIFBlock::NIFBlock(int blockType)
@@ -286,29 +317,38 @@ NIFFile::NIFBlkBSTriShape::~NIFBlkBSTriShape()
 }
 
 NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
-    NIFFile& f, size_t nxtBlk, int nxtBlkType)
+    NIFFile& f, size_t nxtBlk, int nxtBlkType, const BA2File *ba2File)
   : NIFBlock(NIFFile::BlkTypeBSLightingShaderProperty)
 {
   if (f.bsVersion < 0x90)
     shaderType = f.readUInt32();
   else
     shaderType = 0;
+  materialName = (std::string *) 0;
   int     n = f.readInt32();
   if (n >= 0 && n < int(f.stringTable.size()))
   {
     nameID = n;
-    if (f.bsVersion >= 0x80 && !f.stringTable[n].empty())
+    if (f.bsVersion >= 0x80 && !f.stringTable[n]->empty())
     {
       materialName = f.stringTable[n];
-      if (std::strncmp(materialName.c_str(), "materials/", 10) != 0)
-        materialName.insert(0, "materials/");
+      if (std::strncmp(materialName->c_str(), "materials/", 10) != 0)
+      {
+        f.stringBuf = *materialName;
+        size_t  i = f.stringBuf.find("/materials/");
+        if (i != std::string::npos)
+          f.stringBuf.erase(0, i + 1);
+        else
+          f.stringBuf.insert(0, "materials/");
+        materialName = f.storeString(f.stringBuf);
+      }
     }
   }
+  for (unsigned int i = f.readUInt32(); i--; )
+    extraData.push_back(f.readUInt32());
+  controller = f.readBlockID();
   if (f.bsVersion < 0x90)
   {
-    for (unsigned int i = f.readUInt32(); i--; )
-      extraData.push_back(f.readUInt32());
-    controller = f.readBlockID();
     flags = f.readUInt64();
     offsetU = f.readFloat();
     offsetV = f.readFloat();
@@ -327,6 +367,38 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
     textureSet =
         (nxtBlkType == NIFFile::BlkTypeBSShaderTextureSet ? int(nxtBlk) : -1);
   }
+  bgsmVersion = 0;
+  bgsmFlags = 0;
+  bgsmAlphaBlendMode = 0x0067;
+  bgsmAlphaThreshold = -1;
+  if (materialName && ba2File)
+  {
+    BGSMFile  bgsmFile;
+    try
+    {
+      bgsmFile.loadBGSMFile(*ba2File, *materialName);
+    }
+    catch (...)
+    {
+      bgsmFile.clear();
+    }
+    if (bgsmFile.version)
+    {
+      bgsmVersion = (unsigned short) (bgsmFile.version & 0xFFFFU);
+      bgsmFlags = (unsigned short) (bgsmFile.flags & 0xFFFFU);
+      offsetU = offsetU + (bgsmFile.offsetU * scaleU);
+      offsetV = offsetV + (bgsmFile.offsetV * scaleV);
+      scaleU = scaleU * bgsmFile.scaleU;
+      scaleV = scaleV * bgsmFile.scaleV;
+      bgsmAlphaBlendMode = bgsmFile.alphaBlendMode;
+      bgsmAlphaThreshold = -1;
+      if (bgsmFile.alphaThresholdEnabled)
+        bgsmAlphaThreshold = (signed short) bgsmFile.alphaThreshold;
+      bgsmTextures.resize(bgsmFile.texturePaths.size(), (std::string *) 0);
+      for (size_t i = 0; i < bgsmFile.texturePaths.size(); i++)
+        bgsmTextures[i] = f.storeString(bgsmFile.texturePaths[i]);
+    }
+  }
 }
 
 NIFFile::NIFBlkBSLightingShaderProperty::~NIFBlkBSLightingShaderProperty()
@@ -339,15 +411,17 @@ NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(NIFFile& f)
   nameID = f.readInt32();
   if (nameID < 0 || size_t(nameID) >= f.stringTable.size())
     nameID = -1;
-  texturePaths.resize(f.bsVersion < 0x80 ? 9 : (f.bsVersion < 0x90 ? 10 : 13));
+  texturePaths.resize(f.bsVersion < 0x80 ? 9 : (f.bsVersion < 0x90 ? 10 : 13),
+                      (std::string *) 0);
   for (size_t i = 0; i < texturePaths.size(); i++)
   {
-    f.readString(texturePaths[i], 4);
-    if (texturePaths[i].length() > 0 &&
-        std::strncmp(texturePaths[i].c_str(), "textures/", 9) != 0)
+    f.readString(4);
+    if (f.stringBuf.length() > 0 &&
+        std::strncmp(f.stringBuf.c_str(), "textures/", 9) != 0)
     {
-      texturePaths[i].insert(0, "textures/");
+      f.stringBuf.insert(0, "textures/");
     }
+    texturePaths[i] = f.storeString(f.stringBuf);
   }
 }
 
@@ -355,8 +429,26 @@ NIFFile::NIFBlkBSShaderTextureSet::~NIFBlkBSShaderTextureSet()
 {
 }
 
-void NIFFile::readString(std::string& s, size_t stringLengthSize)
+NIFFile::NIFBlkNiAlphaProperty::NIFBlkNiAlphaProperty(NIFFile& f)
+  : NIFBlock(NIFFile::BlkTypeNiAlphaProperty)
 {
+  int     n = f.readInt32();
+  if (n >= 0 && n < int(f.stringTable.size()))
+    nameID = n;
+  for (unsigned int i = f.readUInt32(); i--; )
+    extraData.push_back(f.readUInt32());
+  controller = f.readBlockID();
+  flags = f.readUInt16();
+  alphaThreshold = f.readUInt8();
+}
+
+NIFFile::NIFBlkNiAlphaProperty::~NIFBlkNiAlphaProperty()
+{
+}
+
+void NIFFile::readString(size_t stringLengthSize)
+{
+  std::string&  s = stringBuf;
   s.clear();
   size_t  n = ~(size_t(0));
   if (stringLengthSize == 1)
@@ -394,7 +486,15 @@ void NIFFile::readString(std::string& s, size_t stringLengthSize)
   }
 }
 
-void NIFFile::loadNIFFile()
+const std::string * NIFFile::storeString(std::string& s)
+{
+  std::set< std::string >::iterator i = stringSet.find(s);
+  if (i == stringSet.end())
+    i = stringSet.insert(s).first;
+  return &(*i);
+}
+
+void NIFFile::loadNIFFile(const BA2File *ba2File)
 {
   if (fileBufSize < 57 ||
       std::memcmp(fileBuf, "Gamebryo File Format, Version ", 30) != 0)
@@ -406,21 +506,24 @@ void NIFFile::loadNIFFile()
     throw errorMessage("unsupported NIF file version or endianness");
   blockCnt = readUInt32Fast();
   bsVersion = readUInt32Fast();
-  readString(authorName, 1);
+  readString(1);
+  authorName = storeString(stringBuf);
   if (bsVersion >= 0x84)
     (void) readUInt32();
-  readString(processScriptName, 1);
-  readString(exportScriptName, 1);
-  std::string tmp;
+  readString(1);
+  processScriptName = storeString(stringBuf);
+  readString(1);
+  exportScriptName = storeString(stringBuf);
+
   std::vector< unsigned char >  blockTypes;
   if (bsVersion >= 0x80 && bsVersion < 0x84)
-    readString(tmp, 1);
+    readString(1);
   {
     std::vector< int >  tmpBlkTypes;
     for (size_t n = readUInt16(); n--; )
     {
-      readString(tmp, 4);
-      tmpBlkTypes.push_back(stringToBlockType(tmp.c_str()));
+      readString(4);
+      tmpBlkTypes.push_back(stringToBlockType(stringBuf.c_str()));
     }
     if ((blockCnt * 6ULL + filePos) > fileBufSize)
       throw errorMessage("end of input file");
@@ -443,8 +546,8 @@ void NIFFile::loadNIFFile()
   (void) readUInt32();  // ignore maximum string length
   for (size_t i = 0; i < stringCnt; i++)
   {
-    readString(tmp, 4);
-    stringTable.push_back(tmp);
+    readString(4);
+    stringTable.push_back(storeString(stringBuf));
   }
   if (readUInt32() != 0)
     throw errorMessage("NIFFile: number of groups > 0 is not supported");
@@ -480,11 +583,15 @@ void NIFFile::loadNIFFile()
             int     t = BlkTypeUnknown;
             if ((i + 1) < blockCnt)
               t = blockTypeBaseTable[blockTypes[i + 1]];
-            blocks[i] = new NIFBlkBSLightingShaderProperty(*this, i + 1, t);
+            blocks[i] = new NIFBlkBSLightingShaderProperty(*this, i + 1, t,
+                                                           ba2File);
           }
           break;
         case BlkTypeBSShaderTextureSet:
           blocks[i] = new NIFBlkBSShaderTextureSet(*this);
+          break;
+        case BlkTypeNiAlphaProperty:
+          blocks[i] = new NIFBlkNiAlphaProperty(*this);
           break;
         default:
           blocks[i] = new NIFBlock(blockType);
@@ -551,7 +658,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   t.triangleData = &(b.triangleData.front());
   t.vertexTransform = b.vertexTransform;
   if (b.nameID >= 0)
-    t.name = stringTable[b.nameID].c_str();
+    t.name = stringTable[b.nameID]->c_str();
   for (size_t i = parentBlocks.size(); i-- > 0; )
   {
     t.vertexTransform *=
@@ -568,14 +675,23 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
     {
       const NIFBlkBSLightingShaderProperty& lsBlock =
           *((const NIFBlkBSLightingShaderProperty *) blocks[n]);
-      if (!lsBlock.materialName.empty())
-        t.materialPath = &(lsBlock.materialName);
+      if (lsBlock.materialName && !lsBlock.materialName->empty())
+        t.materialPath = lsBlock.materialName;
       t.textureOffsetU = lsBlock.offsetU;
       t.textureOffsetV = lsBlock.offsetV;
       t.textureScaleU = lsBlock.scaleU;
       t.textureScaleV = lsBlock.scaleV;
-      if (lsBlock.textureSet >= 0)
+      if (lsBlock.bgsmAlphaThreshold >= 0)
+        t.alphaThreshold = (unsigned char) lsBlock.bgsmAlphaThreshold;
+      if (lsBlock.bgsmVersion && (lsBlock.textureSet < 0 || bsVersion >= 0x90))
+      {
+        t.texturePathCnt = (unsigned char) lsBlock.bgsmTextures.size();
+        t.texturePaths = &(lsBlock.bgsmTextures.front());
+      }
+      else if (lsBlock.textureSet >= 0)
+      {
         n = size_t(lsBlock.textureSet);
+      }
     }
     if (getBaseBlockType(n) == BlkTypeBSShaderTextureSet)
     {
@@ -585,25 +701,33 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       t.texturePaths = &(tsBlock.texturePaths.front());
     }
   }
+  if (b.alphaProperty >= 0 &&
+      getBaseBlockType(size_t(b.alphaProperty)) == BlkTypeNiAlphaProperty)
+  {
+    const NIFBlkNiAlphaProperty&  apBlock =
+        *((const NIFBlkNiAlphaProperty *) blocks[b.alphaProperty]);
+    t.alphaThreshold = apBlock.alphaThreshold;
+  }
   v.push_back(t);
 }
 
-NIFFile::NIFFile(const char *fileName)
+NIFFile::NIFFile(const char *fileName, const BA2File *ba2File)
   : FileBuffer(fileName)
 {
-  loadNIFFile();
+  loadNIFFile(ba2File);
 }
 
-NIFFile::NIFFile(const unsigned char *buf, size_t bufSize)
+NIFFile::NIFFile(const unsigned char *buf, size_t bufSize,
+                 const BA2File *ba2File)
   : FileBuffer(buf, bufSize)
 {
-  loadNIFFile();
+  loadNIFFile(ba2File);
 }
 
-NIFFile::NIFFile(FileBuffer& buf)
+NIFFile::NIFFile(FileBuffer& buf, const BA2File *ba2File)
   : FileBuffer(buf.getDataPtr(), buf.size())
 {
-  loadNIFFile();
+  loadNIFFile(ba2File);
 }
 
 NIFFile::~NIFFile()
