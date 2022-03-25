@@ -419,7 +419,11 @@ NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(NIFFile& f)
     if (f.stringBuf.length() > 0 &&
         std::strncmp(f.stringBuf.c_str(), "textures/", 9) != 0)
     {
-      f.stringBuf.insert(0, "textures/");
+      size_t  n = f.stringBuf.find("/textures/");
+      if (n != std::string::npos)
+        f.stringBuf.erase(0, n + 1);
+      else
+        f.stringBuf.insert(0, "textures/");
     }
     texturePaths[i] = f.storeString(f.stringBuf);
   }
@@ -488,9 +492,7 @@ void NIFFile::readString(size_t stringLengthSize)
 
 const std::string * NIFFile::storeString(std::string& s)
 {
-  std::set< std::string >::iterator i = stringSet.find(s);
-  if (i == stringSet.end())
-    i = stringSet.insert(s).first;
+  std::set< std::string >::const_iterator i = stringSet.insert(s).first;
   return &(*i);
 }
 
@@ -657,6 +659,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   t.vertexData = &(b.vertexData.front());
   t.triangleData = &(b.triangleData.front());
   t.vertexTransform = b.vertexTransform;
+  t.isWater = true;
   if (b.nameID >= 0)
     t.name = stringTable[b.nameID]->c_str();
   for (size_t i = parentBlocks.size(); i-- > 0; )
@@ -667,12 +670,9 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   if (b.shaderProperty >= 0)
   {
     size_t  n = size_t(b.shaderProperty);
-    if (getBaseBlockType(n) == BlkTypeBSWaterShaderProperty)
+    if (getBaseBlockType(n) == BlkTypeBSLightingShaderProperty)
     {
-      t.isWater = true;
-    }
-    else if (getBaseBlockType(n) == BlkTypeBSLightingShaderProperty)
-    {
+      t.isWater = false;
       const NIFBlkBSLightingShaderProperty& lsBlock =
           *((const NIFBlkBSLightingShaderProperty *) blocks[n]);
       if (lsBlock.materialName && !lsBlock.materialName->empty())
