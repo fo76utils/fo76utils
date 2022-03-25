@@ -66,9 +66,11 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
     const NIFFile::NIFBlkNiNode *nodeBlock = nifFile.getNode(i);
     const NIFFile::NIFBlkBSTriShape *triShapeBlock = nifFile.getTriShape(i);
     const NIFFile::NIFBlkBSLightingShaderProperty *
-        lightingShaderPropertyBlock = nifFile.getLightingShaderProperty(i);
+        lspBlock = nifFile.getLightingShaderProperty(i);
     const NIFFile::NIFBlkBSShaderTextureSet *
         shaderTextureSetBlock = nifFile.getShaderTextureSet(i);
+    const NIFFile::NIFBlkNiAlphaProperty *
+        alphaPropertyBlock = nifFile.getAlphaProperty(i);
     if (nodeBlock)
     {
       if (nodeBlock->controller >= 0)
@@ -108,29 +110,51 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
                      triShapeBlock->alphaProperty);
       }
     }
-    else if (lightingShaderPropertyBlock)
+    else if (lspBlock)
     {
-      if (lightingShaderPropertyBlock->controller >= 0)
+      if (lspBlock->controller >= 0)
+        std::fprintf(f, "    Controller: %3d\n", lspBlock->controller);
+      if (lspBlock->textureSet >= 0)
+        std::fprintf(f, "    Texture set: %3d\n", lspBlock->textureSet);
+      if (lspBlock->bgsmTextures.size() > 0)
       {
-        std::fprintf(f, "    Controller: %3d\n",
-                     lightingShaderPropertyBlock->controller);
-      }
-      if (lightingShaderPropertyBlock->textureSet >= 0)
-      {
-        std::fprintf(f, "    Texture set: %3d\n",
-                     lightingShaderPropertyBlock->textureSet);
+        std::fprintf(f, "    Material version: 0x%04X\n",
+                     (unsigned int) lspBlock->bgsmVersion);
+        std::fprintf(f, "    Material flags: 0x%04X\n",
+                     (unsigned int) lspBlock->bgsmFlags);
+        std::fprintf(f, "    Material alpha blend mode: 0x%04X\n",
+                     (unsigned int) lspBlock->bgsmAlphaBlendMode);
+        std::fprintf(f, "    Material alpha threshold: %3d\n",
+                     int(lspBlock->bgsmAlphaThreshold));
+        for (size_t j = 0; j < lspBlock->bgsmTextures.size(); j++)
+        {
+          std::fprintf(f, "    Material texture %d: %s\n",
+                       int(j), lspBlock->bgsmTextures[j]->c_str());
+        }
       }
     }
     else if (shaderTextureSetBlock)
     {
       for (size_t j = 0; j < shaderTextureSetBlock->texturePaths.size(); j++)
       {
-        if (!shaderTextureSetBlock->texturePaths[j].empty())
+        if (!shaderTextureSetBlock->texturePaths[j]->empty())
         {
           std::fprintf(f, "    Texture %2d: %s\n",
-                       int(j), shaderTextureSetBlock->texturePaths[j].c_str());
+                       int(j), shaderTextureSetBlock->texturePaths[j]->c_str());
         }
       }
+    }
+    else if (alphaPropertyBlock)
+    {
+      if (alphaPropertyBlock->controller >= 0)
+      {
+        std::fprintf(f, "    Controller: %3d\n",
+                     alphaPropertyBlock->controller);
+      }
+      std::fprintf(f, "    Flags: 0x%04X\n",
+                   (unsigned int) alphaPropertyBlock->flags);
+      std::fprintf(f, "    Alpha threshold: %u\n",
+                   (unsigned int) alphaPropertyBlock->alphaThreshold);
     }
   }
 }
@@ -145,6 +169,7 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "  Vertex count: %d\n", int(meshData[i].vertexCnt));
     std::fprintf(f, "  Triangle count: %d\n", int(meshData[i].triangleCnt));
     std::fprintf(f, "  Is water: %d\n", int(meshData[i].isWater));
+    std::fprintf(f, "  Alpha threshold: %d\n", int(meshData[i].alphaThreshold));
     printVertexTransform(f, meshData[i].vertexTransform);
     if (meshData[i].materialPath)
       std::fprintf(f, "  Material: %s\n", meshData[i].materialPath->c_str());
@@ -154,7 +179,7 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
     for (size_t j = 0; j < meshData[i].texturePathCnt; j++)
     {
       std::fprintf(f, "  Texture %2d: %s\n",
-                   int(j), meshData[i].texturePaths[j].c_str());
+                   int(j), meshData[i].texturePaths[j]->c_str());
     }
     std::fprintf(f, "  Vertex list:\n");
     for (size_t j = 0; j < meshData[i].vertexCnt; j++)
@@ -234,11 +259,11 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     for (size_t j = 0; j < 2; j++)
     {
       if (j < meshData[i].texturePathCnt &&
-          !meshData[i].texturePaths[j].empty())
+          !meshData[i].texturePaths[j]->empty())
       {
         std::fprintf(f, "%s %s\n",
                      (!j ? "map_Kd" : "map_Kn"),
-                     meshData[i].texturePaths[j].c_str());
+                     meshData[i].texturePaths[j]->c_str());
       }
     }
     std::fprintf(f, "\n");
@@ -249,7 +274,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                              const BA2File& ba2File,
                              int imageWidth, int imageHeight)
 {
-  std::map< std::string, DDSTexture * > textures;
+  std::map< const std::string *, DDSTexture * > textures;
   try
   {
     size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
@@ -258,50 +283,28 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     std::vector< unsigned char >  fileBuf;
     std::vector< NIFFile::NIFTriShape > meshData;
     nifFile.getMesh(meshData);
-    NIFFile::NIFVertexTransform viewTransform;
-    // isometric view
-    viewTransform.rotateXX =   float(std::sqrt(1.0 / 2.0));
-    viewTransform.rotateXY =   float(std::sqrt(1.0 / 2.0));
-    viewTransform.rotateXZ =   0.0f;
-    viewTransform.rotateYX =   float(std::sqrt(1.0 / 6.0));
-    viewTransform.rotateYY = -(float(std::sqrt(1.0 / 6.0)));
-    viewTransform.rotateYZ = -(float(std::sqrt(2.0 / 3.0)));
-    viewTransform.rotateZX = -(float(std::sqrt(1.0 / 3.0)));
-    viewTransform.rotateZY =   float(std::sqrt(1.0 / 3.0));
-    viewTransform.rotateZZ = -(float(std::sqrt(1.0 / 3.0)));
+    // isometric view (rotate by 54.7356, 180, 45 degrees)
+    NIFFile::NIFVertexTransform viewTransform(1.0f,
+                                              float(std::atan(std::sqrt(2.0))),
+                                              float(std::atan(1.0) * 4.0),
+                                              float(std::atan(1.0)),
+                                              0.0f, 0.0f, 0.0f);
     {
-      float   xMin = 1.0e9f;
-      float   yMin = 1.0e9f;
-      float   zMin = 1.0e9f;
-      float   xMax = -1.0e9f;
-      float   yMax = -1.0e9f;
-      float   zMax = -1.0e9f;
+      NIFFile::NIFBounds  b;
       for (size_t i = 0; i < meshData.size(); i++)
+        meshData[i].calculateBounds(b, &viewTransform);
+      if (b.xMax > b.xMin && b.yMax > b.yMin)
       {
-        NIFFile::NIFVertexTransform vt = meshData[i].vertexTransform;
-        vt *= viewTransform;
-        for (size_t j = 0; j < meshData[i].vertexCnt; j++)
-        {
-          NIFFile::NIFVertex  v = meshData[i].vertexData[j];
-          vt.transformXYZ(v.x, v.y, v.z);
-          xMin = (v.x < xMin ? v.x : xMin);
-          yMin = (v.y < yMin ? v.y : yMin);
-          zMin = (v.z < zMin ? v.z : zMin);
-          xMax = (v.x > xMax ? v.x : xMax);
-          yMax = (v.y > yMax ? v.y : yMax);
-          zMax = (v.z > zMax ? v.z : zMax);
-        }
-      }
-      if (xMax > xMin && yMax > yMin && zMax > zMin)
-      {
-        float   xScale = float(imageWidth) * 0.875f / (xMax - xMin);
-        float   yScale = float(imageHeight) * 0.875f / (yMax - yMin);
+        float   xScale = float(imageWidth) * 0.875f / (b.xMax - b.xMin);
+        float   yScale = float(imageHeight) * 0.875f / (b.yMax - b.yMin);
         viewTransform.scale = (xScale < yScale ? xScale : yScale);
         viewTransform.offsX =
-            (float(imageWidth) - ((xMin + xMax) * viewTransform.scale)) * 0.5f;
+            (float(imageWidth) - ((b.xMin + b.xMax) * viewTransform.scale))
+            * 0.5f;
         viewTransform.offsY =
-            (float(imageHeight) - ((yMin + yMax) * viewTransform.scale)) * 0.5f;
-        viewTransform.offsZ = 1.0f - (zMin * viewTransform.scale);
+            (float(imageHeight) - ((b.yMin + b.yMax) * viewTransform.scale))
+            * 0.5f;
+        viewTransform.offsZ = 1.0f - (b.zMin * viewTransform.scale);
       }
     }
     for (size_t i = 0; i < meshData.size(); i++)
@@ -310,24 +313,33 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       const DDSTexture  *textureN = (DDSTexture *) 0;
       for (size_t j = 0; j < meshData[i].texturePathCnt && j < 2; j++)
       {
-        if (meshData[i].texturePaths[j].empty())
+        if (meshData[i].texturePaths[j]->empty())
           continue;
-        if (textures.find(meshData[i].texturePaths[j]) != textures.end())
-          continue;
-        ba2File.extractFile(fileBuf, meshData[i].texturePaths[j]);
-        DDSTexture  *texture =
-            new DDSTexture(&(fileBuf.front()), fileBuf.size());
-        textures.insert(std::pair< std::string, DDSTexture * >(
-                            meshData[i].texturePaths[j], texture));
+        std::map< const std::string *, DDSTexture * >::iterator k =
+            textures.find(meshData[i].texturePaths[j]);
+        if (k == textures.end())
+        {
+          ba2File.extractFile(fileBuf, *(meshData[i].texturePaths[j]));
+          DDSTexture  *texture =
+              new DDSTexture(&(fileBuf.front()), fileBuf.size());
+          k = textures.insert(std::pair< const std::string *, DDSTexture * >(
+                                  meshData[i].texturePaths[j], texture)).first;
+        }
         if (j == 0)
-          textureD = texture;
+          textureD = k->second;
         else
-          textureN = texture;
+          textureN = k->second;
       }
       Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
-                             imageWidth, imageHeight,
-                             meshData[i], viewTransform);
-      plot3d.drawTriShape(-0.57735f, 0.57735f, 0.57735f, textureD, textureN);
+                             imageWidth, imageHeight, meshData[i]);
+      // light direction: 45, -35.2644, 0 degrees
+      NIFFile::NIFVertexTransform tmp(1.0f,
+                                      float(std::atan(1.0)),
+                                      -(float(std::atan(std::sqrt(0.5)))), 0.0f,
+                                      0.0f, 0.0f, 0.0f);
+      plot3d.drawTriShape(NIFFile::NIFVertexTransform(), viewTransform,
+                          tmp.rotateXZ, tmp.rotateYZ, tmp.rotateZZ,
+                          textureD, textureN);
     }
     DDSOutputFile outFile(outFileName, imageWidth, imageHeight,
                           DDSInputFile::pixelFormatRGB24);
@@ -337,27 +349,25 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       unsigned int  a = c >> 24;
       if (a >= 1 && a <= 254)
       {
-        unsigned int  waterColor = 0x00804000U;
-        unsigned int  lightLevel = (a - 1) << 2;
-        unsigned int  r = ((waterColor & 0xFF) * lightLevel + 0x80) >> 8;
-        unsigned int  g = (((waterColor >> 8) & 0xFF) * lightLevel + 0x80) >> 8;
-        unsigned int  b = ((waterColor >> 16) * lightLevel + 0x80) >> 8;
-        c = blendRGBA32(c, 0xC0000000U | (b << 16) | (g << 8) | r, 0xC0);
+        unsigned int  waterColor = Plot3D_TriShape::multiplyWithLight(
+                                       0xFF804000U, 0U, int((a - 1) << 2));
+        waterColor = (waterColor & 0x00FFFFFFU) | 0xC0000000U;
+        c = blendRGBA32(c, waterColor, int(waterColor >> 24));
       }
       outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
       outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
       outFile.writeByte((unsigned char) (c & 0xFF));
     }
-    for (std::map< std::string, DDSTexture * >::iterator i = textures.begin();
-         i != textures.end(); i++)
+    for (std::map< const std::string *, DDSTexture * >::iterator
+             i = textures.begin(); i != textures.end(); i++)
     {
       delete i->second;
     }
   }
   catch (...)
   {
-    for (std::map< std::string, DDSTexture * >::iterator i = textures.begin();
-         i != textures.end(); i++)
+    for (std::map< const std::string *, DDSTexture * >::iterator
+             i = textures.begin(); i != textures.end(); i++)
     {
       delete i->second;
     }
@@ -367,50 +377,73 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
 
 int main(int argc, char **argv)
 {
-  // 0: default (block list)
-  // 1: quiet (author info)
-  // 2: verbose (block list and model data)
-  // 3: .obj format
-  // 4: .mtl format
-  // 5: render to DDS file
-  int     outFmt = 0;
-  if (argc >= 2)
-  {
-    static const char *formatOptions[5] =
-    {
-      "-q", "-v", "-obj", "-mtl", "-render"
-    };
-    for (size_t i = 0; i < (sizeof(formatOptions) / sizeof(char *)); i++)
-    {
-      if (std::strcmp(argv[1], formatOptions[i]) == 0)
-      {
-        outFmt = int(i + 1);
-        argc--;
-        argv++;
-        break;
-      }
-    }
-  }
-  if (argc < (outFmt != 5 ? 3 : 4))
-  {
-    std::fprintf(stderr, "Usage: nif_info [-q|-v|-obj|-mtl|-render DDSFILE] "
-                         "ARCHIVEPATH PATTERN...\n");
-    std::fprintf(stderr, "    -q      Print author name, file name, "
-                         "and file size only\n");
-    std::fprintf(stderr, "    -v      Verbose mode, print block list, "
-                         "and vertex and triangle data\n");
-    std::fprintf(stderr, "    -obj    Print model data in .obj format\n");
-    std::fprintf(stderr, "    -mtl    Print material data in .mtl format\n");
-    std::fprintf(stderr, "    -render Render model to DDS file "
-                         "(experimental)\n");
-    return 1;
-  }
   std::FILE *outFile = stdout;
   try
   {
+    // 0: default (block list)
+    // 1: quiet (author info)
+    // 2: verbose (block list and model data)
+    // 3: .obj format
+    // 4: .mtl format
+    // 5: render to DDS file
+    int     outFmt = 0;
+    int     renderWidth = 1200;
+    int     renderHeight = 800;
+    if (argc >= 2)
+    {
+      static const char *formatOptions[5] =
+      {
+        "-q", "-v", "-obj", "-mtl", "-render"
+      };
+      for (size_t i = 0; i < (sizeof(formatOptions) / sizeof(char *)); i++)
+      {
+        if (std::strcmp(argv[1], formatOptions[i]) == 0)
+        {
+          outFmt = int(i + 1);
+          argc--;
+          argv++;
+          break;
+        }
+      }
+      if (outFmt == 0 && std::strncmp(argv[1], "-render", 7) == 0)
+      {
+        std::string tmp(argv[1] + 7);
+        outFmt = 5;
+        argc--;
+        argv++;
+        size_t  n = tmp.find('x');
+        if (n != std::string::npos)
+        {
+          renderHeight = int(parseInteger(tmp.c_str() + (n + 1), 10,
+                                          "invalid image height", 8, 32768));
+          tmp.resize(n);
+          renderWidth = int(parseInteger(tmp.c_str(), 10,
+                                         "invalid image width", 8, 32768));
+        }
+        else
+        {
+          throw errorMessage("invalid image dimensions");
+        }
+      }
+    }
+    if (argc < (outFmt != 5 ? 3 : 4))
+    {
+      std::fprintf(stderr, "Usage: nif_info [-q|-v|-obj|-mtl|-render DDSFILE] "
+                           "ARCHIVEPATH PATTERN...\n");
+      std::fprintf(stderr, "    -q      Print author name, file name, "
+                           "and file size only\n");
+      std::fprintf(stderr, "    -v      Verbose mode, print block list, "
+                           "and vertex and triangle data\n");
+      std::fprintf(stderr, "    -obj    Print model data in .obj format\n");
+      std::fprintf(stderr, "    -mtl    Print material data in .mtl format\n");
+      std::fprintf(stderr, "    -render[WIDTHxHEIGHT] DDSFILE       "
+                           "Render model to DDS file (experimental)\n");
+      return 1;
+    }
     std::vector< std::string >  fileNames;
     for (int i = 2; i < argc; i++)
       fileNames.push_back(argv[i]);
+    fileNames.push_back(".bgsm");
     if (outFmt == 5)
     {
       fileNames.push_back(".dds");
@@ -438,7 +471,7 @@ int main(int argc, char **argv)
         printAuthorName(outFile, fileBuf, fileNames[i].c_str());
         continue;
       }
-      NIFFile nifFile(&(fileBuf.front()), fileBuf.size());
+      NIFFile nifFile(&(fileBuf.front()), fileBuf.size(), &ba2File);
       if (outFmt == 0 || outFmt == 2)
         printBlockList(outFile, nifFile);
       if (outFmt == 2)
@@ -460,7 +493,7 @@ int main(int argc, char **argv)
       if (outFmt == 5)
       {
         std::fprintf(stderr, "%s\n", fileNames[i].c_str());
-        renderMeshToFile(argv[0], nifFile, ba2File, 1200, 800);
+        renderMeshToFile(argv[0], nifFile, ba2File, renderWidth, renderHeight);
         break;
       }
     }
