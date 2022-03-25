@@ -226,40 +226,118 @@ template< typename T, typename ColorType > class Plot3D : public T
   }
 };
 
-struct ColorZUVL
+struct ColorV2
 {
-  float   z;
-  float   u;
-  float   v;
-  float   l;
-  inline ColorZUVL& operator+=(const ColorZUVL& d)
+  // Z, light
+  float   v0;
+  float   v1;
+  inline ColorV2& operator+=(const ColorV2& d)
   {
-    z += d.z;
-    u += d.u;
-    v += d.v;
-    l += d.l;
+    v0 += d.v0;
+    v1 += d.v1;
     return (*this);
   }
-  inline ColorZUVL& operator-=(const ColorZUVL& d)
+  inline ColorV2& operator-=(const ColorV2& d)
   {
-    z -= d.z;
-    u -= d.u;
-    v -= d.v;
-    l -= d.l;
+    v0 -= d.v0;
+    v1 -= d.v1;
     return (*this);
   }
-  inline ColorZUVL& operator*=(float d)
+  inline ColorV2& operator*=(float d)
   {
-    z *= d;
-    u *= d;
-    v *= d;
-    l *= d;
+    v0 *= d;
+    v1 *= d;
+    return (*this);
+  }
+};
+
+struct ColorV4 : public ColorV2
+{
+  // U, V
+  float   v2;
+  float   v3;
+  inline ColorV4& operator+=(const ColorV4& d)
+  {
+    v0 += d.v0;
+    v1 += d.v1;
+    v2 += d.v2;
+    v3 += d.v3;
+    return (*this);
+  }
+  inline ColorV4& operator-=(const ColorV4& d)
+  {
+    v0 -= d.v0;
+    v1 -= d.v1;
+    v2 -= d.v2;
+    v3 -= d.v3;
+    return (*this);
+  }
+  inline ColorV4& operator*=(float d)
+  {
+    v0 *= d;
+    v1 *= d;
+    v2 *= d;
+    v3 *= d;
+    return (*this);
+  }
+};
+
+struct ColorV6 : public ColorV4
+{
+  // normalX, normalY
+  float   v4;
+  float   v5;
+  inline ColorV6& operator+=(const ColorV6& d)
+  {
+    v0 += d.v0;
+    v1 += d.v1;
+    v2 += d.v2;
+    v3 += d.v3;
+    v4 += d.v4;
+    v5 += d.v5;
+    return (*this);
+  }
+  inline ColorV6& operator-=(const ColorV6& d)
+  {
+    v0 -= d.v0;
+    v1 -= d.v1;
+    v2 -= d.v2;
+    v3 -= d.v3;
+    v4 -= d.v4;
+    v5 -= d.v5;
+    return (*this);
+  }
+  inline ColorV6& operator*=(float d)
+  {
+    v0 *= d;
+    v1 *= d;
+    v2 *= d;
+    v3 *= d;
+    v4 *= d;
+    v5 *= d;
     return (*this);
   }
 };
 
 class Plot3D_TriShape : public NIFFile::NIFTriShape
 {
+ public:
+  static inline unsigned int multiplyWithLight(unsigned int c,
+                                               unsigned int alphaThreshold,
+                                               int lightLevel)
+  {
+    if (c < alphaThreshold)
+      return 0U;
+    unsigned long long  tmp =
+        (unsigned long long) (c & 0x000000FFU)
+        | ((unsigned long long) (c & 0x0000FF00U) << 12)
+        | ((unsigned long long) (c & 0x00FF0000U) << 24);
+    tmp = (tmp * (unsigned int) lightLevel) + 0x0000800008000080ULL;
+    tmp = tmp | ((((tmp >> 8) | (tmp >> 9)) & 0x0001000010000100ULL) * 0xFFU);
+    return ((unsigned int) ((tmp >> 8) & 0x000000FFU)
+            | (unsigned int) ((tmp >> 20) & 0x0000FF00U)
+            | (unsigned int) ((tmp >> 32) & 0x00FF0000U) | 0xFF000000U);
+  }
  private:
   class Plot3DTS_Base
   {
@@ -269,80 +347,68 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     int     width;
     int     height;
     float   mipLevel;
-    float   normalX;
-    float   normalY;
-    float   normalZ;
+    unsigned int  alphaThreshold;
     const DDSTexture  *textureD;
     const DDSTexture  *textureN;
-    static inline unsigned int multiplyWithLight(unsigned int c,
-                                                 float lightLevel);
+    Plot3D_TriShape *p;
+    float   mipLevel_n;
+    float   lightX;
+    float   lightY;
+    float   lightZ;
   };
   class Plot3DTS_Water : public Plot3DTS_Base
   {
    public:
     // fill with water
-    inline void drawPixel(int x, int y, const ColorZUVL& z);
+    inline void drawPixel(int x, int y, const ColorV2& z);
   };
   class Plot3DTS_TextureN : public Plot3DTS_Base
   {
    public:
     // fill with solid color (1x1 texture)
-    inline void drawPixel(int x, int y, const ColorZUVL& z);
+    inline void drawPixel(int x, int y, const ColorV2& z);
   };
   class Plot3DTS_TextureB : public Plot3DTS_Base
   {
    public:
     // diffuse texture with bilinear filtering
-    inline void drawPixel(int x, int y, const ColorZUVL& z);
+    inline void drawPixel(int x, int y, const ColorV4& z);
   };
   class Plot3DTS_TextureT : public Plot3DTS_Base
   {
    public:
     // diffuse texture with trilinear filtering
-    inline void drawPixel(int x, int y, const ColorZUVL& z);
+    inline void drawPixel(int x, int y, const ColorV4& z);
   };
   class Plot3DTS_NormalsT : public Plot3DTS_Base
   {
    public:
     // diffuse + normal map with trilinear filtering
-    inline void drawPixel(int x, int y, const ColorZUVL& z);
+    void drawPixel(int x, int y, const ColorV6& z);
   };
  protected:
   unsigned int  *bufRGBW;
   float   *bufZ;
   int     width;
   int     height;
-  int     xMin;
-  int     yMin;
-  int     zMin;
-  int     xMax;
-  int     yMax;
-  int     zMax;
-  std::vector< NIFFile::NIFVertex >   vertexBuf;
-  std::vector< NIFFile::NIFTriangle > triangleBuf;
+  std::vector< NIFFile::NIFVertex > vertexBuf;
+  bool transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
+                           const NIFFile::NIFVertexTransform& viewTransform,
+                           float& lightX, float& lightY, float& lightZ);
  public:
   // the alpha channel is 255 for solid geometry, 0 for air, and 1 to 254
   // for water with light level converted to RGB multiplier of (alpha - 1) / 64
   Plot3D_TriShape(unsigned int *outBufRGBW, float *outBufZ,
                   int imageWidth, int imageHeight,
-                  const NIFFile::NIFTriShape& t,
-                  const NIFFile::NIFVertexTransform& viewTransform);
+                  const NIFFile::NIFTriShape& t);
   virtual ~Plot3D_TriShape();
-  inline void getBounds(int& x0, int& y0, int& z0,
-                        int& x1, int& y1, int& z1) const
-  {
-    x0 = xMin;
-    y0 = yMin;
-    z0 = zMin;
-    x1 = xMax;
-    y1 = yMax;
-    z1 = zMax;
-  }
   // calculate RGB multiplier from normals and light direction
   virtual float
       calculateLighting(float normalX, float normalY, float normalZ,
                         float lightX, float lightY, float lightZ) const;
-  void drawTriShape(float lightX, float lightY, float lightZ,
+  void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,
+                    const NIFFile::NIFVertexTransform& viewTransform,
+                    float lightX, float lightY, float lightZ,
                     const DDSTexture *textureD,
                     const DDSTexture *textureN = (DDSTexture *) 0);
 };
