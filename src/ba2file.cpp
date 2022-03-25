@@ -7,6 +7,15 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+inline BA2File::FileDeclaration::FileDeclaration()
+  : fileData((unsigned char *) 0),
+    packedSize(0),
+    unpackedSize(0),
+    archiveType(0),
+    archiveFile(0)
+{
+}
+
 BA2File::FileDeclaration * BA2File::addPackedFile(const std::string& fileName)
 {
   bool    nameMatches = false;
@@ -41,20 +50,8 @@ BA2File::FileDeclaration * BA2File::addPackedFile(const std::string& fileName)
         return (FileDeclaration *) 0;
     }
   }
-  std::map< std::string, FileDeclaration >::iterator  i =
-      fileMap.find(fileName);
-  if (i == fileMap.end())
-  {
-    FileDeclaration fd;
-    fd.fileData = (unsigned char *) 0;
-    fd.packedSize = 0;
-    fd.unpackedSize = 0;
-    fd.archiveType = 0;
-    fd.archiveFile = 0;
-    i = fileMap.insert(std::pair< std::string, FileDeclaration >(
-                           fileName, fd)).first;
-  }
-  return &(i->second);
+  FileDeclaration&  fd = fileMap[fileName];
+  return &fd;
 }
 
 void BA2File::loadBA2General(FileBuffer& buf, size_t archiveFile)
@@ -226,7 +223,7 @@ void BA2File::loadBSAFile(FileBuffer& buf, size_t archiveFile, int archiveType)
         fileDecl->archiveFile = archiveFile;
         if (fileDecl->unpackedSize & 0x40000000)
         {
-          fileDecl->packedSize = fileDecl->unpackedSize - 0x40000004U;
+          fileDecl->packedSize = fileDecl->unpackedSize & 0x3FFFFFFFU;
           fileDecl->unpackedSize = 0;
         }
       }
@@ -650,10 +647,14 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
     throw errorMessage("file %s not found in archive", fileName.c_str());
   const FileDeclaration&  fileDecl = i->second;
   const unsigned char *p = fileDecl.fileData;
+  unsigned int  packedSize = fileDecl.packedSize;
   unsigned int  unpackedSize = fileDecl.unpackedSize;
   int     archiveType = fileDecl.archiveType;
   if (archiveType & 0x40000100)         // BSA with compression or full names
+  {
     unpackedSize = getBSAUnpackedSize(p, fileDecl);
+    packedSize = packedSize - (unsigned int) (p - fileDecl.fileData);
+  }
   if (!unpackedSize)
     return;
   buf.reserve(unpackedSize);
@@ -664,7 +665,7 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
     return;
   }
 
-  extractBlock(buf, unpackedSize, fileDecl, p, fileDecl.packedSize);
+  extractBlock(buf, unpackedSize, fileDecl, p, packedSize);
 }
 
 int BA2File::extractTexture(std::vector< unsigned char >& buf,
@@ -677,10 +678,14 @@ int BA2File::extractTexture(std::vector< unsigned char >& buf,
     throw errorMessage("file %s not found in archive", fileName.c_str());
   const FileDeclaration&  fileDecl = i->second;
   const unsigned char *p = fileDecl.fileData;
+  unsigned int  packedSize = fileDecl.packedSize;
   unsigned int  unpackedSize = fileDecl.unpackedSize;
   int     archiveType = fileDecl.archiveType;
   if (archiveType & 0x40000100)         // BSA with compression or full names
+  {
     unpackedSize = getBSAUnpackedSize(p, fileDecl);
+    packedSize = packedSize - (unsigned int) (p - fileDecl.fileData);
+  }
   if (!unpackedSize)
     return mipOffset;
   buf.reserve(unpackedSize);
@@ -688,7 +693,7 @@ int BA2File::extractTexture(std::vector< unsigned char >& buf,
   if (archiveType == 1)
     return extractBA2Texture(buf, fileDecl, mipOffset);
 
-  extractBlock(buf, unpackedSize, fileDecl, p, fileDecl.packedSize);
+  extractBlock(buf, unpackedSize, fileDecl, p, packedSize);
   return mipOffset;
 }
 

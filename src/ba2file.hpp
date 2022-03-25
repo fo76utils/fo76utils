@@ -17,6 +17,7 @@ class BA2File
     // >= 103: BSA (version + flags, 0x40000000: compressed, 0x0100: full name)
     int           archiveType;
     unsigned int  archiveFile;
+    inline FileDeclaration();
   };
   std::map< std::string, FileDeclaration >  fileMap;
   std::vector< FileBuffer * >       archiveFiles;
