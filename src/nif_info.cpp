@@ -369,9 +369,10 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     {
       const DDSTexture  *textureD = (DDSTexture *) 0;
       const DDSTexture  *textureN = (DDSTexture *) 0;
-      for (size_t j = 0; j < meshData[i].texturePathCnt && j < 2; j++)
+      const DDSTexture  *textureE = (DDSTexture *) 0;
+      for (size_t j = 0; j < meshData[i].texturePathCnt && j < 5; j++)
       {
-        if (meshData[i].texturePaths[j]->empty())
+        if (meshData[i].texturePaths[j]->empty() || j == 2 || j == 3)
           continue;
         std::map< const std::string *, DDSTexture * >::iterator k =
             textures.find(meshData[i].texturePaths[j]);
@@ -385,8 +386,10 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         }
         if (j == 0)
           textureD = k->second;
-        else
+        else if (j == 1)
           textureN = k->second;
+        else
+          textureE = k->second;
       }
       Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
                              imageWidth, imageHeight, meshData[i]);
@@ -397,7 +400,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                                       0.0f, 0.0f, 0.0f);
       plot3d.drawTriShape(NIFFile::NIFVertexTransform(), viewTransform,
                           tmp.rotateXZ, tmp.rotateYZ, tmp.rotateZZ,
-                          textureD, textureN);
+                          textureD, textureN, textureE);
     }
     for (size_t i = 0; i < imageDataSize; i++)
     {
