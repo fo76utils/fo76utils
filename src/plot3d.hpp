@@ -354,6 +354,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     float   lightY;
     float   lightZ;
     const float *lightingPolynomial;
+    const DDSTexture  *textureE;
   };
   class Plot3DTS_Water : public Plot3DTS_Base
   {
@@ -381,8 +382,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   };
   class Plot3DTS_NormalsT : public Plot3DTS_Base
   {
+   protected:
+    unsigned int environmentMap(unsigned int c,
+                                float normalX, float normalY, int l) const;
    public:
-    // diffuse + normal map with trilinear filtering
+    // diffuse + normal and environment map with trilinear filtering
     void drawPixel(int x, int y, const ColorV6& z);
   };
  protected:
@@ -416,7 +420,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                     const NIFFile::NIFVertexTransform& viewTransform,
                     float lightX, float lightY, float lightZ,
                     const DDSTexture *textureD,
-                    const DDSTexture *textureN = (DDSTexture *) 0);
+                    const DDSTexture *textureN = (DDSTexture *) 0,
+                    const DDSTexture *textureE = (DDSTexture *) 0);
 };
 
 #endif
