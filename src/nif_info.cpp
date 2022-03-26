@@ -270,47 +270,62 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
   }
 }
 
-static void filterImage(unsigned int *buf, int imageWidth, int imageHeight,
-                        bool isVertical)
+static unsigned int downsample2xFilter(const unsigned int *buf,
+                                       int imageWidth, int imageHeight,
+                                       int x, int y)
 {
-  static const int  filterTable[14] =
+  static const int  filterTable[105] =
   {
-    -5,  1, -3, -3, -1, 10,  0, 16,  1, 10,  3, -3,  5,  1
+    // Y offset, (X offset, value) * 7
+    -5, -5,   1, -3,  -3, -1,  10,  0,  16,  1,  10,  3,  -3,  5,   1,
+    -3, -5,  -3, -3,   9, -1, -30,  0, -48,  1, -30,  3,   9,  5,  -3,
+    -1, -5,  10, -3, -30, -1, 100,  0, 160,  1, 100,  3, -30,  5,  10,
+     0, -5,  16, -3, -48, -1, 160,  0, 256,  1, 160,  3, -48,  5,  16,
+     1, -5,  10, -3, -30, -1, 100,  0, 160,  1, 100,  3, -30,  5,  10,
+     3, -5,  -3, -3,   9, -1, -30,  0, -48,  1, -30,  3,   9,  5,  -3,
+     5, -5,   1, -3,  -3, -1,  10,  0,  16,  1,  10,  3,  -3,  5,   1
   };
-  for (int y = 0; y < imageHeight; y++)
+  const int   *p = filterTable;
+  int     r = 0;
+  int     g = 0;
+  int     b = 0;
+  for (int i = 0; i < 7; i++)
   {
-    for (int x = 0; x < imageWidth; x++, buf++)
+    int     yy = y + p[0];
+    p++;
+    yy = (yy > 0 ? (yy < (imageHeight - 1) ? yy : (imageHeight - 1)) : 0);
+    const unsigned int  *bufp = buf + (size_t(yy) * size_t(imageWidth));
+    if (BRANCH_EXPECT(x < 5 || x >= (imageWidth - 5), false))
     {
-      int     tmpRB = 0x40004000;
-      int     tmpG = 0x00400000;
-      for (int i = 0; i < 14; i = i + 2)
+      for (int j = 0; j < 7; j++, p = p + 2)
       {
-        int     offs = 0;
-        if (!isVertical)
-        {
-          int     xx = x + filterTable[i];
-          xx = (xx > 0 ? (xx < (imageWidth - 1) ? xx : (imageWidth - 1)) : 0);
-          offs = xx - x;
-        }
-        else
-        {
-          int     yy = y + filterTable[i];
-          yy = (yy > 0 ? (yy < (imageHeight - 1) ? yy : (imageHeight - 1)) : 0);
-          offs = (yy - y) * imageWidth;
-        }
-        unsigned int  c = *(buf + offs);
-        tmpRB = tmpRB + (int(c & 0x00FF00FFU) * filterTable[i + 1]);
-        tmpG = tmpG + (int(c & 0x0000FF00U) * filterTable[i + 1]);
+        int     xx = x + p[0];
+        int     m = p[1];
+        xx = (xx > 0 ? (xx < (imageWidth - 1) ? xx : (imageWidth - 1)) : 0);
+        unsigned int  c = bufp[xx];
+        r = r + (int(c & 0xFF) * m);
+        g = g + (int((c >> 8) & 0xFF) * m);
+        b = b + (int((c >> 16) & 0xFF) * m);
       }
-      int     r = (tmpRB & 0x0000FFFF) - 0x00003FF0;
-      int     g = (tmpG & 0x00FFFF00) - 0x003FF000;
-      int     b = (tmpRB & 0x7FFF0000) - 0x3FF00000;
-      r = (r > 0 ? (r < 0x00001FE0 ? r : 0x00001FE0) : 0) & 0x00001FE0;
-      g = (g > 0 ? (g < 0x001FE000 ? g : 0x001FE000) : 0) & 0x001FE000;
-      b = (b > 0 ? (b < 0x1FE00000 ? b : 0x1FE00000) : 0) & 0x1FE00000;
-      *buf = (*buf & 0xFF000000U) | ((unsigned int) (r | g | b) >> 5);
+    }
+    else
+    {
+      bufp = bufp + x;
+      for (int j = 0; j < 7; j++, p = p + 2)
+      {
+        unsigned int  c = *(bufp + p[0]);
+        int     m = p[1];
+        r = r + (int(c & 0xFF) * m);
+        g = g + (int((c >> 8) & 0xFF) * m);
+        b = b + (int((c >> 16) & 0xFF) * m);
+      }
     }
   }
+  unsigned int  c = buf[size_t(y) * size_t(imageWidth) + size_t(x)];
+  r = (r > 0 ? (r < 0x0003FC00 ? r : 0x0003FC00) : 0) + 512;
+  g = ((g > 0 ? (g < 0x0003FC00 ? g : 0x0003FC00) : 0) + 512) & 0x0003FC00;
+  b = ((b > 0 ? (b < 0x0003FC00 ? b : 0x0003FC00) : 0) + 512) & 0x0003FC00;
+  return ((c & 0xFF000000U) | (unsigned int) ((r >> 10) | (g >> 2) | (b << 6)));
 }
 
 static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
@@ -396,18 +411,14 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         outBufRGBW[i] = blendRGBA32(c, waterColor, int(waterColor >> 24));
       }
     }
-    filterImage(&(outBufRGBW.front()), imageWidth, imageHeight, false);
-    filterImage(&(outBufRGBW.front()), imageWidth, imageHeight, true);
     DDSOutputFile outFile(outFileName, imageWidth >> 1, imageHeight >> 1,
                           DDSInputFile::pixelFormatRGB24);
-    const unsigned int  *p = &(outBufRGBW.front());
-    for (int y = 0; y < imageHeight; y++)
+    for (int y = 0; y < imageHeight; y = y + 2)
     {
-      for (int x = 0; x < imageWidth; x++, p++)
+      for (int x = 0; x < imageWidth; x = x + 2)
       {
-        if ((x | y) & 1)
-          continue;
-        unsigned int  c = *p;
+        unsigned int  c = downsample2xFilter(&(outBufRGBW.front()),
+                                             imageWidth, imageHeight, x, y);
         outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
         outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
         outFile.writeByte((unsigned char) (c & 0xFF));
