@@ -76,7 +76,8 @@ void Plot3D_TriShape::Plot3DTS_NormalsT::drawPixel(int x, int y,
   unsigned int  c = textureD->getPixelT(z.v2, z.v3, mipLevel);
   if (c < alphaThreshold)
     return;
-  unsigned int  n = textureN->getPixelT(z.v2, z.v3, mipLevel + mipLevel_n);
+  unsigned int  n =
+      textureN->getPixelT(z.v2 * textureScaleN, z.v3 * textureScaleN, mipLevel);
   float   tmpX = float(int(n & 0xFF)) * (1.0f / 127.5f) - 1.0f;
   float   tmpY = float(int((n >> 8) & 0xFF)) * (1.0f / 127.5f) - 1.0f;
   float   tmpZ = (tmpX * tmpX) + (tmpY * tmpY);
@@ -102,7 +103,7 @@ void Plot3D_TriShape::Plot3DTS_NormalsT::drawPixel(int x, int y,
                       normalX, normalY, normalZ, lightX, lightY, lightZ,
                       lightingPolynomial));
   outBufZ[offs] = z.v0;
-  outBufRGBW[offs] = Plot3D_TriShape::multiplyWithLight(c, alphaThreshold, l);
+  outBufRGBW[offs] = Plot3D_TriShape::multiplyWithLight(c, 0U, l);
 }
 
 bool Plot3D_TriShape::transformVertexData(
@@ -225,7 +226,7 @@ void Plot3D_TriShape::drawTriShape(
   plot3d.alphaThreshold = (unsigned int) alphaThreshold << 24;
   plot3d.textureD = textureD;
   plot3d.textureN = textureN;
-  plot3d.mipLevel_n = 0.0f;
+  plot3d.textureScaleN = 1.0f;
   plot3d.lightX = lightX;
   plot3d.lightY = lightY;
   plot3d.lightZ = lightZ;
@@ -237,7 +238,7 @@ void Plot3D_TriShape::drawTriShape(
     if (textureN->getWidth() == (textureD->getWidth() << 1) &&
         textureN->getHeight() == (textureD->getHeight() << 1))
     {
-      plot3d.mipLevel_n = 1.0f;
+      plot3d.textureScaleN = 2.0f;
     }
     else
     {
