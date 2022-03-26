@@ -124,7 +124,7 @@ class NIFFile : public FileBuffer
     NIFTriShape()
       : vertexCnt(0), triangleCnt(0),
         vertexData((NIFVertex *) 0), triangleData((NIFTriangle *) 0),
-        isWater(false), alphaThreshold(1), texturePathCnt(0),
+        isWater(false), alphaThreshold(0), texturePathCnt(0),
         texturePaths((std::string **) 0), materialPath((std::string *) 0),
         textureOffsetU(0.0f), textureOffsetV(0.0f),
         textureScaleU(1.0f), textureScaleV(1.0f), name("")
