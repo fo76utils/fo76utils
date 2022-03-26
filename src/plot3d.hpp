@@ -329,11 +329,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     if (c < alphaThreshold)
       return 0U;
     unsigned long long  tmp =
-        (unsigned long long) (c & 0x000000FFU)
-        | ((unsigned long long) (c & 0x0000FF00U) << 12)
+        (unsigned long long) ((c & 0x000000FFU) | ((c & 0x0000FF00U) << 12))
         | ((unsigned long long) (c & 0x00FF0000U) << 24);
     tmp = (tmp * (unsigned int) lightLevel) + 0x0000800008000080ULL;
-    tmp = tmp | ((((tmp >> 8) | (tmp >> 9)) & 0x0001000010000100ULL) * 0xFFU);
+    tmp = tmp | (((tmp >> 10) & 0x0001C0001C0001C0ULL) * 0x03FFU);
     return ((unsigned int) ((tmp >> 8) & 0x000000FFU)
             | (unsigned int) ((tmp >> 20) & 0x0000FF00U)
             | (unsigned int) ((tmp >> 32) & 0x00FF0000U) | 0xFF000000U);
@@ -350,7 +349,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     unsigned int  alphaThreshold;
     const DDSTexture  *textureD;
     const DDSTexture  *textureN;
-    float   mipLevel_n;
+    float   textureScaleN;
     float   lightX;
     float   lightY;
     float   lightZ;
