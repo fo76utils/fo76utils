@@ -370,6 +370,10 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
           blockSize = 16;
           decodeFunction = &decodeBlock_BC5S;
           break;
+        case 0x57:                      // DXGI_FORMAT_B8G8R8A8_UNORM
+          blockSize = 64;
+          decodeFunction = &decodeBlock_BGRA;
+          break;
         default:
           throw errorMessage("unsupported DXGI_FORMAT: 0x%08X", tmp);
       }
