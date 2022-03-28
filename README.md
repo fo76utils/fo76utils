@@ -70,3 +70,8 @@ Running any of the programs without arguments prints detailed usage information.
     # extract the map icons only
     scons -f SConstruct.maps game=tes5 interface/tes5icon_02.dds
 
+#### Example 6
+
+    ./nif_info -render1920x1080 glassdome.dds Fallout76/Data palaceofthewindingpath/palace_bld_glassdome01.nif
+    ./nif_info -render1920x1080 44.dds Fallout4/Data weapons/44/44load.nif
+
