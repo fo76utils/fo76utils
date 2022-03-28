@@ -354,7 +354,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     float   lightY;
     float   lightZ;
     const float *lightingPolynomial;
-    const DDSTexture  *textureE;
+    const DDSTexture  *textureR;
+    short   reflectionLevel;
+    bool    fo76Reflection;
+    float   textureScaleR;
   };
   class Plot3DTS_Water : public Plot3DTS_Base
   {
@@ -383,10 +386,31 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   class Plot3DTS_NormalsT : public Plot3DTS_Base
   {
    protected:
-    unsigned int environmentMap(unsigned int c,
-                                float normalX, float normalY, int l) const;
+    // returns light level
+    inline int normalMap(float& normalX, float& normalY, float& normalZ,
+                         unsigned int n) const;
+   public:
+    // diffuse + normal map with trilinear filtering
+    void drawPixel(int x, int y, const ColorV6& z);
+  };
+  class Plot3DTS_NormalsEnvT : public Plot3DTS_NormalsT
+  {
+   protected:
+    inline unsigned int environmentMap(
+        unsigned int c, float normalX, float normalY, float normalZ,
+        int x, int y) const;
    public:
     // diffuse + normal and environment map with trilinear filtering
+    void drawPixel(int x, int y, const ColorV6& z);
+  };
+  class Plot3DTS_NormalsReflT : public Plot3DTS_NormalsT
+  {
+   protected:
+    inline unsigned int reflectionMap(
+        unsigned int c, float normalX, float normalY, float normalZ,
+        int x, int y, const ColorV6& z) const;
+   public:
+    // diffuse + normal and reflection map with trilinear filtering
     void drawPixel(int x, int y, const ColorV6& z);
   };
  protected:
@@ -396,17 +420,19 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   int     width;
   int     height;
   std::vector< NIFFile::NIFVertex > vertexBuf;
+  std::vector< unsigned int > triangleBuf;
   float   lightingPolynomial[6];
-  bool transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
-                           const NIFFile::NIFVertexTransform& viewTransform,
-                           float& lightX, float& lightY, float& lightZ);
+  void sortTriangles(size_t n0, size_t n2);
+  size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
+                             const NIFFile::NIFVertexTransform& viewTransform,
+                             float& lightX, float& lightY, float& lightZ);
  public:
   // the alpha channel is 255 for solid geometry, 0 for air, and 1 to 254
   // for water with light level converted to RGB multiplier of (alpha - 1) / 64
   Plot3D_TriShape(unsigned int *outBufRGBW, float *outBufZ,
-                  int imageWidth, int imageHeight,
-                  const NIFFile::NIFTriShape& t);
+                  int imageWidth, int imageHeight);
   virtual ~Plot3D_TriShape();
+  Plot3D_TriShape& operator=(const NIFFile::NIFTriShape& t);
   // set polynomial a[0..5] for mapping dot product (-1.0 to 1.0)
   // to RGB multiplier
   void setLightingFunction(const float *a);
@@ -421,7 +447,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                     float lightX, float lightY, float lightZ,
                     const DDSTexture *textureD,
                     const DDSTexture *textureN = (DDSTexture *) 0,
-                    const DDSTexture *textureE = (DDSTexture *) 0);
+                    const DDSTexture *textureR = (DDSTexture *) 0);
 };
 
 #endif
