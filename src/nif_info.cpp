@@ -5,6 +5,10 @@
 #include "ddstxt.hpp"
 #include "plot3d.hpp"
 
+#ifdef HAVE_SDL
+#  include <SDL/SDL.h>
+#endif
+
 static void printAuthorName(std::FILE *f,
                             const std::vector< unsigned char >& fileBuf,
                             const char *nifFileName)
@@ -128,8 +132,11 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
                      int(lspBlock->bgsmAlphaThreshold));
         for (size_t j = 0; j < lspBlock->bgsmTextures.size(); j++)
         {
-          std::fprintf(f, "    Material texture %d: %s\n",
-                       int(j), lspBlock->bgsmTextures[j]->c_str());
+          if (!lspBlock->bgsmTextures[j]->empty())
+          {
+            std::fprintf(f, "    Material texture %d: %s\n",
+                         int(j), lspBlock->bgsmTextures[j]->c_str());
+          }
         }
       }
     }
@@ -168,7 +175,21 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "TriShape %3d (%s):\n", int(i), meshData[i].name);
     std::fprintf(f, "  Vertex count: %d\n", int(meshData[i].vertexCnt));
     std::fprintf(f, "  Triangle count: %d\n", int(meshData[i].triangleCnt));
-    std::fprintf(f, "  Is water: %d\n", int(meshData[i].isWater));
+    if (meshData[i].flags)
+    {
+      std::fprintf(f, "  Flags: ");
+      if (meshData[i].flags & 0x0001)
+        std::fprintf(f, "hidden");
+      if ((meshData[i].flags & 0x0003) > 0x0002)
+        std::fprintf(f, ", ");
+      if (meshData[i].flags & 0x0002)
+        std::fprintf(f, "is water");
+      if ((meshData[i].flags & 0x0007) > 0x0004)
+        std::fprintf(f, ", ");
+      if (meshData[i].flags & 0x0004)
+        std::fprintf(f, "is effect");
+      std::fputc('\n', f);
+    }
     std::fprintf(f, "  Alpha threshold: %d\n", int(meshData[i].alphaThreshold));
     printVertexTransform(f, meshData[i].vertexTransform);
     if (meshData[i].materialPath)
@@ -333,98 +354,235 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                              int imageWidth, int imageHeight)
 {
   std::map< const std::string *, DDSTexture * > textures;
+#ifdef HAVE_SDL
+  if (!outFileName)
+  {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
+      throw errorMessage("error initializing SDL");
+  }
+#endif
   try
   {
+#ifdef HAVE_SDL
+    SDL_Surface *sdlScreen = (SDL_Surface *) 0;
+    if (!outFileName)
+    {
+      sdlScreen = SDL_SetVideoMode(imageWidth, imageHeight, 24, SDL_SWSURFACE);
+      if (!sdlScreen)
+        throw errorMessage("error setting SDL video mode");
+    }
+#endif
     size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
     std::vector< unsigned int > outBufRGBW(imageDataSize, 0U);
     std::vector< float >  outBufZ(imageDataSize, 16777216.0f);
     std::vector< unsigned char >  fileBuf;
     std::vector< NIFFile::NIFTriShape > meshData;
     nifFile.getMesh(meshData);
+    float   modelRotationX = 0.0f;
+    float   modelRotationY = 0.0f;
+    float   modelRotationZ = 0.0f;
+    // light direction: 45, -35.2644, 0 degrees
+    float   lightRotationX = float(std::atan(1.0));
+    float   lightRotationY = -(float(std::atan(std::sqrt(0.5))));
     // isometric view (rotate by 54.7356, 180, 45 degrees)
-    NIFFile::NIFVertexTransform viewTransform(1.0f,
-                                              float(std::atan(std::sqrt(2.0))),
-                                              float(std::atan(1.0) * 4.0),
-                                              float(std::atan(1.0)),
-                                              0.0f, 0.0f, 0.0f);
+    float   viewRotationX = float(std::atan(std::sqrt(2.0)));
+    float   viewRotationY = float(std::atan(1.0) * 4.0);
+    float   viewRotationZ = float(std::atan(1.0));
+    Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
+                           imageWidth, imageHeight);
+    while (true)
     {
-      NIFFile::NIFBounds  b;
-      for (size_t i = 0; i < meshData.size(); i++)
-        meshData[i].calculateBounds(b, &viewTransform);
-      if (b.xMax > b.xMin && b.yMax > b.yMin)
+      NIFFile::NIFVertexTransform
+          modelTransform(1.0f, modelRotationX, modelRotationY, modelRotationZ,
+                         0.0f, 0.0f, 0.0f);
+      NIFFile::NIFVertexTransform
+          viewTransform(1.0f, viewRotationX, viewRotationY, viewRotationZ,
+                        0.0f, 0.0f, 0.0f);
       {
-        float   xScale = float(imageWidth) * 0.9375f / (b.xMax - b.xMin);
-        float   yScale = float(imageHeight) * 0.9375f / (b.yMax - b.yMin);
-        viewTransform.scale = (xScale < yScale ? xScale : yScale);
-        viewTransform.offsX =
-            (float(imageWidth) - ((b.xMin + b.xMax) * viewTransform.scale))
-            * 0.5f;
-        viewTransform.offsY =
-            (float(imageHeight) - ((b.yMin + b.yMax) * viewTransform.scale))
-            * 0.5f;
-        viewTransform.offsZ = 1.0f - (b.zMin * viewTransform.scale);
-      }
-    }
-    for (size_t i = 0; i < meshData.size(); i++)
-    {
-      const DDSTexture  *textureD = (DDSTexture *) 0;
-      const DDSTexture  *textureN = (DDSTexture *) 0;
-      const DDSTexture  *textureE = (DDSTexture *) 0;
-      for (size_t j = 0; j < meshData[i].texturePathCnt && j < 5; j++)
-      {
-        if (meshData[i].texturePaths[j]->empty() || j == 2 || j == 3)
-          continue;
-        std::map< const std::string *, DDSTexture * >::iterator k =
-            textures.find(meshData[i].texturePaths[j]);
-        if (k == textures.end())
+        NIFFile::NIFVertexTransform t(modelTransform);
+        t *= viewTransform;
+        NIFFile::NIFBounds  b;
+        for (size_t i = 0; i < meshData.size(); i++)
         {
-          ba2File.extractFile(fileBuf, *(meshData[i].texturePaths[j]));
-          DDSTexture  *texture =
-              new DDSTexture(&(fileBuf.front()), fileBuf.size());
-          k = textures.insert(std::pair< const std::string *, DDSTexture * >(
-                                  meshData[i].texturePaths[j], texture)).first;
+          if (!(meshData[i].flags & 0x0005))    // ignore if hidden or effect
+            meshData[i].calculateBounds(b, &t);
         }
-        if (j == 0)
-          textureD = k->second;
-        else if (j == 1)
-          textureN = k->second;
-        else
-          textureE = k->second;
+        if (b.xMax > b.xMin && b.yMax > b.yMin)
+        {
+          float   xScale = float(imageWidth) * 0.9375f / (b.xMax - b.xMin);
+          float   yScale = float(imageHeight) * 0.9375f / (b.yMax - b.yMin);
+          viewTransform.scale = (xScale < yScale ? xScale : yScale);
+          viewTransform.offsX =
+              (float(imageWidth) - ((b.xMin + b.xMax) * viewTransform.scale))
+              * 0.5f;
+          viewTransform.offsY =
+              (float(imageHeight) - ((b.yMin + b.yMax) * viewTransform.scale))
+              * 0.5f;
+          viewTransform.offsZ = 1.0f - (b.zMin * viewTransform.scale);
+        }
       }
-      Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
-                             imageWidth, imageHeight, meshData[i]);
-      // light direction: 45, -35.2644, 0 degrees
-      NIFFile::NIFVertexTransform tmp(1.0f,
-                                      float(std::atan(1.0)),
-                                      -(float(std::atan(std::sqrt(0.5)))), 0.0f,
-                                      0.0f, 0.0f, 0.0f);
-      plot3d.drawTriShape(NIFFile::NIFVertexTransform(), viewTransform,
-                          tmp.rotateXZ, tmp.rotateYZ, tmp.rotateZZ,
-                          textureD, textureN, textureE);
-    }
-    for (size_t i = 0; i < imageDataSize; i++)
-    {
-      unsigned int  c = outBufRGBW[i];
-      unsigned int  a = c >> 24;
-      if (a >= 1 && a <= 254)
+      for (size_t i = 0; i < meshData.size(); i++)
       {
-        unsigned int  waterColor = Plot3D_TriShape::multiplyWithLight(
-                                       0xFF804000U, 0U, int((a - 1) << 2));
-        waterColor = (waterColor & 0x00FFFFFFU) | 0xC0000000U;
-        outBufRGBW[i] = blendRGBA32(c, waterColor, int(waterColor >> 24));
+        if (meshData[i].flags & 0x0005)         // ignore if hidden or effect
+          continue;
+        plot3d = meshData[i];
+        const DDSTexture  *textureD = (DDSTexture *) 0;
+        const DDSTexture  *textureN = (DDSTexture *) 0;
+        const DDSTexture  *textureR = (DDSTexture *) 0;
+        for (size_t j = 0; j < meshData[i].texturePathCnt && j < 9; j++)
+        {
+          if (meshData[i].texturePaths[j]->empty() || (j >= 2 && (j & 3)))
+            continue;
+          std::map< const std::string *, DDSTexture * >::iterator k =
+              textures.find(meshData[i].texturePaths[j]);
+          if (k == textures.end())
+          {
+            ba2File.extractFile(fileBuf, *(meshData[i].texturePaths[j]));
+            DDSTexture  *texture =
+                new DDSTexture(&(fileBuf.front()), fileBuf.size());
+            k = textures.insert(std::pair< const std::string *, DDSTexture * >(
+                                    meshData[i].texturePaths[j],
+                                    texture)).first;
+          }
+          if (j == 0)
+            textureD = k->second;
+          else if (j == 1)
+            textureN = k->second;
+          else
+            textureR = k->second;
+        }
+        NIFFile::NIFVertexTransform
+            tmp(1.0f, lightRotationX, lightRotationY, 0.0f, 0.0f, 0.0f, 0.0f);
+        plot3d.drawTriShape(modelTransform, viewTransform,
+                            tmp.rotateXZ, tmp.rotateYZ, tmp.rotateZZ,
+                            textureD, textureN, textureR);
       }
-    }
-    DDSOutputFile outFile(outFileName, imageWidth >> 1, imageHeight >> 1,
-                          DDSInputFile::pixelFormatRGB24);
-    for (int y = 0; y < imageHeight; y = y + 2)
-    {
-      for (int x = 0; x < imageWidth; x = x + 2)
+#ifdef HAVE_SDL
+      if (outFileName)
+#endif
       {
-        unsigned int  c = downsample2xFilter(&(outBufRGBW.front()),
-                                             imageWidth, imageHeight, x, y);
-        outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
-        outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
-        outFile.writeByte((unsigned char) (c & 0xFF));
+        for (size_t i = 0; i < imageDataSize; i++)
+        {
+          unsigned int  c = outBufRGBW[i];
+          unsigned int  a = c >> 24;
+          if (a >= 1 && a <= 254)
+          {
+            unsigned int  waterColor = Plot3D_TriShape::multiplyWithLight(
+                                           0xFF804000U, 0U, int((a - 1) << 2));
+            waterColor = (waterColor & 0x00FFFFFFU) | 0xC0000000U;
+            outBufRGBW[i] = blendRGBA32(c, waterColor, int(waterColor >> 24));
+          }
+        }
+      }
+#ifdef HAVE_SDL
+      else
+      {
+        SDL_LockSurface(sdlScreen);
+        unsigned int  *srcPtr = &(outBufRGBW.front());
+        unsigned char *dstPtr =
+            reinterpret_cast< unsigned char * >(sdlScreen->pixels);
+        for (int y = 0; y < imageHeight; y++)
+        {
+          for (int x = 0; x < imageWidth; x++, srcPtr++, dstPtr = dstPtr + 3)
+          {
+            unsigned int  c = *srcPtr;
+            unsigned int  a = c >> 24;
+            if (a >= 1 && a <= 254)
+            {
+              unsigned int  waterColor =
+                  Plot3D_TriShape::multiplyWithLight(0xFF804000U, 0U,
+                                                     int((a - 1) << 2));
+              waterColor = (waterColor & 0x00FFFFFFU) | 0xC0000000U;
+              c = blendRGBA32(c, waterColor, int(waterColor >> 24));
+            }
+            dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);     // B
+            dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);      // G
+            dstPtr[2] = (unsigned char) (c & 0xFF);             // R
+            *srcPtr = 0U;
+            outBufZ[size_t(srcPtr - &(outBufRGBW.front()))] = 16777216.0f;
+          }
+          dstPtr = dstPtr + (int(sdlScreen->pitch) - (imageWidth * 3));
+        }
+        SDL_UnlockSurface(sdlScreen);
+        SDL_UpdateRect(sdlScreen, 0, 0, imageWidth, imageHeight);
+        bool    keyPressed = false;
+        bool    quitFlag = false;
+        while (!(keyPressed || quitFlag))
+        {
+          SDL_Delay(10);
+          SDL_Event event;
+          while (SDL_PollEvent(&event))
+          {
+            if (event.type != SDL_KEYDOWN)
+            {
+              if (event.type == SDL_QUIT)
+                quitFlag = true;
+              continue;
+            }
+            switch (event.key.keysym.sym)
+            {
+              case SDLK_a:
+                modelRotationZ += 0.19634954f;          // 11.25 degrees
+                break;
+              case SDLK_d:
+                modelRotationZ -= 0.19634954f;
+                break;
+              case SDLK_s:
+                modelRotationX += 0.19634954f;
+                break;
+              case SDLK_w:
+                modelRotationX -= 0.19634954f;
+                break;
+              case SDLK_q:
+                modelRotationY -= 0.19634954f;
+                break;
+              case SDLK_e:
+                modelRotationY += 0.19634954f;
+                break;
+              case SDLK_LEFT:
+                lightRotationX += 0.19634954f;
+                break;
+              case SDLK_RIGHT:
+                lightRotationX -= 0.19634954f;
+                break;
+              case SDLK_DOWN:
+                lightRotationY += 0.19634954f;
+                break;
+              case SDLK_UP:
+                lightRotationY -= 0.19634954f;
+                break;
+              case SDLK_ESCAPE:
+                quitFlag = true;
+                break;
+              default:
+                continue;
+            }
+            keyPressed = true;
+            break;
+          }
+        }
+        if (!quitFlag)
+          continue;
+      }
+#endif
+      break;
+    }
+#ifdef HAVE_SDL
+    if (outFileName)
+#endif
+    {
+      DDSOutputFile outFile(outFileName, imageWidth >> 1, imageHeight >> 1,
+                            DDSInputFile::pixelFormatRGB24);
+      for (int y = 0; y < imageHeight; y = y + 2)
+      {
+        for (int x = 0; x < imageWidth; x = x + 2)
+        {
+          unsigned int  c = downsample2xFilter(&(outBufRGBW.front()),
+                                               imageWidth, imageHeight, x, y);
+          outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
+          outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
+          outFile.writeByte((unsigned char) (c & 0xFF));
+        }
       }
     }
     for (std::map< const std::string *, DDSTexture * >::iterator
@@ -432,6 +590,10 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     {
       delete i->second;
     }
+#ifdef HAVE_SDL
+    if (!outFileName)
+      SDL_Quit();
+#endif
   }
   catch (...)
   {
@@ -440,6 +602,10 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     {
       delete i->second;
     }
+#ifdef HAVE_SDL
+    if (!outFileName)
+      SDL_Quit();
+#endif
     throw;
   }
 }
@@ -455,14 +621,15 @@ int main(int argc, char **argv)
     // 3: .obj format
     // 4: .mtl format
     // 5: render to DDS file
+    // 6: render and view in real time (requires SDL 1.2)
     int     outFmt = 0;
-    int     renderWidth = 2400;
-    int     renderHeight = 1600;
+    int     renderWidth = 1344;
+    int     renderHeight = 896;
     if (argc >= 2)
     {
-      static const char *formatOptions[5] =
+      static const char *formatOptions[6] =
       {
-        "-q", "-v", "-obj", "-mtl", "-render"
+        "-q", "-v", "-obj", "-mtl", "-render", "-view"
       };
       for (size_t i = 0; i < (sizeof(formatOptions) / sizeof(char *)); i++)
       {
@@ -474,12 +641,14 @@ int main(int argc, char **argv)
           break;
         }
       }
-      if (outFmt == 0 && std::strncmp(argv[1], "-render", 7) == 0)
+      if (outFmt == 0 &&
+          (std::strncmp(argv[1], "-render", 7) == 0 ||
+           std::strncmp(argv[1], "-view", 5) == 0))
       {
-        std::string tmp(argv[1] + 7);
-        outFmt = 5;
+        outFmt = (argv[1][1] == 'r' ? 5 : 6);
         argc--;
         argv++;
+        std::string tmp(argv[0] + (outFmt == 5 ? 7 : 5));
         size_t  n = tmp.find('x');
         if (n != std::string::npos)
         {
@@ -488,8 +657,6 @@ int main(int argc, char **argv)
           tmp.resize(n);
           renderWidth = int(parseInteger(tmp.c_str(), 10,
                                          "invalid image width", 8, 16384));
-          renderWidth = renderWidth << 1;
-          renderHeight = renderHeight << 1;
         }
         else
         {
@@ -499,8 +666,8 @@ int main(int argc, char **argv)
     }
     if (argc < (outFmt != 5 ? 3 : 4))
     {
-      std::fprintf(stderr, "Usage: nif_info [-q|-v|-obj|-mtl|-render DDSFILE] "
-                           "ARCHIVEPATH PATTERN...\n");
+      std::fprintf(stderr, "Usage: nif_info [OPTION] ARCHIVEPATH PATTERN...\n");
+      std::fprintf(stderr, "Options:\n");
       std::fprintf(stderr, "    -q      Print author name, file name, "
                            "and file size only\n");
       std::fprintf(stderr, "    -v      Verbose mode, print block list, "
@@ -509,15 +676,19 @@ int main(int argc, char **argv)
       std::fprintf(stderr, "    -mtl    Print material data in .mtl format\n");
       std::fprintf(stderr, "    -render[WIDTHxHEIGHT] DDSFILE       "
                            "Render model to DDS file (experimental)\n");
+#ifdef HAVE_SDL
+      std::fprintf(stderr, "    -view[WIDTHxHEIGHT] View model\n");
+#endif
       return 1;
     }
     std::vector< std::string >  fileNames;
     for (int i = 2; i < argc; i++)
       fileNames.push_back(argv[i]);
     fileNames.push_back(".bgsm");
+    if (outFmt >= 5)
+      fileNames.push_back(".dds");
     if (outFmt == 5)
     {
-      fileNames.push_back(".dds");
       argc--;
       argv++;
     }
@@ -563,10 +734,23 @@ int main(int argc, char **argv)
       }
       if (outFmt == 4)
         printMTLData(outFile, nifFile);
-      if (outFmt == 5)
+      if (outFmt == 5 || outFmt == 6)
       {
         std::fprintf(stderr, "%s\n", fileNames[i].c_str());
-        renderMeshToFile(argv[0], nifFile, ba2File, renderWidth, renderHeight);
+        if (outFmt == 5)
+        {
+          renderMeshToFile(argv[0], nifFile, ba2File,
+                           renderWidth << 1, renderHeight << 1);
+        }
+        else
+        {
+#ifdef HAVE_SDL
+          renderMeshToFile((char *) 0, nifFile, ba2File,
+                           renderWidth, renderHeight);
+#else
+          throw errorMessage("viewing the model requires SDL 1.2");
+#endif
+        }
         break;
       }
     }
