@@ -7,31 +7,37 @@ BGSMFile::BGSMFile()
   clear();
 }
 
-BGSMFile::BGSMFile(const char *fileName)
+BGSMFile::BGSMFile(std::vector< std::string >& texturePaths,
+                   const char *fileName)
 {
   FileBuffer  buf(fileName);
-  loadBGSMFile(buf);
+  loadBGSMFile(texturePaths, buf);
 }
 
-BGSMFile::BGSMFile(const unsigned char *buf, size_t bufSize)
+BGSMFile::BGSMFile(std::vector< std::string >& texturePaths,
+                   const unsigned char *buf, size_t bufSize)
 {
   FileBuffer  tmpBuf(buf, bufSize);
-  loadBGSMFile(tmpBuf);
+  loadBGSMFile(texturePaths, tmpBuf);
 }
 
-BGSMFile::BGSMFile(FileBuffer& buf)
+BGSMFile::BGSMFile(std::vector< std::string >& texturePaths, FileBuffer& buf)
 {
-  loadBGSMFile(buf);
+  loadBGSMFile(texturePaths, buf);
 }
 
-BGSMFile::BGSMFile(const BA2File& ba2File, const std::string& fileName)
+BGSMFile::BGSMFile(std::vector< std::string >& texturePaths,
+                   const BA2File& ba2File, const std::string& fileName)
 {
-  loadBGSMFile(ba2File, fileName);
+  loadBGSMFile(texturePaths, ba2File, fileName);
 }
 
-void BGSMFile::loadBGSMFile(FileBuffer& buf)
+void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
+                            FileBuffer& buf)
 {
   clear();
+  for (size_t i = 0; i < texturePaths.size(); i++)
+    texturePaths[i].clear();
   buf.setPosition(0);
   if (buf.size() < 68)
     throw errorMessage("BGSM file is shorter than expected");
@@ -63,17 +69,28 @@ void BGSMFile::loadBGSMFile(FileBuffer& buf)
   }
   for (size_t i = 0; i < texturePaths.size(); i++)
   {
+    static const unsigned char  texturePathMap[20] =
+    {
+      0x00, 0x01, 0x06, 0x03, 0x04, 0x02, 0x88, 0x07, 0x88, 0x88,       // FO4
+      0x00, 0x01, 0x86, 0x03, 0x02, 0x07, 0x08, 0x09, 0x86, 0x86        // FO76
+    };
     size_t  len = buf.readUInt32();
-    buf.readPath(texturePaths[i], len, "textures/", ".dds");
+    size_t  n = texturePathMap[i + (version == 2 ? 0 : 10)];
+    bool    unusedTexture = bool(n & 0x80);
+    n = n & 0x0F;
+    buf.readPath(texturePaths[n], len, "textures/", ".dds");
+    if (unusedTexture)
+      texturePaths[n].clear();
   }
 }
 
-void BGSMFile::loadBGSMFile(const BA2File& ba2File, const std::string& fileName)
+void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
+                            const BA2File& ba2File, const std::string& fileName)
 {
   std::vector< unsigned char >  tmpBuf;
   ba2File.extractFile(tmpBuf, fileName);
   FileBuffer  buf(&(tmpBuf.front()), tmpBuf.size());
-  loadBGSMFile(buf);
+  loadBGSMFile(texturePaths, buf);
 }
 
 void BGSMFile::clear()
@@ -88,6 +105,5 @@ void BGSMFile::clear()
   alphaBlendMode = 0x0067;
   alphaThreshold = 128;
   alphaThresholdEnabled = false;
-  texturePaths.resize(0);
 }
 
