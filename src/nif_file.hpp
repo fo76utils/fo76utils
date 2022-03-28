@@ -107,12 +107,20 @@ class NIFFile : public FileBuffer
     const NIFVertex     *vertexData;
     const NIFTriangle   *triangleData;
     NIFVertexTransform  vertexTransform;
-    bool    isWater;
+    // 0x0001: hidden
+    // 0x0002: is water
+    // 0x0004: is effect
+    unsigned short  flags;
     unsigned char alphaThreshold;
-    // 9 for Skyrim, 10 for Fallout 4, 13 for Fallout 76
     unsigned char texturePathCnt;
     // texturePaths[0] = diffuse texture
     // texturePaths[1] = normal map
+    // texturePaths[2] = glow texture
+    // texturePaths[4] = environment map
+    // texturePaths[6] = Fallout 4 specular
+    // texturePaths[7] = wrinkles
+    // texturePaths[8] = Fallout 76 _r
+    // texturePaths[9] = Fallout 76 _l
     const std::string * const * texturePaths;
     // BGSM file name for Fallout 4 and 76
     const std::string   *materialPath;
@@ -124,7 +132,7 @@ class NIFFile : public FileBuffer
     NIFTriShape()
       : vertexCnt(0), triangleCnt(0),
         vertexData((NIFVertex *) 0), triangleData((NIFTriangle *) 0),
-        isWater(false), alphaThreshold(0), texturePathCnt(0),
+        flags(0x0000), alphaThreshold(0), texturePathCnt(0),
         texturePaths((std::string **) 0), materialPath((std::string *) 0),
         textureOffsetU(0.0f), textureOffsetV(0.0f),
         textureScaleU(1.0f), textureScaleV(1.0f), name("")
@@ -256,6 +264,7 @@ class NIFFile : public FileBuffer
   std::vector< const std::string * >  stringTable;
   std::set< std::string >   stringSet;
   std::string   stringBuf;
+  std::vector< std::string >  bgsmTexturePaths;
   void readString(size_t stringLengthSize);
   const std::string *storeString(std::string& s);
   inline int readBlockID()

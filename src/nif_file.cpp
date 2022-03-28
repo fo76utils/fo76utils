@@ -376,7 +376,7 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
     BGSMFile  bgsmFile;
     try
     {
-      bgsmFile.loadBGSMFile(*ba2File, *materialName);
+      bgsmFile.loadBGSMFile(f.bgsmTexturePaths, *ba2File, *materialName);
     }
     catch (...)
     {
@@ -394,9 +394,9 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
       bgsmAlphaThreshold = -1;
       if (bgsmFile.alphaThresholdEnabled)
         bgsmAlphaThreshold = (signed short) bgsmFile.alphaThreshold;
-      bgsmTextures.resize(bgsmFile.texturePaths.size(), (std::string *) 0);
-      for (size_t i = 0; i < bgsmFile.texturePaths.size(); i++)
-        bgsmTextures[i] = f.storeString(bgsmFile.texturePaths[i]);
+      bgsmTextures.resize(f.bgsmTexturePaths.size(), (std::string *) 0);
+      for (size_t i = 0; i < f.bgsmTexturePaths.size(); i++)
+        bgsmTextures[i] = f.storeString(f.bgsmTexturePaths[i]);
     }
   }
 }
@@ -411,10 +411,20 @@ NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(NIFFile& f)
   nameID = f.readInt32();
   if (nameID < 0 || size_t(nameID) >= f.stringTable.size())
     nameID = -1;
-  texturePaths.resize(f.bsVersion < 0x80 ? 9 : (f.bsVersion < 0x90 ? 10 : 13),
-                      (std::string *) 0);
-  for (size_t i = 0; i < texturePaths.size(); i++)
+  texturePaths.resize((f.bsVersion < 0x90 ? 8 : 10), (std::string *) 0);
+  f.stringBuf.clear();
+  for (size_t i = 5; i < texturePaths.size(); i++)
+    texturePaths[i] = f.storeString(f.stringBuf);
+  static const unsigned char  texturePathMap[32] =
   {
+     0,  1,  2,  3,  4,  5, 64, 64, 255, 255,           // Skyrim
+     0,  1,  2,  3,  4,  7, 64,  6, 255, 255,           // Fallout 4
+     0,  1,  2,  3,  4,  7, 64, 64, 64,  8,  9, 255     // Fallout 76
+  };
+  for (size_t i = (f.bsVersion < 0x80 ? 0 : (f.bsVersion < 0x90 ? 10 : 20));
+       !(texturePathMap[i] & 0x80); i++)
+  {
+    size_t  j = texturePathMap[i];
     f.readString(4);
     if (f.stringBuf.length() > 0 &&
         std::strncmp(f.stringBuf.c_str(), "textures/", 9) != 0)
@@ -425,7 +435,8 @@ NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(NIFFile& f)
       else
         f.stringBuf.insert(0, "textures/");
     }
-    texturePaths[i] = f.storeString(f.stringBuf);
+    if (j < texturePaths.size())
+      texturePaths[j] = f.storeString(f.stringBuf);
   }
 }
 
@@ -659,7 +670,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   t.vertexData = &(b.vertexData.front());
   t.triangleData = &(b.triangleData.front());
   t.vertexTransform = b.vertexTransform;
-  t.isWater = true;
+  t.flags = (unsigned short) (b.flags & 0x0001);        // hidden
   if (b.nameID >= 0)
     t.name = stringTable[b.nameID]->c_str();
   for (size_t i = parentBlocks.size(); i-- > 0; )
@@ -670,9 +681,9 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   if (b.shaderProperty >= 0)
   {
     size_t  n = size_t(b.shaderProperty);
-    if (getBaseBlockType(n) == BlkTypeBSLightingShaderProperty)
+    int     baseBlockType = getBaseBlockType(n);
+    if (baseBlockType == BlkTypeBSLightingShaderProperty)
     {
-      t.isWater = false;
       const NIFBlkBSLightingShaderProperty& lsBlock =
           *((const NIFBlkBSLightingShaderProperty *) blocks[n]);
       if (lsBlock.materialName && !lsBlock.materialName->empty())
@@ -681,8 +692,11 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       t.textureOffsetV = lsBlock.offsetV;
       t.textureScaleU = lsBlock.scaleU;
       t.textureScaleV = lsBlock.scaleV;
+      // default to 128 if blending is enabled in src alpha, inv src alpha mode
       if (lsBlock.bgsmAlphaThreshold >= 0)
         t.alphaThreshold = (unsigned char) lsBlock.bgsmAlphaThreshold;
+      else if (lsBlock.bgsmAlphaBlendMode == 0x0167)
+        t.alphaThreshold = 128;
       if (lsBlock.bgsmVersion && (lsBlock.textureSet < 0 || bsVersion >= 0x90))
       {
         t.texturePathCnt = (unsigned char) lsBlock.bgsmTextures.size();
@@ -692,6 +706,19 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       {
         n = size_t(lsBlock.textureSet);
       }
+    }
+    else if (baseBlockType == BlkTypeBSEffectShaderProperty)
+    {
+      t.flags = t.flags | 0x0004;
+    }
+    else if (baseBlockType == BlkTypeBSWaterShaderProperty)
+    {
+      t.flags = t.flags | 0x0002;
+    }
+    else
+    {
+      // unknown shader type
+      return;
     }
     if (getBaseBlockType(n) == BlkTypeBSShaderTextureSet)
     {
@@ -706,7 +733,21 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   {
     const NIFBlkNiAlphaProperty&  apBlock =
         *((const NIFBlkNiAlphaProperty *) blocks[b.alphaProperty]);
-    t.alphaThreshold = apBlock.alphaThreshold;
+    if (apBlock.flags & 0x0200)         // threshold enabled
+    {
+      t.alphaThreshold = apBlock.alphaThreshold;
+      if ((apBlock.flags & 0x1C00) == 0x1000 && t.alphaThreshold < 255)
+        t.alphaThreshold++;             // threshold mode is "greater"
+    }
+    else if ((apBlock.flags & 0x01FF) == 0x00ED)
+    {
+      t.alphaThreshold = 128;           // blending enabled, src/inv src alpha
+    }
+  }
+  if (t.texturePathCnt > 0 &&
+      t.texturePaths[0]->find("/fxwater") != std::string::npos)
+  {
+    t.flags = t.flags | 0x0002;
   }
   v.push_back(t);
 }
