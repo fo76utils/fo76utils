@@ -528,46 +528,48 @@ DDSTexture::~DDSTexture()
 
 unsigned int DDSTexture::getPixelB(float x, float y, int mipLevel) const
 {
-  int     x0 = int(x * 256.0f + (x < 0.0f ? -0.5f : 0.5f));
-  int     y0 = int(y * 256.0f + (y < 0.0f ? -0.5f : 0.5f));
+  int     x0 = roundFloat(x * 256.0f);
+  int     y0 = roundFloat(y * 256.0f);
   int     xf = x0 & 0xFF;
   int     yf = y0 & 0xFF;
-  x0 = (x0 & 0x7FFFFF00) >> 8;
-  y0 = (y0 & 0x7FFFFF00) >> 8;
-  unsigned int  c0 = blendRGBA32(getPixelN(x0, y0, mipLevel),
-                                 getPixelN(x0 + 1, y0, mipLevel), xf);
-  unsigned int  c1 = blendRGBA32(getPixelN(x0, y0 + 1, mipLevel),
-                                 getPixelN(x0 + 1, y0 + 1, mipLevel), xf);
-  return blendRGBA32(c0, c1, yf);
+  x0 = int((unsigned int) x0 >> 8);
+  y0 = int((unsigned int) y0 >> 8);
+  unsigned long long  c0, c1;
+  c0 = blendRGBA32ToRBGA64(getPixelN(x0, y0, mipLevel),
+                           getPixelN(x0 + 1, y0, mipLevel), xf);
+  c1 = blendRGBA32ToRBGA64(getPixelN(x0, y0 + 1, mipLevel),
+                           getPixelN(x0 + 1, y0 + 1, mipLevel), xf);
+  return rbga64ToRGBA32(blendRBGA64(c0, c1, yf));
 }
 
 unsigned int DDSTexture::getPixelT(float x, float y, float mipLevel) const
 {
-  int     x0 = int(x * 256.0f + (x < 0.0f ? -0.5f : 0.5f));
-  int     y0 = int(y * 256.0f + (y < 0.0f ? -0.5f : 0.5f));
-  int     m0 = int(mipLevel * 256.0f + (mipLevel < 0.0f ? -0.5f : 0.5f));
-  int     x0m1 = (x0 & 0x7FFFFFFF) >> 1;
-  int     y0m1 = (y0 & 0x7FFFFFFF) >> 1;
+  int     x0 = roundFloat(x * 256.0f);
+  int     y0 = roundFloat(y * 256.0f);
+  int     m0 = roundFloat(mipLevel * 256.0f);
+  int     x0m1 = int((unsigned int) x0 >> 1);
+  int     y0m1 = int((unsigned int) y0 >> 1);
   int     xf = x0 & 0xFF;
   int     yf = y0 & 0xFF;
   int     mf = m0 & 0xFF;
-  x0 = (x0 & 0x7FFFFF00) >> 8;
-  y0 = (y0 & 0x7FFFFF00) >> 8;
-  m0 = (m0 & 0x7FFFFF00) >> 8;
+  x0 = int((unsigned int) x0 >> 8);
+  y0 = int((unsigned int) y0 >> 8);
+  m0 = int((unsigned int) m0 >> 8);
   int     m1 = m0 + 1;
   int     xfm1 = x0m1 & 0xFF;
   int     yfm1 = y0m1 & 0xFF;
-  x0m1 = (x0m1 & 0x7FFFFF00) >> 8;
-  y0m1 = (y0m1 & 0x7FFFFF00) >> 8;
-  unsigned int  c0 = blendRGBA32(getPixelN(x0, y0, m0),
-                                 getPixelN(x0 + 1, y0, m0), xf);
-  unsigned int  c1 = blendRGBA32(getPixelN(x0, y0 + 1, m0),
-                                 getPixelN(x0 + 1, y0 + 1, m0), xf);
-  unsigned int  c = blendRGBA32(c0, c1, yf);
-  c0 = blendRGBA32(getPixelN(x0m1, y0m1, m1),
-                   getPixelN(x0m1 + 1, y0m1, m1), xfm1);
-  c1 = blendRGBA32(getPixelN(x0m1, y0m1 + 1, m1),
-                   getPixelN(x0m1 + 1, y0m1 + 1, m1), xfm1);
-  return blendRGBA32(c, blendRGBA32(c0, c1, yfm1), mf);
+  x0m1 = int((unsigned int) x0m1 >> 8);
+  y0m1 = int((unsigned int) y0m1 >> 8);
+  unsigned long long  c0, c1, c;
+  c0 = blendRGBA32ToRBGA64(getPixelN(x0, y0, m0),
+                           getPixelN(x0 + 1, y0, m0), xf);
+  c1 = blendRGBA32ToRBGA64(getPixelN(x0, y0 + 1, m0),
+                           getPixelN(x0 + 1, y0 + 1, m0), xf);
+  c = blendRBGA64(c0, c1, yf);
+  c0 = blendRGBA32ToRBGA64(getPixelN(x0m1, y0m1, m1),
+                           getPixelN(x0m1 + 1, y0m1, m1), xfm1);
+  c1 = blendRGBA32ToRBGA64(getPixelN(x0m1, y0m1 + 1, m1),
+                           getPixelN(x0m1 + 1, y0m1 + 1, m1), xfm1);
+  return rbga64ToRGBA32(blendRBGA64(c, blendRBGA64(c0, c1, yfm1), mf));
 }
 
