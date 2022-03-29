@@ -353,7 +353,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                              const BA2File& ba2File,
                              int imageWidth, int imageHeight)
 {
-  std::map< const std::string *, DDSTexture * > textures;
+  std::map< const std::string *, DDSTexture * > textureSet;
 #ifdef HAVE_SDL
   if (!outFileName)
   {
@@ -388,6 +388,8 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     float   viewRotationX = float(std::atan(std::sqrt(2.0)));
     float   viewRotationY = float(std::atan(1.0) * 4.0);
     float   viewRotationZ = float(std::atan(1.0));
+    std::string
+        defaultEnvMap("textures/shared/cubemaps/metalchrome01cube_e.dds");
     Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
                            imageWidth, imageHeight);
     while (true)
@@ -426,36 +428,37 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         if (meshData[i].flags & 0x0005)         // ignore if hidden or effect
           continue;
         plot3d = meshData[i];
-        const DDSTexture  *textureD = (DDSTexture *) 0;
-        const DDSTexture  *textureN = (DDSTexture *) 0;
-        const DDSTexture  *textureR = (DDSTexture *) 0;
-        for (size_t j = 0; j < meshData[i].texturePathCnt && j < 9; j++)
+        const DDSTexture  *textures[9];
+        for (size_t j = 9; j-- > 0; )
         {
-          if (meshData[i].texturePaths[j]->empty() || (j >= 2 && (j & 3)))
+          textures[j] = (DDSTexture *) 0;
+          if (!(j < meshData[i].texturePathCnt && (j < 2 || !(j & 3))))
             continue;
-          std::map< const std::string *, DDSTexture * >::iterator k =
-              textures.find(meshData[i].texturePaths[j]);
-          if (k == textures.end())
+          const std::string *texturePath = meshData[i].texturePaths[j];
+          if (texturePath->empty())
           {
-            ba2File.extractFile(fileBuf, *(meshData[i].texturePaths[j]));
+            if (!(j == 4 && textures[8]))
+              continue;
+            texturePath = &defaultEnvMap;
+          }
+          std::map< const std::string *, DDSTexture * >::iterator k =
+              textureSet.find(texturePath);
+          if (k == textureSet.end())
+          {
+            ba2File.extractFile(fileBuf, *texturePath);
             DDSTexture  *texture =
                 new DDSTexture(&(fileBuf.front()), fileBuf.size());
-            k = textures.insert(std::pair< const std::string *, DDSTexture * >(
-                                    meshData[i].texturePaths[j],
-                                    texture)).first;
+            k = textureSet.insert(
+                    std::pair< const std::string *, DDSTexture * >(
+                        texturePath, texture)).first;
           }
-          if (j == 0)
-            textureD = k->second;
-          else if (j == 1)
-            textureN = k->second;
-          else
-            textureR = k->second;
+          textures[j] = k->second;
         }
         NIFFile::NIFVertexTransform
             tmp(1.0f, lightRotationX, lightRotationY, 0.0f, 0.0f, 0.0f, 0.0f);
         plot3d.drawTriShape(modelTransform, viewTransform,
                             tmp.rotateXZ, tmp.rotateYZ, tmp.rotateZZ,
-                            textureD, textureN, textureR);
+                            textures, 9);
       }
 #ifdef HAVE_SDL
       if (outFileName)
@@ -586,7 +589,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       }
     }
     for (std::map< const std::string *, DDSTexture * >::iterator
-             i = textures.begin(); i != textures.end(); i++)
+             i = textureSet.begin(); i != textureSet.end(); i++)
     {
       delete i->second;
     }
@@ -598,7 +601,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
   catch (...)
   {
     for (std::map< const std::string *, DDSTexture * >::iterator
-             i = textures.begin(); i != textures.end(); i++)
+             i = textureSet.begin(); i != textureSet.end(); i++)
     {
       delete i->second;
     }
