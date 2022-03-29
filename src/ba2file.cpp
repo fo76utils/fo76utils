@@ -304,6 +304,12 @@ void BA2File::loadArchiveFile(const char *fileName)
     if (!fileName || *fileName == '\0')
       throw errorMessage("empty input file name");
 #if defined(_WIN32) || defined(_WIN64)
+    char    c = fileName[std::strlen(fileName) - 1];
+    if (c == '/' || c == '\\')
+    {
+      loadArchivesFromDir(fileName);
+      return;
+    }
     struct __stat64 st;
     if (_stat64(fileName, &st) != 0)
 #else
