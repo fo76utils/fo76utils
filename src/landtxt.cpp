@@ -535,7 +535,8 @@ int main(int argc, char **argv)
         throw errorMessage("invalid command line option: %s", argv[i]);
       }
     }
-    if (args.size() != (checkNameExtension(args[0], ".esm") ? 2 : 4))
+    if (args.size() < 1 ||
+        args.size() != (checkNameExtension(args[0], ".esm") ? 2 : 4))
     {
       for (size_t i = 0; usageStrings[i]; i++)
         std::fprintf(stderr, "%s\n", usageStrings[i]);
