@@ -7,6 +7,54 @@ const float Plot3D_TriShape::defaultLightingPolynomial[6] =
   0.672235f, 0.997428f, 0.009355f, -0.771812f, 0.108711f, 0.369682f
 };
 
+Plot3D_TriShape::Plot3DTS_Base::Plot3DTS_Base(
+    Plot3D_TriShape& p, float light_X, float light_Y, float light_Z,
+    const DDSTexture * const *textures, size_t textureCnt)
+{
+  outBufRGBW = p.bufRGBW;
+  outBufZ = p.bufZ;
+  width = p.width;
+  height = p.height;
+  mipLevel = 0.0f;
+  alphaThreshold = (unsigned int) p.alphaThreshold << 24;
+  textureD = (DDSTexture *) 0;
+  textureN = (DDSTexture *) 0;
+  textureScaleN = 1.0f;
+  lightX = light_X;
+  lightY = light_Y;
+  lightZ = light_Z;
+  lightingPolynomial = p.lightingPolynomial;
+  textureE = (DDSTexture *) 0;
+  reflectionLevel = 0;
+  textureScaleR = 1.0f;
+  textureR = (DDSTexture *) 0;
+  if (textureCnt >= 1)
+    textureD = textures[0];
+  if (!(textureD && textureCnt >= 2 && textures[1] &&
+        ((textureD->getWidth() * textures[1]->getHeight())
+         == (textureD->getHeight() * textures[1]->getWidth()))))
+  {
+    return;
+  }
+  textureN = textures[1];
+  textureScaleN = float(textureN->getWidth()) / float(textureD->getWidth());
+  if (!(textureCnt >= 5 && textures[4]))
+    return;
+  textureE = textures[4];
+  if (!(textureCnt >= 9 && textures[8]))
+  {
+    reflectionLevel = int(Plot3D_TriShape::calculateLighting(
+                              0.0f, 0.0f, -1.0f, 0.707107f, 0.707107f, 0.0f,
+                              lightingPolynomial));
+    return;
+  }
+  textureR = textures[8];
+  reflectionLevel = int(Plot3D_TriShape::calculateLighting(
+                            0.0f, 0.0f, -1.0f, 0.684653f, 0.684653f, -0.25f,
+                            lightingPolynomial));
+  textureScaleR = float(textureR->getWidth()) / float(textureD->getWidth());
+}
+
 inline void Plot3D_TriShape::Plot3DTS_Water::drawPixel(int x, int y,
                                                        const ColorV2& z)
 {
@@ -148,8 +196,8 @@ inline unsigned int Plot3D_TriShape::Plot3DTS_NormalsEnvT::environmentMap(
     u = u - (normalY * 0.5f);
     v = v + (normalX * 0.5f);
   }
-  unsigned int  tmp = textureR->getPixelB(u * float(textureR->getWidth()),
-                                          v * float(textureR->getHeight()), 0);
+  unsigned int  tmp = textureE->getPixelB(u * float(textureE->getWidth()),
+                                          v * float(textureE->getHeight()), 0);
   tmp = Plot3D_TriShape::multiplyWithLight(tmp, 0U, reflectionLevel);
   unsigned int  rb = (c & 0x00FF00FFU) + (tmp & 0x00FF00FFU);
   unsigned int  g = (c & 0x0000FF00U) + (tmp & 0x0000FF00U);
@@ -183,6 +231,10 @@ inline unsigned int Plot3D_TriShape::Plot3DTS_NormalsReflT::reflectionMap(
     unsigned int c, float normalX, float normalY, float normalZ,
     int x, int y, const ColorV6& z) const
 {
+  unsigned int  tmp =
+      textureR->getPixelT(z.v2 * textureScaleR, z.v3 * textureScaleR, mipLevel);
+  if (!(tmp & 0x00FFFFFFU))
+    return c;
   float   u = float((height >> 1) - y) * (0.25f / float(height)) + 0.5f;
   float   v = float(x - (width >> 1)) * (0.25f / float(height)) + 0.5f;
   if (normalZ < -0.5f)
@@ -195,16 +247,18 @@ inline unsigned int Plot3D_TriShape::Plot3DTS_NormalsReflT::reflectionMap(
     u = u - (normalY * 0.5f);
     v = v + (normalX * 0.5f);
   }
-  int     n = int(((u * u) + (float(std::cos(v * 12.56637f)) * 0.375f))
-                  * 193.0f + 63.5f);
-  n = (n > 0 ? (n < 255 ? n : 255) : 0);
-  unsigned int  tmp =
-      textureR->getPixelT(z.v2 * textureScaleR, z.v3 * textureScaleR, mipLevel);
-  unsigned int  rb = ((tmp & 0x00FF00FFU) * (unsigned int) n) + 0x00800080U;
-  unsigned int  g = ((tmp & 0x0000FF00U) * (unsigned int) n) + 0x00008000U;
-  tmp = ((rb & 0xFF00FF00U) | (g & 0x00FF0000U)) >> 8;
-  tmp = Plot3D_TriShape::multiplyWithLight(tmp, 0U, reflectionLevel);
-  rb = (c & 0x00FF00FFU) + (tmp & 0x00FF00FFU);
+  unsigned int  n = 0xFFC0C0C0U;
+  if (BRANCH_EXPECT(textureE, true))
+  {
+    n = textureE->getPixelB(u * float(textureE->getWidth()),
+                            v * float(textureE->getHeight()), 0);
+  }
+  unsigned int  r = ((tmp & 0xFFU) * (n & 0xFFU) + 0x80U) >> 8;
+  unsigned int  g = ((tmp & 0xFF00U) * (n & 0xFF00U) + 0x00800000U) >> 24;
+  unsigned int  b = (((tmp >> 16) & 0xFFU) * ((n >> 16) & 0xFFU) + 0x80U) >> 8;
+  tmp = Plot3D_TriShape::multiplyWithLight(r | (g << 8) | (b << 16), 0U,
+                                           reflectionLevel);
+  unsigned int  rb = (c & 0x00FF00FFU) + (tmp & 0x00FF00FFU);
   g = (c & 0x0000FF00U) + (tmp & 0x0000FF00U);
   tmp = (((rb & 0x01000100U) | (g & 0x00010000U)) >> 8) * 0xFFU;
   return (0xFF000000U | (rb & 0x00FF00FFU) | (g & 0x0000FF00U) | tmp);
@@ -315,7 +369,7 @@ size_t Plot3D_TriShape::transformVertexData(
     v.normalZ = (x * vt.rotateZX) + (y * vt.rotateZY) + (z * vt.rotateZZ);
     float   l = calculateLighting(v.normalX, v.normalY, v.normalZ,
                                   lightX, lightY, lightZ, lightingPolynomial);
-    v.vertexColor = (unsigned int) int(l * 1048576.0f + 0.5f);
+    v.vertexColor = (unsigned int) roundFloat(l * 1048576.0f);
   }
   size_t  n = 0;
   for (size_t i = 0; i < triangleCnt; i++)
@@ -431,62 +485,22 @@ void Plot3D_TriShape::drawTriShape(
     const NIFFile::NIFVertexTransform& modelTransform,
     const NIFFile::NIFVertexTransform& viewTransform,
     float lightX, float lightY, float lightZ,
-    const DDSTexture *textureD, const DDSTexture *textureN,
-    const DDSTexture *textureR)
+    const DDSTexture * const *textures, size_t textureCnt)
 {
   if (flags & 0x0002)
-    textureD = (DDSTexture *) 0;        // water
-  else if (!textureD)
+    textureCnt = 0;                     // water
+  else if (!(textureCnt >= 1 && textures[0]))
     return;
   size_t  triangleCntRendered =
       transformVertexData(modelTransform, viewTransform,
                           lightX, lightY, lightZ);
   if (!triangleCntRendered)
     return;
-  Plot3DTS_Base plot3d;
-  plot3d.outBufRGBW = bufRGBW;
-  plot3d.outBufZ = bufZ;
-  plot3d.width = width;
-  plot3d.height = height;
-  plot3d.mipLevel = 0.0f;
-  plot3d.alphaThreshold = (unsigned int) alphaThreshold << 24;
-  plot3d.textureD = textureD;
-  plot3d.textureN = (DDSTexture *) 0;
-  plot3d.textureScaleN = 1.0f;
-  plot3d.lightX = lightX;
-  plot3d.lightY = lightY;
-  plot3d.lightZ = lightZ;
-  plot3d.lightingPolynomial = lightingPolynomial;
-  plot3d.textureR = (DDSTexture *) 0;
-  plot3d.reflectionLevel = 0;
-  plot3d.fo76Reflection = false;
-  plot3d.textureScaleR = 1.0f;
-  if (textureD && textureN &&
-      ((textureD->getWidth() * textureN->getHeight())
-       == (textureD->getHeight() * textureN->getWidth())))
-  {
-    plot3d.textureN = textureN;
-    plot3d.textureScaleN =
-        float(textureN->getWidth()) / float(textureD->getWidth());
-    if (textureR)
-    {
-      plot3d.textureR = textureR;
-      float   reflectionLevel =
-          calculateLighting(0.0f, 0.0f, -1.0f, 0.684653f, 0.684653f, -0.25f,
-                            lightingPolynomial);
-      if (texturePathCnt >= 9 && !texturePaths[8]->empty())
-      {
-        plot3d.fo76Reflection = true;
-        plot3d.textureScaleR =
-            float(textureR->getWidth()) / float(textureD->getWidth());
-      }
-      else
-      {
-        reflectionLevel = reflectionLevel * 0.75f + 0.125f;
-      }
-      plot3d.reflectionLevel = short(reflectionLevel);
-    }
-  }
+  Plot3DTS_Base plot3d(*this, lightX, lightY, lightZ, textures, textureCnt);
+  const DDSTexture  *textureD = plot3d.textureD;
+  const DDSTexture  *textureN = plot3d.textureN;
+  const DDSTexture  *textureE = plot3d.textureE;
+  const DDSTexture  *textureR = plot3d.textureR;
   for (size_t i = 0; i < triangleCntRendered; i++)
   {
     const NIFFile::NIFVertex& v0 = vertexBuf[triangleData[triangleBuf[i]].v0];
@@ -564,12 +578,12 @@ void Plot3D_TriShape::drawTriShape(
         z2.v4 = v2.normalX;
         z2.v5 = v2.normalY;
         z2.v1 = v2.normalZ;
-        if (!textureR)
+        if (!textureE)
         {
           reinterpret_cast< Plot3D< Plot3DTS_NormalsT, ColorV6 > * >(
               &plot3d)->drawTriangle(x0, y0, z0, x1, y1, z1, x2, y2, z2);
         }
-        else if (plot3d.fo76Reflection)
+        else if (textureR)
         {
           reinterpret_cast< Plot3D< Plot3DTS_NormalsReflT, ColorV6 > * >(
               &plot3d)->drawTriangle(x0, y0, z0, x1, y1, z1, x2, y2, z2);

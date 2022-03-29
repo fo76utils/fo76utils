@@ -354,10 +354,13 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     float   lightY;
     float   lightZ;
     const float *lightingPolynomial;
-    const DDSTexture  *textureR;
-    short   reflectionLevel;
-    bool    fo76Reflection;
+    const DDSTexture  *textureE;
+    int     reflectionLevel;
     float   textureScaleR;
+    const DDSTexture  *textureR;
+    Plot3DTS_Base(Plot3D_TriShape& p,
+                  float light_X, float light_Y, float light_Z,
+                  const DDSTexture * const *textures, size_t textureCnt);
   };
   class Plot3DTS_Water : public Plot3DTS_Base
   {
@@ -442,12 +445,14 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   static float calculateLighting(float normalX, float normalY, float normalZ,
                                  float lightX, float lightY, float lightZ,
                                  const float *a);
+  // textures[0] = diffuse
+  // textures[1] = normal
+  // textures[4] = environment map
+  // textures[8] = Fallout 76 reflection map
   void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,
                     const NIFFile::NIFVertexTransform& viewTransform,
                     float lightX, float lightY, float lightZ,
-                    const DDSTexture *textureD,
-                    const DDSTexture *textureN = (DDSTexture *) 0,
-                    const DDSTexture *textureR = (DDSTexture *) 0);
+                    const DDSTexture * const *textures, size_t textureCnt);
 };
 
 #endif
