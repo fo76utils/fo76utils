@@ -19,7 +19,11 @@ std::runtime_error errorMessage(const char *fmt, ...);
 
 inline int roundFloat(float x)
 {
+#if 0
   return int(x + (x < 0.0f ? -0.5f : 0.5f));
+#else
+  return int(std::lrintf(x));
+#endif
 }
 
 inline int uint16ToSigned(unsigned short x)
@@ -36,12 +40,36 @@ inline int uint32ToSigned(unsigned int x)
   return (int(x ^ 0x80000000U) + int(-0x80000000));
 }
 
+inline unsigned long long rgba32ToRBGA64(unsigned int c)
+{
+  return ((unsigned long long) (c & 0x00FF00FFU)
+          | ((unsigned long long) (c & 0xFF00FF00U) << 24));
+}
+
+inline unsigned int rbga64ToRGBA32(unsigned long long c)
+{
+  return (((unsigned int) c & 0x00FF00FFU)
+          | ((unsigned int) (c >> 24) & 0xFF00FF00U));
+}
+
+inline unsigned long long blendRBGA64(unsigned long long c0,
+                                      unsigned long long c1, int f)
+{
+  unsigned int  m = (unsigned int) f;
+  unsigned long long  tmp = (c0 * (256U - m)) + (c1 * m);
+  return (((tmp + 0x0080008000800080ULL) >> 8) & 0x00FF00FF00FF00FFULL);
+}
+
+inline unsigned long long blendRGBA32ToRBGA64(unsigned int c0,
+                                              unsigned int c1, int f)
+{
+  return blendRBGA64(rgba32ToRBGA64(c0), rgba32ToRBGA64(c1), f);
+}
+
 inline unsigned int blendRGBA32(unsigned int c0, unsigned int c1, int f)
 {
-  unsigned long long  tmp0 = (unsigned long long) (c0 & 0x00FF00FFU)
-                             | ((unsigned long long) (c0 & 0xFF00FF00U) << 24);
-  unsigned long long  tmp1 = (unsigned long long) (c1 & 0x00FF00FFU)
-                             | ((unsigned long long) (c1 & 0xFF00FF00U) << 24);
+  unsigned long long  tmp0 = rgba32ToRBGA64(c0);
+  unsigned long long  tmp1 = rgba32ToRBGA64(c1);
   unsigned int  m = (unsigned int) f;
   tmp0 = (tmp0 * (256U - m)) + (tmp1 * m) + 0x0080008000800080ULL;
   return (((unsigned int) (tmp0 & 0xFF00FF00U) >> 8)
