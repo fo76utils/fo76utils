@@ -178,16 +178,20 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
     if (meshData[i].flags)
     {
       std::fprintf(f, "  Flags: ");
-      if (meshData[i].flags & 0x0001)
+      if (meshData[i].flags & 0x01)
         std::fprintf(f, "hidden");
-      if ((meshData[i].flags & 0x0003) > 0x0002)
+      if ((meshData[i].flags & 0x03) > 0x02)
         std::fprintf(f, ", ");
-      if (meshData[i].flags & 0x0002)
+      if (meshData[i].flags & 0x02)
         std::fprintf(f, "is water");
-      if ((meshData[i].flags & 0x0007) > 0x0004)
+      if ((meshData[i].flags & 0x07) > 0x04)
         std::fprintf(f, ", ");
-      if (meshData[i].flags & 0x0004)
+      if (meshData[i].flags & 0x04)
         std::fprintf(f, "is effect");
+      if ((meshData[i].flags & 0x0F) > 0x08)
+        std::fprintf(f, ", ");
+      if (meshData[i].flags & 0x08)
+        std::fprintf(f, "is decal");
       std::fputc('\n', f);
     }
     std::fprintf(f, "  Alpha threshold: %d\n", int(meshData[i].alphaThreshold));
@@ -432,7 +436,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         for (size_t j = 9; j-- > 0; )
         {
           textures[j] = (DDSTexture *) 0;
-          if (!(j < meshData[i].texturePathCnt && (j < 2 || !(j & 3))))
+          if (!(j < meshData[i].texturePathCnt && ((1 << int(j)) & 0x011B)))
             continue;
           const std::string *texturePath = meshData[i].texturePaths[j];
           if (texturePath->empty())
