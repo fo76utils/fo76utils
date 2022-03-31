@@ -107,19 +107,27 @@ class NIFFile : public FileBuffer
     const NIFVertex     *vertexData;
     const NIFTriangle   *triangleData;
     NIFVertexTransform  vertexTransform;
-    // 0x0001: hidden
-    // 0x0002: is water
-    // 0x0004: is effect
-    unsigned short  flags;
+    // bit 0:     hidden
+    // bit 1:     is water
+    // bit 2:     is effect
+    // bit 3:     is decal
+    // bits 4-5:  culling mode
+    //       0x00: if triangle vertices are in CW order (default)
+    //       0x10: if triangle vertices are in CCW order
+    //       0x20: if all normals are pointing away from the camera
+    //       0x30: disabled
+    unsigned char flags;
+    unsigned char gradientMapV;
     unsigned char alphaThreshold;
     unsigned char texturePathCnt;
     // texturePaths[0] = diffuse texture
     // texturePaths[1] = normal map
     // texturePaths[2] = glow texture
+    // texturePaths[3] = gradient map
     // texturePaths[4] = environment map
     // texturePaths[6] = Fallout 4 specular
     // texturePaths[7] = wrinkles
-    // texturePaths[8] = Fallout 76 _r
+    // texturePaths[8] = Fallout 76 _r, or environment mask (_em)
     // texturePaths[9] = Fallout 76 _l
     const std::string * const * texturePaths;
     // BGSM file name for Fallout 4 and 76
@@ -132,7 +140,7 @@ class NIFFile : public FileBuffer
     NIFTriShape()
       : vertexCnt(0), triangleCnt(0),
         vertexData((NIFVertex *) 0), triangleData((NIFTriangle *) 0),
-        flags(0x0000), alphaThreshold(0), texturePathCnt(0),
+        flags(0x00), gradientMapV(0), alphaThreshold(0), texturePathCnt(0),
         texturePaths((std::string **) 0), materialPath((std::string *) 0),
         textureOffsetU(0.0f), textureOffsetV(0.0f),
         textureScaleU(1.0f), textureScaleV(1.0f), name("")
