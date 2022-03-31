@@ -325,12 +325,6 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       decodeFunction = &decodeBlock_BGRA;
     else
       throw errorMessage("unsupported texture file format");
-    while ((xSizeMip0 >> (unsigned int) (mipLevelCnt - 1)) < 4U ||
-           (ySizeMip0 >> (unsigned int) (mipLevelCnt - 1)) < 4U)
-    {
-      if (--mipLevelCnt < 1)
-        throw errorMessage("unsupported RGB texture dimensions");
-    }
   }
   else
   {
@@ -341,6 +335,12 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       unsigned int  tmp = buf.readUInt32();
       switch (tmp)
       {
+        case 0x1C:                      // DXGI_FORMAT_R8G8B8A8_UNORM
+        case 0x1D:                      // DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
+          haveAlpha = true;
+          blockSize = 64;
+          decodeFunction = &decodeBlock_RGBA;
+          break;
         case 0x47:                      // DXGI_FORMAT_BC1_UNORM
         case 0x48:                      // DXGI_FORMAT_BC1_UNORM_SRGB
           break;
@@ -371,6 +371,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
           decodeFunction = &decodeBlock_BC5S;
           break;
         case 0x57:                      // DXGI_FORMAT_B8G8R8A8_UNORM
+          haveAlpha = true;
           blockSize = 64;
           decodeFunction = &decodeBlock_BGRA;
           break;
@@ -400,6 +401,15 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
           throw errorMessage("unsupported DDS fourCC: 0x%08X",
                              FileBuffer::swapUInt32(fourCC));
       }
+    }
+  }
+  if (blockSize > 16)
+  {
+    while ((xSizeMip0 >> (unsigned int) (mipLevelCnt - 1)) < 4U ||
+           (ySizeMip0 >> (unsigned int) (mipLevelCnt - 1)) < 4U)
+    {
+      if (--mipLevelCnt < 1)
+        throw errorMessage("unsupported RGB texture dimensions");
     }
   }
   size_t  sizeRequired = dataOffs;
@@ -566,10 +576,14 @@ unsigned int DDSTexture::getPixelT(float x, float y, float mipLevel) const
   c1 = blendRGBA32ToRBGA64(getPixelN(x0, y0 + 1, m0),
                            getPixelN(x0 + 1, y0 + 1, m0), xf);
   c = blendRBGA64(c0, c1, yf);
-  c0 = blendRGBA32ToRBGA64(getPixelN(x0m1, y0m1, m1),
-                           getPixelN(x0m1 + 1, y0m1, m1), xfm1);
-  c1 = blendRGBA32ToRBGA64(getPixelN(x0m1, y0m1 + 1, m1),
-                           getPixelN(x0m1 + 1, y0m1 + 1, m1), xfm1);
-  return rbga64ToRGBA32(blendRBGA64(c, blendRBGA64(c0, c1, yfm1), mf));
+  if (BRANCH_EXPECT(mf, true))
+  {
+    c0 = blendRGBA32ToRBGA64(getPixelN(x0m1, y0m1, m1),
+                             getPixelN(x0m1 + 1, y0m1, m1), xfm1);
+    c1 = blendRGBA32ToRBGA64(getPixelN(x0m1, y0m1 + 1, m1),
+                             getPixelN(x0m1 + 1, y0m1 + 1, m1), xfm1);
+    c = blendRBGA64(c, blendRBGA64(c0, c1, yfm1), mf);
+  }
+  return rbga64ToRGBA32(c);
 }
 
