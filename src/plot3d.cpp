@@ -7,6 +7,17 @@ const float Plot3D_TriShape::defaultLightingPolynomial[6] =
   0.672235f, 0.997428f, 0.009355f, -0.771812f, 0.108711f, 0.369682f
 };
 
+unsigned int Plot3D_TriShape::Plot3DTS_Base::gradientMap(unsigned int c) const
+{
+  unsigned int  u = (c & 0xFFU) + ((c >> 7) & 0x01FEU) + ((c >> 16) & 0xFFU);
+  u = ((u + 2U) * (unsigned int) (textureG->getWidth() - 1)) >> 2;
+  unsigned int  v =
+      ((255U - gradientMapV) * (unsigned int) textureG->getHeight()) >> 8;
+  unsigned int  c0 = textureG->getPixelN(int(u >> 8), int(v), 0);
+  unsigned int  c1 = textureG->getPixelN(int(u >> 8) + 1, int(v), 0);
+  return blendRGBA32(c0, c1, int(u & 0xFFU));
+}
+
 Plot3D_TriShape::Plot3DTS_Base::Plot3DTS_Base(
     Plot3D_TriShape& p, float light_X, float light_Y, float light_Z,
     const DDSTexture * const *textures, size_t textureCnt)
@@ -18,6 +29,7 @@ Plot3D_TriShape::Plot3DTS_Base::Plot3DTS_Base(
   mipLevel = 0.0f;
   alphaThreshold = (unsigned int) p.alphaThreshold << 24;
   textureD = (DDSTexture *) 0;
+  textureG = (DDSTexture *) 0;
   textureN = (DDSTexture *) 0;
   textureScaleN = 1.0f;
   lightX = light_X;
@@ -26,6 +38,7 @@ Plot3D_TriShape::Plot3DTS_Base::Plot3DTS_Base(
   lightingPolynomial = p.lightingPolynomial;
   textureE = (DDSTexture *) 0;
   reflectionLevel = 0;
+  gradientMapV = p.gradientMapV;
   textureScaleR = 1.0f;
   textureR = (DDSTexture *) 0;
   if (textureCnt >= 1)
@@ -38,20 +51,22 @@ Plot3D_TriShape::Plot3DTS_Base::Plot3DTS_Base(
   }
   textureN = textures[1];
   textureScaleN = float(textureN->getWidth()) / float(textureD->getWidth());
+  if (textureCnt >= 4)
+    textureG = textures[3];
   if (!(textureCnt >= 5 && textures[4]))
     return;
   textureE = textures[4];
   if (!(textureCnt >= 9 && textures[8]))
   {
-    reflectionLevel = int(Plot3D_TriShape::calculateLighting(
-                              0.0f, 0.0f, -1.0f, 0.707107f, 0.707107f, 0.0f,
-                              lightingPolynomial));
+    reflectionLevel = short(Plot3D_TriShape::calculateLighting(
+                                0.0f, 0.0f, -1.0f, 0.707107f, 0.707107f, 0.0f,
+                                lightingPolynomial));
     return;
   }
   textureR = textures[8];
-  reflectionLevel = int(Plot3D_TriShape::calculateLighting(
-                            0.0f, 0.0f, -1.0f, 0.684653f, 0.684653f, -0.25f,
-                            lightingPolynomial));
+  reflectionLevel = short(Plot3D_TriShape::calculateLighting(
+                              0.0f, 0.0f, -1.0f, 0.684653f, 0.684653f, -0.25f,
+                              lightingPolynomial));
   textureScaleR = float(textureR->getWidth()) / float(textureD->getWidth());
 }
 
@@ -77,6 +92,8 @@ inline void Plot3D_TriShape::Plot3DTS_TextureN::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   unsigned int  c = textureD->getPixelN(0, 0, 15);
+  if (BRANCH_EXPECT(textureG, false))
+    c = gradientMap(c);
   if (!(c = Plot3D_TriShape::multiplyWithLight(c, alphaThreshold, int(z.v1))))
     return;
   outBufZ[offs] = z.v0;
@@ -92,6 +109,8 @@ inline void Plot3D_TriShape::Plot3DTS_TextureB::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   unsigned int  c = textureD->getPixelB(z.v2, z.v3, int(mipLevel));
+  if (BRANCH_EXPECT(textureG, false))
+    c = gradientMap(c);
   if (!(c = Plot3D_TriShape::multiplyWithLight(c, alphaThreshold, int(z.v1))))
     return;
   outBufZ[offs] = z.v0;
@@ -107,6 +126,8 @@ inline void Plot3D_TriShape::Plot3DTS_TextureT::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   unsigned int  c = textureD->getPixelT(z.v2, z.v3, mipLevel);
+  if (BRANCH_EXPECT(textureG, false))
+    c = gradientMap(c);
   if (!(c = Plot3D_TriShape::multiplyWithLight(c, alphaThreshold, int(z.v1))))
     return;
   outBufZ[offs] = z.v0;
@@ -168,6 +189,8 @@ void Plot3D_TriShape::Plot3DTS_NormalsT::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   unsigned int  c = textureD->getPixelT(z.v2, z.v3, mipLevel);
+  if (BRANCH_EXPECT(textureG, false))
+    c = gradientMap(c);
   if (c < alphaThreshold)
     return;
   outBufZ[offs] = z.v0;
@@ -214,6 +237,8 @@ void Plot3D_TriShape::Plot3DTS_NormalsEnvT::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   unsigned int  c = textureD->getPixelT(z.v2, z.v3, mipLevel);
+  if (BRANCH_EXPECT(textureG, false))
+    c = gradientMap(c);
   if (c < alphaThreshold)
     return;
   outBufZ[offs] = z.v0;
@@ -273,6 +298,8 @@ void Plot3D_TriShape::Plot3DTS_NormalsReflT::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   unsigned int  c = textureD->getPixelT(z.v2, z.v3, mipLevel);
+  if (BRANCH_EXPECT(textureG, false))
+    c = gradientMap(c);
   if (c < alphaThreshold)
     return;
   outBufZ[offs] = z.v0;
@@ -335,6 +362,8 @@ size_t Plot3D_TriShape::transformVertexData(
   NIFFile::NIFVertexTransform vt(vertexTransform);
   vt *= modelTransform;
   vt *= viewTransform;
+  if (flags & 0x08)                     // decal
+    vt.offsZ = vt.offsZ - 0.5f;
   NIFFile::NIFBounds  b;
   for (size_t i = 0; i < vertexCnt; i++)
   {
@@ -382,8 +411,18 @@ size_t Plot3D_TriShape::transformVertexData(
     const NIFFile::NIFVertex& v0 = vertexBuf[triangleData[i].v0];
     const NIFFile::NIFVertex& v1 = vertexBuf[triangleData[i].v1];
     const NIFFile::NIFVertex& v2 = vertexBuf[triangleData[i].v2];
-    if (v0.normalZ > 0.0f && v1.normalZ > 0.0f && v2.normalZ > 0.0f &&
-        !alphaThreshold && !(flags & 0x0002))
+    if (!(flags & 0x20))
+    {
+      if ((!(flags & 0x10) &&
+           ((v1.x - v0.x) * (v2.y - v0.y)) > ((v2.x - v0.x) * (v1.y - v0.y))) ||
+          ((flags & 0x10) &&
+           ((v1.x - v0.x) * (v2.y - v0.y)) < ((v2.x - v0.x) * (v1.y - v0.y))))
+      {
+        continue;
+      }
+    }
+    else if (!(flags & 0x10) &&
+             v0.normalZ > 0.0f && v1.normalZ > 0.0f && v2.normalZ > 0.0f)
     {
       continue;
     }
@@ -430,6 +469,7 @@ Plot3D_TriShape& Plot3D_TriShape::operator=(const NIFFile::NIFTriShape& t)
   triangleData = t.triangleData;
   vertexTransform = t.vertexTransform;
   flags = t.flags;
+  gradientMapV = t.gradientMapV;
   alphaThreshold = t.alphaThreshold;
   texturePathCnt = t.texturePathCnt;
   texturePaths = t.texturePaths;
@@ -487,7 +527,7 @@ void Plot3D_TriShape::drawTriShape(
     float lightX, float lightY, float lightZ,
     const DDSTexture * const *textures, size_t textureCnt)
 {
-  if (flags & 0x0002)
+  if (flags & 0x02)
     textureCnt = 0;                     // water
   else if (!(textureCnt >= 1 && textures[0]))
     return;

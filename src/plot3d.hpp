@@ -340,6 +340,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
  private:
   class Plot3DTS_Base
   {
+   protected:
+    unsigned int gradientMap(unsigned int c) const;
    public:
     unsigned int  *outBufRGBW;
     float   *outBufZ;
@@ -348,6 +350,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     float   mipLevel;
     unsigned int  alphaThreshold;
     const DDSTexture  *textureD;
+    const DDSTexture  *textureG;
     const DDSTexture  *textureN;
     float   textureScaleN;
     float   lightX;
@@ -355,7 +358,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     float   lightZ;
     const float *lightingPolynomial;
     const DDSTexture  *textureE;
-    int     reflectionLevel;
+    short   reflectionLevel;
+    unsigned char gradientMapV;
     float   textureScaleR;
     const DDSTexture  *textureR;
     Plot3DTS_Base(Plot3D_TriShape& p,
