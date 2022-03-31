@@ -9,7 +9,9 @@
 struct BGSMFile
 {
   unsigned int  version;                // 2: Fallout 4, 20: Fallout 76
-  unsigned int  flags;                  // 1: U, 2: V
+  unsigned char uvFlags;                // 1: U, 2: V
+  unsigned char renderFlags;            // 1: is decal
+  unsigned char gradientMapV;
   float   offsetU;
   float   offsetV;
   float   scaleU;
@@ -22,10 +24,11 @@ struct BGSMFile
   // texturePaths[0] = diffuse
   // texturePaths[1] = normal
   // texturePaths[2] = glow
+  // texturePaths[3] = gradient map
   // texturePaths[4] = environment map
   // texturePaths[6] = Fallout 4 _s.dds
   // texturePaths[7] = wrinkles
-  // texturePaths[8] = Fallout 76 _r.dds
+  // texturePaths[8] = Fallout 76 _r.dds, or environment mask (_em.dds)
   // texturePaths[9] = Fallout 76 _l.dds
   BGSMFile(std::vector< std::string >& texturePaths, const char *fileName);
   BGSMFile(std::vector< std::string >& texturePaths,

@@ -46,7 +46,7 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   version = buf.readUInt32Fast();
   if (version != 2 && version != 20)
     throw errorMessage("unsupported BGSM file version");
-  flags = buf.readUInt32Fast();
+  uvFlags = (unsigned char) (buf.readUInt32Fast() & 0xFFU);
   offsetU = buf.readFloat();
   offsetV = buf.readFloat();
   scaleU = buf.readFloat();
@@ -57,6 +57,10 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   alphaBlendMode |= (unsigned short) (buf.readUInt32Fast() & 0x0FU);
   alphaThreshold = buf.readUInt8Fast();
   alphaThresholdEnabled = bool(buf.readUInt8Fast());
+  // Z buffer write, Z buffer test, screen space reflections
+  (void) buf.readUInt32Fast();
+  // decal
+  renderFlags = renderFlags | (unsigned char) bool(buf.readUInt8Fast());
   if (version == 2)
   {
     buf.setPosition(63);                // Fallout 4
@@ -96,7 +100,9 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
 void BGSMFile::clear()
 {
   version = 0;
-  flags = 0;
+  uvFlags = 0;
+  renderFlags = 0;
+  gradientMapV = 0;
   offsetU = 0.0f;
   offsetV = 0.0f;
   scaleU = 1.0f;
