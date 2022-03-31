@@ -82,7 +82,7 @@ static void fillWaterMesh(const NIFFile::NIFTriShape *meshData, size_t meshCnt,
   for (size_t i = 0; i < meshCnt; i++)
   {
 #if 0
-    if (!(meshData[i].flags & 0x0002))
+    if (!(meshData[i].flags & 0x02))
       continue;
 #endif
     NIFFile::NIFVertexTransform t = meshData[i].vertexTransform;
@@ -146,7 +146,7 @@ static void createMeshFromOBND(std::vector< NIFFile::NIFTriShape >& meshData,
   meshData[0].triangleCnt = obndTriangleBuf.size();
   meshData[0].vertexData = &(vertexData.front());
   meshData[0].triangleData = &(obndTriangleBuf.front());
-  meshData[0].flags = 0x0002;           // is water
+  meshData[0].flags = 0x32;             // is water
 }
 
 static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
