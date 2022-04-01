@@ -576,14 +576,13 @@ void Plot3D_TriShape::drawTriShape(
                                         - ((v2.x - v0.x) * (v1.y - v0.y))));
       float   uvArea2 = float(std::fabs(((z1.v2 - z0.v2) * (z2.v3 - z0.v3))
                                         - ((z2.v2 - z0.v2) * (z1.v3 - z0.v3))));
-      float   txtW = float(textureD->getWidth());
-      float   txtH = float(textureD->getHeight());
-      uvArea2 *= (txtW * txtH);
-      float   maxScale = (txtW < txtH ? txtW : txtH);
       float   mipLevel = 15.0f;
       bool    integerMipLevel = true;
-      if ((xyArea2 * (maxScale * maxScale)) > uvArea2)
+      if (xyArea2 > uvArea2)
       {
+        float   txtW = float(textureD->getWidth());
+        float   txtH = float(textureD->getHeight());
+        uvArea2 *= (txtW * txtH);
         mipLevel = 0.0f;
         if (uvArea2 > xyArea2)
           mipLevel = float(std::log(uvArea2 / xyArea2)) * 0.7213475f;

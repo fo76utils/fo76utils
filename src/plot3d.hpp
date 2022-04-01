@@ -153,7 +153,8 @@ template< typename T, typename ColorType > class Plot3D : public T
                     int x2, int y2, ColorType z2)
   {
     T::drawPixel(x0, y0, z0);
-    if (x0 == x1 && x0 == x2 && y0 == y1 && y0 == y2)
+    if ((std::abs(x1 - x0) | std::abs(x2 - x0) | std::abs(x2 - x1)
+         | std::abs(y1 - y0) | std::abs(y2 - y0) | std::abs(y2 - y1)) <= 1)
     {
       T::drawPixel(x1, y1, z1);
       T::drawPixel(x2, y2, z2);
