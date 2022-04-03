@@ -17,6 +17,7 @@ class TerrainMesh : public NIFFile::NIFTriShape
   std::vector< unsigned char >  textureBuf2;
   std::vector< unsigned short > hmapBuf;
   DDSTexture  *landTexture;
+  static unsigned short convertToFloat16(float x);
   static void calculateNormal(float& normalX, float& normalY, float& normalZ,
                               float dx, float dy, float dz1, float dz2);
  public:
@@ -30,8 +31,9 @@ class TerrainMesh : public NIFFile::NIFTriShape
                   float zMin, float zMax);
   void createMesh(const LandscapeData& landData,
                   int textureScale, int x0, int y0, int x1, int y1,
-                  float textureMip, const DDSTexture * const *landTextures,
-                  size_t landTextureCnt);
+                  const DDSTexture * const *landTextures, size_t landTextureCnt,
+                  float textureMip = 0.0f, float textureRGBScale = 1.0f,
+                  unsigned int textureDefaultColor = 0x003F3F3FU);
   inline size_t getTextureCount() const
   {
     return 1;

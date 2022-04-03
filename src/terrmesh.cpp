@@ -3,6 +3,20 @@
 #include "terrmesh.hpp"
 #include "landtxt.hpp"
 
+unsigned short TerrainMesh::convertToFloat16(float x)
+{
+  int     e = 0;
+  int     m = roundFloat(float(std::frexp(x, &e)) * 2048.0f);
+  if (!m)
+    return 0;
+  int     s = m & 0x8000;
+  m = std::abs(m);
+  e = e + 14 + (m >> 11);
+  if (e <= 0 || e > 31)
+    return (unsigned short) (s | (e <= 0 ? 0x0000 : 0x7FFF));
+  return (unsigned short) (s | (e << 10) | (m & 0x03FF));
+}
+
 void TerrainMesh::calculateNormal(
     float& normalX, float& normalY, float& normalZ,
     float dx, float dy, float dz1, float dz2)
@@ -36,23 +50,35 @@ void TerrainMesh::createMesh(
 {
   int     w = std::abs(x1 - x0) + 1;
   int     h = std::abs(y1 - y0) + 1;
-  int     txtW = w << textureScale;
-  int     txtH = h << textureScale;
+  int     txtW = (w + 7) << textureScale;
+  int     txtH = (h + 7) << textureScale;
   x0 = (x0 < x1 ? x0 : x1);
   y0 = (y0 < y1 ? y0 : y1);
   x1 = x0 + w - 1;
   y1 = y0 + h - 1;
+  int     txtWP2 = 1;
+  int     txtHP2 = 1;
+  while (txtWP2 < txtW)
+    txtWP2 = txtWP2 << 1;
+  while (txtHP2 < txtH)
+    txtHP2 = txtHP2 << 1;
+  // create vertex and triangle data
   vertexCnt = size_t(w) * size_t(h);
+  if (vertexCnt > 65536U)
+    throw errorMessage("TerrainMesh: vertex count is out of range");
   triangleCnt = (size_t(w - 1) * size_t(h - 1)) << 1;
   vertexDataBuf.resize(vertexCnt);
   triangleDataBuf.resize(triangleCnt);
   vertexData = &(vertexDataBuf.front());
   triangleData = &(triangleDataBuf.front());
-  NIFFile::NIFVertex  *vertexPtr = &(vertexDataBuf.front());
+  NIFFile::NIFVertex    *vertexPtr = &(vertexDataBuf.front());
+  NIFFile::NIFTriangle  *trianglePtr = &(triangleDataBuf.front());
   float   xyScale = 4096.0f / float(cellResolution);
   float   zScale = (zMax - zMin) / 65535.0f;
   float   normalScale1 = float(cellResolution) * (1.0f / 4096.0f);
   float   normalScale2 = float(cellResolution) * (0.7071068f / 4096.0f);
+  float   uScale = 1.0f / float(txtWP2 >> textureScale);
+  float   vScale = 1.0f / float(txtHP2 >> textureScale);
   for (int y = y1; y >= y0; y--)
   {
     for (int x = x0; x <= x1; x++, vertexPtr++)
@@ -102,27 +128,107 @@ void TerrainMesh::createMesh(
       vertexPtr->normalX = normalX * tmp;
       vertexPtr->normalY = normalY * tmp;
       vertexPtr->normalZ = normalZ * tmp;
+      vertexPtr->u = convertToFloat16(float(x - x0) * uScale);
+      vertexPtr->v = convertToFloat16(float(y - y0) * vScale);
+      if (x != x1 && y != y0)
+      {
+        int     v0 = int(vertexPtr - &(vertexDataBuf.front())); // SW
+        int     v1 = v0 + 1;            // SE
+        int     v2 = v0 + (w + 1);      // NE
+        int     v3 = v0 + w;            // NW
+        trianglePtr[0].v0 = (unsigned short) v0;
+        trianglePtr[0].v1 = (unsigned short) v1;
+        if ((x ^ y) & 1)                // split SW -> NE
+        {                               // vertices must be in CCW order
+          trianglePtr[0].v2 = (unsigned short) v2;
+          trianglePtr[1].v0 = (unsigned short) v0;
+        }
+        else                            // split SE -> NW
+        {
+          trianglePtr[0].v2 = (unsigned short) v3;
+          trianglePtr[1].v0 = (unsigned short) v1;
+        }
+        trianglePtr[1].v1 = (unsigned short) v2;
+        trianglePtr[1].v2 = (unsigned short) v3;
+        trianglePtr = trianglePtr + 2;
+      }
     }
   }
+  // create texture
+  textureBuf.resize(size_t(txtWP2) * size_t(txtHP2) * 3U + 128U);
+  unsigned int  ddsHdrBuf[32];
+  for (size_t i = 6; i < 32; i++)
+    ddsHdrBuf[i] = 0U;
+  ddsHdrBuf[0] = 0x20534444;    // "DDS "
+  ddsHdrBuf[1] = 124;           // size of DDS_HEADER
+  ddsHdrBuf[2] = 0x0000100F;    // caps, height, width, pitch, pixel format
+  ddsHdrBuf[3] = (unsigned int) txtHP2;
+  ddsHdrBuf[4] = (unsigned int) txtWP2;
+  ddsHdrBuf[5] = (unsigned int) txtWP2 * 3U;    // pitch
+  ddsHdrBuf[19] = 32;           // size of DDS_PIXELFORMAT
+  ddsHdrBuf[20] = 0x00000040;   // DDPF_RGB
+  ddsHdrBuf[22] = 24;           // bits per pixel
+  ddsHdrBuf[23] = 0x00FF0000;   // red mask
+  ddsHdrBuf[24] = 0x0000FF00;   // green mask
+  ddsHdrBuf[25] = 0x000000FF;   // blue mask
+  ddsHdrBuf[27] = 0x00001000;   // DDSCAPS_TEXTURE
+  unsigned char *dstPtr = &(textureBuf.front());
+  for (size_t i = 0; i < 32; i++, dstPtr = dstPtr + 4)
+  {
+    unsigned int  n = ddsHdrBuf[i];
+    dstPtr[0] = (unsigned char) (n & 0xFF);
+    dstPtr[1] = (unsigned char) ((n >> 8) & 0xFF);
+    dstPtr[2] = (unsigned char) ((n >> 16) & 0xFF);
+    dstPtr[3] = (unsigned char) ((n >> 24) & 0xFF);
+  }
+  for (int y = 0; y < txtHP2; y++)
+  {
+    int     yc = (y0 << textureScale) + y;
+    if (y >= ((txtH + txtHP2) >> 1))
+      yc = yc - txtHP2;
+    yc = (yc > 0 ? (yc < (ltexHeight - 1) ? yc : (ltexHeight - 1)) : 0);
+    const unsigned char *srcPtr =
+        ltexData + (size_t(yc) * size_t(ltexWidth) * 3U);
+    for (int x = 0; x < txtWP2; x++, dstPtr = dstPtr + 3)
+    {
+      int     xc = (x0 << textureScale) + x;
+      if (x >= ((txtW + txtWP2) >> 1))
+        xc = xc - txtWP2;
+      xc = (xc > 0 ? (xc < (ltexWidth - 1) ? xc : (ltexWidth - 1)) : 0);
+      size_t  offs = size_t(xc) * 3U;
+      dstPtr[0] = srcPtr[offs];
+      dstPtr[1] = srcPtr[offs + 1];
+      dstPtr[2] = srcPtr[offs + 2];
+    }
+  }
+  if (landTexture)
+  {
+    delete landTexture;
+    landTexture = (DDSTexture *) 0;
+  }
+  landTexture = new DDSTexture(&(textureBuf.front()), textureBuf.size());
 }
 
 void TerrainMesh::createMesh(
     const LandscapeData& landData,
-    int textureScale, int x0, int y0, int x1, int y1, float textureMip,
-    const DDSTexture * const *landTextures, size_t landTextureCnt)
+    int textureScale, int x0, int y0, int x1, int y1,
+    const DDSTexture * const *landTextures, size_t landTextureCnt,
+    float textureMip, float textureRGBScale, unsigned int textureDefaultColor)
 {
-  int     w = std::abs(x1 - x0) + 1;
-  int     h = std::abs(y1 - y0) + 1;
+  int     w = std::abs(x1 - x0) + 8;
+  int     h = std::abs(y1 - y0) + 8;
   int     txtW = w << textureScale;
   int     txtH = h << textureScale;
-  x0 = (x0 < x1 ? x0 : x1);
-  y0 = (y0 < y1 ? y0 : y1);
+  x0 = (x0 < x1 ? x0 : x1) - 4;
+  y0 = (y0 < y1 ? y0 : y1) - 4;
   x1 = x0 + w - 1;
   y1 = y0 + h - 1;
   {
     textureBuf2.resize(size_t(txtW) * size_t(txtH) * 3U);
     LandscapeTexture  landTxt(landData, landTextures, landTextureCnt);
     landTxt.setMipLevel(textureMip);
+    landTxt.setRGBScale(textureRGBScale);
+    landTxt.setDefaultColor(textureDefaultColor);
     landTxt.renderTexture(&(textureBuf2.front()), textureScale, x0, y0, x1, y1);
   }
   hmapBuf.resize(size_t(w) * size_t(h));
@@ -146,7 +252,7 @@ void TerrainMesh::createMesh(
   xOffset = xOffset * (4096.0f / float(cellResolution));
   yOffset = yOffset * (4096.0f / float(cellResolution));
   createMesh(&(hmapBuf.front()), w, h, &(textureBuf2.front()), txtW, txtH,
-             textureScale, 0, 0, w - 1, h - 1, cellResolution,
+             textureScale, 4, 4, w - 4, h - 4, cellResolution,
              xOffset, yOffset, landData.getZMin(), landData.getZMax());
 }
 
