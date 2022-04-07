@@ -29,5 +29,6 @@ fo4land = env.Program("fo4land", ["src/fo4land.cpp"])
 landtxt = env.Program("landtxt", ["src/ltxtmain.cpp"])
 markers = env.Program("markers", ["src/markers.cpp"])
 nif_info = env.Program("nif_info", ["src/nif_info.cpp"])
+render = env.Program("render", ["src/render.cpp"])
 terrain = env.Program("terrain", ["src/terrain.cpp"])
 
