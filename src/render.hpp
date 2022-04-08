@@ -27,10 +27,6 @@ class Renderer
     unsigned int  flags;        // 1: terrain, 2: solid object, 4: water
     unsigned int  modelID;      // NIF file number
     unsigned int  formID;       // form ID of reference
-    signed short  terrainX0;
-    signed short  terrainY0;
-    signed short  terrainX1;
-    signed short  terrainY1;
     // -1:        not rendered
     // 0 to 63:   single tile, N = Y * 8 + X
     // 64 to 319:   2*2 tiles, N = 64 + ((Y0 & 6) * 8) + (X0 & 6)
@@ -39,21 +35,13 @@ class Renderer
     //                             + ((Y0 & 3) * 256) + ((X0 & 3) * 64)
     // 1344:        8*8 tiles
     int     tileIndex;
-    // bit Y * 8 + X of screenAreasUsed is set if the bounds of the object
-    // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
-    // in the top left corner
-    unsigned long long  screenAreasUsed;
     NIFFile::NIFVertexTransform modelTransform;
-    signed short  obndX0;
-    signed short  obndY0;
-    signed short  obndZ0;
-    signed short  obndX1;
-    signed short  obndY1;
-    signed short  obndZ1;
-    inline bool overlapsWith(const RenderObject& r) const
-    {
-      return bool(screenAreasUsed & r.screenAreasUsed);
-    }
+    signed short  x0;           // object bounds or terrain area
+    signed short  y0;
+    signed short  z0;
+    signed short  x1;
+    signed short  y1;
+    signed short  z1;
     bool operator<(const RenderObject& r) const;
   };
   struct CachedTexture
@@ -127,9 +115,13 @@ class Renderer
   std::vector< unsigned char >  fileBuf;
   unsigned int  waterColor;
   bool    verboseMode;
+  NIFFile::NIFBounds  worldBounds;
+  // bit Y * 8 + X of the return value is set if the bounds of the object
+  // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
+  // in the top left corner
   unsigned long long calculateTileMask(int x0, int y0, int x1, int y1) const;
   static int calculateTileIndex(unsigned long long screenAreasUsed);
-  void setScreenAreasUsed(RenderObject& p);
+  int setScreenAreaUsed(RenderObject& p);
   unsigned int getDefaultWorldID() const;
   void addTerrainCell(const ESMFile::ESMRecord& r);
   void addWaterCell(const ESMFile::ESMRecord& r);
@@ -152,10 +144,10 @@ class Renderer
   void loadModel(unsigned int modelID);
   void renderObjectList();
   void renderThread(size_t threadNum, size_t startPos, size_t endPos,
-                    unsigned long long tileMask);
+                    unsigned long long tileIndexMask);
   static void threadFunction(Renderer *p, size_t threadNum,
                              size_t startPos, size_t endPos,
-                             unsigned long long tileMask);
+                             unsigned long long tileIndexMask);
  public:
   Renderer(int imageWidth, int imageHeight,
            const BA2File& archiveFiles, ESMFile& masterFiles,
@@ -179,12 +171,65 @@ class Renderer
   }
   void clear();
   void clearImage();
+  // rotations are in radians
   void setViewTransform(float scale,
                         float rotationX, float rotationY, float rotationZ,
                         float offsetX, float offsetY, float offsetZ);
   void setLightDirection(float rotationX, float rotationY);
+  // set polynomial a[0..5] for mapping dot product (-1.0 to 1.0)
+  // to RGB multiplier
+  void setLightingFunction(const float *a);
   // default to std::thread::hardware_concurrency() if n <= 0
   void setThreadCount(int n);
+  void setTextureMipLevel(int n)
+  {
+    textureMip = n;             // base mip level for all textures
+  }
+  void setLandTextureMip(float n)
+  {
+    landTextureMip = n;         // additional mip level for landscape textures
+  }
+  void setLandTxtRGBScale(float n)
+  {
+    landTxtRGBScale = n;
+  }
+  void setLandDefaultColor(unsigned int n)
+  {
+    landTxtDefColor = n;        // 0x00RRGGBB
+  }
+  void setLandTxtResolution(int n)
+  {
+    cellTextureResolution = n;  // must be power of two and >= cell resolution
+  }
+  void setModelLOD(int n)
+  {
+    modelLOD = n;               // 0 (maximum detail) to 4
+  }
+  void setDistantObjectsOnly(bool n)
+  {
+    distantObjectsOnly = n;     // ignore if not visible from distance
+  }
+  void setNoDisabledObjects(bool n)
+  {
+    noDisabledObjects = n;      // ignore if initially disabled
+  }
+  // models with path name including s are rendered at full quality
+  void addHDModelPattern(const std::string& s);
+  // default environment map texture path
+  void setDefaultEnvMap(const std::string& s);
+  // water normal map texture path
+  void setWaterTexture(const std::string& s);
+  // 0xAARRGGBB
+  void setWaterColor(unsigned int n)
+  {
+    waterColor = (n & 0xFF00FF00U)
+                 | ((n & 0x000000FFU) << 16) | ((n & 0x00FF0000U) >> 16);
+  }
+  // disable printing messages if n is false
+  void setVerboseMode(bool n)
+  {
+    verboseMode = n;
+  }
   void loadTerrain(const char *btdFileName = (char *) 0,
                    unsigned int worldID = 0U, unsigned int defTxtID = 0U,
                    int mipLevel = 2, int xMin = -32768, int yMin = -32768,
@@ -192,6 +237,10 @@ class Renderer
   void renderTerrain(unsigned int worldID = 0U);
   void renderObjects(unsigned int formID = 0U);
   void renderWater(unsigned int formID = 0U);
+  inline const NIFFile::NIFBounds& getBounds() const
+  {
+    return worldBounds;
+  }
 };
 
 #endif

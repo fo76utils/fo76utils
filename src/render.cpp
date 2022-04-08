@@ -18,9 +18,9 @@ bool Renderer::RenderObject::operator<(const RenderObject& r) const
     return ((modelID & modelMask2) < (r.modelID & modelMask2));
   if (formID != r.formID)
     return (formID < r.formID);
-  if (terrainY0 != r.terrainY0)
-    return (terrainY0 < r.terrainY0);
-  return (terrainX0 < r.terrainX0);
+  if (y0 != r.y0)
+    return (y0 < r.y0);
+  return (x0 < r.x0);
 }
 
 Renderer::ModelData::ModelData()
@@ -155,25 +155,24 @@ int Renderer::calculateTileIndex(unsigned long long screenAreasUsed)
   return 1344;
 }
 
-void Renderer::setScreenAreasUsed(RenderObject& p)
+int Renderer::setScreenAreaUsed(RenderObject& p)
 {
   p.tileIndex = -1;
-  p.screenAreasUsed = 0ULL;
   NIFFile::NIFVertexTransform vt;
   NIFFile::NIFBounds  modelBounds;
   if (p.flags & 1U)
   {
     if (!landData)
-      return;
+      return -1;
     float   xyScale = 4096.0f / float(landData->getCellResolution());
     float   xOffset = -xyScale * float(landData->getOriginX());
     float   yOffset = xyScale * float(landData->getOriginY());
     float   zScale = (landData->getZMax() - landData->getZMin()) / 65535.0f;
     float   zOffset = landData->getZMin();
-    int     x0 = (p.terrainX0 < p.terrainX1 ? p.terrainX0 : p.terrainX1);
-    int     y0 = (p.terrainY0 < p.terrainY1 ? p.terrainY0 : p.terrainY1);
-    int     x1 = x0 + std::abs(int(p.terrainX1) - int(p.terrainX0));
-    int     y1 = y0 + std::abs(int(p.terrainY1) - int(p.terrainY0));
+    int     x0 = (p.x0 < p.x1 ? p.x0 : p.x1);
+    int     y0 = (p.y0 < p.y1 ? p.y0 : p.y1);
+    int     x1 = x0 + std::abs(int(p.x1) - int(p.x0));
+    int     y1 = y0 + std::abs(int(p.y1) - int(p.y0));
     modelBounds.xMin = float(x0) * xyScale + xOffset;
     modelBounds.yMin = float(y1) * -xyScale + yOffset;
     modelBounds.xMax = float(x1) * xyScale + xOffset;
@@ -201,12 +200,12 @@ void Renderer::setScreenAreasUsed(RenderObject& p)
   }
   else if (p.flags & 6U)
   {
-    int     x0 = int(p.obndX0 < p.obndX1 ? p.obndX0 : p.obndX1) - 2;
-    int     x1 = x0 + std::abs(int(p.obndX1) - int(p.obndX0)) + 4;
-    int     y0 = int(p.obndY0 < p.obndY1 ? p.obndY0 : p.obndY1) - 2;
-    int     y1 = y0 + std::abs(int(p.obndY1) - int(p.obndY0)) + 4;
-    int     z0 = int(p.obndZ0 < p.obndZ1 ? p.obndZ0 : p.obndZ1) - 2;
-    int     z1 = z0 + std::abs(int(p.obndZ1) - int(p.obndZ0)) + 4;
+    int     x0 = int(p.x0 < p.x1 ? p.x0 : p.x1) - 2;
+    int     x1 = x0 + std::abs(int(p.x1) - int(p.x0)) + 4;
+    int     y0 = int(p.y0 < p.y1 ? p.y0 : p.y1) - 2;
+    int     y1 = y0 + std::abs(int(p.y1) - int(p.y0)) + 4;
+    int     z0 = int(p.z0 < p.z1 ? p.z0 : p.z1) - 2;
+    int     z1 = z0 + std::abs(int(p.z1) - int(p.z0)) + 4;
     modelBounds.xMin = float(x0);
     modelBounds.yMin = float(y0);
     modelBounds.zMin = float(z0);
@@ -218,7 +217,7 @@ void Renderer::setScreenAreasUsed(RenderObject& p)
   }
   else
   {
-    return;
+    return -1;
   }
   NIFFile::NIFBounds  screenBounds;
   NIFFile::NIFVertex  v;
@@ -230,6 +229,14 @@ void Renderer::setScreenAreasUsed(RenderObject& p)
     vt.transformXYZ(v.x, v.y, v.z);
     screenBounds += v;
   }
+  v.x = screenBounds.xMin;
+  v.y = screenBounds.yMin;
+  v.z = screenBounds.zMin;
+  worldBounds += v;
+  v.x = screenBounds.xMax;
+  v.y = screenBounds.yMax;
+  v.z = screenBounds.zMax;
+  worldBounds += v;
   int     xMin = roundFloat(screenBounds.xMin - 2.0f);
   int     yMin = roundFloat(screenBounds.yMin - 2.0f);
   int     zMin = roundFloat(screenBounds.zMin - 2.0f);
@@ -239,10 +246,10 @@ void Renderer::setScreenAreasUsed(RenderObject& p)
   if (xMin >= width || xMax < 0 || yMin >= height || yMax < 0 ||
       zMin >= 16777216 || zMax < 0)
   {
-    return;
+    return -1;
   }
-  p.screenAreasUsed = calculateTileMask(xMin, yMin, xMax, yMax);
-  p.tileIndex = calculateTileIndex(p.screenAreasUsed);
+  p.tileIndex = calculateTileIndex(calculateTileMask(xMin, yMin, xMax, yMax));
+  return p.tileIndex;
 }
 
 unsigned int Renderer::getDefaultWorldID() const
@@ -279,13 +286,8 @@ void Renderer::addTerrainCell(const ESMFile::ESMRecord& r)
   tmp.modelID = 0;
   tmp.formID = 0;
   tmp.tileIndex = -1;
-  tmp.screenAreasUsed = 0ULL;
-  tmp.obndX0 = 0;
-  tmp.obndY0 = 0;
-  tmp.obndZ0 = 0;
-  tmp.obndX1 = 0;
-  tmp.obndY1 = 0;
-  tmp.obndZ1 = 0;
+  tmp.z0 = 0;
+  tmp.z1 = 0;
   int     w = landData->getImageWidth();
   int     h = landData->getImageHeight();
   int     n = landData->getCellResolution();
@@ -309,12 +311,11 @@ void Renderer::addTerrainCell(const ESMFile::ESMRecord& r)
       int     x2 = x + n;
       if (!(x >= x0 && x < x1 && x < w && x2 > 0))
         continue;
-      tmp.terrainX0 = (signed short) (x > 0 ? x : 0);
-      tmp.terrainY0 = (signed short) (y > 0 ? y : 0);
-      tmp.terrainX1 = (signed short) (x2 < w ? x2 : w);
-      tmp.terrainY1 = (signed short) (y2 < h ? y2 : h);
-      setScreenAreasUsed(tmp);
-      if (tmp.tileIndex >= 0)
+      tmp.x0 = (signed short) (x > 0 ? x : 0);
+      tmp.y0 = (signed short) (y > 0 ? y : 0);
+      tmp.x1 = (signed short) (x2 < w ? x2 : w);
+      tmp.y1 = (signed short) (y2 < h ? y2 : h);
+      if (setScreenAreaUsed(tmp) >= 0)
         objectList.push_back(tmp);
     }
   }
@@ -353,23 +354,17 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   tmp.flags = 0x0004;                   // water
   tmp.modelID = 0;
   tmp.formID = 0;
-  tmp.terrainX0 = 0;
-  tmp.terrainY0 = 0;
-  tmp.terrainX1 = 0;
-  tmp.terrainY1 = 0;
   tmp.tileIndex = -1;
-  tmp.screenAreasUsed = 0ULL;
   tmp.modelTransform.offsX = float(cellX) * 4096.0f;
   tmp.modelTransform.offsY = float(cellY) * 4096.0f;
   tmp.modelTransform.offsZ = waterLevel;
-  tmp.obndX0 = 0;
-  tmp.obndY0 = 0;
-  tmp.obndZ0 = 0;
-  tmp.obndX1 = 4096;
-  tmp.obndY1 = 4096;
-  tmp.obndZ1 = 0;
-  setScreenAreasUsed(tmp);
-  if (tmp.tileIndex >= 0)
+  tmp.x0 = 0;
+  tmp.y0 = 0;
+  tmp.z0 = 0;
+  tmp.x1 = 4096;
+  tmp.y1 = 4096;
+  tmp.z1 = 0;
+  if (setScreenAreaUsed(tmp) >= 0)
     objectList.push_back(tmp);
 }
 
@@ -457,7 +452,7 @@ void Renderer::findObjects(unsigned int formID, int type)
     const ESMFile::ESMRecord  *r2;
     if (!(refrName && bool(r2 = esmFile.getRecordPtr(refrName))))
       continue;
-    if (*r2 == "STAT" || *r2 == "SCOL")
+    if (*r2 == "STAT" || *r2 == "SCOL" || *r2 == "TREE")
     {
       if (distantObjectsOnly && !(r2->flags & 0x00008000))
         continue;
@@ -469,12 +464,7 @@ void Renderer::findObjects(unsigned int formID, int type)
     RenderObject  tmp;
     tmp.flags = (type == 1 ? 2U : 4U);
     tmp.formID = formID;
-    tmp.terrainX0 = 0;
-    tmp.terrainY0 = 0;
-    tmp.terrainX1 = 0;
-    tmp.terrainY1 = 0;
     tmp.tileIndex = -1;
-    tmp.screenAreasUsed = 0ULL;
     bool    haveOBND = false;
     bool    isWater = (*r2 == "PWAT");
     bool    isHDModel = false;
@@ -485,12 +475,12 @@ void Renderer::findObjects(unsigned int formID, int type)
       {
         if (f == "OBND" && f.size() >= 6)
         {
-          tmp.obndX0 = (signed short) uint16ToSigned(f.readUInt16Fast());
-          tmp.obndY0 = (signed short) uint16ToSigned(f.readUInt16Fast());
-          tmp.obndZ0 = (signed short) uint16ToSigned(f.readUInt16Fast());
-          tmp.obndX1 = (signed short) uint16ToSigned(f.readUInt16Fast());
-          tmp.obndY1 = (signed short) uint16ToSigned(f.readUInt16Fast());
-          tmp.obndZ1 = (signed short) uint16ToSigned(f.readUInt16Fast());
+          tmp.x0 = (signed short) uint16ToSigned(f.readUInt16Fast());
+          tmp.y0 = (signed short) uint16ToSigned(f.readUInt16Fast());
+          tmp.z0 = (signed short) uint16ToSigned(f.readUInt16Fast());
+          tmp.x1 = (signed short) uint16ToSigned(f.readUInt16Fast());
+          tmp.y1 = (signed short) uint16ToSigned(f.readUInt16Fast());
+          tmp.z1 = (signed short) uint16ToSigned(f.readUInt16Fast());
           haveOBND = true;
         }
         else if (f == "MODL" && f.size() > 1 &&
@@ -532,8 +522,7 @@ void Renderer::findObjects(unsigned int formID, int type)
       continue;
     tmp.modelTransform = NIFFile::NIFVertexTransform(scale, rX, rY, rZ,
                                                      offsX, offsY, offsZ);
-    setScreenAreasUsed(tmp);
-    if (tmp.tileIndex < 0)
+    if (setScreenAreaUsed(tmp) < 0)
       continue;
     std::map< std::string, unsigned int >::iterator i =
         modelPathMap.find(stringBuf);
@@ -575,8 +564,8 @@ void Renderer::sortObjectList()
     std::printf("#%06u: 0x%04X, 0x%08X, %6u, %4d, (%6d, %6d), (%6d, %6d)\n",
                 (unsigned int) i, objectList[i].flags, objectList[i].formID,
                 objectList[i].modelID, objectList[i].tileIndex,
-                int(objectList[i].terrainX0), int(objectList[i].terrainY0),
-                int(objectList[i].terrainX1), int(objectList[i].terrainY1));
+                int(objectList[i].x0), int(objectList[i].y0),
+                int(objectList[i].x1), int(objectList[i].y1));
   }
 #endif
 }
@@ -758,7 +747,7 @@ void Renderer::loadModel(unsigned int modelID)
       if (t.flags & 0x05)               // ignore if hidden or effect
         continue;
       nifFiles[n].totalTriangleCnt += t.triangleCnt;
-      size_t  nTextures = size_t(!(t.flags & 0x02) ? (!isHDModel ? 1 : 10) : 0);
+      size_t  nTextures = size_t(!(t.flags & 0x02) ? (!isHDModel ? 4 : 10) : 0);
       for (size_t j = nTextures; j-- > 0; )
       {
         const std::string *texturePath = (std::string *) 0;
@@ -773,6 +762,8 @@ void Renderer::loadModel(unsigned int modelID)
         }
         if (texturePath && !texturePath->empty())
           nifFiles[n].textures[i * 10U + j] = loadTexture(*texturePath);
+        if (j > 1 && !isHDModel)
+          j = 1;
       }
     }
   }
@@ -800,7 +791,7 @@ void Renderer::renderObjectList()
     for (size_t k = 0; k < 64; k++)
     {
       threadTriangleCnt[k] = 0;
-      threadTileMask[k] = 0ULL;
+      threadTileMask[k] = 1ULL << (unsigned int) k;
     }
     size_t  j = i;
     unsigned int  modelIDMask = modelBatchCnt - 1U;
@@ -828,12 +819,13 @@ void Renderer::renderObjectList()
         triangleCnt = nifFiles[p.modelID & modelIDMask].totalTriangleCnt;
       }
       threadTriangleCnt[p.tileIndex & 63] += triangleCnt;
-      threadTileMask[p.tileIndex & 63] |= p.screenAreasUsed;
       j++;
     }
     size_t  threadsUsed = 64;
     while (int(threadsUsed) > threadCnt)
     {
+      // merge the areas with the lowest triangle counts
+      // until there are not more left than the number of threads
       size_t  minCnt1 = 0x7FFFFFFF;
       size_t  minCnt2 = 0x7FFFFFFF;
       size_t  minCntThread1 = 0;
@@ -861,10 +853,11 @@ void Renderer::renderObjectList()
     }
     for (size_t k = 0; k < threadsUsed; k++)
     {
-      if (!threadTileMask[k])
-        continue;
-      renderThreads[k].t = new std::thread(threadFunction, this, k, i, j,
-                                           threadTileMask[k]);
+      if (threadTriangleCnt[k] > 0)
+      {
+        renderThreads[k].t = new std::thread(threadFunction, this, k, i, j,
+                                             threadTileMask[k]);
+      }
     }
     for (size_t k = 0; k < threadsUsed; k++)
       renderThreads[k].join();
@@ -889,7 +882,7 @@ void Renderer::renderObjectList()
 }
 
 void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
-                            unsigned long long tileMask)
+                            unsigned long long tileIndexMask)
 {
   RenderThread& t = renderThreads[threadNum];
   if (!t.renderer)
@@ -904,12 +897,44 @@ void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
       landTxtScale++;
     }
   }
+  unsigned long long  tileMask = 0ULL;
   for (size_t i = startPos; i < endPos; i++)
   {
-    if (!(objectList[i].screenAreasUsed & tileMask) ||
-        (objectList[i].screenAreasUsed & ~tileMask))
+    int     tileIndex = objectList[i].tileIndex;
+    if (tileIndex < 0 ||
+        !((1ULL << (unsigned int) (tileIndex & 63)) & tileIndexMask) ||
+        ((1ULL << (unsigned int) (tileIndex & 63)) & ~tileIndexMask))
     {
       continue;
+    }
+    if (BRANCH_EXPECT(!tileMask, false))
+    {
+      // calculate mask of areas this thread is allowed to access
+      if (tileIndex < 64 || tileIndexMask == ~0ULL)
+      {
+        tileMask = tileIndexMask;
+      }
+      else if (tileIndex < 1344)
+      {
+        for (int l = 0; l < 64; l++)
+        {
+          if (!(tileIndexMask & (1ULL << (unsigned int) l)))
+            continue;
+          int     n = (tileIndex & ~63) + l - (tileIndex < 320 ? 64 : 320);
+          int     x0 = (n & 6) + ((n >> 6) & (tileIndex < 320 ? 1 : 3));
+          int     y0 = ((n >> 3) & 6) + ((n >> (tileIndex < 320 ? 7 : 8)) & 3);
+          n = (tileIndex < 320 ? 2 : 4);
+          for (int j = 0; j < n && (y0 + j) < 8; j++)
+          {
+            for (int k = 0; k < n && (x0 + k) < 8; k++)
+              tileMask = tileMask | (1ULL << (unsigned int) ((j << 3) | k));
+          }
+        }
+      }
+      else
+      {
+        tileMask = ~0ULL;
+      }
     }
     bool    invalidOBND = false;
     if (objectList[i].flags & 0x01)             // terrain
@@ -918,8 +943,8 @@ void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
       {
         t.terrainMesh->createMesh(
             *landData, landTxtScale,
-            objectList[i].terrainX0, objectList[i].terrainY0,
-            objectList[i].terrainX1, objectList[i].terrainY1,
+            objectList[i].x0, objectList[i].y0,
+            objectList[i].x1, objectList[i].y1,
             &(landTextures.front()), landTextures.size(),
             landTextureMip, landTxtRGBScale, landTxtDefColor);
         *(t.renderer) = *(t.terrainMesh);
@@ -944,6 +969,8 @@ void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
         unsigned long long  m =
             calculateTileMask(roundFloat(b.xMin), roundFloat(b.yMin),
                               roundFloat(b.xMax), roundFloat(b.yMax));
+        if (!m)
+          continue;
         if (m & ~tileMask)
         {
           invalidOBND = true;
@@ -960,10 +987,10 @@ void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
       NIFFile::NIFTriShape  tmp;
       NIFFile::NIFVertex    vTmp[4];
       NIFFile::NIFTriangle  tTmp[2];
-      int     x0 = objectList[i].obndX0;
-      int     y0 = objectList[i].obndY0;
-      int     x1 = objectList[i].obndX1;
-      int     y1 = objectList[i].obndY1;
+      int     x0 = objectList[i].x0;
+      int     y0 = objectList[i].y0;
+      int     x1 = objectList[i].x1;
+      int     y1 = objectList[i].y1;
       for (int j = 0; j < 4; j++)
       {
         vTmp[j].x = float(j == 0 || j == 3 ? x0 : x1);
@@ -995,21 +1022,18 @@ void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
           (DDSTexture **) 0, 0);
     }
     if (!invalidOBND)
-    {
       objectList[i].tileIndex = -1;
-      objectList[i].screenAreasUsed = 0ULL;
-    }
   }
 }
 
 void Renderer::threadFunction(Renderer *p, size_t threadNum,
                               size_t startPos, size_t endPos,
-                              unsigned long long tileMask)
+                              unsigned long long tileIndexMask)
 {
   try
   {
     p->renderThreads[threadNum].errMsg.clear();
-    p->renderThread(threadNum, startPos, endPos, tileMask);
+    p->renderThread(threadNum, startPos, endPos, tileIndexMask);
   }
   catch (std::exception& e)
   {
@@ -1103,6 +1127,12 @@ void Renderer::setLightDirection(float rotationX, float rotationY)
   lightZ = t.rotateZZ;
 }
 
+void Renderer::setLightingFunction(const float *a)
+{
+  for (int i = 0; i < 6; i++)
+    lightingPolynomial[i] = a[i];
+}
+
 void Renderer::setThreadCount(int n)
 {
   if (n <= 0)
@@ -1111,8 +1141,6 @@ void Renderer::setThreadCount(int n)
   n = (n > 1 ? (n < maxThreads ? n : maxThreads) : 1);
   if (n == threadCnt)
     return;
-  if (verboseMode)
-    std::fprintf(stderr, "Using %d threads\n", n);
   threadCnt = n;
   renderThreads.resize(size_t(n));
   for (size_t i = 0; i < renderThreads.size(); i++)
@@ -1123,6 +1151,30 @@ void Renderer::setThreadCount(int n)
                                                       width, height);
     }
   }
+}
+
+void Renderer::addHDModelPattern(const std::string& s)
+{
+  if (s.empty())
+    return;
+  for (size_t i = 0; i < hdModelNamePatterns.size(); i++)
+  {
+    if (s.find(hdModelNamePatterns[i]) != std::string::npos)
+      return;
+    if (hdModelNamePatterns[i].find(s) != std::string::npos)
+      hdModelNamePatterns.erase(hdModelNamePatterns.begin() + i);
+  }
+  hdModelNamePatterns.push_back(s);
+}
+
+void Renderer::setDefaultEnvMap(const std::string& s)
+{
+  defaultEnvMap = s;
+}
+
+void Renderer::setWaterTexture(const std::string& s)
+{
+  defaultWaterTexture = s;
 }
 
 void Renderer::loadTerrain(const char *btdFileName,
@@ -1197,6 +1249,40 @@ void Renderer::renderWater(unsigned int formID)
 
 static const char *usageStrings[] =
 {
+  "Usage: render INFILE.ESM[,...] OUTFILE.DDS W H ARCHIVEPATH [OPTIONS...]",
+  "",
+  "Options:",
+  "    --help              print usage",
+  "    --                  remaining options are file names",
+  "    -threads INT        set the number of threads to use",
+  "    -ssaa BOOL          render at double resolution and downsample",
+  "    -q                  do not print messages other than errors",
+  "",
+  "    -btd FILENAME.BTD   read terrain data from Fallout 76 .btd file",
+  "    -w FORMID           form ID of world, cell, or object to render",
+  "    -r X0 Y0 X1 Y1      terrain cell range, X0,Y0 = SW to X1,Y1 = NE",
+  "    -l INT              level of detail to use from BTD file (0 to 4)",
+  "    -deftxt FORMID      form ID of default land texture",
+  "    -defclr 0x00RRGGBB  default color for untextured terrain",
+  "    -ltxtres INT        land texture resolution per cell",
+  "    -mip INT            base mip level for all textures",
+  "    -lmip FLOAT         additional mip level for land textures",
+  "    -lmult FLOAT        land texture RGB level scale",
+  "",
+  "    -view SCALE RX RY RZ OFFS_X OFFS_Y OFFS_Z",
+  "                        set transform from world coordinates to image",
+  "                        coordinates, rotations are in degrees",
+  "    -light SCALE RX RY  set light level and X, Y rotation (0, 0 = top)",
+  "    -lpoly A5 A4 A3 A2 A1 A0    set lighting polynomial, -1 <= x <= 1",
+  "",
+  "    -mlod INT           set level of detail for models, 0 (best) to 4",
+  "    -vis BOOL           render only objects visible from distance",
+  "    -ndis BOOL          do not render initially disabled objects",
+  "    -hqm STRING         add high quality model path name pattern",
+  "",
+  "    -env FILENAME.DDS   default environment map texture path in archives",
+  "    -wtxt FILENAME.DDS  water normal map texture path in archives",
+  "    -watercolor UINT32  water color (A7R8G8B8), 0 disables water",
   (char *) 0
 };
 
@@ -1205,30 +1291,382 @@ int main(int argc, char **argv)
   int     err = 1;
   try
   {
-    BA2File ba2File("Fallout76/Data");
-    ESMFile esmFile("Fallout76/Data/SeventySix.esm");
-    Renderer  renderer(9024, 9024, ba2File, esmFile);
-    renderer.loadTerrain("Fallout76/Data/Terrain/Appalachia.btd", 0x0025DA15, 0,
-                         0, -35, -35, 35, 35);
-    renderer.renderTerrain(0x0025DA15);
-    renderer.clear();
-    renderer.renderObjects(0x0025DA15);
-    renderer.renderWater(0x0025DA15);
-    DDSOutputFile outFile("test1.dds", 9024, 9024,
-                          DDSInputFile::pixelFormatRGB24);
-    for (size_t i = 0; i < (9024 * 9024); i++)
-    {
-      unsigned int  c = renderer.getImageData()[i];
-      outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
-      outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
-      outFile.writeByte((unsigned char) (c & 0xFF));
-    }
+    std::vector< const char * > args;
+    int     threadCnt = -1;
+    bool    verboseMode = true;
+    bool    distantObjectsOnly = false;
+    bool    noDisabledObjects = false;
+    bool    enableDownscale = false;
+    unsigned int  formID = 0U;
+    int     btdLOD = 2;
+    const char  *btdPath = (char *) 0;
+    int     terrainX0 = -32768;
+    int     terrainY0 = -32768;
+    int     terrainX1 = 32767;
+    int     terrainY1 = 32767;
+    unsigned int  defTxtID = 0U;
+    unsigned int  ltxtDefColor = 0x003F3F3FU;
+    int     ltxtResolution = 128;
+    int     textureMip = 2;
+    float   landTextureMip = 3.0f;
+    float   landTextureMult = 1.0f;
+    int     modelLOD = 0;
+    unsigned int  waterColor = 0x60102030U;
+    float   viewScale = 0.0625f;
+    float   viewRotationX = 180.0f;
+    float   viewRotationY = 0.0f;
+    float   viewRotationZ = 0.0f;
+    float   viewOffsX = 0.0f;
+    float   viewOffsY = 0.0f;
+    float   viewOffsZ = 0.0f;
+    float   lightLevel = 1.0f;
+    float   lightRotationX = 63.435f;
+    float   lightRotationY = 41.8103f;
+    float   lightingPolynomial[6];
+    const char  *defaultEnvMap = (char *) 0;
+    const char  *waterTexture = (char *) 0;
+    std::vector< const char * > hdModelNamePatterns;
+    Plot3D_TriShape::getDefaultLightingFunction(lightingPolynomial);
 
-    if (argc < 2)
+    for (int i = 1; i < argc; i++)
+    {
+      if (std::strcmp(argv[i], "--") == 0)
+      {
+        while (++i < argc)
+          args.push_back(argv[i]);
+        break;
+      }
+      else if (std::strcmp(argv[i], "--help") == 0)
+      {
+        args.clear();
+        err = 0;
+        break;
+      }
+      else if (argv[i][0] != '-')
+      {
+        args.push_back(argv[i]);
+      }
+      else if (std::strcmp(argv[i], "-threads") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        threadCnt = int(parseInteger(argv[i], 10, "invalid number of threads",
+                                     1, 16));
+      }
+      else if (std::strcmp(argv[i], "-ssaa") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        enableDownscale =
+            bool(parseInteger(argv[i], 0, "invalid argument for -ssaa", 0, 1));
+      }
+      else if (std::strcmp(argv[i], "-q") == 0)
+      {
+        verboseMode = false;
+      }
+      else if (std::strcmp(argv[i], "-btd") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        btdPath = argv[i];
+      }
+      else if (std::strcmp(argv[i], "-w") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        formID = (unsigned int) parseInteger(argv[i], 0, "invalid form ID",
+                                             0, 0x0FFFFFFF);
+      }
+      else if (std::strcmp(argv[i], "-r") == 0)
+      {
+        if ((i + 4) >= argc)
+          throw errorMessage("missing argument for %s", argv[i]);
+        terrainX0 = int(parseInteger(argv[i + 1], 10, "invalid terrain X0",
+                                     -32768, 32767));
+        terrainY0 = int(parseInteger(argv[i + 2], 10, "invalid terrain Y0",
+                                     -32768, 32767));
+        terrainX1 = int(parseInteger(argv[i + 3], 10, "invalid terrain X1",
+                                     terrainX0, 32767));
+        terrainY1 = int(parseInteger(argv[i + 4], 10, "invalid terrain Y1",
+                                     terrainY0, 32767));
+        i = i + 4;
+      }
+      else if (std::strcmp(argv[i], "-l") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        btdLOD = int(parseInteger(argv[i], 10,
+                                  "invalid terrain level of detail", 0, 4));
+      }
+      else if (std::strcmp(argv[i], "-deftxt") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        defTxtID = (unsigned int) parseInteger(argv[i], 0, "invalid form ID",
+                                               0, 0x0FFFFFFF);
+      }
+      else if (std::strcmp(argv[i], "-defclr") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        ltxtDefColor = (unsigned int) parseInteger(argv[i], 0,
+                                                   "invalid land texture color",
+                                                   0, 0x00FFFFFF);
+      }
+      else if (std::strcmp(argv[i], "-ltxtres") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        ltxtResolution = int(parseInteger(argv[i], 0,
+                                          "invalid land texture resolution",
+                                          8, 4096));
+        if (ltxtResolution & (ltxtResolution - 1))
+          throw errorMessage("invalid land texture resolution");
+      }
+      else if (std::strcmp(argv[i], "-mip") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        textureMip = int(parseInteger(argv[i], 10, "invalid texture mip level",
+                                      0, 15));
+      }
+      else if (std::strcmp(argv[i], "-lmip") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        landTextureMip = float(parseFloat(argv[i],
+                                          "invalid land texture mip level",
+                                          0.0, 15.0));
+      }
+      else if (std::strcmp(argv[i], "-lmult") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        landTextureMult = float(parseFloat(argv[i],
+                                           "invalid land texture RGB scale",
+                                           0.5, 8.0));
+      }
+      else if (std::strcmp(argv[i], "-view") == 0)
+      {
+        if ((i + 7) >= argc)
+          throw errorMessage("missing argument for %s", argv[i]);
+        viewScale = float(parseFloat(argv[i + 1], "invalid view scale",
+                                     1.0 / 512.0, 16.0));
+        viewRotationX = float(parseFloat(argv[i + 2], "invalid view X rotation",
+                                         -360.0, 360.0));
+        viewRotationY = float(parseFloat(argv[i + 3], "invalid view Y rotation",
+                                         -360.0, 360.0));
+        viewRotationZ = float(parseFloat(argv[i + 4], "invalid view Z rotation",
+                                         -360.0, 360.0));
+        viewOffsX = float(parseFloat(argv[i + 5], "invalid view X offset",
+                                     -1048576.0, 1048576.0));
+        viewOffsY = float(parseFloat(argv[i + 6], "invalid view Y offset",
+                                     -1048576.0, 1048576.0));
+        viewOffsZ = float(parseFloat(argv[i + 7], "invalid view Z offset",
+                                     -1048576.0, 1048576.0));
+        i = i + 7;
+      }
+      else if (std::strcmp(argv[i], "-light") == 0)
+      {
+        if ((i + 3) >= argc)
+          throw errorMessage("missing argument for %s", argv[i]);
+        lightLevel = float(parseFloat(argv[i + 1], "invalid light level",
+                                      0.125, 4.0));
+        lightRotationX = float(parseFloat(argv[i + 2],
+                                          "invalid light X rotation",
+                                          -360.0, 360.0));
+        lightRotationY = float(parseFloat(argv[i + 3],
+                                          "invalid light Y rotation",
+                                          -360.0, 360.0));
+        i = i + 3;
+      }
+      else if (std::strcmp(argv[i], "-lpoly") == 0)
+      {
+        for (int j = 5; j >= 0; j--)
+        {
+          if (++i >= argc)
+            throw errorMessage("missing argument for -lpoly");
+          lightingPolynomial[j] =
+              float(parseFloat(argv[i], "invalid lighting polynomial",
+                               -16.0, 16.0));
+        }
+      }
+      else if (std::strcmp(argv[i], "-mlod") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        modelLOD = int(parseInteger(argv[i], 10, "invalid model LOD", 0, 4));
+      }
+      else if (std::strcmp(argv[i], "-vis") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        distantObjectsOnly =
+            bool(parseInteger(argv[i], 0, "invalid argument for -vis", 0, 1));
+      }
+      else if (std::strcmp(argv[i], "-ndis") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        noDisabledObjects =
+            bool(parseInteger(argv[i], 0, "invalid argument for -ndis", 0, 1));
+      }
+      else if (std::strcmp(argv[i], "-hqm") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        hdModelNamePatterns.push_back(argv[i]);
+      }
+      else if (std::strcmp(argv[i], "-env") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        defaultEnvMap = argv[i];
+      }
+      else if (std::strcmp(argv[i], "-wtxt") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        waterTexture = argv[i];
+      }
+      else if (std::strcmp(argv[i], "-watercolor") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        waterColor = (unsigned int) parseInteger(argv[i], 0,
+                                                 "invalid water color",
+                                                 0, 0x7FFFFFFF);
+      }
+      else
+      {
+        throw errorMessage("invalid option: %s", argv[i]);
+      }
+    }
+    if (args.size() != 5)
     {
       for (size_t i = 0; usageStrings[i]; i++)
         std::fprintf(stderr, "%s\n", usageStrings[i]);
       return err;
+    }
+    if (btdPath && *btdPath == '\0')
+      btdPath = (char *) 0;
+    if (!formID)
+      formID = (!btdPath ? 0x0000003CU : 0x0025DA15U);
+    for (int i = 0; i < 6; i++)
+      lightingPolynomial[i] = lightingPolynomial[i] * lightLevel;
+    for (int i = -128; i <= 128; i++)
+    {
+      float   x = float(i) * (1.0f / 128.0f);
+      float   y = 0.0f;
+      for (int j = 5; j >= 0; j--)
+        y = y * x + lightingPolynomial[j];
+      if (!(y >= 0.0f && y <= (253.0f / 64.0f)))
+        throw errorMessage("lighting polynomial is out of range at x = %f", x);
+    }
+    waterColor = (waterColor & 0x00FFFFFFU) | ((waterColor & 0x7F000000U) << 1);
+    if (!(waterColor & 0xFF000000U))
+      waterColor = 0U;
+    int     width =
+        int(parseInteger(args[2], 0, "invalid image width", 1, 32768));
+    int     height =
+        int(parseInteger(args[3], 0, "invalid image height", 1, 32768));
+    if (enableDownscale)
+    {
+      width = width << 1;
+      height = height << 1;
+      viewScale = viewScale * 2.0f;
+      viewOffsX = viewOffsX * 2.0f;
+      viewOffsY = viewOffsY * 2.0f;
+      viewOffsZ = viewOffsZ * 2.0f;
+    }
+    unsigned int  worldID = formID;
+
+    BA2File ba2File(args[4]);
+    ESMFile esmFile(args[0]);
+    Renderer  renderer(width, height, ba2File, esmFile);
+    if (threadCnt > 0)
+      renderer.setThreadCount(threadCnt);
+    renderer.setVerboseMode(verboseMode);
+    renderer.setDistantObjectsOnly(distantObjectsOnly);
+    renderer.setNoDisabledObjects(noDisabledObjects);
+    renderer.setLandDefaultColor(ltxtDefColor);
+    renderer.setLandTxtResolution(ltxtResolution);
+    renderer.setTextureMipLevel(textureMip);
+    renderer.setLandTextureMip(landTextureMip);
+    renderer.setLandTxtRGBScale(landTextureMult);
+    renderer.setModelLOD(modelLOD);
+    renderer.setWaterColor(waterColor);
+    {
+      float   tmp = float(std::atan(1.0) / 45.0);       // degrees to radians
+      renderer.setViewTransform(
+          viewScale,
+          viewRotationX * tmp, viewRotationY * tmp, viewRotationZ * tmp,
+          viewOffsX + (float(width) * 0.5f), viewOffsY + (float(height) * 0.5f),
+          viewOffsZ);
+      renderer.setLightDirection(lightRotationX * tmp, lightRotationY * tmp);
+    }
+    renderer.setLightingFunction(lightingPolynomial);
+    if (defaultEnvMap && *defaultEnvMap)
+      renderer.setDefaultEnvMap(std::string(defaultEnvMap));
+    if (waterColor && waterTexture && *waterTexture)
+      renderer.setWaterTexture(std::string(waterTexture));
+    for (size_t i = 0; i < hdModelNamePatterns.size(); i++)
+    {
+      if (hdModelNamePatterns[i] && hdModelNamePatterns[i][0])
+        renderer.addHDModelPattern(std::string(hdModelNamePatterns[i]));
+    }
+
+    if (worldID)
+    {
+      renderer.loadTerrain(btdPath, worldID, defTxtID,
+                           btdLOD, terrainX0, terrainY0, terrainX1, terrainY1);
+      renderer.renderTerrain(worldID);
+      renderer.clear();
+    }
+    renderer.renderObjects(formID);
+    if (waterColor)
+      renderer.renderWater(formID);
+    if (verboseMode)
+    {
+      const NIFFile::NIFBounds& b = renderer.getBounds();
+      if (b.xMax > b.xMin)
+      {
+        float   scale = (!enableDownscale ? 1.0f : 0.5f);
+        std::fprintf(stderr,
+                     "Bounds: %6.0f, %6.0f, %6.0f to %6.0f, %6.0f, %6.0f\n",
+                     b.xMin * scale, b.yMin * scale, b.zMin * scale,
+                     b.xMax * scale, b.yMax * scale, b.zMax * scale);
+      }
+    }
+
+    DDSOutputFile outFile(args[1],
+                          width >> (!enableDownscale ? 0 : 1),
+                          height >> (!enableDownscale ? 0 : 1),
+                          DDSInputFile::pixelFormatRGB24);
+    if (!enableDownscale)
+    {
+      size_t  imageDataSize = size_t(width) * size_t(height);
+      for (size_t i = 0; i < imageDataSize; i++)
+      {
+        unsigned int  c = renderer.getImageData()[i];
+        outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
+        outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
+        outFile.writeByte((unsigned char) (c & 0xFF));
+      }
+    }
+    else
+    {
+      for (int y = 0; y < height; y = y + 2)
+      {
+        for (int x = 0; x < width; x = x + 2)
+        {
+          unsigned int  c = downsample2xFilter(renderer.getImageData(),
+                                               width, height, x, y);
+          outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
+          outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
+          outFile.writeByte((unsigned char) (c & 0xFF));
+        }
+      }
     }
     err = 0;
   }
