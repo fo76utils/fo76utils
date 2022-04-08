@@ -43,6 +43,8 @@ Plot3D_TriShape::Plot3DTS_Base::Plot3DTS_Base(
   textureR = (DDSTexture *) 0;
   if (textureCnt >= 1)
     textureD = textures[0];
+  if (textureCnt >= 4)
+    textureG = textures[3];
   if (!(textureD && textureCnt >= 2 && textures[1] &&
         ((textureD->getWidth() * textures[1]->getHeight())
          == (textureD->getHeight() * textures[1]->getWidth()))))
@@ -51,8 +53,6 @@ Plot3D_TriShape::Plot3DTS_Base::Plot3DTS_Base(
   }
   textureN = textures[1];
   textureScaleN = float(textureN->getWidth()) / float(textureD->getWidth());
-  if (textureCnt >= 4)
-    textureG = textures[3];
   if (!(textureCnt >= 5 && textures[4]))
     return;
   textureE = textures[4];
