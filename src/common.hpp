@@ -40,6 +40,8 @@ inline int uint32ToSigned(unsigned int x)
   return (int(x ^ 0x80000000U) + int(-0x80000000));
 }
 
+unsigned short convertToFloat16(float x);
+
 inline unsigned long long rgba32ToRBGA64(unsigned int c)
 {
   return ((unsigned long long) (c & 0x00FF00FFU)

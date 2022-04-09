@@ -12,6 +12,20 @@ std::runtime_error errorMessage(const char *fmt, ...)
   return std::runtime_error(std::string(buf));
 }
 
+unsigned short convertToFloat16(float x)
+{
+  int     e = 0;
+  int     m = roundFloat(float(std::frexp(x, &e)) * 2048.0f);
+  if (!m)
+    return 0;
+  int     s = m & 0x8000;
+  m = std::abs(m);
+  e = e + 14 + (m >> 11);
+  if (e <= 0 || e > 31)
+    return (unsigned short) (s | (e <= 0 ? 0x0000 : 0x7FFF));
+  return (unsigned short) (s | (e << 10) | (m & 0x03FF));
+}
+
 long parseInteger(const char *s, int base, const char *errMsg,
                   long minVal, long maxVal)
 {

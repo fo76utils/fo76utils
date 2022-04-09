@@ -3,20 +3,6 @@
 #include "terrmesh.hpp"
 #include "landtxt.hpp"
 
-unsigned short TerrainMesh::convertToFloat16(float x)
-{
-  int     e = 0;
-  int     m = roundFloat(float(std::frexp(x, &e)) * 2048.0f);
-  if (!m)
-    return 0;
-  int     s = m & 0x8000;
-  m = std::abs(m);
-  e = e + 14 + (m >> 11);
-  if (e <= 0 || e > 31)
-    return (unsigned short) (s | (e <= 0 ? 0x0000 : 0x7FFF));
-  return (unsigned short) (s | (e << 10) | (m & 0x03FF));
-}
-
 void TerrainMesh::calculateNormal(
     float& normalX, float& normalY, float& normalZ,
     float dx, float dy, float dz1, float dz2)
