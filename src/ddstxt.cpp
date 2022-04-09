@@ -554,17 +554,23 @@ unsigned int DDSTexture::getPixelB(float x, float y, int mipLevel) const
 
 unsigned int DDSTexture::getPixelT(float x, float y, float mipLevel) const
 {
+  int     m0 = roundFloat(mipLevel * 256.0f);
+  int     mf = m0 & 0xFF;
+  m0 = int((unsigned int) m0 >> 8);
+  if (BRANCH_EXPECT(!mf, false))
+  {
+    if (BRANCH_EXPECT(!(((xSizeMip0 - 1) | (ySizeMip0 - 1)) >> m0), false))
+      return textureData[m0][0];
+    return getPixelB(x, y, m0);
+  }
   int     x0 = roundFloat(x * 256.0f);
   int     y0 = roundFloat(y * 256.0f);
-  int     m0 = roundFloat(mipLevel * 256.0f);
   int     x0m1 = int((unsigned int) x0 >> 1);
   int     y0m1 = int((unsigned int) y0 >> 1);
   int     xf = x0 & 0xFF;
   int     yf = y0 & 0xFF;
-  int     mf = m0 & 0xFF;
   x0 = int((unsigned int) x0 >> 8);
   y0 = int((unsigned int) y0 >> 8);
-  m0 = int((unsigned int) m0 >> 8);
   int     m1 = m0 + 1;
   int     xfm1 = x0m1 & 0xFF;
   int     yfm1 = y0m1 & 0xFF;
@@ -576,14 +582,11 @@ unsigned int DDSTexture::getPixelT(float x, float y, float mipLevel) const
   c1 = blendRGBA32ToRBGA64(getPixelN(x0, y0 + 1, m0),
                            getPixelN(x0 + 1, y0 + 1, m0), xf);
   c = blendRBGA64(c0, c1, yf);
-  if (BRANCH_EXPECT(mf, true))
-  {
-    c0 = blendRGBA32ToRBGA64(getPixelN(x0m1, y0m1, m1),
-                             getPixelN(x0m1 + 1, y0m1, m1), xfm1);
-    c1 = blendRGBA32ToRBGA64(getPixelN(x0m1, y0m1 + 1, m1),
-                             getPixelN(x0m1 + 1, y0m1 + 1, m1), xfm1);
-    c = blendRBGA64(c, blendRBGA64(c0, c1, yfm1), mf);
-  }
+  c0 = blendRGBA32ToRBGA64(getPixelN(x0m1, y0m1, m1),
+                           getPixelN(x0m1 + 1, y0m1, m1), xfm1);
+  c1 = blendRGBA32ToRBGA64(getPixelN(x0m1, y0m1 + 1, m1),
+                           getPixelN(x0m1 + 1, y0m1 + 1, m1), xfm1);
+  c = blendRBGA64(c, blendRBGA64(c0, c1, yfm1), mf);
   return rbga64ToRGBA32(c);
 }
 
