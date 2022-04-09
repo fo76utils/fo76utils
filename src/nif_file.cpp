@@ -83,6 +83,16 @@ NIFFile::NIFVertexTransform& NIFFile::NIFVertexTransform::operator*=(
   return (*this);
 }
 
+void NIFFile::NIFVertexTransform::rotateXYZ(float& x, float& y, float& z) const
+{
+  float   tmpX = (x * rotateXX) + (y * rotateXY) + (z * rotateXZ);
+  float   tmpY = (x * rotateYX) + (y * rotateYY) + (z * rotateYZ);
+  float   tmpZ = (x * rotateZX) + (y * rotateZY) + (z * rotateZZ);
+  x = tmpX;
+  y = tmpY;
+  z = tmpZ;
+}
+
 void NIFFile::NIFVertexTransform::transformXYZ(
     float& x, float& y, float& z) const
 {

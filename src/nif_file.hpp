@@ -61,6 +61,7 @@ class NIFFile : public FileBuffer
                        float offsetX, float offsetY, float offsetZ);
     void readFromBuffer(FileBuffer& buf);
     NIFVertexTransform& operator*=(const NIFVertexTransform& r);
+    void rotateXYZ(float& x, float& y, float& z) const;
     void transformXYZ(float& x, float& y, float& z) const;
     void transformVertex(NIFVertex& v) const;
   };
