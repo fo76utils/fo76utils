@@ -369,24 +369,29 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
     objectList.push_back(tmp);
 }
 
-void Renderer::findObjects(unsigned int formID, int type)
+void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
 {
   if (!formID)
     return;
   const ESMFile::ESMRecord  *r = (ESMFile::ESMRecord *) 0;
   do
   {
+    bool    noNextRecord = (r && !parentID);
     r = esmFile.getRecordPtr(formID);
     if (!r)
       break;
+    if (BRANCH_EXPECT(*r == "GRUP", false))
+    {
+      if (r->formID >= 1U && r->formID <= 9U && r->formID != 7U)
+        findObjects(r->children, type, formID);
+    }
+    else if (noNextRecord)
+    {
+      break;
+    }
     if (BRANCH_EXPECT(!(*r == "REFR"), false))
     {
-      if (*r == "GRUP")
-      {
-        if (r->formID >= 1U && r->formID <= 9U && r->formID != 7U)
-          findObjects(r->children, type);
-      }
-      else if (*r == "CELL")
+      if (*r == "CELL")
       {
         if (type == 0)
           addTerrainCell(*r);
@@ -409,16 +414,13 @@ void Renderer::findObjects(unsigned int formID, int type)
               return;
           }
         }
-        findObjects(formID, type);
+        findObjects(formID, type, r->parent);
         return;
       }
       continue;
     }
-    if ((r->flags & 0x00000020) || !type ||     // ignore deleted records
-        (noDisabledObjects && (r->flags & 0x00000800)))
-    {
-      continue;
-    }
+    if ((r->flags & (!noDisabledObjects ? 0x00000020 : 0x00000820)) || !type)
+      continue;                         // ignore deleted and disabled records
     unsigned int  refrName = 0U;
     float   scale = 1.0f;
     float   rX = 0.0f;
@@ -453,14 +455,29 @@ void Renderer::findObjects(unsigned int formID, int type)
     const ESMFile::ESMRecord  *r2;
     if (!(refrName && bool(r2 = esmFile.getRecordPtr(refrName))))
       continue;
-    if (*r2 == "STAT" || *r2 == "SCOL" || *r2 == "TREE")
+    switch (r2->type)
     {
-      if (distantObjectsOnly && !(r2->flags & 0x00008000))
+      case 0x49544341:                  // "ACTI"
+        // ignore markers
+        if (r2->flags & 0x00800000U)
+          continue;
+        break;
+      case 0x4E525546:                  // "FURN"
+      case 0x4C4F4353:                  // "SCOL"
+      case 0x54415453:                  // "STAT"
+      case 0x45455254:                  // "TREE"
+        // ignore markers and (optionally) objects not visible from distance
+        if ((r2->flags | (!distantObjectsOnly ? 0xFF7FFFFFU : 0xFF7F7FFFU))
+            != 0xFF7FFFFFU)
+        {
+          continue;
+        }
+        break;
+      case 0x5454534D:                  // "MSTT"
+      case 0x54415750:                  // "PWAT"
+        break;
+      default:
         continue;
-    }
-    else if (!(*r2 == "MSTT" || *r2 == "ACTI" || *r2 == "PWAT"))
-    {
-      continue;
     }
     RenderObject  tmp;
     tmp.flags = (type == 1 ? 2U : 4U);
@@ -518,8 +535,6 @@ void Renderer::findObjects(unsigned int formID, int type)
       }
     }
     if (!haveOBND || stringBuf.empty() || (type == 2) != isWater)
-      continue;
-    if (*r2 == "ACTI" && !isWater)
       continue;
     tmp.modelTransform = NIFFile::NIFVertexTransform(scale, rX, rY, rZ,
                                                      offsX, offsY, offsZ);
@@ -1125,6 +1140,26 @@ Renderer::~Renderer()
     delete[] outBufRGBW;
 }
 
+unsigned int Renderer::findParentWorld(ESMFile& esmFile, unsigned int formID)
+{
+  if (!formID)
+    return 0xFFFFFFFFU;
+  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
+  if (!(r && (*r == "WRLD" || *r == "GRUP" || *r == "CELL" || *r == "REFR")))
+    return 0xFFFFFFFFU;
+  if (*r == "WRLD")
+    return formID;
+  while (!(*r == "GRUP" && r->formID == 1U))
+  {
+    if (!r->parent)
+      return 0U;
+    r = esmFile.getRecordPtr(r->parent);
+    if (!r)
+      return 0U;
+  }
+  return r->flags;
+}
+
 void Renderer::clear()
 {
   clear(0x7C);
@@ -1274,6 +1309,7 @@ static const char *usageStrings[] =
   "",
   "Options:",
   "    --help              print usage",
+  "    --list-defaults     print defaults for all options, and exit",
   "    --                  remaining options are file names",
   "    -threads INT        set the number of threads to use",
   "    -ssaa BOOL          render at double resolution and downsample",
@@ -1316,7 +1352,7 @@ int main(int argc, char **argv)
     int     threadCnt = -1;
     bool    verboseMode = true;
     bool    distantObjectsOnly = false;
-    bool    noDisabledObjects = false;
+    bool    noDisabledObjects = true;
     bool    enableDownscale = false;
     unsigned int  formID = 0U;
     int     btdLOD = 2;
@@ -1362,6 +1398,63 @@ int main(int argc, char **argv)
         args.clear();
         err = 0;
         break;
+      }
+      else if (std::strcmp(argv[i], "--list-defaults") == 0)
+      {
+        std::printf("-threads %d", threadCnt);
+        if (threadCnt <= 0)
+        {
+          std::printf(" (defaults to hardware threads: %d)",
+                      int(std::thread::hardware_concurrency()));
+        }
+        std::printf("\n-ssaa %d\n", int(enableDownscale));
+        std::printf("-w 0x%08X", formID);
+        if (!formID)
+          std::printf(" (defaults to 0x0000003C or 0x0025DA15)");
+        std::printf("\n-r %d %d %d %d\n",
+                    terrainX0, terrainY0, terrainX1, terrainY1);
+        std::printf("-l %d\n", btdLOD);
+        std::printf("-deftxt 0x%08X\n", defTxtID);
+        std::printf("-defclr 0x%08X\n", ltxtDefColor);
+        std::printf("-ltxtres %d\n", ltxtResolution);
+        std::printf("-mip %d\n", textureMip);
+        std::printf("-lmip %.1f\n", landTextureMip);
+        std::printf("-lmult %.1f\n", landTextureMult);
+        std::printf("-view %.6f %.1f %.1f %.1f %.1f %.1f %.1f\n",
+                    viewScale, viewRotationX, viewRotationY, viewRotationZ,
+                    viewOffsX, viewOffsY, viewOffsZ);
+        float   tmp = float(std::atan(1.0) / 45.0);
+        {
+          NIFFile::NIFVertexTransform
+              vt(1.0f,
+                 viewRotationX * tmp, viewRotationY * tmp, viewRotationZ * tmp,
+                 0.0f, 0.0f, 0.0f);
+          std::printf("    Rotation matrix:\n");
+          std::printf("        X: %9.6f %9.6f %9.6f\n",
+                      vt.rotateXX, vt.rotateXY, vt.rotateXZ);
+          std::printf("        Y: %9.6f %9.6f %9.6f\n",
+                      vt.rotateYX, vt.rotateYY, vt.rotateYZ);
+          std::printf("        Z: %9.6f %9.6f %9.6f\n",
+                      vt.rotateZX, vt.rotateZY, vt.rotateZZ);
+        }
+        std::printf("-light %.1f %.4f %.4f\n",
+                    lightLevel, lightRotationX, lightRotationY);
+        {
+          NIFFile::NIFVertexTransform
+              vt(1.0f, lightRotationX * tmp, lightRotationY * tmp, 0.0f,
+                 0.0f, 0.0f, 0.0f);
+          std::printf("    Light vector: %9.6f %9.6f %9.6f\n",
+                      vt.rotateXZ, vt.rotateYZ, vt.rotateZZ);
+        }
+        std::printf("-lpoly %.6f %.6f %.6f %.6f %.6f %.6f\n",
+                    lightingPolynomial[5], lightingPolynomial[4],
+                    lightingPolynomial[3], lightingPolynomial[2],
+                    lightingPolynomial[1], lightingPolynomial[0]);
+        std::printf("-mlod %d\n", modelLOD);
+        std::printf("-vis %d\n", int(distantObjectsOnly));
+        std::printf("-ndis %d\n", int(noDisabledObjects));
+        std::printf("-watercolor 0x%08X\n", waterColor);
+        return 0;
       }
       else if (argv[i][0] != '-')
       {
@@ -1600,10 +1693,12 @@ int main(int argc, char **argv)
       viewOffsY = viewOffsY * 2.0f;
       viewOffsZ = viewOffsZ * 2.0f;
     }
-    unsigned int  worldID = formID;
 
     BA2File ba2File(args[4]);
     ESMFile esmFile(args[0]);
+    unsigned int  worldID = Renderer::findParentWorld(esmFile, formID);
+    if (worldID == 0xFFFFFFFFU)
+      throw errorMessage("form ID not found in ESM, or invalid record type");
     Renderer  renderer(width, height, ba2File, esmFile);
     if (threadCnt > 0)
       renderer.setThreadCount(threadCnt);

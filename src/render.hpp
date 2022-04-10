@@ -14,7 +14,6 @@
 #include "plot3d.hpp"
 
 #include <thread>
-#include <mutex>
 
 class Renderer
 {
@@ -128,7 +127,7 @@ class Renderer
   void addTerrainCell(const ESMFile::ESMRecord& r);
   void addWaterCell(const ESMFile::ESMRecord& r);
   // type = 0: terrain, type = 1: solid objects, type = 2: water
-  void findObjects(unsigned int formID, int type);
+  void findObjects(unsigned int formID, int type, unsigned int parentID = 0U);
   void sortObjectList();
   // 0x0001: clear image data
   // 0x0002: clear Z buffer
@@ -157,6 +156,8 @@ class Renderer
            const BA2File& archiveFiles, ESMFile& masterFiles,
            unsigned int *bufRGBW = 0, float *bufZ = 0);
   virtual ~Renderer();
+  // returns 0 if formID is not in an exterior world, 0xFFFFFFFF on error
+  static unsigned int findParentWorld(ESMFile& esmFile, unsigned int formID);
   inline const unsigned int *getImageData() const
   {
     return outBufRGBW;
