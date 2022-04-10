@@ -404,7 +404,10 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
       bgsmAlphaBlendMode = bgsmFile.alphaBlendMode;
       bgsmAlphaThreshold = -1;
       if (bgsmFile.alphaThresholdEnabled)
-        bgsmAlphaThreshold = (signed short) bgsmFile.alphaThreshold;
+      {
+        int     tmp = bgsmFile.alphaThreshold;
+        bgsmAlphaThreshold = (signed short) (tmp + int(tmp < 255));
+      }
       bgsmTextures.resize(f.bgsmTexturePaths.size(), (std::string *) 0);
       for (size_t i = 0; i < f.bgsmTexturePaths.size(); i++)
         bgsmTextures[i] = f.storeString(f.bgsmTexturePaths[i]);
@@ -709,7 +712,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
         t.alphaThreshold = (unsigned char) lsBlock.bgsmAlphaThreshold;
       else if (lsBlock.bgsmAlphaBlendMode == 0x0167)
         t.alphaThreshold = (!(t.flags & 0x08) ? 128 : 192);
-      if (lsBlock.bgsmVersion && (lsBlock.textureSet < 0 || bsVersion >= 0x90))
+      if (lsBlock.bgsmVersion && lsBlock.bgsmTextures.size() > 0)
       {
         t.texturePathCnt = (unsigned char) lsBlock.bgsmTextures.size();
         t.texturePaths = &(lsBlock.bgsmTextures.front());
