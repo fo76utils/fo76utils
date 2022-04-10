@@ -334,8 +334,12 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     float   viewRotationX = float(std::atan(std::sqrt(2.0)));
     float   viewRotationY = float(std::atan(1.0) * 4.0);
     float   viewRotationZ = float(std::atan(1.0));
-    std::string
-        defaultEnvMap("textures/shared/cubemaps/metalchrome01cube_e.dds");
+    std::string defaultEnvMap;
+    if (nifFile.getVersion() < 0x80)
+      defaultEnvMap = "textures/cubemaps/chrome_e.dds";
+    else
+      defaultEnvMap = "textures/shared/cubemaps/metalchrome01cube_e.dds";
+    std::string waterTexture("textures/water/defaultwater.dds");
     Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
                            imageWidth, imageHeight);
     while (true)
@@ -346,6 +350,10 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       NIFFile::NIFVertexTransform
           viewTransform(1.0f, viewRotationX, viewRotationY, viewRotationZ,
                         0.0f, 0.0f, 0.0f);
+      NIFFile::NIFVertexTransform
+          lightTransform(1.0f, lightRotationX, lightRotationY, 0.0f,
+                         0.0f, 0.0f, 0.0f);
+      bool    haveWater = false;
       {
         NIFFile::NIFVertexTransform t(modelTransform);
         t *= viewTransform;
@@ -371,21 +379,26 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       }
       for (size_t i = 0; i < meshData.size(); i++)
       {
-        if (meshData[i].flags & 0x0005)         // ignore if hidden or effect
+        if (meshData[i].flags & 0x05)           // ignore if hidden or effect
           continue;
+        if (meshData[i].flags & 0x02)
+          haveWater = true;
         plot3d = meshData[i];
         const DDSTexture  *textures[9];
         for (size_t j = 9; j-- > 0; )
         {
           textures[j] = (DDSTexture *) 0;
-          if (!(j < meshData[i].texturePathCnt && ((1 << int(j)) & 0x011B)))
-            continue;
-          const std::string *texturePath = meshData[i].texturePaths[j];
-          if (texturePath->empty())
+          const std::string *texturePath = (std::string *) 0;
+          if (j < meshData[i].texturePathCnt && ((1 << int(j)) & 0x011B))
+            texturePath = meshData[i].texturePaths[j];
+          if (!texturePath || texturePath->empty())
           {
-            if (!(j == 4 && textures[8]))
+            if (j == 4 && textures[8])
+              texturePath = &defaultEnvMap;
+            else if (j == 1 && (meshData[i].flags & 0x02))
+              texturePath = &waterTexture;
+            else
               continue;
-            texturePath = &defaultEnvMap;
           }
           std::map< const std::string *, DDSTexture * >::iterator k =
               textureSet.find(texturePath);
@@ -400,31 +413,34 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
           }
           textures[j] = k->second;
         }
-        NIFFile::NIFVertexTransform
-            tmp(1.0f, lightRotationX, lightRotationY, 0.0f, 0.0f, 0.0f, 0.0f);
         plot3d.drawTriShape(modelTransform, viewTransform,
-                            tmp.rotateXZ, tmp.rotateYZ, tmp.rotateZZ,
-                            textures, 9);
+                            lightTransform.rotateXZ, lightTransform.rotateYZ,
+                            lightTransform.rotateZZ, textures, 9);
       }
-#ifdef HAVE_SDL
-      if (outFileName)
-#endif
+      if (haveWater)
       {
-        for (size_t i = 0; i < imageDataSize; i++)
+        const DDSTexture  *envMap = (DDSTexture *) 0;
+        if (!defaultEnvMap.empty())
         {
-          unsigned int  c = outBufRGBW[i];
-          unsigned int  a = c >> 24;
-          if (a >= 1 && a <= 254)
+          std::map< const std::string *, DDSTexture * >::iterator k =
+              textureSet.find(&defaultEnvMap);
+          if (k == textureSet.end())
           {
-            unsigned int  waterColor = Plot3D_TriShape::multiplyWithLight(
-                                           0xFF804000U, 0U, int((a - 1) << 2));
-            waterColor = (waterColor & 0x00FFFFFFU) | 0xC0000000U;
-            outBufRGBW[i] = blendRGBA32(c, waterColor, int(waterColor >> 24));
+            ba2File.extractFile(fileBuf, defaultEnvMap);
+            DDSTexture  *texture =
+                new DDSTexture(&(fileBuf.front()), fileBuf.size());
+            k = textureSet.insert(
+                    std::pair< const std::string *, DDSTexture * >(
+                        &defaultEnvMap, texture)).first;
           }
+          envMap = k->second;
         }
+        plot3d.renderWater(viewTransform, 0xC0804000U,
+                           lightTransform.rotateXZ, lightTransform.rotateYZ,
+                           lightTransform.rotateZZ, envMap, 0.5f);
       }
 #ifdef HAVE_SDL
-      else
+      if (!outFileName)
       {
         SDL_LockSurface(sdlScreen);
         unsigned int  *srcPtr = &(outBufRGBW.front());
@@ -435,15 +451,6 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
           for (int x = 0; x < imageWidth; x++, srcPtr++, dstPtr = dstPtr + 3)
           {
             unsigned int  c = *srcPtr;
-            unsigned int  a = c >> 24;
-            if (a >= 1 && a <= 254)
-            {
-              unsigned int  waterColor =
-                  Plot3D_TriShape::multiplyWithLight(0xFF804000U, 0U,
-                                                     int((a - 1) << 2));
-              waterColor = (waterColor & 0x00FFFFFFU) | 0xC0000000U;
-              c = blendRGBA32(c, waterColor, int(waterColor >> 24));
-            }
             dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);     // B
             dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);      // G
             dstPtr[2] = (unsigned char) (c & 0xFF);             // R
