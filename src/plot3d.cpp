@@ -183,10 +183,10 @@ inline void Plot3D_TriShape::Plot3DTS_TextureT::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   unsigned int  c = textureD->getPixelT(z.v2, z.v3, mipLevel);
-  if (BRANCH_EXPECT(textureG, false))
-    c = gradientMap(c);
   if (c < alphaThreshold)
     return;
+  if (BRANCH_EXPECT(textureG, false))
+    c = gradientMap(c);
   outBufZ[offs] = z.v0;
   int     l = int(Plot3D_TriShape::calculateLighting(
                       z.v4, z.v5, z.v1, lightX, lightY, lightZ,
@@ -203,10 +203,10 @@ void Plot3D_TriShape::Plot3DTS_NormalsT::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   unsigned int  c = textureD->getPixelT(z.v2, z.v3, mipLevel);
-  if (BRANCH_EXPECT(textureG, false))
-    c = gradientMap(c);
   if (c < alphaThreshold)
     return;
+  if (BRANCH_EXPECT(textureG, false))
+    c = gradientMap(c);
   outBufZ[offs] = z.v0;
   unsigned int  n =
       textureN->getPixelT(z.v2 * textureScaleN, z.v3 * textureScaleN, mipLevel);
@@ -226,10 +226,10 @@ void Plot3D_TriShape::Plot3DTS_NormalsEnvT::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   unsigned int  c = textureD->getPixelT(z.v2, z.v3, mipLevel);
-  if (BRANCH_EXPECT(textureG, false))
-    c = gradientMap(c);
   if (c < alphaThreshold)
     return;
+  if (BRANCH_EXPECT(textureG, false))
+    c = gradientMap(c);
   outBufZ[offs] = z.v0;
   unsigned int  n =
       textureN->getPixelT(z.v2 * textureScaleN, z.v3 * textureScaleN, mipLevel);
@@ -287,10 +287,10 @@ void Plot3D_TriShape::Plot3DTS_NormalsReflT::drawPixel(int x, int y,
   if (outBufZ[offs] <= z.v0)
     return;
   unsigned int  c = textureD->getPixelT(z.v2, z.v3, mipLevel);
-  if (BRANCH_EXPECT(textureG, false))
-    c = gradientMap(c);
   if (c < alphaThreshold)
     return;
+  if (BRANCH_EXPECT(textureG, false))
+    c = gradientMap(c);
   outBufZ[offs] = z.v0;
   unsigned int  n =
       textureN->getPixelT(z.v2 * textureScaleN, z.v3 * textureScaleN, mipLevel);
@@ -377,7 +377,7 @@ size_t Plot3D_TriShape::transformVertexData(
   vt *= modelTransform;
   vt *= viewTransform;
   if (flags & 0x08)                     // decal
-    vt.offsZ = vt.offsZ - 0.5f;
+    vt.offsZ = vt.offsZ - 1.0f;
   NIFFile::NIFBounds  b;
   for (size_t i = 0; i < vertexCnt; i++)
   {
