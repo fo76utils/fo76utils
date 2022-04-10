@@ -68,6 +68,8 @@ class Renderer
     std::string errMsg;
     TerrainMesh *terrainMesh;
     Plot3D_TriShape *renderer;
+    // objects not rendered due to incorrect bounds
+    std::vector< unsigned int > objectsRemaining;
     RenderThread();
     ~RenderThread();
     void join();
@@ -143,6 +145,8 @@ class Renderer
   bool isHighQualityModel(const std::string& modelPath) const;
   void loadModel(unsigned int modelID);
   void renderObjectList();
+  bool renderObject(RenderThread& t, size_t i,
+                    unsigned long long tileMask = ~0ULL);
   void renderThread(size_t threadNum, size_t startPos, size_t endPos,
                     unsigned long long tileIndexMask);
   static void threadFunction(Renderer *p, size_t threadNum,

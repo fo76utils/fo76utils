@@ -82,6 +82,7 @@ void Renderer::RenderThread::clear()
     delete terrainMesh;
     terrainMesh = (TerrainMesh *) 0;
   }
+  objectsRemaining.clear();
 }
 
 unsigned long long Renderer::calculateTileMask(int x0, int y0,
@@ -660,7 +661,10 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName)
     DDSTexture  *t = (DDSTexture *) 0;
     try
     {
-      int     m = ba2File.extractTexture(fileBuf, fileName, textureMip);
+      int     m = 0;
+      if (fileName.find("/cubemaps/") == std::string::npos)
+        m = textureMip;
+      m = ba2File.extractTexture(fileBuf, fileName, m);
       t = new DDSTexture(&(fileBuf.front()), fileBuf.size(), m);
       CachedTexture tmp;
       tmp.texture = t;
@@ -747,7 +751,13 @@ void Renderer::loadModel(unsigned int modelID)
       if (t.flags & 0x05)               // ignore if hidden or effect
         continue;
       nifFiles[n].totalTriangleCnt += t.triangleCnt;
-      size_t  nTextures = size_t(!(t.flags & 0x02) ? (!isHDModel ? 4 : 10) : 0);
+      if (t.flags & 0x02)
+      {
+        if (!defaultWaterTexture.empty())
+          nifFiles[n].textures[i * 10U + 1U] = loadTexture(defaultWaterTexture);
+        continue;
+      }
+      size_t  nTextures = size_t(!isHDModel ? 4 : 10);
       for (size_t j = nTextures; j-- > 0; )
       {
         const std::string *texturePath = (std::string *) 0;
@@ -818,6 +828,11 @@ void Renderer::renderObjectList()
         }
         triangleCnt = nifFiles[p.modelID & modelIDMask].totalTriangleCnt;
       }
+      else if ((p.flags & 0x04) && !defaultWaterTexture.empty())
+      {
+        nifFiles[0].textures.resize(10, (DDSTexture *) 0);
+        nifFiles[0].textures[1] = loadTexture(defaultWaterTexture);
+      }
       threadTriangleCnt[p.tileIndex & 63] += triangleCnt;
       j++;
     }
@@ -867,7 +882,12 @@ void Renderer::renderObjectList()
         throw errorMessage("%s", renderThreads[k].errMsg.c_str());
     }
     // render any remaining objects that were skipped due to incorrect bounds
-    renderThread(0, i, j, ~0ULL);
+    for (size_t k = 0; k < threadsUsed; k++)
+    {
+      for (size_t l = 0; l < renderThreads[k].objectsRemaining.size(); l++)
+        renderObject(renderThreads[k], renderThreads[k].objectsRemaining[l]);
+      renderThreads[k].objectsRemaining.clear();
+    }
     i = j;
     clear(0x20);
     shrinkTextureCache();
@@ -881,6 +901,106 @@ void Renderer::renderObjectList()
     std::fputc('\n', stderr);
 }
 
+bool Renderer::renderObject(RenderThread& t, size_t i,
+                            unsigned long long tileMask)
+{
+  if (objectList[i].flags & 0x01)               // terrain
+  {
+    if (landData && t.terrainMesh)
+    {
+      int     landTxtScale = 0;
+      for (int j = landData->getCellResolution(); j < cellTextureResolution; )
+      {
+        landTxtScale++;
+        j = j << 1;
+      }
+      t.terrainMesh->createMesh(
+          *landData, landTxtScale,
+          objectList[i].x0, objectList[i].y0,
+          objectList[i].x1, objectList[i].y1,
+          &(landTextures.front()), landTextures.size(),
+          landTextureMip, landTxtRGBScale, landTxtDefColor);
+      *(t.renderer) = *(t.terrainMesh);
+      t.renderer->drawTriShape(
+          objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
+          t.terrainMesh->getTextures(), t.terrainMesh->getTextureCount());
+    }
+  }
+  else if (objectList[i].formID)                // object or water mesh
+  {
+    NIFFile::NIFVertexTransform vt(objectList[i].modelTransform);
+    vt *= viewTransform;
+    size_t  n = objectList[i].modelID & (modelBatchCnt - 1U);
+    for (size_t j = 0; j < nifFiles[n].meshData.size(); j++)
+    {
+      if (nifFiles[n].meshData[j].flags & 0x05) // hidden or effect
+        continue;
+      if (nifFiles[n].meshData[j].triangleCnt < 1)
+        continue;
+      NIFFile::NIFBounds  b;
+      nifFiles[n].meshData[j].calculateBounds(b, &vt);
+      unsigned long long  m =
+          calculateTileMask(roundFloat(b.xMin), roundFloat(b.yMin),
+                            roundFloat(b.xMax), roundFloat(b.yMax));
+      if (!m)
+        continue;
+      if (m & ~tileMask)
+        return false;
+      *(t.renderer) = nifFiles[n].meshData[j];
+      t.renderer->drawTriShape(
+          objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
+          &(nifFiles[n].textures.front()) + (j * 10U), 10);
+    }
+  }
+  else if (objectList[i].flags & 0x04)          // water cell
+  {
+    NIFFile::NIFTriShape  tmp;
+    NIFFile::NIFVertex    vTmp[4];
+    NIFFile::NIFTriangle  tTmp[2];
+    int     x0 = objectList[i].x0;
+    int     y0 = objectList[i].y0;
+    int     x1 = objectList[i].x1;
+    int     y1 = objectList[i].y1;
+    for (int j = 0; j < 4; j++)
+    {
+      vTmp[j].x = float(j == 0 || j == 3 ? x0 : x1);
+      vTmp[j].y = float(j == 0 || j == 1 ? y0 : y1);
+      vTmp[j].z = 0.0f;
+      vTmp[j].normalX = 0.0f;
+      vTmp[j].normalY = 0.0f;
+      vTmp[j].normalZ = 1.0f;
+      vTmp[j].u = (unsigned short) (j == 0 || j == 3 ? 0x0000 : 0x4000);
+      vTmp[j].v = (unsigned short) (j == 0 || j == 1 ? 0x0000 : 0x4000);
+      vTmp[j].vertexColor = 0xFFFFFFFFU;
+    }
+    tTmp[0].v0 = 0;
+    tTmp[0].v1 = 1;
+    tTmp[0].v2 = 2;
+    tTmp[1].v0 = 0;
+    tTmp[1].v1 = 2;
+    tTmp[1].v2 = 3;
+    tmp.vertexCnt = 4;
+    tmp.triangleCnt = 2;
+    tmp.vertexData = vTmp;
+    tmp.triangleData = tTmp;
+    tmp.flags = 0x32;                   // water
+    tmp.texturePathCnt = 0;
+    tmp.texturePaths = (std::string **) 0;
+    const DDSTexture * const  *textures = (DDSTexture **) 0;
+    size_t  textureCnt = 0;
+    if (!defaultWaterTexture.empty() && nifFiles[0].textures.size() >= 2)
+    {
+      textures = &(nifFiles[0].textures.front());
+      textureCnt = 2;
+    }
+    *(t.renderer) = tmp;
+    t.renderer->drawTriShape(
+        objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
+        textures, textureCnt);
+  }
+  return true;
+}
+
 void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
                             unsigned long long tileIndexMask)
 {
@@ -888,15 +1008,6 @@ void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
   if (!t.renderer)
     return;
   t.renderer->setLightingFunction(lightingPolynomial);
-  int     landTxtScale = 0;
-  if (landData)
-  {
-    while ((landData->getCellResolution() << landTxtScale)
-           < cellTextureResolution && landTxtScale < 8)
-    {
-      landTxtScale++;
-    }
-  }
   unsigned long long  tileMask = 0ULL;
   for (size_t i = startPos; i < endPos; i++)
   {
@@ -936,93 +1047,8 @@ void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
         tileMask = ~0ULL;
       }
     }
-    bool    invalidOBND = false;
-    if (objectList[i].flags & 0x01)             // terrain
-    {
-      if (landData && t.terrainMesh)
-      {
-        t.terrainMesh->createMesh(
-            *landData, landTxtScale,
-            objectList[i].x0, objectList[i].y0,
-            objectList[i].x1, objectList[i].y1,
-            &(landTextures.front()), landTextures.size(),
-            landTextureMip, landTxtRGBScale, landTxtDefColor);
-        *(t.renderer) = *(t.terrainMesh);
-        t.renderer->drawTriShape(
-            objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
-            t.terrainMesh->getTextures(), t.terrainMesh->getTextureCount());
-      }
-    }
-    else if (objectList[i].formID)              // object or water mesh
-    {
-      NIFFile::NIFVertexTransform vt(objectList[i].modelTransform);
-      vt *= viewTransform;
-      size_t  n = objectList[i].modelID & (modelBatchCnt - 1U);
-      for (size_t j = 0; j < nifFiles[n].meshData.size(); j++)
-      {
-        if (nifFiles[n].meshData[j].flags & 0x05)       // hidden or effect
-          continue;
-        if (nifFiles[n].meshData[j].triangleCnt < 1)
-          continue;
-        NIFFile::NIFBounds  b;
-        nifFiles[n].meshData[j].calculateBounds(b, &vt);
-        unsigned long long  m =
-            calculateTileMask(roundFloat(b.xMin), roundFloat(b.yMin),
-                              roundFloat(b.xMax), roundFloat(b.yMax));
-        if (!m)
-          continue;
-        if (m & ~tileMask)
-        {
-          invalidOBND = true;
-          break;
-        }
-        *(t.renderer) = nifFiles[n].meshData[j];
-        t.renderer->drawTriShape(
-            objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
-            &(nifFiles[n].textures.front()) + (j * 10U), 10);
-      }
-    }
-    else if (objectList[i].flags & 0x04)        // water cell
-    {
-      NIFFile::NIFTriShape  tmp;
-      NIFFile::NIFVertex    vTmp[4];
-      NIFFile::NIFTriangle  tTmp[2];
-      int     x0 = objectList[i].x0;
-      int     y0 = objectList[i].y0;
-      int     x1 = objectList[i].x1;
-      int     y1 = objectList[i].y1;
-      for (int j = 0; j < 4; j++)
-      {
-        vTmp[j].x = float(j == 0 || j == 3 ? x0 : x1);
-        vTmp[j].y = float(j == 0 || j == 1 ? y0 : y1);
-        vTmp[j].z = 0.0f;
-        vTmp[j].normalX = 0.0f;
-        vTmp[j].normalY = 0.0f;
-        vTmp[j].normalZ = 1.0f;
-        vTmp[j].u = (unsigned short) (j == 0 || j == 3 ? 0x0000 : 0x3C00);
-        vTmp[j].v = (unsigned short) (j == 0 || j == 1 ? 0x0000 : 0x3C00);
-        vTmp[j].vertexColor = 0xFFFFFFFFU;
-      }
-      tTmp[0].v0 = 0;
-      tTmp[0].v1 = 1;
-      tTmp[0].v2 = 2;
-      tTmp[1].v0 = 0;
-      tTmp[1].v1 = 2;
-      tTmp[1].v2 = 3;
-      tmp.vertexCnt = 4;
-      tmp.triangleCnt = 2;
-      tmp.vertexData = vTmp;
-      tmp.triangleData = tTmp;
-      tmp.flags = 0x32;                 // water
-      tmp.texturePathCnt = 0;
-      tmp.texturePaths = (std::string **) 0;
-      *(t.renderer) = tmp;
-      t.renderer->drawTriShape(
-          objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
-          (DDSTexture **) 0, 0);
-    }
-    if (!invalidOBND)
-      objectList[i].tileIndex = -1;
+    if (!renderObject(t, i, tileMask))
+      t.objectsRemaining.push_back((unsigned int) i);
   }
 }
 
@@ -1232,20 +1258,15 @@ void Renderer::renderWater(unsigned int formID)
   findObjects(formID, 2);
   sortObjectList();
   renderObjectList();
-  size_t  imageDataSize = size_t(width) * size_t(height);
-  for (size_t i = 0; i < imageDataSize; i++)
+  if (renderThreads[0].renderer)
   {
-    unsigned int  c = outBufRGBW[i];
-    unsigned int  a = c >> 24;
-    if (a >= 1 && a <= 254)
-    {
-      unsigned int  tmp =
-          Plot3D_TriShape::multiplyWithLight(waterColor, 0U, int((a - 1) << 2));
-      outBufRGBW[i] = blendRGBA32(c, tmp, int(waterColor >> 24)) | 0xFF000000U;
-    }
+    const DDSTexture  *envMap = (DDSTexture *) 0;
+    if (!defaultEnvMap.empty())
+      envMap = loadTexture(defaultEnvMap);
+    renderThreads[0].renderer->renderWater(
+        viewTransform, waterColor, lightX, lightY, lightZ, envMap, 0.375f);
   }
 }
-
 
 static const char *usageStrings[] =
 {
@@ -1318,7 +1339,7 @@ int main(int argc, char **argv)
     float   viewRotationZ = 0.0f;
     float   viewOffsX = 0.0f;
     float   viewOffsY = 0.0f;
-    float   viewOffsZ = 0.0f;
+    float   viewOffsZ = 32768.0f;
     float   lightLevel = 1.0f;
     float   lightRotationX = 63.435f;
     float   lightRotationY = 41.8103f;
