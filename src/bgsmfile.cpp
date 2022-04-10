@@ -71,15 +71,20 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
     buf.setPosition(60);                // Fallout 76
     texturePaths.resize(10);
   }
-  for (size_t i = 0; i < texturePaths.size(); i++)
+  static const unsigned char  texturePathMap[40] =
   {
-    static const unsigned char  texturePathMap[20] =
-    {
-      0x00, 0x01, 0x06, 0x03, 0x04, 0x02, 0x88, 0x07, 0x88, 0x88,       // FO4
-      0x00, 0x01, 0x86, 0x03, 0x02, 0x07, 0x08, 0x09, 0x86, 0x86        // FO76
-    };
+    0x00, 0x01, 0x06, 0x04, 0x04, 0x02, 0x88, 0x07, 0x88, 0xFF, // FO4
+    0x00, 0x01, 0x06, 0x03, 0x04, 0x02, 0x88, 0x07, 0x88, 0xFF,
+    0x00, 0x01, 0x86, 0x04, 0x02, 0x07, 0x08, 0x09, 0x86, 0xFF, // FO76
+    0x00, 0x01, 0x86, 0x03, 0x02, 0x07, 0x08, 0x09, 0x86, 0xFF
+  };
+  const unsigned char *p = texturePathMap;
+  bool    gradientMapEnabled = bool(buf[(version == 2 ? 62 : 58)]);
+  p = p + ((version == 2 ? 0 : 20) + (!gradientMapEnabled ? 0 : 10));
+  for ( ; *p != 0xFF; p++)
+  {
     size_t  len = buf.readUInt32();
-    size_t  n = texturePathMap[i + (version == 2 ? 0 : 10)];
+    size_t  n = *p;
     bool    unusedTexture = bool(n & 0x80);
     n = n & 0x0F;
     buf.readPath(texturePaths[n], len, "textures/", ".dds");
