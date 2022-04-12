@@ -711,7 +711,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       if (lsBlock.bgsmAlphaThreshold >= 0)
         t.alphaThreshold = (unsigned char) lsBlock.bgsmAlphaThreshold;
       else if (lsBlock.bgsmAlphaBlendMode == 0x0167)
-        t.alphaThreshold = (!(t.flags & 0x08) ? 128 : 192);
+        t.alphaThreshold = 128;
       if (lsBlock.bgsmVersion && lsBlock.bgsmTextures.size() > 0)
       {
         t.texturePathCnt = (unsigned char) lsBlock.bgsmTextures.size();
