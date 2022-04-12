@@ -283,52 +283,11 @@ struct ColorV4 : public ColorV2
   }
 };
 
-struct ColorV6 : public ColorV4
-{
-  // normalX, normalY
-  float   v4;
-  float   v5;
-  inline ColorV6& operator+=(const ColorV6& d)
-  {
-    v0 += d.v0;
-    v1 += d.v1;
-    v2 += d.v2;
-    v3 += d.v3;
-    v4 += d.v4;
-    v5 += d.v5;
-    return (*this);
-  }
-  inline ColorV6& operator-=(const ColorV6& d)
-  {
-    v0 -= d.v0;
-    v1 -= d.v1;
-    v2 -= d.v2;
-    v3 -= d.v3;
-    v4 -= d.v4;
-    v5 -= d.v5;
-    return (*this);
-  }
-  inline ColorV6& operator*=(float d)
-  {
-    v0 *= d;
-    v1 *= d;
-    v2 *= d;
-    v3 *= d;
-    v4 *= d;
-    v5 *= d;
-    return (*this);
-  }
-};
-
 class Plot3D_TriShape : public NIFFile::NIFTriShape
 {
  public:
-  static inline unsigned int multiplyWithLight(unsigned int c,
-                                               unsigned int alphaThreshold,
-                                               int lightLevel)
+  static inline unsigned int multiplyWithLight(unsigned int c, int lightLevel)
   {
-    if (c < alphaThreshold)
-      return 0U;
     unsigned long long  tmp =
         (unsigned long long) ((c & 0x000000FFU) | ((c & 0x0000FF00U) << 12))
         | ((unsigned long long) (c & 0x00FF0000U) << 24);
@@ -338,88 +297,78 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
             | (unsigned int) ((tmp >> 20) & 0x0000FF00U)
             | (unsigned int) ((tmp >> 32) & 0x00FF0000U) | 0xFF000000U);
   }
- private:
-  class Plot3DTS_Base
-  {
-   public:
-    unsigned int  *outBufRGBW;
-    float   *outBufZ;
-    int     width;
-    int     height;
-    float   mipLevel;
-    unsigned int  alphaThreshold;
-    const DDSTexture  *textureD;
-    const DDSTexture  *textureG;
-    const DDSTexture  *textureN;
-    float   textureScaleN;
-    float   lightX;
-    float   lightY;
-    float   lightZ;
-    const float *lightingPolynomial;
-    const DDSTexture  *textureE;
-    short   reflectionLevel;
-    unsigned char gradientMapV;
-    float   textureScaleR;
-    const DDSTexture  *textureR;
-    Plot3DTS_Base(Plot3D_TriShape& p,
-                  float light_X, float light_Y, float light_Z,
-                  const DDSTexture * const *textures, size_t textureCnt);
-    unsigned int gradientMap(unsigned int c) const;
-    // returns light level
-    inline int normalMap(float& normalX, float& normalY, float& normalZ,
-                         unsigned int n) const;
-    inline unsigned int environmentMap(
-        unsigned int c, float normalX, float normalY, float normalZ,
-        int x, int y) const;
-  };
-  class Plot3DTS_Water : public Plot3DTS_Base
-  {
-   public:
-    // fill with water
-    void drawPixel(int x, int y, const ColorV6& z);
-  };
-  class Plot3DTS_TextureT : public Plot3DTS_Base
-  {
-   public:
-    // diffuse texture with trilinear filtering
-    inline void drawPixel(int x, int y, const ColorV6& z);
-  };
-  class Plot3DTS_NormalsT : public Plot3DTS_Base
-  {
-   public:
-    // diffuse + normal map with trilinear filtering
-    void drawPixel(int x, int y, const ColorV6& z);
-  };
-  class Plot3DTS_NormalsEnvT : public Plot3DTS_NormalsT
-  {
-   public:
-    // diffuse + normal and environment map with trilinear filtering
-    void drawPixel(int x, int y, const ColorV6& z);
-  };
-  class Plot3DTS_NormalsReflT : public Plot3DTS_NormalsT
-  {
-   protected:
-    inline unsigned int reflectionMap(
-        unsigned int c, float normalX, float normalY, float normalZ,
-        int x, int y, const ColorV6& z) const;
-   public:
-    // diffuse + normal and reflection map with trilinear filtering
-    void drawPixel(int x, int y, const ColorV6& z);
-  };
  protected:
   static const float  defaultLightingPolynomial[6];
   unsigned int  *bufRGBW;
   float   *bufZ;
   int     width;
   int     height;
+  const DDSTexture  *textureD;
+  const DDSTexture  *textureG;
+  const DDSTexture  *textureN;
+  const DDSTexture  *textureE;
+  const DDSTexture  *textureR;
+  float   textureScaleN;
+  float   textureScaleR;
+  float   mipLevel;
+  float   light_X;
+  float   light_Y;
+  float   light_Z;
+  int     reflectionLevel;
+  float   envMapUVScale;
+  void    (*drawPixelFunction)(Plot3D_TriShape& p,
+                               int x, int y, float txtU, float txtV,
+                               const NIFFile::NIFVertex& z);
   std::vector< NIFFile::NIFVertex > vertexBuf;
   std::vector< unsigned int > triangleBuf;
   float   lightingPolynomial[6];
+  std::vector< unsigned short > vclrTable;
   void calculateWaterUV(const NIFFile::NIFVertexTransform& modelTransform);
   void sortTriangles(size_t n0, size_t n2);
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                              const NIFFile::NIFVertexTransform& viewTransform,
                              float& lightX, float& lightY, float& lightZ);
+  unsigned int gradientMapAndVColor(unsigned int c, unsigned int vColor) const;
+  // returns light level
+  inline int normalMap(float& normalX, float& normalY, float& normalZ,
+                       unsigned int n) const;
+  inline unsigned int environmentMap(
+      unsigned int c, float normalX, float normalY, float normalZ,
+      int x, int y) const;
+  inline unsigned int reflectionMap(
+      unsigned int c, float normalX, float normalY, float normalZ,
+      int x, int y, float txtU, float txtV) const;
+  // fill with water
+  static void drawPixel_Water(Plot3D_TriShape& p,
+                              int x, int y, float txtU, float txtV,
+                              const NIFFile::NIFVertex& z);
+  // diffuse texture with trilinear filtering
+  static void drawPixel_Diffuse(Plot3D_TriShape& p,
+                                int x, int y, float txtU, float txtV,
+                                const NIFFile::NIFVertex& z);
+  // diffuse + normal map with trilinear filtering
+  static void drawPixel_Normal(Plot3D_TriShape& p,
+                               int x, int y, float txtU, float txtV,
+                               const NIFFile::NIFVertex& z);
+  // diffuse + normal and environment map with trilinear filtering
+  static void drawPixel_NormalEnv(Plot3D_TriShape& p,
+                                  int x, int y, float txtU, float txtV,
+                                  const NIFFile::NIFVertex& z);
+  // diffuse + normal and reflection map with trilinear filtering
+  static void drawPixel_NormalRefl(Plot3D_TriShape& p,
+                                   int x, int y, float txtU, float txtV,
+                                   const NIFFile::NIFVertex& z);
+  static unsigned int interpVertexColors(
+      const NIFFile::NIFVertex& v0, const NIFFile::NIFVertex& v1,
+      const NIFFile::NIFVertex& v2, float w0, float w1, float w2);
+  inline void drawPixel(
+      int x, int y, float z, float txtU, float txtV,
+      NIFFile::NIFVertex& v, const NIFFile::NIFVertex& v0,
+      const NIFFile::NIFVertex& v1, const NIFFile::NIFVertex& v2,
+      float w0, float w1, float w2);
+  void drawLine(const NIFFile::NIFVertex *v0, const NIFFile::NIFVertex *v1);
+  void drawTriangle(const NIFFile::NIFVertex *v0, const NIFFile::NIFVertex *v1,
+                    const NIFFile::NIFVertex *v2);
  public:
   // The alpha channel is 255 for solid geometry, 0 for air, and 1 to 254
   // for water. In the case of water, the pixel format changes to R5G6B5X8Y8,
@@ -452,7 +401,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                    unsigned int waterColor,     // 0xAABBGGRR format
                    float lightX, float lightY, float lightZ,
                    const DDSTexture *envMap = (DDSTexture *) 0,
-                   float reflectionLevel = 1.0f);
+                   float envMapLevel = 1.0f);
 };
 
 static inline unsigned int downsample2xFilter(const unsigned int *buf,
