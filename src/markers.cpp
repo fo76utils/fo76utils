@@ -852,7 +852,7 @@ int main(int argc, char **argv)
             throw errorMessage("invalid view transform, "
                                "must be 9 comma separated numbers");
           }
-          if (i < 2 && (tmp1 < 1L || tmp1 > 65536L))
+          if (i < 2 && (tmp1 < 2L || tmp1 > 65536L))
             throw errorMessage("invalid image dimensions");
           if (i == 2 && !(tmp2 >= (1.0 / 512.0) && tmp2 <= 16.0))
             throw errorMessage("invalid view scale");
@@ -881,7 +881,7 @@ int main(int argc, char **argv)
           else if (i == 6)
             viewOffsX = float(tmp2) + (float(imageWidth) * 0.5f);
           else if (i == 7)
-            viewOffsY = float(tmp2) + (float(imageHeight) * 0.5f);
+            viewOffsY = float(tmp2) + (float(imageHeight - 2) * 0.5f);
           else if (i == 8)
             viewOffsZ = float(tmp2);
         }
