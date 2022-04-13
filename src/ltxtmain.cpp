@@ -6,6 +6,7 @@
 #include "esmfile.hpp"
 #include "landdata.hpp"
 #include "landtxt.hpp"
+#include "plot3d.hpp"
 
 #include <thread>
 
@@ -183,6 +184,7 @@ static const char *usageStrings[] =
   "    -defclr 0x00RRGGBB  default color for untextured areas",
   "    -scale INT          scale output resolution by 2^N",
   "    -threads INT        set the number of threads to use",
+  "    -ssaa BOOL          render at double resolution and downsample",
   "    -q                  do not print texture file names",
   "",
   "DDS input file options:",
@@ -196,7 +198,7 @@ static const char *usageStrings[] =
   "    -l INT              level of detail to use from BTD file (0 to 4)",
   "    -deftxt FORMID      form ID of default texture",
   "    -no-vclr            do not use vertex color data",
-  "    -no-gcvr            do not use ground cover data",
+  "    -gcvr               use ground cover data",
   (char *) 0
 };
 
@@ -235,8 +237,9 @@ int main(int argc, char **argv)
     int           xMax = 32767;
     int           yMax = 32767;
     unsigned char btdLOD = 2;
+    bool          enableDownscale = false;
     bool          disableVCLR = false;
-    bool          disableGCVR = false;
+    bool          disableGCVR = true;
     unsigned int  hdrBuf[11];
 
     std::vector< const char * > args;
@@ -300,6 +303,13 @@ int main(int argc, char **argv)
         threadCnt =
             int(parseInteger(argv[i], 10, "invalid thread count", 1, 64));
       }
+      else if (std::strcmp(argv[i], "-ssaa") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        enableDownscale =
+            bool(parseInteger(argv[i], 0, "invalid argument for -ssaa", 0, 1));
+      }
       else if (std::strcmp(argv[i], "-q") == 0)
       {
         verboseMode = false;
@@ -359,9 +369,9 @@ int main(int argc, char **argv)
       {
         disableVCLR = true;
       }
-      else if (std::strcmp(argv[i], "-no-gcvr") == 0)
+      else if (std::strcmp(argv[i], "-gcvr") == 0)
       {
-        disableGCVR = true;
+        disableGCVR = false;
       }
       else
       {
@@ -381,6 +391,8 @@ int main(int argc, char **argv)
       ba2File = new BA2File(archivePath, ".dds\t.bgsm", "/lod/\t/actors/");
     int     width = 0;
     int     height = 0;
+    if (enableDownscale)
+      mipLevel = (mipLevel > 1.0f ? (mipLevel - 1.0f) : 0.0f);
     if (!checkNameExtension(args[0], ".esm"))
     {
       // DDS input files
@@ -485,7 +497,13 @@ int main(int argc, char **argv)
     hdrBuf[9] = hdrBuf[9] << xyScale;
     DDSOutputFile outFile(args[1],
                           width, height, DDSInputFile::pixelFormatRGB24,
-                          hdrBuf, 0);
+                          hdrBuf, (!enableDownscale ? 0 : 16384));
+    if (enableDownscale)
+    {
+      xyScale++;
+      width = width << 1;
+      height = height << 1;
+    }
     for (size_t i = 0; i < threads.size(); i++)
     {
       if (!landData)
@@ -526,6 +544,9 @@ int main(int argc, char **argv)
       threads[i]->setDefaultColor(defaultColor);
       threads[i]->xyScale = xyScale;
     }
+    std::vector< unsigned int > downsampleBuf;
+    if (enableDownscale)
+      downsampleBuf.reserve(size_t(width) * size_t(height));
     for (int y = 0; y < height; )
     {
       for (size_t i = 0; i < threads.size() && y < height; i++)
@@ -542,8 +563,35 @@ int main(int argc, char **argv)
         threads[i]->threadPtr->join();
         delete threads[i]->threadPtr;
         threads[i]->threadPtr = (std::thread *) 0;
-        outFile.writeData(&(threads[i]->outBuf.front()),
-                          sizeof(unsigned char) * threads[i]->outBuf.size());
+        if (!enableDownscale)
+        {
+          outFile.writeData(&(threads[i]->outBuf.front()),
+                            sizeof(unsigned char) * threads[i]->outBuf.size());
+        }
+        else
+        {
+          for (size_t j = 0; (j + 2) < threads[i]->outBuf.size(); j = j + 3)
+          {
+            unsigned int  b = threads[i]->outBuf[j];
+            unsigned int  g = threads[i]->outBuf[j + 1];
+            unsigned int  r = threads[i]->outBuf[j + 2];
+            downsampleBuf.push_back(0xFF000000U | r | (g << 8) | (b << 16));
+          }
+        }
+      }
+    }
+    if (downsampleBuf.size() >= (size_t(width) * size_t(height)))
+    {
+      for (int y = 0; y < height; y = y + 2)
+      {
+        for (int x = 0; x < width; x = x + 2)
+        {
+          unsigned int  c = downsample2xFilter(&(downsampleBuf.front()),
+                                               width, height, x, y);
+          outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
+          outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
+          outFile.writeByte((unsigned char) (c & 0xFF));
+        }
       }
     }
     err = 0;
