@@ -134,7 +134,7 @@ if mapIconsType == "fo4":
     mapIconMip += 0.25
 elif mapIconsType == "fo76":
     mapIconMip -= 0.25
-enableGCVR = int(addVariable("gcvr", 1, "enable ground cover"))
+enableGCVR = int(addVariable("gcvr", 0, "enable ground cover"))
 enableVCLR = int(addVariable("vclr", 1, "enable vertex color"))
 jpegResize = int(addVariable("jpegresize", 100,
                              "resize JPEG file by percentage, "
@@ -193,14 +193,14 @@ def landtxtCommand(target, source):
     cmdOpts += ["-deftxt", "0x%08X" % (defTxtID)]
     cmdOpts += ["-r", cellMinX, cellMinY, cellMaxX, cellMaxY]
     if btdPath:
-        cmdOpts += ["-btd", btdPath, "-l", mipLevel, "-mult", 1.2]
+        cmdOpts += ["-btd", btdPath, "-l", mipLevel, "-mult", 1.2, "-ssaa", 1]
     else:
         cmdOpts += ["-mult", 1.25]
         if mipLevel < 2:
             cmdOpts += ["-scale", 2 - mipLevel]
     cmdOpts += ["-mip", textureMip + mipLevel]
-    if not enableGCVR:
-        cmdOpts += ["-no-gcvr"]
+    if enableGCVR:
+        cmdOpts += ["-gcvr"]
     if not enableVCLR:
         cmdOpts += ["-no-vclr"]
     return commandString(cmdOpts)

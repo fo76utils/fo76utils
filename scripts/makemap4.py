@@ -70,7 +70,7 @@ def createMap(gameNum, scale):
     landtxtOptions += ["-w", worldID, "-deftxt", defTxtID]
     landtxtOptions += ["-mult", "1.25"]
     if btdName:
-        landtxtOptions += ["-mip", "7.0"]       # + ["-no-gcvr"]
+        landtxtOptions += ["-mip", "7.0", "-ssaa", "1"] # + ["-gcvr"]
     else:
         landtxtOptions += ["-mip", "5.0"]
     landtxtOptions += ["-scale", str(scale)]

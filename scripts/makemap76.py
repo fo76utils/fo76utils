@@ -92,9 +92,9 @@ def createMap(gameName, gamePath, btdName, esmName, worldID, defTxtID):
     landtxtOptions += ["-d", gamePath, "-btd", gamePath + "/Terrain/" + btdName]
     landtxtOptions += ["-r"] + cellRange + ["-l", mipLevel]
     landtxtOptions += ["-mip", mipLevel + textureMip]
-    landtxtOptions += ["-mult", textureBrightness]
-    if not enableGCVR:
-        landtxtOptions += ["-no-gcvr"]
+    landtxtOptions += ["-mult", textureBrightness, "-ssaa", 1]
+    if enableGCVR:
+        landtxtOptions += ["-gcvr"]
     if not enableVCLR:
         landtxtOptions += ["-no-vclr"]
     runCmd(["landtxt"] + landtxtOptions)
