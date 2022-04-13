@@ -49,28 +49,30 @@ unsigned long long LandscapeTexture::renderPixelFO76(int x, int y,
                      + (size_t(x) >> txtSetMip)) << 4);
   unsigned int  a = FileBuffer::readUInt16Fast(ltexData16 + (offs << 1));
   a = (a << 3) | 7U;
-  unsigned long long  c = rgb24ToRGB64(defaultColorScaled);
-  unsigned char prvTexture = 0xFF;
+  unsigned long long  c = defaultColorScaled;
+  p0 = p0 + 6;
   if (!integerMip)
   {
-    for ( ; a; a = a >> 3, p0++)
+    for ( ; a; a = a << 3)
     {
-      unsigned int  aTmp = a & 7U;
-      if (!aTmp)
+      p0--;
+      if (a < 0x8000U)
         continue;
+      unsigned int  aTmp = ~a & 0x00038000U;
+      a = a & 0x7FFFU;
       unsigned char t = *p0;
-      if (t >= landTextureCnt || t == prvTexture || !landTextures[t])
+      if (t >= landTextureCnt || !landTextures[t])
         continue;
-      unsigned long long  cTmp =
-          rgb24ToRGB64(landTextures[t]->getPixelT(float(txtX) * txtScale,
-                                                  float(txtY) * txtScale,
-                                                  mipLevel));
-      prvTexture = (aTmp == 7 ? t : (unsigned char) 0xFF);
-      if (aTmp != 7)
-        cTmp = blendRGB64(c, cTmp, (aTmp * 585U + 8U) >> 4);
+      unsigned int  cTmp =
+          landTextures[t]->getPixelT(float(txtX - txtY) * txtScale,
+                                     float(txtX + txtY) * txtScale, mipLevel);
+      if (cTmp < ((aTmp * 0x4900U + 0x00800000U) & 0xFF000000U))
+        continue;
       c = cTmp;
+      break;
     }
-    if (gcvrData)
+    c = rgb24ToRGB64(c);
+    if (BRANCH_EXPECT(gcvrData, false))
     {
       p0 = txtSetData + ((size_t(p0 - txtSetData) & ~7UL) | 8UL);
       a = gcvrData[offs];
@@ -82,30 +84,33 @@ unsigned long long LandscapeTexture::renderPixelFO76(int x, int y,
         if (t >= landTextureCnt || !landTextures[t])
           continue;
         unsigned int  cTmp =
-            landTextures[t]->getPixelT(float(txtX) * txtScale,
-                                       float(txtY) * txtScale, mipLevel);
+            landTextures[t]->getPixelT(float(txtX - txtY) * txtScale,
+                                       float(txtX + txtY) * txtScale, mipLevel);
         c = blendRGB64(c, rgb24ToRGB64(cTmp), cTmp >> 25);
       }
     }
   }
   else
   {
-    for ( ; a; a = a >> 3, p0++)
+    for ( ; a; a = a << 3)
     {
-      unsigned int  aTmp = a & 7U;
-      if (!aTmp)
+      p0--;
+      if (a < 0x8000U)
         continue;
+      unsigned int  aTmp = ~a & 0x00038000U;
+      a = a & 0x7FFFU;
       unsigned char t = *p0;
-      if (t >= landTextureCnt || t == prvTexture || !landTextures[t])
+      if (t >= landTextureCnt || !landTextures[t])
         continue;
-      unsigned long long  cTmp =
-          rgb24ToRGB64(landTextures[t]->getPixelN(txtX, txtY, int(mipLevel)));
-      prvTexture = (aTmp == 7 ? t : (unsigned char) 0xFF);
-      if (aTmp != 7)
-        cTmp = blendRGB64(c, cTmp, (aTmp * 585U + 8U) >> 4);
+      unsigned int  cTmp =
+          landTextures[t]->getPixelN(txtX - txtY, txtX + txtY, int(mipLevel));
+      if (cTmp < ((aTmp * 0x4900U + 0x00800000U) & 0xFF000000U))
+        continue;
       c = cTmp;
+      break;
     }
-    if (gcvrData)
+    c = rgb24ToRGB64(c);
+    if (BRANCH_EXPECT(gcvrData, false))
     {
       p0 = txtSetData + ((size_t(p0 - txtSetData) & ~7UL) | 8UL);
       a = gcvrData[offs];
@@ -117,7 +122,7 @@ unsigned long long LandscapeTexture::renderPixelFO76(int x, int y,
         if (t >= landTextureCnt || !landTextures[t])
           continue;
         unsigned int  cTmp =
-            landTextures[t]->getPixelN(txtX, txtY, int(mipLevel));
+            landTextures[t]->getPixelN(txtX - txtY, txtX + txtY, int(mipLevel));
         c = blendRGB64(c, rgb24ToRGB64(cTmp), cTmp >> 25);
       }
     }
