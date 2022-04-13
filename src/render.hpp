@@ -14,6 +14,7 @@
 #include "plot3d.hpp"
 
 #include <thread>
+#include <mutex>
 
 class Renderer
 {
@@ -55,8 +56,7 @@ class Renderer
     NIFFile *nifFile;
     size_t  totalTriangleCnt;
     std::vector< NIFFile::NIFTriShape > meshData;
-    // 10 texture pointers for each NIFTriShape
-    std::vector< const DDSTexture * > textures;
+    bool    isHDModel;
     ModelData();
     ~ModelData();
     void clear();
@@ -102,6 +102,7 @@ class Renderer
   size_t  textureDataSize;
   CachedTexture *firstTexture;
   CachedTexture *lastTexture;
+  std::mutex  textureCacheMutex;
   std::map< std::string, CachedTexture >  textureCache;
   std::vector< const DDSTexture * > landTextures;
   std::vector< RenderObject > objectList;

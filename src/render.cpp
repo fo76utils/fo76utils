@@ -25,7 +25,8 @@ bool Renderer::RenderObject::operator<(const RenderObject& r) const
 
 Renderer::ModelData::ModelData()
   : nifFile((NIFFile *) 0),
-    totalTriangleCnt(0)
+    totalTriangleCnt(0),
+    isHDModel(false)
 {
 }
 
@@ -43,7 +44,7 @@ void Renderer::ModelData::clear()
   }
   totalTriangleCnt = 0;
   meshData.clear();
-  textures.clear();
+  isHDModel = false;
 }
 
 Renderer::RenderThread::RenderThread()
@@ -658,6 +659,7 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName)
 {
   if (fileName.find("/temp_ground") != std::string::npos)
     return (DDSTexture *) 0;
+  textureCacheMutex.lock();
   std::map< std::string, CachedTexture >::iterator  i =
       textureCache.find(fileName);
   if (i != textureCache.end())
@@ -693,12 +695,14 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName)
     }
     catch (std::runtime_error&)
     {
+      textureCacheMutex.unlock();
       if (t)
         delete t;
       return (DDSTexture *) 0;
     }
     catch (...)
     {
+      textureCacheMutex.unlock();
       if (t)
         delete t;
       throw;
@@ -711,7 +715,9 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName)
   i->second.prv = lastTexture;
   i->second.nxt = (CachedTexture *) 0;
   lastTexture = &(i->second);
-  return i->second.texture;
+  const DDSTexture  *t = i->second.texture;
+  textureCacheMutex.unlock();
+  return t;
 }
 
 void Renderer::shrinkTextureCache()
@@ -756,40 +762,16 @@ void Renderer::loadModel(unsigned int modelID)
     nifFiles[n].nifFile =
         new NIFFile(&(fileBuf.front()), fileBuf.size(), &ba2File);
     bool    isHDModel = isHighQualityModel(*(modelPaths[modelID]));
+    nifFiles[n].isHDModel = isHDModel;
     nifFiles[n].nifFile->getMesh(nifFiles[n].meshData, 0U,
                                  (unsigned int) (modelLOD > 0 && !isHDModel));
     size_t  meshCnt = nifFiles[n].meshData.size();
-    nifFiles[n].textures.resize(meshCnt * 10U, (DDSTexture *) 0);
     for (size_t i = 0; i < meshCnt; i++)
     {
       const NIFFile::NIFTriShape& t = nifFiles[n].meshData[i];
       if (t.flags & 0x05)               // ignore if hidden or effect
         continue;
       nifFiles[n].totalTriangleCnt += t.triangleCnt;
-      if (t.flags & 0x02)
-      {
-        if (!defaultWaterTexture.empty())
-          nifFiles[n].textures[i * 10U + 1U] = loadTexture(defaultWaterTexture);
-        continue;
-      }
-      size_t  nTextures = size_t(!isHDModel ? 4 : 10);
-      for (size_t j = nTextures; j-- > 0; )
-      {
-        const std::string *texturePath = (std::string *) 0;
-        if (j < t.texturePathCnt &&
-            t.texturePaths[j] && !t.texturePaths[j]->empty())
-        {
-          texturePath = t.texturePaths[j];
-        }
-        else if (j == 4 && nifFiles[n].textures[i * 10U + 8U])
-        {
-          texturePath = &defaultEnvMap;
-        }
-        if (texturePath && !texturePath->empty())
-          nifFiles[n].textures[i * 10U + j] = loadTexture(*texturePath);
-        if (j > 1 && !isHDModel)
-          j = 1;
-      }
     }
   }
   catch (std::runtime_error&)
@@ -842,11 +824,6 @@ void Renderer::renderObjectList()
             nifFiles[p.modelID & modelIDMask].totalTriangleCnt = 1;
         }
         triangleCnt = nifFiles[p.modelID & modelIDMask].totalTriangleCnt;
-      }
-      else if ((p.flags & 0x04) && !defaultWaterTexture.empty())
-      {
-        nifFiles[0].textures.resize(10, (DDSTexture *) 0);
-        nifFiles[0].textures[1] = loadTexture(defaultWaterTexture);
       }
       threadTriangleCnt[p.tileIndex & 63] += triangleCnt;
       j++;
@@ -962,9 +939,39 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (m & ~tileMask)
         return false;
       *(t.renderer) = nifFiles[n].meshData[j];
+      const DDSTexture  *textures[10];
+      for (int k = 0; k < 10; k++)
+        textures[k] = (DDSTexture *) 0;
+      if (t.renderer->flags & 0x02)
+      {
+        if (!defaultWaterTexture.empty())
+          textures[1] = loadTexture(defaultWaterTexture);
+      }
+      else
+      {
+        unsigned int  txtSetMask = (!nifFiles[n].isHDModel ? 0x0009U : 0x011BU);
+        for (size_t k = size_t(!nifFiles[n].isHDModel ? 4 : 10); k-- > 0; )
+        {
+          if (!((1U << (unsigned char) k) & txtSetMask))
+            continue;
+          const std::string *texturePath = (std::string *) 0;
+          if (k < t.renderer->texturePathCnt &&
+              t.renderer->texturePaths[k] &&
+              !t.renderer->texturePaths[k]->empty())
+          {
+            texturePath = t.renderer->texturePaths[k];
+          }
+          else if (k == 4 && textures[8])
+          {
+            texturePath = &defaultEnvMap;
+          }
+          if (texturePath && !texturePath->empty())
+            textures[k] = loadTexture(*texturePath);
+        }
+      }
       t.renderer->drawTriShape(
           objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
-          &(nifFiles[n].textures.front()) + (j * 10U), 10);
+          textures, 10);
     }
   }
   else if (objectList[i].flags & 0x04)          // water cell
@@ -1001,17 +1008,15 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     tmp.flags = 0x32;                   // water
     tmp.texturePathCnt = 0;
     tmp.texturePaths = (std::string **) 0;
-    const DDSTexture * const  *textures = (DDSTexture **) 0;
-    size_t  textureCnt = 0;
-    if (!defaultWaterTexture.empty() && nifFiles[0].textures.size() >= 2)
-    {
-      textures = &(nifFiles[0].textures.front());
-      textureCnt = 2;
-    }
+    const DDSTexture  *textures[2];
+    textures[0] = (DDSTexture *) 0;
+    textures[1] = (DDSTexture *) 0;
+    if (!defaultWaterTexture.empty())
+      textures[1] = loadTexture(defaultWaterTexture);
     *(t.renderer) = tmp;
     t.renderer->drawTriShape(
         objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
-        textures, textureCnt);
+        textures, 2);
   }
   return true;
 }
@@ -1245,7 +1250,7 @@ void Renderer::loadTerrain(const char *btdFileName,
   clear(0x44);
   if (verboseMode)
     std::fprintf(stderr, "Loading terrain data\n");
-  landData = new LandscapeData(&esmFile, btdFileName, &ba2File, 0x1B, worldID,
+  landData = new LandscapeData(&esmFile, btdFileName, &ba2File, 0x0B, worldID,
                                defTxtID, mipLevel, xMin, yMin, xMax, yMax);
   defaultLandLevel = landData->getDefaultLandLevel();
   defaultWaterLevel = landData->getWaterLevel();
@@ -1681,9 +1686,11 @@ int main(int argc, char **argv)
     if (!(waterColor & 0xFF000000U))
       waterColor = 0U;
     int     width =
-        int(parseInteger(args[2], 0, "invalid image width", 1, 32768));
+        int(parseInteger(args[2], 0, "invalid image width", 2, 32768));
     int     height =
-        int(parseInteger(args[3], 0, "invalid image height", 1, 32768));
+        int(parseInteger(args[3], 0, "invalid image height", 2, 32768));
+    viewOffsX = viewOffsX + (float(width) * 0.5f);
+    viewOffsY = viewOffsY + (float(height - 2) * 0.5f);
     if (enableDownscale)
     {
       width = width << 1;
@@ -1717,8 +1724,7 @@ int main(int argc, char **argv)
       renderer.setViewTransform(
           viewScale,
           viewRotationX * tmp, viewRotationY * tmp, viewRotationZ * tmp,
-          viewOffsX + (float(width) * 0.5f), viewOffsY + (float(height) * 0.5f),
-          viewOffsZ);
+          viewOffsX, viewOffsY, viewOffsZ);
       renderer.setLightDirection(lightRotationX * tmp, lightRotationY * tmp);
     }
     renderer.setLightingFunction(lightingPolynomial);
