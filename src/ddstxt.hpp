@@ -75,5 +75,8 @@ class DDSTexture
   unsigned int getPixelT(float x, float y, float mipLevel) const;
 };
 
+unsigned int downsample2xFilter(const unsigned int *buf,
+                                int imageWidth, int imageHeight, int x, int y);
+
 #endif
 

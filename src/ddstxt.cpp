@@ -590,3 +590,122 @@ unsigned int DDSTexture::getPixelT(float x, float y, float mipLevel) const
   return rbga64ToRGBA32(c);
 }
 
+struct Downsample2xTables
+{
+  //   1   0  -3   0  10  16  10   0  -3   0   1
+  //   0   0   0   0   0   0   0   0   0   0   0
+  //  -3   0   9   0 -30 -48 -30   0   9   0  -3
+  //   0   0   0   0   0   0   0   0   0   0   0
+  //  10   0 -30   0 100 160 100   0 -30   0  10
+  //  16   0 -48   0 160 256 160   0 -48   0  16
+  //  10   0 -30   0 100 160 100   0 -30   0  10
+  //   0   0   0   0   0   0   0   0   0   0   0
+  //  -3   0   9   0 -30 -48 -30   0   9   0  -3
+  //   0   0   0   0   0   0   0   0   0   0   0
+  //   1   0  -3   0  10  16  10   0  -3   0   1
+  static const int  filterTable1[10];
+  // Y offset, (X offset, multTable offset) * 4
+  static const int  filterTable2[27];
+  int     multTable[2560];
+  Downsample2xTables();
+  static inline void getPixelFast(int& r, int& g, int& b,
+                                  const unsigned int *buf, int w,
+                                  int x, int y, const int *m)
+  {
+    unsigned int  c = *(buf + (y * w + x));
+    r = r + m[c & 0xFF];
+    g = g + m[(c >> 8) & 0xFF];
+    b = b + m[(c >> 16) & 0xFF];
+  }
+  static inline void getPixel(int& r, int& g, int& b,
+                              const unsigned int *buf, int w, int h,
+                              int x, int y, const int *m)
+  {
+    x = (x > 0 ? (x < (w - 1) ? x : (w - 1)) : 0);
+    y = (y > 0 ? (y < (h - 1) ? y : (h - 1)) : 0);
+    unsigned int  c = buf[size_t(y) * size_t(w) + size_t(x)];
+    r = r + m[c & 0xFF];
+    g = g + m[(c >> 8) & 0xFF];
+    b = b + m[(c >> 16) & 0xFF];
+  }
+};
+
+const int Downsample2xTables::filterTable1[10] =
+{
+  256, 160, 100, -48, -30,  16,  10,   9,  -3,   1
+};
+
+const int Downsample2xTables::filterTable2[27] =
+{
+  1,  0, 0x0100,  1, 0x0200,  3, 0x0400,  5, 0x0600,
+  3,  0, 0x0300,  1, 0x0400,  3, 0x0700,  5, 0x0800,
+  5,  0, 0x0500,  1, 0x0600,  3, 0x0800,  5, 0x0900
+};
+
+Downsample2xTables::Downsample2xTables()
+{
+  for (int i = 0; i < 2560; i++)
+    multTable[i] = (i & 255) * (i & 255) * filterTable1[i >> 8];
+}
+
+unsigned int downsample2xFilter(const unsigned int *buf,
+                                int imageWidth, int imageHeight, int x, int y)
+{
+  static Downsample2xTables t;
+  const int   *p = t.filterTable2;
+  int     r = 0;
+  int     g = 0;
+  int     b = 0;
+  unsigned int  c = buf[size_t(y) * size_t(imageWidth) + size_t(x)];
+  if (BRANCH_EXPECT((x >= 5 && x < (imageWidth - 5) &&
+                     y >= 5 && y < (imageHeight - 5)), true))
+  {
+    buf = buf + (size_t(y) * size_t(imageWidth) + size_t(x));
+    t.getPixelFast(r, g, b, buf, imageWidth, 0, 0, t.multTable);
+    for (int i = 0; i < 3; i++)
+    {
+      int     yOffs = *(p++);
+      for (int j = 0; j < 4; j++, p = p + 2)
+      {
+        int     xOffs = p[0];
+        const int *m = &(t.multTable[p[1]]);
+        t.getPixelFast(r, g, b, buf, imageWidth, xOffs, yOffs, m);
+        t.getPixelFast(r, g, b, buf, imageWidth, yOffs, -xOffs, m);
+        t.getPixelFast(r, g, b, buf, imageWidth, -xOffs, -yOffs, m);
+        t.getPixelFast(r, g, b, buf, imageWidth, -yOffs, xOffs, m);
+      }
+    }
+  }
+  else
+  {
+    t.getPixel(r, g, b, buf, imageWidth, imageHeight, x, y, t.multTable);
+    for (int i = 0; i < 3; i++)
+    {
+      int     yOffs = *(p++);
+      for (int j = 0; j < 4; j++, p = p + 2)
+      {
+        int     xOffs = p[0];
+        const int *m = &(t.multTable[p[1]]);
+        t.getPixel(r, g, b, buf, imageWidth, imageHeight,
+                   x + xOffs, y + yOffs, m);
+        t.getPixel(r, g, b, buf, imageWidth, imageHeight,
+                   x + yOffs, y - xOffs, m);
+        t.getPixel(r, g, b, buf, imageWidth, imageHeight,
+                   x - xOffs, y - yOffs, m);
+        t.getPixel(r, g, b, buf, imageWidth, imageHeight,
+                   x - yOffs, y + xOffs, m);
+      }
+    }
+  }
+  r = (r >= 256 ? (r <= 0x03FC0100 ?
+                   roundFloat(float(std::sqrt(float(r) * (1.0f / 1024.0f))))
+                   : 255) : 0);
+  g = (g >= 256 ? (g <= 0x03FC0100 ?
+                   roundFloat(float(std::sqrt(float(g) * (1.0f / 1024.0f))))
+                   : 255) : 0);
+  b = (b >= 256 ? (b <= 0x03FC0100 ?
+                   roundFloat(float(std::sqrt(float(b) * (1.0f / 1024.0f))))
+                   : 255) : 0);
+  return ((c & 0xFF000000U) | (unsigned int) (r | (g << 8) | (b << 16)));
+}
+
