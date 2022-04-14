@@ -9,8 +9,8 @@ bool Renderer::RenderObject::operator<(const RenderObject& r) const
   unsigned int  modelMask1 = ~(Renderer::modelBatchCnt - 1U);
   if ((modelID & modelMask1) != (r.modelID & modelMask1))
     return ((modelID & modelMask1) < (r.modelID & modelMask1));
-  if ((flags & 7U) != (r.flags & 7U))
-    return ((flags & 7U) < (r.flags & 7U));
+  if ((flags & 7) != (r.flags & 7))
+    return ((flags & 7) < (r.flags & 7));
   if (tileIndex != r.tileIndex)
     return (tileIndex < r.tileIndex);
   unsigned int  modelMask2 = Renderer::modelBatchCnt - 1U;
@@ -104,7 +104,7 @@ unsigned long long Renderer::calculateTileMask(int x0, int y0,
   return m;
 }
 
-int Renderer::calculateTileIndex(unsigned long long screenAreasUsed)
+signed short Renderer::calculateTileIndex(unsigned long long screenAreasUsed)
 {
   if (!screenAreasUsed)
     return -1;
@@ -120,7 +120,7 @@ int Renderer::calculateTileIndex(unsigned long long screenAreasUsed)
       else
         n0 = n1;
     }
-    return int(n0);
+    return (signed short) n0;
   }
   unsigned long long  m = screenAreasUsed;
   int     x0 = 7;
@@ -146,13 +146,13 @@ int Renderer::calculateTileIndex(unsigned long long screenAreasUsed)
   }
   if ((x1 - x0) <= 1 && (y1 - y0) <= 1)
   {
-    return (((y0 & 6) << 3) + (x0 & 6) + 64
-            + ((y0 & 1) << 7) + ((x0 & 1) << 6));
+    return (signed short) (((y0 & 6) << 3) + (x0 & 6) + 64
+                           + ((y0 & 1) << 7) + ((x0 & 1) << 6));
   }
   if ((x1 - x0) <= 3 && (y1 - y0) <= 3)
   {
-    return (((y0 & 4) << 3) + (x0 & 4) + 320
-            + ((y0 & 3) << 8) + ((x0 & 3) << 6));
+    return (signed short) (((y0 & 4) << 3) + (x0 & 4) + 320
+                           + ((y0 & 3) << 8) + ((x0 & 3) << 6));
   }
   return 1344;
 }
@@ -162,7 +162,7 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
   p.tileIndex = -1;
   NIFFile::NIFVertexTransform vt;
   NIFFile::NIFBounds  modelBounds;
-  if (p.flags & 1U)
+  if (p.flags & 1)
   {
     if (!landData)
       return -1;
@@ -200,7 +200,7 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
     modelBounds.zMax = float(int(z1)) * zScale + zOffset;
     vt = viewTransform;
   }
-  else if (p.flags & 6U)
+  else if (p.flags & 6)
   {
     int     x0 = int(p.x0 < p.x1 ? p.x0 : p.x1) - 2;
     int     x1 = x0 + std::abs(int(p.x1) - int(p.x0)) + 4;
@@ -285,9 +285,10 @@ void Renderer::addTerrainCell(const ESMFile::ESMRecord& r)
     return;
   RenderObject  tmp;
   tmp.flags = 0x0001;                   // terrain
+  tmp.tileIndex = -1;
   tmp.modelID = 0;
   tmp.formID = 0;
-  tmp.tileIndex = -1;
+  tmp.mswpFormID = 0;
   tmp.z0 = 0;
   tmp.z1 = 0;
   int     w = landData->getImageWidth();
@@ -354,9 +355,10 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
     waterLevel = defaultWaterLevel;
   RenderObject  tmp;
   tmp.flags = 0x0004;                   // water
+  tmp.tileIndex = -1;
   tmp.modelID = 0;
   tmp.formID = 0;
-  tmp.tileIndex = -1;
+  tmp.mswpFormID = 0;
   tmp.modelTransform.offsX = float(cellX) * 4096.0f;
   tmp.modelTransform.offsY = float(cellY) * 4096.0f;
   tmp.modelTransform.offsZ = waterLevel;
@@ -481,9 +483,10 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
         continue;
     }
     RenderObject  tmp;
-    tmp.flags = (type == 1 ? 2U : 4U);
-    tmp.formID = formID;
+    tmp.flags = (type == 1 ? 2 : 4);
     tmp.tileIndex = -1;
+    tmp.formID = formID;
+    tmp.mswpFormID = 0U;
     bool    haveOBND = false;
     bool    isWater = (*r2 == "PWAT");
     bool    isHDModel = false;
@@ -507,6 +510,10 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
         {
           f.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
           isHDModel = isHighQualityModel(stringBuf);
+        }
+        else if (f == "MODS" && f.size() >= 4)
+        {
+          tmp.mswpFormID = loadMaterialSwap(f.readUInt32Fast());
         }
         else if (f == "MNAM" && f.size() == 1040 && modelLOD && !isHDModel)
         {
@@ -574,17 +581,6 @@ void Renderer::sortObjectList()
       objectList[i].modelID = modelIDTable[objectList[i].modelID];
   }
   std::sort(objectList.begin(), objectList.end());
-#if 0
-  std::printf("Object list size = %6u\n", (unsigned int) objectList.size());
-  for (size_t i = 0; i < objectList.size(); i++)
-  {
-    std::printf("#%06u: 0x%04X, 0x%08X, %6u, %4d, (%6d, %6d), (%6d, %6d)\n",
-                (unsigned int) i, objectList[i].flags, objectList[i].formID,
-                objectList[i].modelID, objectList[i].tileIndex,
-                int(objectList[i].x0), int(objectList[i].y0),
-                int(objectList[i].x1), int(objectList[i].y1));
-  }
-#endif
 }
 
 void Renderer::clear(unsigned int flags)
@@ -780,6 +776,68 @@ void Renderer::loadModel(unsigned int modelID)
   }
 }
 
+unsigned int Renderer::loadMaterialSwap(unsigned int formID)
+{
+  if (!formID)
+    return 0U;
+  {
+    std::map< unsigned int, std::vector< MaterialSwap > >::const_iterator i =
+        materialSwaps.find(formID);
+    if (i != materialSwaps.end())
+      return (i->second.size() > 0 ? formID : 0U);
+  }
+  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
+  if (!(r && *r == "MSWP"))
+    return 0U;
+  std::vector< MaterialSwap > *v = (std::vector< MaterialSwap > *) 0;
+  MaterialSwap  *m = (MaterialSwap *) 0;
+  ESMFile::ESMField f(esmFile, *r);
+  while (f.next())
+  {
+    if (f == "BNAM")
+    {
+      f.readPath(stringBuf, std::string::npos, "materials/", ".bgsm");
+      if (stringBuf.empty())
+      {
+        m = (MaterialSwap *) 0;
+        continue;
+      }
+      if (!v)
+      {
+        std::map< unsigned int, std::vector< MaterialSwap > >::iterator i =
+            materialSwaps.insert(
+                std::pair< unsigned int, std::vector< MaterialSwap > >(
+                    formID, std::vector< MaterialSwap >())).first;
+        v = &(i->second);
+      }
+      v->push_back(MaterialSwap());
+      m = &(v->front()) + (v->size() - 1);
+      m->materialPath = stringBuf;
+    }
+    else if (f == "SNAM" && m)
+    {
+      f.readPath(stringBuf, std::string::npos, "materials/", ".bgsm");
+      if (!stringBuf.empty())
+      {
+        try
+        {
+          ba2File.extractFile(fileBuf, stringBuf);
+          FileBuffer  tmp(&(fileBuf.front()), fileBuf.size());
+          m->bgsmFile.loadBGSMFile(m->texturePaths, tmp);
+        }
+        catch (std::runtime_error&)
+        {
+          m = (MaterialSwap *) 0;
+          v->resize(v->size() - 1);
+        }
+      }
+    }
+  }
+  if (v && v->size() > 0)
+    return formID;
+  return 0U;
+}
+
 void Renderer::renderObjectList()
 {
   clear(0x30);
@@ -893,6 +951,51 @@ void Renderer::renderObjectList()
     std::fputc('\n', stderr);
 }
 
+void Renderer::materialSwap(
+    Plot3D_TriShape& t, const std::string **texturePaths, size_t texturePathCnt,
+    unsigned int formID)
+{
+  std::map< unsigned int, std::vector< MaterialSwap > >::const_iterator i =
+      materialSwaps.find(formID);
+  if (i == materialSwaps.end() || !t.materialPath)
+    return;
+  for (size_t j = 0; j < i->second.size(); j++)
+  {
+    if (!(*(t.materialPath) == i->second[j].materialPath))
+      continue;
+    const BGSMFile& bgsmFile = i->second[j].bgsmFile;
+    t.gradientMapV = bgsmFile.gradientMapV;
+    t.textureOffsetU = bgsmFile.offsetU;
+    t.textureOffsetV = bgsmFile.offsetV;
+    t.textureScaleU = bgsmFile.scaleU;
+    t.textureScaleV = bgsmFile.scaleV;
+    t.alphaThreshold = 0;
+    if (bgsmFile.alphaThresholdEnabled)
+    {
+      t.alphaThreshold = bgsmFile.alphaThreshold;
+      if (bgsmFile.alphaThreshold < 255)
+        t.alphaThreshold++;
+    }
+    else if (bgsmFile.alphaBlendMode == 0x0167)
+    {
+      t.alphaThreshold = 128;   // blending in src alpha, inv src alpha mode
+    }
+    t.flags = t.flags & 0xC7;
+    if (bgsmFile.renderFlags & 0x01)
+      t.flags = t.flags | 0x08;         // decal
+    if ((t.flags & 0x02) || (t.alphaThreshold > 0 && !(t.flags & 0x08)))
+      t.flags = t.flags | 0x30;         // disable culling
+    for (size_t k = 0; k < texturePathCnt; k++)
+    {
+      if (k < i->second[j].texturePaths.size())
+        texturePaths[k] = &(i->second[j].texturePaths.front()) + k;
+      else
+        texturePaths[k] = (std::string *) 0;
+    }
+    break;
+  }
+}
+
 bool Renderer::renderObject(RenderThread& t, size_t i,
                             unsigned long long tileMask)
 {
@@ -939,9 +1042,15 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (m & ~tileMask)
         return false;
       *(t.renderer) = nifFiles[n].meshData[j];
+      const std::string *texturePaths[10];
       const DDSTexture  *textures[10];
-      for (int k = 0; k < 10; k++)
+      for (size_t k = 0; k < 10; k++)
+      {
+        texturePaths[k] = (std::string *) 0;
+        if (k < t.renderer->texturePathCnt)
+          texturePaths[k] = t.renderer->texturePaths[k];
         textures[k] = (DDSTexture *) 0;
+      }
       if (t.renderer->flags & 0x02)
       {
         if (!defaultWaterTexture.empty())
@@ -949,22 +1058,21 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       }
       else
       {
+        if (objectList[i].mswpFormID)
+        {
+          materialSwap(*(t.renderer), texturePaths, 10,
+                       objectList[i].mswpFormID);
+        }
         unsigned int  txtSetMask = (!nifFiles[n].isHDModel ? 0x0009U : 0x011BU);
         for (size_t k = size_t(!nifFiles[n].isHDModel ? 4 : 10); k-- > 0; )
         {
           if (!((1U << (unsigned char) k) & txtSetMask))
             continue;
           const std::string *texturePath = (std::string *) 0;
-          if (k < t.renderer->texturePathCnt &&
-              t.renderer->texturePaths[k] &&
-              !t.renderer->texturePaths[k]->empty())
-          {
-            texturePath = t.renderer->texturePaths[k];
-          }
+          if (texturePaths[k] && !texturePaths[k]->empty())
+            texturePath = texturePaths[k];
           else if (k == 4 && textures[8])
-          {
             texturePath = &defaultEnvMap;
-          }
           if (texturePath && !texturePath->empty())
             textures[k] = loadTexture(*texturePath);
         }
@@ -1119,6 +1227,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     bufZAllocFlag(!bufZ),
     threadCnt(0),
     textureDataSize(0),
+    textureCacheSize(0x40000000),
     firstTexture((CachedTexture *) 0),
     lastTexture((CachedTexture *) 0),
     waterColor(0xC0302010U),
@@ -1317,6 +1426,7 @@ static const char *usageStrings[] =
   "    --list-defaults     print defaults for all options, and exit",
   "    --                  remaining options are file names",
   "    -threads INT        set the number of threads to use",
+  "    -txtcache INT       texture cache size in megabytes",
   "    -ssaa BOOL          render at double resolution and downsample",
   "    -q                  do not print messages other than errors",
   "",
@@ -1355,6 +1465,7 @@ int main(int argc, char **argv)
   {
     std::vector< const char * > args;
     int     threadCnt = -1;
+    int     textureCacheSize = 1024;
     bool    verboseMode = true;
     bool    distantObjectsOnly = false;
     bool    noDisabledObjects = true;
@@ -1412,7 +1523,8 @@ int main(int argc, char **argv)
           std::printf(" (defaults to hardware threads: %d)",
                       int(std::thread::hardware_concurrency()));
         }
-        std::printf("\n-ssaa %d\n", int(enableDownscale));
+        std::printf("\n-txtcache %d\n", textureCacheSize);
+        std::printf("-ssaa %d\n", int(enableDownscale));
         std::printf("-w 0x%08X", formID);
         if (!formID)
           std::printf(" (defaults to 0x0000003C or 0x0025DA15)");
@@ -1471,6 +1583,14 @@ int main(int argc, char **argv)
           throw errorMessage("missing argument for %s", argv[i - 1]);
         threadCnt = int(parseInteger(argv[i], 10, "invalid number of threads",
                                      1, 16));
+      }
+      else if (std::strcmp(argv[i], "-txtcache") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        textureCacheSize =
+            int(parseInteger(argv[i], 0, "invalid texture cache size",
+                             256, 4095));
       }
       else if (std::strcmp(argv[i], "-ssaa") == 0)
       {
@@ -1709,6 +1829,7 @@ int main(int argc, char **argv)
     Renderer  renderer(width, height, ba2File, esmFile);
     if (threadCnt > 0)
       renderer.setThreadCount(threadCnt);
+    renderer.setTextureCacheSize(size_t(textureCacheSize) << 20);
     renderer.setVerboseMode(verboseMode);
     renderer.setDistantObjectsOnly(distantObjectsOnly);
     renderer.setNoDisabledObjects(noDisabledObjects);

@@ -9,6 +9,7 @@
 #include "landdata.hpp"
 #include "ddstxt.hpp"
 #include "landtxt.hpp"
+#include "bgsmfile.hpp"
 #include "nif_file.hpp"
 #include "terrmesh.hpp"
 #include "plot3d.hpp"
@@ -21,12 +22,9 @@ class Renderer
  protected:
   // maximum number of NIF files to keep loaded (must be power of two)
   static const unsigned int modelBatchCnt = 8U;
-  static const unsigned int textureCacheSize = 0x40000000U;
   struct RenderObject
   {
-    unsigned int  flags;        // 1: terrain, 2: solid object, 4: water
-    unsigned int  modelID;      // NIF file number
-    unsigned int  formID;       // form ID of reference
+    unsigned short  flags;      // 1: terrain, 2: solid object, 4: water
     // -1:        not rendered
     // 0 to 63:   single tile, N = Y * 8 + X
     // 64 to 319:   2*2 tiles, N = 64 + ((Y0 & 6) * 8) + (X0 & 6)
@@ -34,7 +32,10 @@ class Renderer
     // 320 to 1343: 4*4 tiles, N = 320 + ((Y0 & 4) * 8) + (X0 & 4)
     //                             + ((Y0 & 3) * 256) + ((X0 & 3) * 64)
     // 1344:        8*8 tiles
-    int     tileIndex;
+    signed short  tileIndex;
+    unsigned int  modelID;      // NIF file number
+    unsigned int  formID;       // form ID of reference
+    unsigned int  mswpFormID;   // material swap form ID if non-zero
     NIFFile::NIFVertexTransform modelTransform;
     signed short  x0;           // object bounds or terrain area
     signed short  y0;
@@ -60,6 +61,12 @@ class Renderer
     ModelData();
     ~ModelData();
     void clear();
+  };
+  struct MaterialSwap
+  {
+    std::string materialPath;
+    BGSMFile    bgsmFile;
+    std::vector< std::string >  texturePaths;
   };
   struct RenderThread
   {
@@ -100,6 +107,7 @@ class Renderer
   bool    bufZAllocFlag;
   int     threadCnt;
   size_t  textureDataSize;
+  size_t  textureCacheSize;
   CachedTexture *firstTexture;
   CachedTexture *lastTexture;
   std::mutex  textureCacheMutex;
@@ -112,6 +120,7 @@ class Renderer
   std::string defaultEnvMap;
   std::string defaultWaterTexture;
   std::vector< ModelData >    nifFiles;
+  std::map< unsigned int, std::vector< MaterialSwap > > materialSwaps;
   std::vector< RenderThread > renderThreads;
   std::string stringBuf;
   std::vector< unsigned char >  fileBuf;
@@ -122,7 +131,7 @@ class Renderer
   // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
   // in the top left corner
   unsigned long long calculateTileMask(int x0, int y0, int x1, int y1) const;
-  static int calculateTileIndex(unsigned long long screenAreasUsed);
+  static signed short calculateTileIndex(unsigned long long screenAreasUsed);
   int setScreenAreaUsed(RenderObject& p);
   unsigned int getDefaultWorldID() const;
   void addTerrainCell(const ESMFile::ESMRecord& r);
@@ -144,7 +153,11 @@ class Renderer
   void shrinkTextureCache();
   bool isHighQualityModel(const std::string& modelPath) const;
   void loadModel(unsigned int modelID);
+  unsigned int loadMaterialSwap(unsigned int formID);
   void renderObjectList();
+  void materialSwap(Plot3D_TriShape& t,
+                    const std::string **texturePaths, size_t texturePathCnt,
+                    unsigned int formID);
   bool renderObject(RenderThread& t, size_t i,
                     unsigned long long tileMask = ~0ULL);
   void renderThread(size_t threadNum, size_t startPos, size_t endPos,
@@ -187,6 +200,10 @@ class Renderer
   void setLightingFunction(const float *a);
   // default to std::thread::hardware_concurrency() if n <= 0
   void setThreadCount(int n);
+  void setTextureCacheSize(size_t n)
+  {
+    textureCacheSize = n;
+  }
   void setTextureMipLevel(int n)
   {
     textureMip = n;             // base mip level for all textures
