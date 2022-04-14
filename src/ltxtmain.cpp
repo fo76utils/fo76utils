@@ -6,7 +6,6 @@
 #include "esmfile.hpp"
 #include "landdata.hpp"
 #include "landtxt.hpp"
-#include "plot3d.hpp"
 
 #include <thread>
 
@@ -545,13 +544,17 @@ int main(int argc, char **argv)
       threads[i]->xyScale = xyScale;
     }
     std::vector< unsigned int > downsampleBuf;
+    int     h = 1 << xyScale;
+    h = (h > 16 ? h : 16);
     if (enableDownscale)
-      downsampleBuf.reserve(size_t(width) * size_t(height));
+      downsampleBuf.resize(size_t(width) * size_t(h * 3));
+    int     downsampleY0 = 0;
+    int     downsampleY1 = 0;
     for (int y = 0; y < height; )
     {
       for (size_t i = 0; i < threads.size() && y < height; i++)
       {
-        int     nextY = y + 16;
+        int     nextY = y + h;
         if (nextY > height)
           nextY = height;
         threads[i]->threadPtr = new std::thread(RenderThread::runThread,
@@ -570,27 +573,42 @@ int main(int argc, char **argv)
         }
         else
         {
+          size_t  k = size_t(downsampleY1) * size_t(width);
+          downsampleY1 += int(threads[i]->outBuf.size() / (size_t(width) * 3U));
           for (size_t j = 0; (j + 2) < threads[i]->outBuf.size(); j = j + 3)
           {
             unsigned int  b = threads[i]->outBuf[j];
             unsigned int  g = threads[i]->outBuf[j + 1];
             unsigned int  r = threads[i]->outBuf[j + 2];
-            downsampleBuf.push_back(0xFF000000U | r | (g << 8) | (b << 16));
+            downsampleBuf[k] = 0xFF000000U | r | (g << 8) | (b << 16);
+            k++;
           }
-        }
-      }
-    }
-    if (downsampleBuf.size() >= (size_t(width) * size_t(height)))
-    {
-      for (int y = 0; y < height; y = y + 2)
-      {
-        for (int x = 0; x < width; x = x + 2)
-        {
-          unsigned int  c = downsample2xFilter(&(downsampleBuf.front()),
-                                               width, height, x, y);
-          outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
-          outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
-          outFile.writeByte((unsigned char) (c & 0xFF));
+          bool    endFlag =
+              (y >= height &&
+               !((i + 1) < threads.size() && threads[i + 1]->threadPtr));
+          if (downsampleY1 >= (h << 1) || endFlag)
+          {
+            unsigned int  *p = &(downsampleBuf.front());
+            int     yc = downsampleY0;
+            for ( ; yc < (downsampleY1 - (!endFlag ? 8 : 0)); yc = yc + 2)
+            {
+              for (int xc = 0; xc < width; xc = xc + 2)
+              {
+                unsigned int  c =
+                    downsample2xFilter(p, width, downsampleY1, xc, yc);
+                outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
+                outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
+                outFile.writeByte((unsigned char) (c & 0xFF));
+              }
+            }
+            if (!endFlag)
+            {
+              std::memcpy(p, p + (size_t(downsampleY1 - 16) * size_t(width)),
+                          (size_t(width) * 16U) * sizeof(unsigned int));
+              downsampleY0 = 8;
+              downsampleY1 = 16;
+            }
+          }
         }
       }
     }
