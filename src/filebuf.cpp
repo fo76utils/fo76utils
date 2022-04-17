@@ -68,6 +68,11 @@ float FileBuffer::readFloat()
   if ((filePos + 4) > fileBufSize)
     throw errorMessage("end of input file");
   unsigned int  tmp = readUInt32Fast();
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  if (!((tmp + 0x00800000U) & 0x7F000000U))
+    return 0.0f;
+  return *(reinterpret_cast< const float * >(fileBuf + (filePos - 4)));
+#else
   int     e = int((tmp >> 23) & 0xFF);
   if (e == 0x00 || e == 0xFF)
     return 0.0f;
@@ -76,6 +81,7 @@ float FileBuffer::readFloat()
   if (tmp & 0x80000000U)
     m = -m;
   return float(m);
+#endif
 }
 
 unsigned long long FileBuffer::readUInt64()
