@@ -43,53 +43,65 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
     throw errorMessage("BGSM file is shorter than expected");
   if (buf.readUInt32Fast() != 0x4D534742)       // "BGSM"
     throw errorMessage("invalid BGSM file header");
-  version = buf.readUInt32Fast();
-  if (version != 2 && version != 20)
+  int     tmp = uint32ToSigned(buf.readUInt32Fast());
+  if (tmp != 2 && tmp != 20)
     throw errorMessage("unsupported BGSM file version");
-  uvFlags = (unsigned char) (buf.readUInt32Fast() & 0xFFU);
+  version = (unsigned char) tmp;
+  flags = (unsigned char) (buf.readUInt32Fast() & 3U);
   offsetU = buf.readFloat();
   offsetV = buf.readFloat();
   scaleU = buf.readFloat();
   scaleV = buf.readFloat();
-  alpha = buf.readFloat();
-  alphaBlendMode = (unsigned short) buf.readUInt8Fast() << 8;
-  alphaBlendMode |= (unsigned short) ((buf.readUInt32Fast() & 0x0FU) << 4);
-  alphaBlendMode |= (unsigned short) (buf.readUInt32Fast() & 0x0FU);
+  tmp = roundFloat(buf.readFloat() * 128.0f);
+  alpha = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+  // blending enabled
+  alphaFlags = (unsigned short) bool(buf.readUInt8Fast());
+  // source blend mode
+  alphaFlags = alphaFlags | (unsigned short) ((buf.readUInt32Fast() & 15) << 1);
+  // destination blend mode
+  alphaFlags = alphaFlags | (unsigned short) ((buf.readUInt32Fast() & 15) << 5);
   alphaThreshold = buf.readUInt8Fast();
-  alphaThresholdEnabled = bool(buf.readUInt8Fast());
+  if (buf.readUInt8Fast())
+    alphaFlags = alphaFlags | 0x1200;   // thresholding enabled, greater mode
   // Z buffer write, Z buffer test, screen space reflections
   (void) buf.readUInt32Fast();
   // decal
-  renderFlags = renderFlags | (unsigned char) bool(buf.readUInt8Fast());
-  if (version == 2)
+  flags = flags | ((unsigned char) bool(buf.readUInt8Fast()) << 2);
+  // two sided
+  flags = flags | ((unsigned char) bool(buf.readUInt8Fast()) << 3);
+  unsigned long long  texturePathMap = 0ULL;
+  buf.setPosition(58);
+  if (version == 2)                     // Fallout 4
   {
-    buf.setPosition(63);                // Fallout 4
+    tmp = roundFloat(buf.readFloat() * 64.0f);  // half level
+    envMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+    // gradient map disabled / enabled
+    texturePathMap = (!buf.readUInt8Fast() ?
+                      0xFFFFFFFE7E244610ULL : 0xFFFFFFFE7E243610ULL);
+    flags = flags | ((unsigned char) bool(buf[buf.size() - 29]) << 4);  // tree
     texturePaths.resize(9);
   }
-  else
+  else                                  // Fallout 76
   {
-    buf.setPosition(60);                // Fallout 76
+    texturePathMap = (!(buf.readUInt16Fast() & 0xFF) ?
+                      0xFFFFFFFE98724E10ULL : 0xFFFFFFFE98723E10ULL);
+    flags = flags | ((unsigned char) bool(buf[buf.size() - 10]) << 4);
     texturePaths.resize(10);
   }
-  static const unsigned char  texturePathMap[40] =
+  for ( ; (texturePathMap & 15U) != 15U; texturePathMap = texturePathMap >> 4)
   {
-    0x00, 0x01, 0x06, 0x04, 0x04, 0x02, 0x88, 0x07, 0x88, 0xFF, // FO4
-    0x00, 0x01, 0x06, 0x03, 0x04, 0x02, 0x88, 0x07, 0x88, 0xFF,
-    0x00, 0x01, 0x86, 0x04, 0x02, 0x07, 0x08, 0x09, 0x86, 0xFF, // FO76
-    0x00, 0x01, 0x86, 0x03, 0x02, 0x07, 0x08, 0x09, 0x86, 0xFF
-  };
-  const unsigned char *p = texturePathMap;
-  bool    gradientMapEnabled = bool(buf[(version == 2 ? 62 : 58)]);
-  p = p + ((version == 2 ? 0 : 20) + (!gradientMapEnabled ? 0 : 10));
-  for ( ; *p != 0xFF; p++)
-  {
+    size_t  n = size_t(texturePathMap & 15U);
     size_t  len = buf.readUInt32();
-    size_t  n = *p;
-    bool    unusedTexture = bool(n & 0x80);
-    n = n & 0x0F;
-    buf.readPath(texturePaths[n], len, "textures/", ".dds");
-    if (unusedTexture)
-      texturePaths[n].clear();
+    if (n >= texturePaths.size())
+      buf.setPosition(buf.getPosition() + len);
+    else
+      buf.readPath(texturePaths[n], len, "textures/", ".dds");
+  }
+  if (!texturePaths[3].empty())
+  {
+    buf.setPosition(buf.size() - (version == 2 ? 5 : 6));
+    gradientMapV =
+        (unsigned char) (roundFloat(buf.readFloat() * 255.0f) & 0xFF);
   }
 }
 
@@ -105,16 +117,15 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
 void BGSMFile::clear()
 {
   version = 0;
-  uvFlags = 0;
-  renderFlags = 0;
-  gradientMapV = 0;
+  flags = 0;
+  gradientMapV = 128;
+  envMapScale = 128;
+  alphaFlags = 0x00EC;
+  alphaThreshold = 0;
+  alpha = 128;
   offsetU = 0.0f;
   offsetV = 0.0f;
   scaleU = 1.0f;
   scaleV = 1.0f;
-  alpha = 1.0f;
-  alphaBlendMode = 0x0067;
-  alphaThreshold = 128;
-  alphaThresholdEnabled = false;
 }
 
