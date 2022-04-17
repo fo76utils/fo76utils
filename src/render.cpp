@@ -372,6 +372,133 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
     objectList.push_back(tmp);
 }
 
+void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
+                              const ESMFile::ESMRecord& r2,
+                              float scale, float rX, float rY, float rZ,
+                              float offsX, float offsY, float offsZ)
+{
+  NIFFile::NIFVertexTransform vt(scale, rX, rY, rZ, offsX, offsY, offsZ);
+  RenderObject  tmp;
+  tmp.flags = 0x0002;
+  tmp.tileIndex = -1;
+  tmp.formID = r.formID;
+  ESMFile::ESMField f(esmFile, r2);
+  unsigned int  mswpFormIDBase = 0U;
+  unsigned int  modelFormID = 0U;
+  unsigned int  modelMSWPFormID = 0U;
+  while (f.next())
+  {
+    if (f == "MODS" && f.size() >= 4)
+    {
+      mswpFormIDBase = f.readUInt32Fast();
+    }
+    else if (f == "ONAM" && f.size() >= 4)
+    {
+      modelFormID = f.readUInt32Fast();
+      if (!modelFormID)
+        continue;
+      modelMSWPFormID = 0U;
+      if (f.size() >= 8)
+        modelMSWPFormID = f.readUInt32Fast();
+      const ESMFile::ESMRecord  *r3 = esmFile.getRecordPtr(modelFormID);
+      if (!r3 || (r3->flags | (!distantObjectsOnly ? 0xFF7FFFFFU : 0xFF7F7FFFU))
+                 != 0xFF7FFFFFU)
+      {
+        // ignore markers and (optionally) objects not visible from distance
+        modelFormID = 0U;
+        continue;
+      }
+      bool    haveOBND = false;
+      bool    isWater = false;
+      bool    isHDModel = false;
+      stringBuf.clear();
+      ESMFile::ESMField f2(esmFile, *r3);
+      while (f2.next())
+      {
+        if (f2 == "OBND" && f2.size() >= 6)
+        {
+          tmp.x0 = (signed short) uint16ToSigned(f2.readUInt16Fast());
+          tmp.y0 = (signed short) uint16ToSigned(f2.readUInt16Fast());
+          tmp.z0 = (signed short) uint16ToSigned(f2.readUInt16Fast());
+          tmp.x1 = (signed short) uint16ToSigned(f2.readUInt16Fast());
+          tmp.y1 = (signed short) uint16ToSigned(f2.readUInt16Fast());
+          tmp.z1 = (signed short) uint16ToSigned(f2.readUInt16Fast());
+          haveOBND = true;
+        }
+        else if (f2 == "MODL" && f2.size() > 1 &&
+                 (!modelLOD || stringBuf.empty()))
+        {
+          f2.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
+          isHDModel = isHighQualityModel(stringBuf);
+        }
+        else if (f2 == "MODS" && f2.size() >= 4 && !modelMSWPFormID)
+        {
+          modelMSWPFormID = f2.readUInt32Fast();
+        }
+        else if (f2 == "MNAM" && f2.size() == 1040 && modelLOD && !isHDModel)
+        {
+          for (int i = (modelLOD - 1) & 3; i >= 0; i--)
+          {
+            f2.setPosition(size_t(i * 260));
+            if (f2[f2.getPosition()] != 0)
+            {
+              f2.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
+              if (!stringBuf.empty())
+                break;
+            }
+          }
+        }
+        else if (f2 == "WNAM" && *r3 == "ACTI" && f2.size() >= 4)
+        {
+          isWater = true;
+        }
+      }
+      if (!(haveOBND && !isWater && !stringBuf.empty() &&
+            !isExcludedModel(stringBuf)))
+      {
+        modelFormID = 0U;
+        continue;
+      }
+      tmp.modelID = 0xFFFFFFFFU;
+    }
+    else if (f == "DATA" && modelFormID)
+    {
+      while ((f.getPosition() + 28) <= f.size())
+      {
+        offsX = f.readFloat();
+        offsY = f.readFloat();
+        offsZ = f.readFloat();
+        rX = f.readFloat();
+        rY = f.readFloat();
+        rZ = f.readFloat();
+        scale = f.readFloat();
+        tmp.modelTransform =
+            NIFFile::NIFVertexTransform(scale, rX, rY, rZ, offsX, offsY, offsZ);
+        tmp.modelTransform *= vt;
+        if (setScreenAreaUsed(tmp) >= 0)
+        {
+          if (tmp.modelID == 0xFFFFFFFFU)
+          {
+            std::map< std::string, unsigned int >::iterator i =
+                modelPathMap.find(stringBuf);
+            if (i == modelPathMap.end())
+            {
+              unsigned int  n = (unsigned int) modelPathMap.size();
+              i = modelPathMap.insert(std::pair< std::string, unsigned int >(
+                                          stringBuf, n)).first;
+            }
+            tmp.modelID = i->second;
+            if (!modelMSWPFormID)
+              modelMSWPFormID = mswpFormIDBase;
+            tmp.mswpFormID = loadMaterialSwap(modelMSWPFormID);
+          }
+          objectList.push_back(tmp);
+        }
+      }
+    }
+  }
+}
+
 void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
 {
   if (!formID)
@@ -465,8 +592,14 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
         if (r2->flags & 0x00800000U)
           continue;
         break;
-      case 0x4E525546:                  // "FURN"
       case 0x4C4F4353:                  // "SCOL"
+        if (!enableSCOL)
+        {
+          if (type == 1)
+            addSCOLObjects(*r, *r2, scale, rX, rY, rZ, offsX, offsY, offsZ);
+          continue;
+        }
+      case 0x4E525546:                  // "FURN"
       case 0x54415453:                  // "STAT"
       case 0x45455254:                  // "TREE"
         // ignore markers and (optionally) objects not visible from distance
@@ -542,8 +675,12 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
         isWater = true;
       }
     }
-    if (!haveOBND || stringBuf.empty() || (type == 2) != isWater)
+    if (!haveOBND || stringBuf.empty() ||
+        (type == 1 && (isWater || isExcludedModel(stringBuf))) ||
+        (type == 2 && !isWater))
+    {
       continue;
+    }
     tmp.modelTransform = NIFFile::NIFVertexTransform(scale, rX, rY, rZ,
                                                      offsX, offsY, offsZ);
     if (setScreenAreaUsed(tmp) < 0)
@@ -736,6 +873,16 @@ void Renderer::shrinkTextureCache()
     textureDataSize = 0;
 }
 
+bool Renderer::isExcludedModel(const std::string& modelPath) const
+{
+  for (size_t i = 0; i < excludeModelPatterns.size(); i++)
+  {
+    if (modelPath.find(excludeModelPatterns[i]) != std::string::npos)
+      return true;
+  }
+  return false;
+}
+
 bool Renderer::isHighQualityModel(const std::string& modelPath) const
 {
   for (size_t i = 0; i < hdModelNamePatterns.size(); i++)
@@ -767,7 +914,7 @@ void Renderer::loadModel(unsigned int modelID)
       const NIFFile::NIFTriShape& t = nifFiles[n].meshData[i];
       if (t.flags & 0x05)               // ignore if hidden or effect
         continue;
-      nifFiles[n].totalTriangleCnt += t.triangleCnt;
+      nifFiles[n].totalTriangleCnt += size_t(t.triangleCnt);
     }
   }
   catch (std::runtime_error&)
@@ -964,27 +1111,16 @@ void Renderer::materialSwap(
     if (!(*(t.materialPath) == i->second[j].materialPath))
       continue;
     const BGSMFile& bgsmFile = i->second[j].bgsmFile;
+    // decal, two sided, tree
+    t.flags = (t.flags & 0x07) | ((bgsmFile.flags & 0x1C) << 1);
+    t.flags = t.flags | ((t.flags & 0x02) << 3);
     t.gradientMapV = bgsmFile.gradientMapV;
+    t.envMapScale = bgsmFile.envMapScale;
+    t.alphaThreshold = bgsmFile.calculateAlphaThreshold();
     t.textureOffsetU = bgsmFile.offsetU;
     t.textureOffsetV = bgsmFile.offsetV;
     t.textureScaleU = bgsmFile.scaleU;
     t.textureScaleV = bgsmFile.scaleV;
-    t.alphaThreshold = 0;
-    if (bgsmFile.alphaThresholdEnabled)
-    {
-      t.alphaThreshold = bgsmFile.alphaThreshold;
-      if (bgsmFile.alphaThreshold < 255)
-        t.alphaThreshold++;
-    }
-    else if (bgsmFile.alphaBlendMode == 0x0167)
-    {
-      t.alphaThreshold = 128;   // blending in src alpha, inv src alpha mode
-    }
-    t.flags = t.flags & 0xC7;
-    if (bgsmFile.renderFlags & 0x01)
-      t.flags = t.flags | 0x08;         // decal
-    if ((t.flags & 0x02) || (t.alphaThreshold > 0 && !(t.flags & 0x08)))
-      t.flags = t.flags | 0x30;         // disable culling
     for (size_t k = 0; k < texturePathCnt; k++)
     {
       if (k < i->second[j].texturePaths.size())
@@ -1030,7 +1166,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     {
       if (nifFiles[n].meshData[j].flags & 0x05) // hidden or effect
         continue;
-      if (nifFiles[n].meshData[j].triangleCnt < 1)
+      if (!nifFiles[n].meshData[j].triangleCnt)
         continue;
       NIFFile::NIFBounds  b;
       nifFiles[n].meshData[j].calculateBounds(b, &vt);
@@ -1062,6 +1198,18 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         {
           materialSwap(*(t.renderer), texturePaths, 10,
                        objectList[i].mswpFormID);
+        }
+        if (BRANCH_EXPECT(!enableTextures, false))
+        {
+          if (t.renderer->alphaThreshold ||
+              (texturePaths[3] && !texturePaths[3]->empty()))
+          {
+            texturePaths[3] = &whiteTexturePath;
+          }
+          else
+          {
+            texturePaths[0] = &whiteTexturePath;
+          }
         }
         unsigned int  txtSetMask = (!nifFiles[n].isHDModel ? 0x0009U : 0x011BU);
         for (size_t k = size_t(!nifFiles[n].isHDModel ? 4 : 10); k-- > 0; )
@@ -1113,7 +1261,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     tmp.triangleCnt = 2;
     tmp.vertexData = vTmp;
     tmp.triangleData = tTmp;
-    tmp.flags = 0x32;                   // water
+    tmp.flags = 0x12;                   // water
     tmp.texturePathCnt = 0;
     tmp.texturePaths = (std::string **) 0;
     const DDSTexture  *textures[2];
@@ -1218,11 +1366,12 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     landTxtDefColor(0x003F3F3FU),
     landData((LandscapeData *) 0),
     cellTextureResolution(256),
-    defaultLandLevel(-8192.0f),
     defaultWaterLevel(-8192.0f),
     modelLOD(0),
     distantObjectsOnly(false),
     noDisabledObjects(false),
+    enableSCOL(false),
+    enableTextures(true),
     bufRGBWAllocFlag(!bufRGBW),
     bufZAllocFlag(!bufZ),
     threadCnt(0),
@@ -1243,6 +1392,10 @@ Renderer::Renderer(int imageWidth, int imageHeight,
   renderThreads.reserve(16);
   nifFiles.resize(modelBatchCnt);
   setThreadCount(-1);
+  if (esmFile.getESMVersion() < 0x80U)
+    whiteTexturePath = "textures/white.dds";
+  else
+    whiteTexturePath = "textures/effects/rainscene/test_flat_white.dds";
 }
 
 Renderer::~Renderer()
@@ -1328,6 +1481,20 @@ void Renderer::setThreadCount(int n)
   }
 }
 
+void Renderer::addExcludeModelPattern(const std::string& s)
+{
+  if (s.empty())
+    return;
+  for (size_t i = 0; i < excludeModelPatterns.size(); i++)
+  {
+    if (s.find(excludeModelPatterns[i]) != std::string::npos)
+      return;
+    if (excludeModelPatterns[i].find(s) != std::string::npos)
+      excludeModelPatterns.erase(excludeModelPatterns.begin() + i);
+  }
+  excludeModelPatterns.push_back(s);
+}
+
 void Renderer::addHDModelPattern(const std::string& s)
 {
   if (s.empty())
@@ -1361,14 +1528,15 @@ void Renderer::loadTerrain(const char *btdFileName,
     std::fprintf(stderr, "Loading terrain data\n");
   landData = new LandscapeData(&esmFile, btdFileName, &ba2File, 0x0B, worldID,
                                defTxtID, mipLevel, xMin, yMin, xMax, yMax);
-  defaultLandLevel = landData->getDefaultLandLevel();
   defaultWaterLevel = landData->getWaterLevel();
   if (verboseMode)
     std::fprintf(stderr, "Loading landscape textures\n");
   landTextures.resize(landData->getTextureCount(), (DDSTexture *) 0);
   for (size_t i = 0; i < landTextures.size(); i++)
   {
-    if (!landData->getTextureDiffuse(i).empty())
+    if (!enableTextures)
+      landTextures[i] = loadTexture(whiteTexturePath);
+    else if (!landData->getTextureDiffuse(i).empty())
       landTextures[i] = loadTexture(landData->getTextureDiffuse(i));
   }
 }
@@ -1426,6 +1594,8 @@ static const char *usageStrings[] =
   "    --list-defaults     print defaults for all options, and exit",
   "    --                  remaining options are file names",
   "    -threads INT        set the number of threads to use",
+  "    -scol BOOL          enable the use of pre-combined meshes",
+  "    -textures BOOL      make all diffuse textures white if false",
   "    -txtcache INT       texture cache size in megabytes",
   "    -ssaa BOOL          render at double resolution and downsample",
   "    -q                  do not print messages other than errors",
@@ -1451,6 +1621,7 @@ static const char *usageStrings[] =
   "    -vis BOOL           render only objects visible from distance",
   "    -ndis BOOL          do not render initially disabled objects",
   "    -hqm STRING         add high quality model path name pattern",
+  "    -xm STRING          add excluded model path name pattern",
   "",
   "    -env FILENAME.DDS   default environment map texture path in archives",
   "    -wtxt FILENAME.DDS  water normal map texture path in archives",
@@ -1470,6 +1641,8 @@ int main(int argc, char **argv)
     bool    distantObjectsOnly = false;
     bool    noDisabledObjects = true;
     bool    enableDownscale = false;
+    bool    enableSCOL = false;
+    bool    enableTextures = true;
     unsigned int  formID = 0U;
     int     btdLOD = 2;
     const char  *btdPath = (char *) 0;
@@ -1499,6 +1672,7 @@ int main(int argc, char **argv)
     const char  *defaultEnvMap = (char *) 0;
     const char  *waterTexture = (char *) 0;
     std::vector< const char * > hdModelNamePatterns;
+    std::vector< const char * > excludeModelPatterns;
     Plot3D_TriShape::getDefaultLightingFunction(lightingPolynomial);
 
     for (int i = 1; i < argc; i++)
@@ -1523,7 +1697,9 @@ int main(int argc, char **argv)
           std::printf(" (defaults to hardware threads: %d)",
                       int(std::thread::hardware_concurrency()));
         }
-        std::printf("\n-txtcache %d\n", textureCacheSize);
+        std::printf("\n-scol %d\n", int(enableSCOL));
+        std::printf("-textures %d\n", int(enableTextures));
+        std::printf("-txtcache %d\n", textureCacheSize);
         std::printf("-ssaa %d\n", int(enableDownscale));
         std::printf("-w 0x%08X", formID);
         if (!formID)
@@ -1583,6 +1759,21 @@ int main(int argc, char **argv)
           throw errorMessage("missing argument for %s", argv[i - 1]);
         threadCnt = int(parseInteger(argv[i], 10, "invalid number of threads",
                                      1, 16));
+      }
+      else if (std::strcmp(argv[i], "-scol") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        enableSCOL =
+            bool(parseInteger(argv[i], 0, "invalid argument for -scol", 0, 1));
+      }
+      else if (std::strcmp(argv[i], "-textures") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        enableTextures =
+            bool(parseInteger(argv[i], 0, "invalid argument for -textures",
+                              0, 1));
       }
       else if (std::strcmp(argv[i], "-txtcache") == 0)
       {
@@ -1756,6 +1947,12 @@ int main(int argc, char **argv)
           throw errorMessage("missing argument for %s", argv[i - 1]);
         hdModelNamePatterns.push_back(argv[i]);
       }
+      else if (std::strcmp(argv[i], "-xm") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        excludeModelPatterns.push_back(argv[i]);
+      }
       else if (std::strcmp(argv[i], "-env") == 0)
       {
         if (++i >= argc)
@@ -1793,15 +1990,6 @@ int main(int argc, char **argv)
       formID = (!btdPath ? 0x0000003CU : 0x0025DA15U);
     for (int i = 0; i < 6; i++)
       lightingPolynomial[i] = lightingPolynomial[i] * lightLevel;
-    for (int i = -128; i <= 128; i++)
-    {
-      float   x = float(i) * (1.0f / 128.0f);
-      float   y = 0.0f;
-      for (int j = 5; j >= 0; j--)
-        y = y * x + lightingPolynomial[j];
-      if (!(y >= 0.0f && y <= (253.0f / 64.0f)))
-        throw errorMessage("lighting polynomial is out of range at x = %f", x);
-    }
     waterColor = (waterColor & 0x00FFFFFFU) | ((waterColor & 0x7F000000U) << 1);
     if (!(waterColor & 0xFF000000U))
       waterColor = 0U;
@@ -1833,6 +2021,8 @@ int main(int argc, char **argv)
     renderer.setVerboseMode(verboseMode);
     renderer.setDistantObjectsOnly(distantObjectsOnly);
     renderer.setNoDisabledObjects(noDisabledObjects);
+    renderer.setEnableSCOL(enableSCOL);
+    renderer.setEnableTextures(enableTextures);
     renderer.setLandDefaultColor(ltxtDefColor);
     renderer.setLandTxtResolution(ltxtResolution);
     renderer.setTextureMipLevel(textureMip);
@@ -1857,6 +2047,11 @@ int main(int argc, char **argv)
     {
       if (hdModelNamePatterns[i] && hdModelNamePatterns[i][0])
         renderer.addHDModelPattern(std::string(hdModelNamePatterns[i]));
+    }
+    for (size_t i = 0; i < excludeModelPatterns.size(); i++)
+    {
+      if (excludeModelPatterns[i] && excludeModelPatterns[i][0])
+        renderer.addExcludeModelPattern(std::string(excludeModelPatterns[i]));
     }
 
     if (worldID)

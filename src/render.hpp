@@ -98,11 +98,12 @@ class Renderer
   unsigned int  landTxtDefColor;
   LandscapeData *landData;
   int     cellTextureResolution;
-  float   defaultLandLevel;
   float   defaultWaterLevel;
   int     modelLOD;                     // 0 (maximum detail) to 4
   bool    distantObjectsOnly;           // ignore if not visible from distance
   bool    noDisabledObjects;            // ignore if initially disabled
+  bool    enableSCOL;
+  bool    enableTextures;
   bool    bufRGBWAllocFlag;
   bool    bufZAllocFlag;
   int     threadCnt;
@@ -116,6 +117,7 @@ class Renderer
   std::vector< RenderObject > objectList;
   std::map< std::string, unsigned int > modelPathMap;
   std::vector< const std::string * >  modelPaths;
+  std::vector< std::string >  excludeModelPatterns;
   std::vector< std::string >  hdModelNamePatterns;
   std::string defaultEnvMap;
   std::string defaultWaterTexture;
@@ -127,6 +129,7 @@ class Renderer
   unsigned int  waterColor;
   bool    verboseMode;
   NIFFile::NIFBounds  worldBounds;
+  std::string whiteTexturePath;
   // bit Y * 8 + X of the return value is set if the bounds of the object
   // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
   // in the top left corner
@@ -136,6 +139,10 @@ class Renderer
   unsigned int getDefaultWorldID() const;
   void addTerrainCell(const ESMFile::ESMRecord& r);
   void addWaterCell(const ESMFile::ESMRecord& r);
+  void addSCOLObjects(const ESMFile::ESMRecord& r,      // REFR
+                      const ESMFile::ESMRecord& r2,     // SCOL
+                      float scale, float rX, float rY, float rZ,
+                      float offsX, float offsY, float offsZ);
   // type = 0: terrain, type = 1: solid objects, type = 2: water
   void findObjects(unsigned int formID, int type, unsigned int parentID = 0U);
   void sortObjectList();
@@ -151,6 +158,7 @@ class Renderer
   // returns NULL on failure
   const DDSTexture *loadTexture(const std::string& fileName);
   void shrinkTextureCache();
+  bool isExcludedModel(const std::string& modelPath) const;
   bool isHighQualityModel(const std::string& modelPath) const;
   void loadModel(unsigned int modelID);
   unsigned int loadMaterialSwap(unsigned int formID);
@@ -236,6 +244,16 @@ class Renderer
   {
     noDisabledObjects = n;      // ignore if initially disabled
   }
+  void setEnableSCOL(bool n)
+  {
+    enableSCOL = n;             // do not split pre-combined meshes
+  }
+  void setEnableTextures(bool n)
+  {
+    enableTextures = n;         // if false, make all diffuse textures white
+  }
+  // models with path name including s are not rendered
+  void addExcludeModelPattern(const std::string& s);
   // models with path name including s are rendered at full quality
   void addHDModelPattern(const std::string& s);
   // default environment map texture path
