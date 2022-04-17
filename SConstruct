@@ -11,6 +11,9 @@ else:
     env.Append(LIBS = ["pthread"])
 if ARGUMENTS.get("debug", 0):
     env.Append(CXXFLAGS = Split("-g -O0"))
+elif ARGUMENTS.get("profile", 0):
+    env.Append(CXXFLAGS = Split("-g -pg -O"))
+    env.Prepend(LINKFLAGS = ["-pg"])
 else:
     env.Append(CXXFLAGS = Split("-O3 -fomit-frame-pointer -ffast-math"))
     env.Append(LINKFLAGS = ["-s"])
@@ -61,6 +64,7 @@ if "win" in sys.platform:
         pkgFiles += Split("ltex scripts src SConstruct SConstruct.maps")
         pkgFiles += Split(".gitignore LICENSE README.md README.mman-win32")
         pkgFiles += Split("mapicons.py tes5cell.txt")
-        package = env.Command("../fo76utils-" + str(buildPackage) + ".7z",
-                              pkgFiles, "7za a -m0=lzma -mx=9 $TARGET $SOURCES")
+        package = env.Command(
+                      "../fo76utils-" + str(buildPackage) + ".7z", pkgFiles,
+                      "7za a -m0=lzma -mx=9 -x!src/*.o $TARGET $SOURCES")
 
