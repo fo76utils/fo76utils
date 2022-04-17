@@ -379,7 +379,6 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
 {
   NIFFile::NIFVertexTransform vt(scale, rX, rY, rZ, offsX, offsY, offsZ);
   RenderObject  tmp;
-  tmp.flags = 0x0002;
   tmp.tileIndex = -1;
   tmp.formID = r.formID;
   ESMFile::ESMField f(esmFile, r2);
@@ -408,6 +407,7 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
         modelFormID = 0U;
         continue;
       }
+      tmp.flags = 0x0002;
       bool    haveOBND = false;
       bool    isWater = false;
       bool    isHDModel = false;
@@ -431,10 +431,6 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
           f2.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
           isHDModel = isHighQualityModel(stringBuf);
         }
-        else if (f2 == "MODS" && f2.size() >= 4 && !modelMSWPFormID)
-        {
-          modelMSWPFormID = f2.readUInt32Fast();
-        }
         else if (f2 == "MNAM" && f2.size() == 1040 && modelLOD && !isHDModel)
         {
           for (int i = (modelLOD - 1) & 3; i >= 0; i--)
@@ -447,6 +443,16 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
                 break;
             }
           }
+        }
+        else if (f2 == "MODS" && f2.size() >= 4 && !modelMSWPFormID)
+        {
+          modelMSWPFormID = f2.readUInt32Fast();
+        }
+        else if (f2 == "MODC" && f2.size() >= 4)
+        {
+          tmp.flags = (tmp.flags & 0x7F)
+                      | (unsigned short) (((roundFloat(f2.readFloat() * 255.0f)
+                                            & 0xFF) << 8) | 0x80);
         }
         else if (f2 == "WNAM" && *r3 == "ACTI" && f2.size() >= 4)
         {
@@ -613,7 +619,13 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
       case 0x54415750:                  // "PWAT"
         break;
       default:
-        continue;
+        if (!enableAllObjects ||
+            (r2->flags | (!distantObjectsOnly ? 0xFF7FFFFFU : 0xFF7F7FFFU))
+            != 0xFF7FFFFFU)
+        {
+          continue;
+        }
+        break;
     }
     RenderObject  tmp;
     tmp.flags = (type == 1 ? 2 : 4);
@@ -644,10 +656,6 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
           f.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
           isHDModel = isHighQualityModel(stringBuf);
         }
-        else if (f == "MODS" && f.size() >= 4)
-        {
-          tmp.mswpFormID = loadMaterialSwap(f.readUInt32Fast());
-        }
         else if (f == "MNAM" && f.size() == 1040 && modelLOD && !isHDModel)
         {
           for (int i = (modelLOD - 1) & 3; i >= 0; i--)
@@ -660,6 +668,16 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
                 break;
             }
           }
+        }
+        else if (f == "MODS" && f.size() >= 4)
+        {
+          tmp.mswpFormID = loadMaterialSwap(f.readUInt32Fast());
+        }
+        else if (f == "MODC" && f.size() >= 4)
+        {
+          tmp.flags = (tmp.flags & 0x7F)
+                      | (unsigned short) (((roundFloat(f.readFloat() * 255.0f)
+                                            & 0xFF) << 8) | 0x80);
         }
         else if (f == "WNAM" && *r2 == "ACTI" && f.size() >= 4)
         {
@@ -1135,7 +1153,8 @@ void Renderer::materialSwap(
 bool Renderer::renderObject(RenderThread& t, size_t i,
                             unsigned long long tileMask)
 {
-  if (objectList[i].flags & 0x01)               // terrain
+  const RenderObject& p = objectList[i];
+  if (p.flags & 0x01)                   // terrain
   {
     if (landData && t.terrainMesh)
     {
@@ -1146,22 +1165,20 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         j = j << 1;
       }
       t.terrainMesh->createMesh(
-          *landData, landTxtScale,
-          objectList[i].x0, objectList[i].y0,
-          objectList[i].x1, objectList[i].y1,
+          *landData, landTxtScale, p.x0, p.y0, p.x1, p.y1,
           &(landTextures.front()), landTextures.size(),
           landTextureMip, landTxtRGBScale, landTxtDefColor);
       *(t.renderer) = *(t.terrainMesh);
       t.renderer->drawTriShape(
-          objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
+          p.modelTransform, viewTransform, lightX, lightY, lightZ,
           t.terrainMesh->getTextures(), t.terrainMesh->getTextureCount());
     }
   }
-  else if (objectList[i].formID)                // object or water mesh
+  else if (p.formID)                    // object or water mesh
   {
-    NIFFile::NIFVertexTransform vt(objectList[i].modelTransform);
+    NIFFile::NIFVertexTransform vt(p.modelTransform);
     vt *= viewTransform;
-    size_t  n = objectList[i].modelID & (modelBatchCnt - 1U);
+    size_t  n = p.modelID & (modelBatchCnt - 1U);
     for (size_t j = 0; j < nifFiles[n].meshData.size(); j++)
     {
       if (nifFiles[n].meshData[j].flags & 0x05) // hidden or effect
@@ -1178,6 +1195,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (m & ~tileMask)
         return false;
       *(t.renderer) = nifFiles[n].meshData[j];
+      if (p.flags & 0x80)
+        t.renderer->gradientMapV = (unsigned char) (p.flags >> 8);
       const std::string *texturePaths[10];
       const DDSTexture  *textures[10];
       for (size_t k = 0; k < 10; k++)
@@ -1194,11 +1213,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       }
       else
       {
-        if (objectList[i].mswpFormID)
-        {
-          materialSwap(*(t.renderer), texturePaths, 10,
-                       objectList[i].mswpFormID);
-        }
+        if (p.mswpFormID)
+          materialSwap(*(t.renderer), texturePaths, 10, p.mswpFormID);
         if (BRANCH_EXPECT(!enableTextures, false))
         {
           if (t.renderer->alphaThreshold ||
@@ -1226,19 +1242,19 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         }
       }
       t.renderer->drawTriShape(
-          objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
+          p.modelTransform, viewTransform, lightX, lightY, lightZ,
           textures, 10);
     }
   }
-  else if (objectList[i].flags & 0x04)          // water cell
+  else if (p.flags & 0x04)              // water cell
   {
     NIFFile::NIFTriShape  tmp;
     NIFFile::NIFVertex    vTmp[4];
     NIFFile::NIFTriangle  tTmp[2];
-    int     x0 = objectList[i].x0;
-    int     y0 = objectList[i].y0;
-    int     x1 = objectList[i].x1;
-    int     y1 = objectList[i].y1;
+    int     x0 = p.x0;
+    int     y0 = p.y0;
+    int     x1 = p.x1;
+    int     y1 = p.y1;
     for (int j = 0; j < 4; j++)
     {
       vTmp[j].x = float(j == 0 || j == 3 ? x0 : x1);
@@ -1271,8 +1287,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       textures[1] = loadTexture(defaultWaterTexture);
     *(t.renderer) = tmp;
     t.renderer->drawTriShape(
-        objectList[i].modelTransform, viewTransform, lightX, lightY, lightZ,
-        textures, 2);
+        p.modelTransform, viewTransform, lightX, lightY, lightZ, textures, 2);
   }
   return true;
 }
@@ -1371,6 +1386,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     distantObjectsOnly(false),
     noDisabledObjects(false),
     enableSCOL(false),
+    enableAllObjects(false),
     enableTextures(true),
     bufRGBWAllocFlag(!bufRGBW),
     bufZAllocFlag(!bufZ),
@@ -1595,6 +1611,7 @@ static const char *usageStrings[] =
   "    --                  remaining options are file names",
   "    -threads INT        set the number of threads to use",
   "    -scol BOOL          enable the use of pre-combined meshes",
+  "    -a                  render all object types",
   "    -textures BOOL      make all diffuse textures white if false",
   "    -txtcache INT       texture cache size in megabytes",
   "    -ssaa BOOL          render at double resolution and downsample",
@@ -1642,6 +1659,7 @@ int main(int argc, char **argv)
     bool    noDisabledObjects = true;
     bool    enableDownscale = false;
     bool    enableSCOL = false;
+    bool    enableAllObjects = false;
     bool    enableTextures = true;
     unsigned int  formID = 0U;
     int     btdLOD = 2;
@@ -1766,6 +1784,10 @@ int main(int argc, char **argv)
           throw errorMessage("missing argument for %s", argv[i - 1]);
         enableSCOL =
             bool(parseInteger(argv[i], 0, "invalid argument for -scol", 0, 1));
+      }
+      else if (std::strcmp(argv[i], "-a") == 0)
+      {
+        enableAllObjects = true;
       }
       else if (std::strcmp(argv[i], "-textures") == 0)
       {
@@ -2022,6 +2044,7 @@ int main(int argc, char **argv)
     renderer.setDistantObjectsOnly(distantObjectsOnly);
     renderer.setNoDisabledObjects(noDisabledObjects);
     renderer.setEnableSCOL(enableSCOL);
+    renderer.setEnableAllObjects(enableAllObjects);
     renderer.setEnableTextures(enableTextures);
     renderer.setLandDefaultColor(ltxtDefColor);
     renderer.setLandTxtResolution(ltxtResolution);

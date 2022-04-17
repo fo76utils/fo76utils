@@ -24,7 +24,9 @@ class Renderer
   static const unsigned int modelBatchCnt = 8U;
   struct RenderObject
   {
-    unsigned short  flags;      // 1: terrain, 2: solid object, 4: water
+    // 1: terrain, 2: solid object, 4: water,
+    // 0x80: upper byte is gradient map V from MODC
+    unsigned short  flags;
     // -1:        not rendered
     // 0 to 63:   single tile, N = Y * 8 + X
     // 64 to 319:   2*2 tiles, N = 64 + ((Y0 & 6) * 8) + (X0 & 6)
@@ -103,6 +105,7 @@ class Renderer
   bool    distantObjectsOnly;           // ignore if not visible from distance
   bool    noDisabledObjects;            // ignore if initially disabled
   bool    enableSCOL;
+  bool    enableAllObjects;
   bool    enableTextures;
   bool    bufRGBWAllocFlag;
   bool    bufZAllocFlag;
@@ -247,6 +250,10 @@ class Renderer
   void setEnableSCOL(bool n)
   {
     enableSCOL = n;             // do not split pre-combined meshes
+  }
+  void setEnableAllObjects(bool n)
+  {
+    enableAllObjects = n;       // render references to any object type
   }
   void setEnableTextures(bool n)
   {
