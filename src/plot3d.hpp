@@ -311,24 +311,29 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   float   textureScaleN;
   float   textureScaleR;
   float   mipLevel;
+  unsigned int  alphaThresholdScaled;
   float   light_X;
   float   light_Y;
   float   light_Z;
   int     reflectionLevel;
   float   envMapUVScale;
+  bool    invNormals;
   void    (*drawPixelFunction)(Plot3D_TriShape& p,
                                int x, int y, float txtU, float txtV,
                                const NIFFile::NIFVertex& z);
   std::vector< NIFFile::NIFVertex > vertexBuf;
   std::vector< unsigned int > triangleBuf;
-  float   lightingPolynomial[6];
   std::vector< unsigned short > vclrTable;
+  std::vector< int >  lightTable;
+  float   lightingPolynomial[6];
   void calculateWaterUV(const NIFFile::NIFVertexTransform& modelTransform);
   void sortTriangles(size_t n0, size_t n2);
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                              const NIFFile::NIFVertexTransform& viewTransform,
                              float& lightX, float& lightY, float& lightZ);
   unsigned int gradientMapAndVColor(unsigned int c, unsigned int vColor) const;
+  // d = dot product from normals and light vector
+  inline int getLightLevel(float d) const;
   // returns light level
   inline int normalMap(float& normalX, float& normalY, float& normalZ,
                        unsigned int n) const;
@@ -342,6 +347,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   static void drawPixel_Water(Plot3D_TriShape& p,
                               int x, int y, float txtU, float txtV,
                               const NIFFile::NIFVertex& z);
+  // calculate RGB multiplier from normals and light direction
+  int calculateLighting(float normalX, float normalY, float normalZ) const;
   // diffuse texture with trilinear filtering
   static void drawPixel_Diffuse(Plot3D_TriShape& p,
                                 int x, int y, float txtU, float txtV,
@@ -384,12 +391,9 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   void setLightingFunction(const float *a);
   void getLightingFunction(float *a) const;
   static void getDefaultLightingFunction(float *a);
-  // calculate RGB multiplier from normals and light direction
-  static float calculateLighting(float normalX, float normalY, float normalZ,
-                                 float lightX, float lightY, float lightZ,
-                                 const float *a);
   // textures[0] = diffuse
   // textures[1] = normal
+  // textures[3] = gradient map
   // textures[4] = environment map
   // textures[8] = Fallout 76 reflection map
   void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,

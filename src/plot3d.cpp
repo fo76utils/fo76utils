@@ -81,7 +81,7 @@ void Plot3D_TriShape::sortTriangles(size_t n0, size_t n2)
   for ( ; j < n2; j++, k++)
     triangleBuf[k] = triangleBuf[j];
   for (i = n0; i < n2; i++)
-    triangleBuf[i] = triangleBuf[triangleCnt + (i - n0)];
+    triangleBuf[i] = triangleBuf[size_t(triangleCnt) + (i - n0)];
 }
 
 size_t Plot3D_TriShape::transformVertexData(
@@ -91,8 +91,8 @@ size_t Plot3D_TriShape::transformVertexData(
 {
   if (vertexBuf.size() < vertexCnt)
     vertexBuf.resize(vertexCnt);
-  if (triangleBuf.size() < (triangleCnt << 1))
-    triangleBuf.resize(triangleCnt << 1);
+  if (triangleBuf.size() < (size_t(triangleCnt) << 1))
+    triangleBuf.resize(size_t(triangleCnt) << 1);
   NIFFile::NIFVertexTransform vt(vertexTransform);
   vt *= modelTransform;
   vt *= viewTransform;
@@ -122,6 +122,8 @@ size_t Plot3D_TriShape::transformVertexData(
     v.normalX = (x * vt.rotateXX) + (y * vt.rotateXY) + (z * vt.rotateXZ);
     v.normalY = (x * vt.rotateYX) + (y * vt.rotateYY) + (z * vt.rotateYZ);
     v.normalZ = (x * vt.rotateZX) + (y * vt.rotateZY) + (z * vt.rotateZZ);
+    if (flags & 0x20)                   // tree: ignore vertex alpha
+      v.vertexColor = v.vertexColor | 0xFF000000U;
   }
   if (flags & 0x02)
     calculateWaterUV(modelTransform);
@@ -136,22 +138,10 @@ size_t Plot3D_TriShape::transformVertexData(
     const NIFFile::NIFVertex& v0 = vertexBuf[triangleData[i].v0];
     const NIFFile::NIFVertex& v1 = vertexBuf[triangleData[i].v1];
     const NIFFile::NIFVertex& v2 = vertexBuf[triangleData[i].v2];
-    if (BRANCH_EXPECT(!(flags & 0x30), true))
+    if (!(flags & 0x10))
     {
       if (((v1.x - v0.x) * (v2.y - v0.y)) > ((v2.x - v0.x) * (v1.y - v0.y)))
-        continue;               // cull if vertices not in CCW order (default)
-    }
-    else if (BRANCH_EXPECT(((flags & 0x30) != 0x30), false))
-    {
-      if (flags & 0x10)
-      {
-        if (((v1.x - v0.x) * (v2.y - v0.y)) < ((v2.x - v0.x) * (v1.y - v0.y)))
-          continue;             // vertices not in CW order
-      }
-      else if (v0.normalZ > 0.0f && v1.normalZ > 0.0f && v2.normalZ > 0.0f)
-      {
-        continue;               // all normals pointing away from the camera
-      }
+        continue;               // cull if vertices are not in CCW order
     }
     int     x0 = roundFloat(v0.x);
     int     y0 = roundFloat(v0.y);
@@ -179,10 +169,10 @@ unsigned int Plot3D_TriShape::gradientMapAndVColor(unsigned int c,
 {
   if (textureG)
   {
-    unsigned int  u = (c & 0xFFU) + ((c >> 7) & 0x01FEU) + ((c >> 16) & 0xFFU);
-    u = ((u + 2U) * (unsigned int) (textureG->getWidth() - 1)) >> 2;
-    unsigned int  v =
-        ((255U - gradientMapV) * (unsigned int) textureG->getHeight()) >> 8;
+    unsigned int  u = (c >> 8) & 0xFFU;
+    unsigned int  v = ((unsigned int) gradientMapV + 0xFFU) & 0xFFU;
+    u = (u + (u >> 7)) * (unsigned int) (textureG->getWidth() - 1);
+    v = (v * (unsigned int) textureG->getHeight()) >> 8;
     unsigned int  c0 = textureG->getPixelN(int(u >> 8), int(v), 0);
     unsigned int  c1 = textureG->getPixelN(int(u >> 8) + 1, int(v), 0);
     c = (c & 0xFF000000U) | (blendRGBA32(c0, c1, int(u & 0xFFU)) & 0x00FFFFFFU);
@@ -195,6 +185,16 @@ unsigned int Plot3D_TriShape::gradientMapAndVColor(unsigned int c,
   b = (((c >> 16) & 0xFFU) * vclrTable[(vColor >> 16) & 0xFFU] + 0x4000U) >> 15;
   a = (((c >> 24) & 0xFFU) * vclrTable[(vColor >> 24) & 0xFFU] + 0x4000U) >> 15;
   return (r | (g << 8) | (b << 16) | (a << 24));
+}
+
+inline int Plot3D_TriShape::getLightLevel(float d) const
+{
+  int     x = roundFloat(d * 32768.0f);
+  int     xf = x & 0xFF;
+  x = int((unsigned int) x >> 8);
+  int     y0 = lightTable[x & 0x01FF];
+  x++;
+  return (((y0 << 8) + ((lightTable[x & 0x01FF] - y0) * xf) + 32768) >> 16);
 }
 
 inline int Plot3D_TriShape::normalMap(
@@ -229,18 +229,16 @@ inline int Plot3D_TriShape::normalMap(
       tmp = (3.0f - tmp) * 0.5f;
     else
       tmp = 1.0f / float(std::sqrt(tmp));
+    if (invNormals)
+      tmp = -tmp;
     tmpX *= tmp;
     tmpY *= tmp;
     tmpZ *= tmp;
   }
-  // calculate lighting
-  const float   *a = lightingPolynomial;
-  float   d = (tmpX * light_X) + (tmpY * light_Y) + (tmpZ * light_Z);
   normalX = tmpX;
   normalY = tmpY;
   normalZ = tmpZ;
-  return int(((((d * a[5] + a[4]) * d + a[3]) * d + a[2]) * d + a[1]) * d
-             + a[0]);
+  return getLightLevel((tmpX * light_X) + (tmpY * light_Y) + (tmpZ * light_Z));
 }
 
 inline unsigned int Plot3D_TriShape::environmentMap(
@@ -332,6 +330,24 @@ void Plot3D_TriShape::drawPixel_Water(Plot3D_TriShape& p,
   p.bufRGBW[offs] = c;
 }
 
+int Plot3D_TriShape::calculateLighting(
+    float normalX, float normalY, float normalZ) const
+{
+  float   tmp = (normalX * normalX) + (normalY * normalY) + (normalZ * normalZ);
+  if (tmp > 0.0f)
+  {
+    if (tmp >= 0.875f && tmp <= 1.125f)
+      tmp = (tmp * 0.378732f - 1.260466f) * tmp + 1.881728f;
+    else
+      tmp = 1.0f / float(std::sqrt(tmp));
+    normalX *= tmp;
+    normalY *= tmp;
+    normalZ *= tmp;
+  }
+  return getLightLevel((normalX * light_X) + (normalY * light_Y)
+                       + (normalZ * light_Z));
+}
+
 void Plot3D_TriShape::drawPixel_Diffuse(Plot3D_TriShape& p,
                                         int x, int y, float txtU, float txtV,
                                         const NIFFile::NIFVertex& z)
@@ -340,12 +356,13 @@ void Plot3D_TriShape::drawPixel_Diffuse(Plot3D_TriShape& p,
   unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
   if (BRANCH_EXPECT((p.textureG || z.vertexColor != 0xFFFFFFFFU), false))
     c = p.gradientMapAndVColor(c, z.vertexColor);
-  if ((c >> 24) < (unsigned int) p.alphaThreshold)
+  if (c < p.alphaThresholdScaled)
     return;
   p.bufZ[offs] = z.z;
-  int     l = int(calculateLighting(z.normalX, z.normalY, z.normalZ,
-                                    p.light_X, p.light_Y, p.light_Z,
-                                    p.lightingPolynomial));
+  float   normalX = (!p.invNormals ? z.normalX : -(z.normalX));
+  float   normalY = (!p.invNormals ? z.normalY : -(z.normalY));
+  float   normalZ = (!p.invNormals ? z.normalZ : -(z.normalZ));
+  int     l = p.calculateLighting(normalX, normalY, normalZ);
   p.bufRGBW[offs] = multiplyWithLight(c, l);
 }
 
@@ -357,7 +374,7 @@ void Plot3D_TriShape::drawPixel_Normal(Plot3D_TriShape& p,
   unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
   if (BRANCH_EXPECT((p.textureG || z.vertexColor != 0xFFFFFFFFU), false))
     c = p.gradientMapAndVColor(c, z.vertexColor);
-  if ((c >> 24) < (unsigned int) p.alphaThreshold)
+  if (c < p.alphaThresholdScaled)
     return;
   p.bufZ[offs] = z.z;
   unsigned int  n = p.textureN->getPixelT(txtU * p.textureScaleN,
@@ -377,7 +394,7 @@ void Plot3D_TriShape::drawPixel_NormalEnv(Plot3D_TriShape& p,
   unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
   if (BRANCH_EXPECT((p.textureG || z.vertexColor != 0xFFFFFFFFU), false))
     c = p.gradientMapAndVColor(c, z.vertexColor);
-  if ((c >> 24) < (unsigned int) p.alphaThreshold)
+  if (c < p.alphaThresholdScaled)
     return;
   p.bufZ[offs] = z.z;
   unsigned int  n = p.textureN->getPixelT(txtU * p.textureScaleN,
@@ -397,7 +414,7 @@ void Plot3D_TriShape::drawPixel_NormalRefl(Plot3D_TriShape& p,
   unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
   if (BRANCH_EXPECT((p.textureG || z.vertexColor != 0xFFFFFFFFU), false))
     c = p.gradientMapAndVColor(c, z.vertexColor);
-  if ((c >> 24) < (unsigned int) p.alphaThreshold)
+  if (c < p.alphaThresholdScaled)
     return;
   p.bufZ[offs] = z.z;
   unsigned int  n = p.textureN->getPixelT(txtU * p.textureScaleN,
@@ -519,10 +536,12 @@ void Plot3D_TriShape::drawTriangle(const NIFFile::NIFVertex *v0,
                                    const NIFFile::NIFVertex *v2)
 {
   mipLevel = 15.0f;
-  float   xyArea2 = float(std::fabs(((double(v1->x) - double(v0->x))
-                                     * (double(v2->y) - double(v0->y)))
-                                    - ((double(v2->x) - double(v0->x))
-                                       * (double(v1->y) - double(v0->y)))));
+  float   xyArea2 = float(((double(v1->x) - double(v0->x))
+                           * (double(v2->y) - double(v0->y)))
+                          - ((double(v2->x) - double(v0->x))
+                             * (double(v1->y) - double(v0->y))));
+  invNormals = (xyArea2 >= 0.0f);
+  xyArea2 = float(std::fabs(xyArea2));
   if (xyArea2 < (1.0f / 1048576.0f))    // if area < 2^-21 square pixels
   {
     drawLine(v0, v1);
@@ -650,11 +669,13 @@ Plot3D_TriShape::Plot3D_TriShape(
     textureScaleN(1.0f),
     textureScaleR(1.0f),
     mipLevel(15.0f),
+    alphaThresholdScaled(0U),
     light_X(0.0f),
     light_Y(0.0f),
     light_Z(1.0f),
     reflectionLevel(0),
     envMapUVScale(0.25f / float(imageHeight)),
+    invNormals(false),
     drawPixelFunction(&drawPixel_Water)
 {
   setLightingFunction(defaultLightingPolynomial);
@@ -679,6 +700,7 @@ Plot3D_TriShape& Plot3D_TriShape::operator=(const NIFFile::NIFTriShape& t)
   vertexTransform = t.vertexTransform;
   flags = t.flags;
   gradientMapV = t.gradientMapV;
+  envMapScale = t.envMapScale;
   alphaThreshold = t.alphaThreshold;
   texturePathCnt = t.texturePathCnt;
   texturePaths = t.texturePaths;
@@ -694,40 +716,30 @@ Plot3D_TriShape& Plot3D_TriShape::operator=(const NIFFile::NIFTriShape& t)
 void Plot3D_TriShape::setLightingFunction(const float *a)
 {
   for (int i = 0; i < 6; i++)
-    lightingPolynomial[i] = a[i] * 256.0f;
-  lightingPolynomial[0] = lightingPolynomial[0] + 0.5f;
+    lightingPolynomial[i] = a[i];
+  lightTable.resize(512);
+  for (int i = 0; i < 512; i++)
+  {
+    float   x =
+        float(i < 256 ? (i < 128 ? i : 128) : (i < 384 ? -128 : (i - 512)))
+        * (1.0f / 128.0f);
+    float   y =
+        ((((x * a[5] + a[4]) * x + a[3]) * x + a[2]) * x + a[1]) * x + a[0];
+    int     tmp = roundFloat(y * 65536.0f);
+    lightTable[i] = (tmp > 0 ? (tmp < 0x0003FF00 ? tmp : 0x0003FF00) : 0);
+  }
 }
 
 void Plot3D_TriShape::getLightingFunction(float *a) const
 {
   for (int i = 0; i < 6; i++)
-    a[i] = lightingPolynomial[i] * (1.0f / 256.0f);
-  a[0] = a[0] - (1.0f / 512.0f);
+    a[i] = lightingPolynomial[i];
 }
 
 void Plot3D_TriShape::getDefaultLightingFunction(float *a)
 {
   for (int i = 0; i < 6; i++)
     a[i] = defaultLightingPolynomial[i];
-}
-
-float Plot3D_TriShape::calculateLighting(
-    float normalX, float normalY, float normalZ,
-    float lightX, float lightY, float lightZ, const float *a)
-{
-  float   tmp = (normalX * normalX) + (normalY * normalY) + (normalZ * normalZ);
-  if (tmp > 0.0f)
-  {
-    if (tmp >= 0.875f && tmp <= 1.125f)
-      tmp = (tmp * 0.378732f - 1.260466f) * tmp + 1.881728f;
-    else
-      tmp = 1.0f / float(std::sqrt(tmp));
-    normalX *= tmp;
-    normalY *= tmp;
-    normalZ *= tmp;
-  }
-  float   x = (normalX * lightX) + (normalY * lightY) + (normalZ * lightZ);
-  return (((((x * a[5] + a[4]) * x + a[3]) * x + a[2]) * x + a[1]) * x + a[0]);
 }
 
 void Plot3D_TriShape::drawTriShape(
@@ -752,6 +764,7 @@ void Plot3D_TriShape::drawTriShape(
   textureScaleN = 1.0f;
   textureScaleR = 1.0f;
   mipLevel = 15.0f;
+  alphaThresholdScaled = (unsigned int) alphaThreshold << 24;
   light_X = lightX;
   light_Y = lightY;
   light_Z = lightZ;
@@ -788,17 +801,16 @@ void Plot3D_TriShape::drawTriShape(
       textureE = textures[4];
       textureR = textures[8];
       textureScaleR = float(textureR->getWidth()) / float(textureD->getWidth());
-      reflectionLevel = calculateLighting(
-                            0.0f, 0.0f, -1.0f, 0.684653f, 0.684653f, -0.25f,
-                            lightingPolynomial);
+      reflectionLevel =
+          roundFloat(float(lightTable[128]) * (0.7217095f / 256.0f));
       drawPixelFunction = &drawPixel_NormalRefl;
     }
     else
     {
       textureE = textures[4];
-      reflectionLevel = calculateLighting(
-                            0.0f, 0.0f, -1.0f, 0.707107f, 0.707107f, 0.0f,
-                            lightingPolynomial);
+      reflectionLevel =
+          roundFloat(float(lightTable[128])
+                     * (float(int(envMapScale)) * (1.0f / 65536.0f)));
       drawPixelFunction = &drawPixel_NormalEnv;
     }
   }
@@ -818,7 +830,7 @@ void Plot3D_TriShape::renderWater(
 {
   viewTransform.rotateXYZ(lightX, lightY, lightZ);
   textureE = envMap;
-  reflectionLevel = roundFloat(lightingPolynomial[0] * envMapLevel);
+  reflectionLevel = roundFloat(lightingPolynomial[0] * (envMapLevel * 256.0f));
   light_X = lightX;
   light_Y = lightY;
   light_Z = lightZ;
@@ -844,9 +856,7 @@ void Plot3D_TriShape::renderWater(
       {
         normalZ = -(float(std::sqrt(1.0001f - normalZ)));
       }
-      int     l = int(calculateLighting(
-                          normalX, normalY, normalZ,
-                          lightX, lightY, lightZ, lightingPolynomial));
+      int     l = calculateLighting(normalX, normalY, normalZ);
       unsigned int  tmp = multiplyWithLight(waterColor, l);
       c = ((c & 0x001FU) << 3) | ((c & 0x07E0U) << 5) | ((c & 0xF800U) << 8);
       c = blendRGBA32(c, tmp, int(waterColor >> 24));
