@@ -103,24 +103,22 @@ class NIFFile : public FileBuffer
   };
   struct NIFTriShape
   {
-    size_t  vertexCnt;
-    size_t  triangleCnt;
+    unsigned int  vertexCnt;
+    unsigned int  triangleCnt;
     const NIFVertex     *vertexData;
     const NIFTriangle   *triangleData;
     NIFVertexTransform  vertexTransform;
-    // bit 0:     hidden
-    // bit 1:     is water
-    // bit 2:     is effect
-    // bit 3:     is decal
-    // bits 4-5:  culling mode
-    //       0x00: if triangle vertices are in CW order (default)
-    //       0x10: if triangle vertices are in CCW order
-    //       0x20: if all normals are pointing away from the camera
-    //       0x30: disabled
+    // bit 0: hidden
+    // bit 1: is water
+    // bit 2: is effect
+    // bit 3: is decal
+    // bit 4: two sided (disables culling)
+    // bit 5: tree (disables vertex alpha)
     unsigned char flags;
     unsigned char gradientMapV;
+    unsigned char envMapScale;          // 128 = 1.0
     unsigned char alphaThreshold;
-    unsigned char texturePathCnt;
+    unsigned int  texturePathCnt;
     // texturePaths[0] = diffuse texture
     // texturePaths[1] = normal map
     // texturePaths[2] = glow texture
@@ -139,9 +137,9 @@ class NIFFile : public FileBuffer
     float   textureScaleV;
     const char  *name;
     NIFTriShape()
-      : vertexCnt(0), triangleCnt(0),
-        vertexData((NIFVertex *) 0), triangleData((NIFTriangle *) 0),
-        flags(0x00), gradientMapV(0), alphaThreshold(0), texturePathCnt(0),
+      : vertexCnt(0), triangleCnt(0), vertexData((NIFVertex *) 0),
+        triangleData((NIFTriangle *) 0), flags(0x00), gradientMapV(128),
+        envMapScale(128), alphaThreshold(0), texturePathCnt(0),
         texturePaths((std::string **) 0), materialPath((std::string *) 0),
         textureOffsetU(0.0f), textureOffsetV(0.0f),
         textureScaleU(1.0f), textureScaleV(1.0f), name("")
@@ -227,10 +225,13 @@ class NIFFile : public FileBuffer
     float   scaleU;
     float   scaleV;
     int     textureSet;
-    unsigned short  bgsmVersion;
-    unsigned short  bgsmFlags;
-    unsigned short  bgsmAlphaBlendMode;
-    signed short    bgsmAlphaThreshold;         // < 0: threshold disabled
+    unsigned char   bgsmVersion;
+    unsigned char   bgsmFlags;
+    unsigned char   bgsmGradientMapV;
+    unsigned char   bgsmEnvMapScale;
+    unsigned short  bgsmAlphaFlags;
+    unsigned char   bgsmAlphaThreshold;
+    unsigned char   bgsmAlpha;          // 128 = 1.0
     std::vector< const std::string * >  bgsmTextures;
     NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType,
                                    const BA2File *ba2File);

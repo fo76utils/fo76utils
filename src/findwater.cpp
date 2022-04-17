@@ -142,11 +142,11 @@ static void createMeshFromOBND(std::vector< NIFFile::NIFTriShape >& meshData,
           (unsigned short) ((0x0000777777665533ULL >> (i << 2)) & 7U);
     }
   }
-  meshData[0].vertexCnt = vertexData.size();
-  meshData[0].triangleCnt = obndTriangleBuf.size();
+  meshData[0].vertexCnt = (unsigned int) vertexData.size();
+  meshData[0].triangleCnt = (unsigned int) obndTriangleBuf.size();
   meshData[0].vertexData = &(vertexData.front());
   meshData[0].triangleData = &(obndTriangleBuf.front());
-  meshData[0].flags = 0x32;             // is water
+  meshData[0].flags = 0x12;             // is water, two sided
 }
 
 static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,

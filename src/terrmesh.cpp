@@ -49,10 +49,10 @@ void TerrainMesh::createMesh(
   while (txtHP2 < txtH)
     txtHP2 = txtHP2 << 1;
   // create vertex and triangle data
-  vertexCnt = size_t(w) * size_t(h);
+  vertexCnt = (unsigned int) w * (unsigned int) h;
   if (vertexCnt > 65536U)
     throw errorMessage("TerrainMesh: vertex count is out of range");
-  triangleCnt = (size_t(w - 1) * size_t(h - 1)) << 1;
+  triangleCnt = ((unsigned int) (w - 1) * (unsigned int) (h - 1)) << 1;
   vertexDataBuf.resize(vertexCnt);
   triangleDataBuf.resize(triangleCnt);
   vertexData = &(vertexDataBuf.front());

@@ -122,14 +122,21 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
         std::fprintf(f, "    Texture set: %3d\n", lspBlock->textureSet);
       if (lspBlock->bgsmTextures.size() > 0)
       {
-        std::fprintf(f, "    Material version: 0x%04X\n",
+        std::fprintf(f, "    Material version: 0x%02X\n",
                      (unsigned int) lspBlock->bgsmVersion);
-        std::fprintf(f, "    Material flags: 0x%04X\n",
+        std::fprintf(f, "    Material flags: 0x%02X\n",
                      (unsigned int) lspBlock->bgsmFlags);
-        std::fprintf(f, "    Material alpha blend mode: 0x%04X\n",
-                     (unsigned int) lspBlock->bgsmAlphaBlendMode);
-        std::fprintf(f, "    Material alpha threshold: %3d\n",
-                     int(lspBlock->bgsmAlphaThreshold));
+        std::fprintf(f, "    Material alpha flags: 0x%04X\n",
+                     (unsigned int) lspBlock->bgsmAlphaFlags);
+        std::fprintf(f, "    Material alpha threshold: %3u\n",
+                     (unsigned int) lspBlock->bgsmAlphaThreshold);
+        std::fprintf(f, "    Material alpha: %.3f\n",
+                     double(int(lspBlock->bgsmAlpha)) * (1.0 / 128.0));
+        std::fprintf(f, "    Material gradient map scale: %.3f\n",
+                     double(int(lspBlock->bgsmGradientMapV)) * (1.0 / 255.0));
+        std::fprintf(f, "    Material environment map scale: %.3f\n",
+                     double(int(lspBlock->bgsmEnvMapScale))
+                     * (lspBlock->bgsmVersion == 2 ? 1.0 / 64.0 : 1.0 / 128.0));
         for (size_t j = 0; j < lspBlock->bgsmTextures.size(); j++)
         {
           if (!lspBlock->bgsmTextures[j]->empty())
@@ -173,25 +180,24 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
   for (size_t i = 0; i < meshData.size(); i++)
   {
     std::fprintf(f, "TriShape %3d (%s):\n", int(i), meshData[i].name);
-    std::fprintf(f, "  Vertex count: %d\n", int(meshData[i].vertexCnt));
-    std::fprintf(f, "  Triangle count: %d\n", int(meshData[i].triangleCnt));
+    std::fprintf(f, "  Vertex count: %u\n", meshData[i].vertexCnt);
+    std::fprintf(f, "  Triangle count: %u\n", meshData[i].triangleCnt);
     if (meshData[i].flags)
     {
+      static const char *flagNames[6] =
+      {
+        "hidden", "is water", "is effect", "decal", "two sided", "tree"
+      };
       std::fprintf(f, "  Flags: ");
-      if (meshData[i].flags & 0x01)
-        std::fprintf(f, "hidden");
-      if ((meshData[i].flags & 0x03) > 0x02)
-        std::fprintf(f, ", ");
-      if (meshData[i].flags & 0x02)
-        std::fprintf(f, "is water");
-      if ((meshData[i].flags & 0x07) > 0x04)
-        std::fprintf(f, ", ");
-      if (meshData[i].flags & 0x04)
-        std::fprintf(f, "is effect");
-      if ((meshData[i].flags & 0x0F) > 0x08)
-        std::fprintf(f, ", ");
-      if (meshData[i].flags & 0x08)
-        std::fprintf(f, "is decal");
+      unsigned char m = 0x01;
+      unsigned char mPrv = 0x01;
+      for (int j = 0; j < 6; j++, m = m << 1, mPrv = (mPrv << 1) | 1)
+      {
+        if ((meshData[i].flags & mPrv) > m)
+          std::fprintf(f, ", ");
+        if (meshData[i].flags & m)
+          std::fprintf(f, "%s", flagNames[j]);
+      }
       std::fputc('\n', f);
     }
     std::fprintf(f, "  Alpha threshold: %d\n", int(meshData[i].alphaThreshold));
@@ -264,7 +270,7 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
       std::fprintf(f, "f %u/%u/%u %u/%u/%u %u/%u/%u\n",
                    v0, v0, v0, v1, v1, v1, v2, v2, v2);
     }
-    vertexNumBase = vertexNumBase + (unsigned int) meshData[i].vertexCnt;
+    vertexNumBase = vertexNumBase + meshData[i].vertexCnt;
     std::fprintf(f, "\n");
   }
 }
@@ -360,7 +366,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         NIFFile::NIFBounds  b;
         for (size_t i = 0; i < meshData.size(); i++)
         {
-          if (!(meshData[i].flags & 0x0005))    // ignore if hidden or effect
+          if (!(meshData[i].flags & 0x05))      // ignore if hidden or effect
             meshData[i].calculateBounds(b, &t);
         }
         if (b.xMax > b.xMin && b.yMax > b.yMin)
