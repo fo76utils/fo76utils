@@ -78,6 +78,6 @@ Running any of the programs without arguments prints detailed usage information.
 
 #### Example 7
 
-    ./render Fallout76/Data/SeventySix.esm whitespring.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -32 -32 32 32 -view 0.125 54.7356 180 -135 4096 -256 32768 -light 1.125 63.4350 41.8103 -ssaa 1 -hqm meshes -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 512
+    ./render Fallout76/Data/SeventySix.esm whitespring.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -32 -32 32 32 -view 0.125 54.7356 180 -135 4096 -256 32768 -light 1.25 63.4350 41.8103 -a -ssaa 1 -hqm meshes -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 512
     ./markers Fallout76/Data/SeventySix.esm fo76mmap.dds 4096,4096,0.125,54.7356,180,-135,4096,-256,32768 fo76icondefs.txt
 
