@@ -59,6 +59,7 @@ if "win" in sys.platform:
         pkgFiles += [fo4land, landtxt, markers, nif_info, render, terrain]
         if buildNIFView:
             pkgFiles += [nif_view, "/mingw64/bin/SDL.dll", "LICENSE.SDL"]
+        pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
         pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
         pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
         pkgFiles += Split("ltex scripts src SConstruct SConstruct.maps")
