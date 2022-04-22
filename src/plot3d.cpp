@@ -116,8 +116,12 @@ size_t Plot3D_TriShape::transformVertexData(
   for (size_t i = 0; i < vertexCnt; i++)
   {
     NIFFile::NIFVertex& v = vertexBuf[i];
-    float   x = v.normalX;
-    float   y = v.normalY;
+    float   x = float(roundFloat(v.x));
+    float   y = float(roundFloat(v.y));
+    v.x = (float(std::fabs(v.x - x)) < 0.03125f ? x : v.x);
+    v.y = (float(std::fabs(v.y - y)) < 0.03125f ? y : v.y);
+    x = v.normalX;
+    y = v.normalY;
     float   z = v.normalZ;
     v.normalX = (x * vt.rotateXX) + (y * vt.rotateXY) + (z * vt.rotateXZ);
     v.normalY = (x * vt.rotateYX) + (y * vt.rotateYY) + (z * vt.rotateYZ);
@@ -143,12 +147,12 @@ size_t Plot3D_TriShape::transformVertexData(
       if (((v1.x - v0.x) * (v2.y - v0.y)) > ((v2.x - v0.x) * (v1.y - v0.y)))
         continue;               // cull if vertices are not in CCW order
     }
-    int     x0 = roundFloat(v0.x);
-    int     y0 = roundFloat(v0.y);
-    int     x1 = roundFloat(v1.x);
-    int     y1 = roundFloat(v1.y);
-    int     x2 = roundFloat(v2.x);
-    int     y2 = roundFloat(v2.y);
+    int     x0 = int(v0.x);
+    int     y0 = int(v0.y);
+    int     x1 = int(v1.x);
+    int     y1 = int(v1.y);
+    int     x2 = int(v2.x);
+    int     y2 = int(v2.y);
     if ((x0 < 0 && x1 < 0 && x2 < 0) ||
         (x0 >= width && x1 >= width && x2 >= width) ||
         (y0 < 0 && y1 < 0 && y2 < 0) ||
@@ -156,6 +160,22 @@ size_t Plot3D_TriShape::transformVertexData(
         (v0.z < 0.0f && v1.z < 0.0f && v2.z < 0.0f))
     {
       continue;
+    }
+    if (x0 == x1 && x0 == x2)
+    {
+      if ((v0.x - float(x0)) != 0.0f && (v1.x - float(x1)) != 0.0f &&
+          (v2.x - float(x2)) != 0.0f)
+      {
+        continue;
+      }
+    }
+    if (y0 == y1 && y0 == y2)
+    {
+      if ((v0.y - float(y0)) != 0.0f && (v1.y - float(y1)) != 0.0f &&
+          (v2.y - float(y2)) != 0.0f)
+      {
+        continue;
+      }
     }
     triangleBuf[n] = (unsigned int) i;
     n++;
