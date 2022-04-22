@@ -666,7 +666,7 @@ LandscapeData::LandscapeData(
     worldID = (btdFileName && *btdFileName ? 0x0025DA15U : 0x0000003CU);
   if (esmFile)
   {
-    waterLevel = -8192.0f;      // defaults for Oblivion
+    waterLevel = 0.0f;          // defaults for Oblivion
     landLevel = -8192.0f;
     loadWorldInfo(*esmFile, worldID);
   }
