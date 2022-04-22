@@ -28,6 +28,18 @@ NIFFile::NIFVertexTransform::NIFVertexTransform(
   float   ry_c = float(std::cos(ry));
   float   rz_s = float(std::sin(rz));
   float   rz_c = float(std::cos(rz));
+  if (float(std::fabs(rx_s)) < 0.000001f)
+    rx_s = 0.0f;
+  if (float(std::fabs(rx_c)) < 0.000001f)
+    rx_c = 0.0f;
+  if (float(std::fabs(ry_s)) < 0.000001f)
+    ry_s = 0.0f;
+  if (float(std::fabs(ry_c)) < 0.000001f)
+    ry_c = 0.0f;
+  if (float(std::fabs(rz_s)) < 0.000001f)
+    rz_s = 0.0f;
+  if (float(std::fabs(rz_c)) < 0.000001f)
+    rz_c = 0.0f;
   rotateXX = ry_c * rz_c;
   rotateXY = ry_c * rz_s;
   rotateXZ = -ry_s;
