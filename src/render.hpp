@@ -20,12 +20,26 @@
 class Renderer
 {
  protected:
-  // maximum number of NIF files to keep loaded (must be power of two)
-  static const unsigned int modelBatchCnt = 8U;
+  // maximum number of NIF files to keep loaded (must be power of two and <= 64)
+  static const unsigned int modelBatchCnt = 16U;
+  struct BaseObject
+  {
+    unsigned short  type;               // first 2 characters, or 0 if excluded
+    unsigned short  flags;              // same as RenderObject flags
+    unsigned int  modelID;
+    unsigned int  mswpFormID;
+    signed short  obndX0;
+    signed short  obndY0;
+    signed short  obndZ0;
+    signed short  obndX1;
+    signed short  obndY1;
+    signed short  obndZ1;
+    std::string modelPath;
+  };
   struct RenderObject
   {
-    // 1: terrain, 2: solid object, 4: water,
-    // 0x80: upper byte is gradient map V from MODC
+    // 1: terrain, 2: solid object, 4: water cell, 6: water mesh
+    // 0x40: high quality model, 0x80: upper byte is gradient map V from MODC
     unsigned short  flags;
     // -1:        not rendered
     // 0 to 63:   single tile, N = Y * 8 + X
@@ -35,16 +49,22 @@ class Renderer
     //                             + ((Y0 & 3) * 256) + ((X0 & 3) * 64)
     // 1344:        8*8 tiles
     signed short  tileIndex;
-    unsigned int  modelID;      // NIF file number
-    unsigned int  formID;       // form ID of reference
+    int     z;                  // Z coordinate for sorting
+    union
+    {
+      const BaseObject  *o;     // valid if flags & 2 is set
+      struct
+      {
+        signed short  x0;       // terrain area, or water cell bounds
+        signed short  y0;
+        signed short  x1;
+        signed short  y1;
+      }
+      t;
+    }
+    model;
     unsigned int  mswpFormID;   // material swap form ID if non-zero
     NIFFile::NIFVertexTransform modelTransform;
-    signed short  x0;           // object bounds or terrain area
-    signed short  y0;
-    signed short  z0;
-    signed short  x1;
-    signed short  y1;
-    signed short  z1;
     bool operator<(const RenderObject& r) const;
   };
   struct CachedTexture
@@ -59,7 +79,10 @@ class Renderer
     NIFFile *nifFile;
     size_t  totalTriangleCnt;
     std::vector< NIFFile::NIFTriShape > meshData;
-    bool    isHDModel;
+    const BaseObject  *o;
+    std::thread *loadThread;
+    std::string threadErrMsg;
+    std::vector< unsigned char >  fileBuf;
     ModelData();
     ~ModelData();
     void clear();
@@ -118,8 +141,6 @@ class Renderer
   std::map< std::string, CachedTexture >  textureCache;
   std::vector< const DDSTexture * > landTextures;
   std::vector< RenderObject > objectList;
-  std::map< std::string, unsigned int > modelPathMap;
-  std::vector< const std::string * >  modelPaths;
   std::vector< std::string >  excludeModelPatterns;
   std::vector< std::string >  hdModelNamePatterns;
   std::string defaultEnvMap;
@@ -133,6 +154,7 @@ class Renderer
   bool    verboseMode;
   NIFFile::NIFBounds  worldBounds;
   std::string whiteTexturePath;
+  std::map< unsigned int, BaseObject >  baseObjects;
   // bit Y * 8 + X of the return value is set if the bounds of the object
   // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
   // in the top left corner
@@ -142,8 +164,10 @@ class Renderer
   unsigned int getDefaultWorldID() const;
   void addTerrainCell(const ESMFile::ESMRecord& r);
   void addWaterCell(const ESMFile::ESMRecord& r);
-  void addSCOLObjects(const ESMFile::ESMRecord& r,      // REFR
-                      const ESMFile::ESMRecord& r2,     // SCOL
+  // returns NULL on excluded model or invalid object
+  const BaseObject *readModelProperties(RenderObject& p,
+                                        const ESMFile::ESMRecord& r);
+  void addSCOLObjects(const ESMFile::ESMRecord& r,      // SCOL
                       float scale, float rX, float rY, float rZ,
                       float offsX, float offsY, float offsZ);
   // type = 0: terrain, type = 1: solid objects, type = 2: water
@@ -163,7 +187,9 @@ class Renderer
   void shrinkTextureCache();
   bool isExcludedModel(const std::string& modelPath) const;
   bool isHighQualityModel(const std::string& modelPath) const;
-  void loadModel(unsigned int modelID);
+  void loadModels(unsigned int t, unsigned long long modelIDMask);
+  static void loadModelsThread(Renderer *p,
+                               unsigned int t, unsigned long long modelIDMask);
   unsigned int loadMaterialSwap(unsigned int formID);
   void renderObjectList();
   void materialSwap(Plot3D_TriShape& t,
