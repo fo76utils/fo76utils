@@ -286,6 +286,7 @@ class MapImage : public ESMFile
   NIFFile::NIFVertexTransform viewTransform;
   unsigned int  priorityMask;
   unsigned int  worldFormID;
+  bool    isInteriorMap;
   std::set< unsigned int >  formIDs;
   struct CellOffset
   {
@@ -391,7 +392,7 @@ void MapImage::setWorldCellOffsets(unsigned int formID,
 
 void MapImage::setInteriorCellOffset(const REFRRecord& refr)
 {
-  if (!refr.isDoor || refr.isInterior)
+  if (!refr.isDoor || refr.isInterior || isInteriorMap)
     return;
   REFRRecord  refr2;
   if (!getREFRRecord(refr2, refr.xtel))
@@ -451,7 +452,8 @@ MapImage::MapImage(const char *esmFileName, const std::vector< MarkerDef >& m,
     imageHeight(size_t(h)),
     viewTransform(vt),
     priorityMask(0U),
-    worldFormID(0U)
+    worldFormID(0U),
+    isInteriorMap(false)
 {
   for (size_t i = 0; i < markerDefs.size(); i++)
   {
@@ -645,8 +647,36 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
 void MapImage::findMarkers(unsigned int worldID)
 {
   worldFormID = worldID;
+  isInteriorMap = false;
   std::set< REFRRecord >  objectsFound;
-  const ESMRecord *r = getRecordPtr(0U);
+  const ESMRecord *r = getRecordPtr(worldID);
+  if (worldID)
+  {
+    if (r && *r == "CELL")
+    {
+      ESMField  f(*this, *r);
+      while (f.next())
+      {
+        if (f == "DATA" && f.size() >= 1)
+          isInteriorMap = bool(f.readUInt8Fast() & 0x01);
+      }
+    }
+    if (isInteriorMap)
+    {
+      if (!(r && r->next))
+        r = (ESMRecord *) 0;
+      else
+        r = getRecordPtr(r->next);
+      if (!(r && *r == "GRUP" && r->formID >= 6U && r->children))
+        r = (ESMRecord *) 0;
+      else
+        r = getRecordPtr(r->children);
+    }
+    else
+    {
+      r = getRecordPtr(0U);
+    }
+  }
   while (r)
   {
     bool    searchChildRecords = bool(r->children);
@@ -724,8 +754,9 @@ void MapImage::findMarkers(unsigned int worldID)
         {
           refr.x = refr.x + k->second.x;
           refr.y = refr.y + k->second.y;
+          refr.z = refr.z + k->second.z;
         }
-        else if (refr.isInterior)
+        else if (refr.isInterior && !isInteriorMap)
         {
           continue;
         }
@@ -741,7 +772,7 @@ void MapImage::findMarkers(unsigned int worldID)
           {
             if ((m->flags ^ (m->flags >> 1)) & 0x0001)
             {
-              if (bool(m->flags & 0x0001) != refr.isInterior)
+              if (bool(m->flags & 0x0001) != refr.isInterior && !isInteriorMap)
                 continue;
             }
           }
