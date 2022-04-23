@@ -132,8 +132,6 @@ textureMip = float(addVariable("texturemip", 4.0,
 mapIconMip = 0.5 + mipLevel
 if mapIconsType == "fo4":
     mapIconMip += 0.25
-elif mapIconsType == "fo76":
-    mapIconMip -= 0.25
 enableGCVR = int(addVariable("gcvr", 0, "enable ground cover"))
 enableVCLR = int(addVariable("vclr", 1, "enable vertex color"))
 jpegResize = int(addVariable("jpegresize", 100,
