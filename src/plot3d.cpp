@@ -2,6 +2,13 @@
 #include "common.hpp"
 #include "plot3d.hpp"
 
+#include <algorithm>
+
+// vertex coordinates closer than this to exact integers are rounded
+#ifndef VERTEX_XY_SNAP
+#  define VERTEX_XY_SNAP  0.03125f
+#endif
+
 const float Plot3D_TriShape::defaultLightingPolynomial[6] =
 {
   0.672235f, 0.997428f, 0.009355f, -0.771812f, 0.108711f, 0.369682f
@@ -32,58 +39,6 @@ void Plot3D_TriShape::calculateWaterUV(
   }
 }
 
-void Plot3D_TriShape::sortTriangles(size_t n0, size_t n2)
-{
-  if ((n2 - n0) <= 2)
-  {
-    if ((n2 - n0) == 2)
-    {
-      const NIFFile::NIFTriangle& t1 = triangleData[triangleBuf[n0]];
-      const NIFFile::NIFTriangle& t2 = triangleData[triangleBuf[n0 + 1]];
-      float   z1 = vertexBuf[t1.v0].z + vertexBuf[t1.v1].z + vertexBuf[t1.v2].z;
-      float   z2 = vertexBuf[t2.v0].z + vertexBuf[t2.v1].z + vertexBuf[t2.v2].z;
-      if (z2 < z1)
-      {
-        unsigned int  tmp = triangleBuf[n0];
-        triangleBuf[n0] = triangleBuf[n0 + 1];
-        triangleBuf[n0 + 1] = tmp;
-      }
-    }
-    return;
-  }
-  size_t  n1 = (n0 + n2) >> 1;
-  if ((n1 - n0) > 1)
-    sortTriangles(n0, n1);
-  if ((n2 - n1) > 1)
-    sortTriangles(n1, n2);
-  size_t  i = n0;
-  size_t  j = n1;
-  size_t  k = triangleCnt;
-  for ( ; i < n1 && j < n2; k++)
-  {
-    const NIFFile::NIFTriangle& t1 = triangleData[triangleBuf[i]];
-    const NIFFile::NIFTriangle& t2 = triangleData[triangleBuf[j]];
-    float   z1 = vertexBuf[t1.v0].z + vertexBuf[t1.v1].z + vertexBuf[t1.v2].z;
-    float   z2 = vertexBuf[t2.v0].z + vertexBuf[t2.v1].z + vertexBuf[t2.v2].z;
-    if (z2 < z1)
-    {
-      triangleBuf[k] = triangleBuf[j];
-      j++;
-    }
-    else
-    {
-      triangleBuf[k] = triangleBuf[i];
-      i++;
-    }
-  }
-  for ( ; i < n1; i++, k++)
-    triangleBuf[k] = triangleBuf[i];
-  for ( ; j < n2; j++, k++)
-    triangleBuf[k] = triangleBuf[j];
-  for (i = n0; i < n2; i++)
-    triangleBuf[i] = triangleBuf[size_t(triangleCnt) + (i - n0)];
-}
-
 size_t Plot3D_TriShape::transformVertexData(
     const NIFFile::NIFVertexTransform& modelTransform,
     const NIFFile::NIFVertexTransform& viewTransform,
@@ -91,8 +46,9 @@ size_t Plot3D_TriShape::transformVertexData(
 {
   if (vertexBuf.size() < vertexCnt)
     vertexBuf.resize(vertexCnt);
-  if (triangleBuf.size() < (size_t(triangleCnt) << 1))
-    triangleBuf.resize(size_t(triangleCnt) << 1);
+  triangleBuf.clear();
+  if (triangleBuf.capacity() < triangleCnt)
+    triangleBuf.reserve(triangleCnt);
   NIFFile::NIFVertexTransform vt(vertexTransform);
   vt *= modelTransform;
   vt *= viewTransform;
@@ -116,10 +72,13 @@ size_t Plot3D_TriShape::transformVertexData(
   for (size_t i = 0; i < vertexCnt; i++)
   {
     NIFFile::NIFVertex& v = vertexBuf[i];
-    float   x = float(roundFloat(v.x));
-    float   y = float(roundFloat(v.y));
-    v.x = (float(std::fabs(v.x - x)) < 0.03125f ? x : v.x);
-    v.y = (float(std::fabs(v.y - y)) < 0.03125f ? y : v.y);
+    float   x, y;
+#ifdef VERTEX_XY_SNAP
+    x = float(roundFloat(v.x));
+    y = float(roundFloat(v.y));
+    v.x = (float(std::fabs(v.x - x)) < VERTEX_XY_SNAP ? x : v.x);
+    v.y = (float(std::fabs(v.y - y)) < VERTEX_XY_SNAP ? y : v.y);
+#endif
     x = v.normalX;
     y = v.normalY;
     float   z = v.normalZ;
@@ -161,6 +120,7 @@ size_t Plot3D_TriShape::transformVertexData(
     {
       continue;
     }
+#ifdef VERTEX_XY_SNAP
     if (x0 == x1 && x0 == x2)
     {
       if ((v0.x - float(x0)) != 0.0f && (v1.x - float(x1)) != 0.0f &&
@@ -177,10 +137,14 @@ size_t Plot3D_TriShape::transformVertexData(
         continue;
       }
     }
-    triangleBuf[n] = (unsigned int) i;
+#endif
+    Triangle  tmp;
+    tmp.z = v0.z + v1.z + v2.z;
+    tmp.n = (unsigned int) i;
+    triangleBuf.push_back(tmp);
     n++;
   }
-  sortTriangles(0, n);
+  std::sort(triangleBuf.begin(), triangleBuf.end());
   return n;
 }
 
@@ -551,128 +515,136 @@ void Plot3D_TriShape::drawLine(const NIFFile::NIFVertex *v0,
   }
 }
 
-void Plot3D_TriShape::drawTriangle(const NIFFile::NIFVertex *v0,
-                                   const NIFFile::NIFVertex *v1,
-                                   const NIFFile::NIFVertex *v2)
+void Plot3D_TriShape::drawTriangles()
 {
-  mipLevel = 15.0f;
-  float   xyArea2 = float(((double(v1->x) - double(v0->x))
-                           * (double(v2->y) - double(v0->y)))
-                          - ((double(v2->x) - double(v0->x))
-                             * (double(v1->y) - double(v0->y))));
-  invNormals = (xyArea2 >= 0.0f);
-  xyArea2 = float(std::fabs(xyArea2));
-  if (xyArea2 < (1.0f / 1048576.0f))    // if area < 2^-21 square pixels
+  for (size_t n = 0; n < triangleBuf.size(); n++)
   {
-    drawLine(v0, v1);
-    drawLine(v1, v2);
-    drawLine(v2, v0);
-    return;
-  }
-  // sort vertices by Y coordinate
-  if (v0->y > v1->y)
-  {
-    const NIFFile::NIFVertex  *tmp = v0;
-    v0 = v1;
-    v1 = tmp;
-  }
-  if (v1->y > v2->y)
-  {
-    const NIFFile::NIFVertex  *tmp;
-    if (v0->y > v2->y)
+    mipLevel = 15.0f;
+    const NIFFile::NIFVertex  *v0, *v1, *v2;
     {
-      tmp = v0;
-      v0 = v2;
+      const Triangle& t = triangleBuf[n];
+      v0 = &(vertexBuf.front()) + triangleData[t.n].v0;
+      v1 = &(vertexBuf.front()) + triangleData[t.n].v1;
+      v2 = &(vertexBuf.front()) + triangleData[t.n].v2;
+    }
+    float   xyArea2 = float(((double(v1->x) - double(v0->x))
+                             * (double(v2->y) - double(v0->y)))
+                            - ((double(v2->x) - double(v0->x))
+                               * (double(v1->y) - double(v0->y))));
+    invNormals = (xyArea2 >= 0.0f);
+    xyArea2 = float(std::fabs(xyArea2));
+    if (xyArea2 < (1.0f / 1048576.0f))  // if area < 2^-21 square pixels
+    {
+      drawLine(v0, v1);
+      drawLine(v1, v2);
+      drawLine(v2, v0);
+      continue;
+    }
+    // sort vertices by Y coordinate
+    if (v0->y > v1->y)
+    {
+      const NIFFile::NIFVertex  *tmp = v0;
+      v0 = v1;
+      v1 = tmp;
+    }
+    if (v1->y > v2->y)
+    {
+      const NIFFile::NIFVertex  *tmp;
+      if (v0->y > v2->y)
+      {
+        tmp = v0;
+        v0 = v2;
+        v2 = tmp;
+      }
+      tmp = v1;
+      v1 = v2;
       v2 = tmp;
     }
-    tmp = v1;
-    v1 = v2;
-    v2 = tmp;
-  }
-  NIFFile::NIFVertex  v;
-  float   txtU0 = v0->getU() * textureScaleU + textureOffsetU;
-  float   txtV0 = v0->getV() * textureScaleV + textureOffsetV;
-  float   txtU1 = v1->getU() * textureScaleU + textureOffsetU;
-  float   txtV1 = v1->getV() * textureScaleV + textureOffsetV;
-  float   txtU2 = v2->getU() * textureScaleU + textureOffsetU;
-  float   txtV2 = v2->getV() * textureScaleV + textureOffsetV;
-  if (BRANCH_EXPECT(textureD, true))
-  {
-    float   uvArea2 = float(std::fabs(((txtU1 - txtU0) * (txtV2 - txtV0))
-                                      - ((txtU2 - txtU0) * (txtV1 - txtV0))));
-    bool    integerMipLevel = true;
-    if (xyArea2 > uvArea2)
+    NIFFile::NIFVertex  v;
+    float   txtU0 = v0->getU() * textureScaleU + textureOffsetU;
+    float   txtV0 = v0->getV() * textureScaleV + textureOffsetV;
+    float   txtU1 = v1->getU() * textureScaleU + textureOffsetU;
+    float   txtV1 = v1->getV() * textureScaleV + textureOffsetV;
+    float   txtU2 = v2->getU() * textureScaleU + textureOffsetU;
+    float   txtV2 = v2->getV() * textureScaleV + textureOffsetV;
+    if (BRANCH_EXPECT(textureD, true))
     {
-      float   txtW = float(textureD->getWidth());
-      float   txtH = float(textureD->getHeight());
-      uvArea2 *= (txtW * txtH);
-      mipLevel = 0.0f;
-      // calculate base 4 logarithm of texel area / pixel area
-      if (uvArea2 > xyArea2)
-        mipLevel = float(std::log2(uvArea2 / xyArea2)) * 0.5f;
-      int     mipLevel_i = int(mipLevel);
-      mipLevel = mipLevel - float(mipLevel_i);
-      integerMipLevel = (mipLevel < 0.0625f || mipLevel >= 0.9375f);
-      if (integerMipLevel)
+      float   uvArea2 = float(std::fabs(((txtU1 - txtU0) * (txtV2 - txtV0))
+                                        - ((txtU2 - txtU0) * (txtV1 - txtV0))));
+      bool    integerMipLevel = true;
+      if (xyArea2 > uvArea2)
       {
-        mipLevel_i += int(mipLevel >= 0.5f);
+        float   txtW = float(textureD->getWidth());
+        float   txtH = float(textureD->getHeight());
+        uvArea2 *= (txtW * txtH);
         mipLevel = 0.0f;
+        // calculate base 4 logarithm of texel area / pixel area
+        if (uvArea2 > xyArea2)
+          mipLevel = float(std::log2(uvArea2 / xyArea2)) * 0.5f;
+        int     mipLevel_i = int(mipLevel);
+        mipLevel = mipLevel - float(mipLevel_i);
+        integerMipLevel = (mipLevel < 0.0625f || mipLevel >= 0.9375f);
+        if (integerMipLevel)
+        {
+          mipLevel_i += int(mipLevel >= 0.5f);
+          mipLevel = 0.0f;
+        }
+        float   txtScale = float(65536 >> mipLevel_i) * (1.0f / 65536.0f);
+        txtW *= txtScale;
+        txtH *= txtScale;
+        txtU0 *= txtW;
+        txtV0 *= txtH;
+        txtU1 *= txtW;
+        txtV1 *= txtH;
+        txtU2 *= txtW;
+        txtV2 *= txtH;
+        mipLevel += float(mipLevel_i);
       }
-      float   txtScale = float(65536 >> mipLevel_i) * (1.0f / 65536.0f);
-      txtW *= txtScale;
-      txtH *= txtScale;
-      txtU0 *= txtW;
-      txtV0 *= txtH;
-      txtU1 *= txtW;
-      txtV1 *= txtH;
-      txtU2 *= txtW;
-      txtV2 *= txtH;
-      mipLevel += float(mipLevel_i);
     }
-  }
-  double  x0 = double(v0->x);
-  double  y0 = double(v0->y);
-  double  x1 = double(v1->x);
-  double  y1 = double(v1->y);
-  double  x2 = double(v2->x);
-  double  y2 = double(v2->y);
-  double  dy2 = 1.0 / (y2 - y0);
-  double  a1 = 1.0 / ((x1 - x0) - ((x2 - x0) * (y1 - y0) * dy2));
-  double  b1 = -((x2 - x0) * a1);
-  double  a2 = (y0 - y1) * dy2 * a1;
-  double  b2 = 1.0 - ((x2 - x0) * a2);
-  int     y = int(y0 + (y0 < 0.0 ? -0.0000005 : 0.9999995));
-  int     yMax = int(y2 + (y2 < 0.0 ? -0.9999995 : 0.0000005));
-  double  w1Step = (a1 < 0.0 ? -a1 : a1);
-  double  w2Step = (a1 < 0.0 ? -a2 : a2);
-  int     xStep = (a1 < 0.0 ? -1 : 1);
-  do
-  {
-    double  yf = (double(y) - y0) * dy2;
-    int     x = roundFloat(float((x2 - x0) * yf + x0));
-    double  w1 = ((double(x) - x0) * a1) + (yf * b1);
-    if (!(w1 >= -0.000001))
+    double  x0 = double(v0->x);
+    double  y0 = double(v0->y);
+    double  x1 = double(v1->x);
+    double  y1 = double(v1->y);
+    double  x2 = double(v2->x);
+    double  y2 = double(v2->y);
+    double  dy2 = 1.0 / (y2 - y0);
+    double  a1 = 1.0 / ((x1 - x0) - ((x2 - x0) * (y1 - y0) * dy2));
+    double  b1 = -((x2 - x0) * a1);
+    double  a2 = (y0 - y1) * dy2 * a1;
+    double  b2 = 1.0 - ((x2 - x0) * a2);
+    int     y = int(y0 + (y0 < 0.0 ? -0.0000005 : 0.9999995));
+    int     yMax = int(y2 + (y2 < 0.0 ? -0.9999995 : 0.0000005));
+    double  w1Step = (a1 < 0.0 ? -a1 : a1);
+    double  w2Step = (a1 < 0.0 ? -a2 : a2);
+    int     xStep = (a1 < 0.0 ? -1 : 1);
+    do
     {
-      w1 += w1Step;
-      x += xStep;
+      double  yf = (double(y) - y0) * dy2;
+      int     x = roundFloat(float((x2 - x0) * yf + x0));
+      double  w1 = ((double(x) - x0) * a1) + (yf * b1);
+      if (!(w1 >= -0.000001))
+      {
+        w1 += w1Step;
+        x += xStep;
+      }
+      double  w2 = ((double(x) - x0) * a2) + (yf * b2);
+      double  w0 = 1.0 - (w1 + w2);
+      while (!(!(w0 >= -0.000001) | !(w2 >= -0.000001)))
+      {
+        v.z = (v0->z * float(w0)) + (v1->z * float(w1)) + (v2->z * float(w2));
+        float   txtU, txtV;
+        txtU = (txtU0 * float(w0)) + (txtU1 * float(w1)) + (txtU2 * float(w2));
+        txtV = (txtV0 * float(w0)) + (txtV1 * float(w1)) + (txtV2 * float(w2));
+        drawPixel(x, y, txtU, txtV,
+                  v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
+        w1 += w1Step;
+        w2 += w2Step;
+        w0 = 1.0 - (w1 + w2);
+        x += xStep;
+      }
     }
-    double  w2 = ((double(x) - x0) * a2) + (yf * b2);
-    double  w0 = 1.0 - (w1 + w2);
-    while (!(!(w0 >= -0.000001) | !(w2 >= -0.000001)))
-    {
-      v.z = (v0->z * float(w0)) + (v1->z * float(w1)) + (v2->z * float(w2));
-      float   txtU, txtV;
-      txtU = (txtU0 * float(w0)) + (txtU1 * float(w1)) + (txtU2 * float(w2));
-      txtV = (txtV0 * float(w0)) + (txtV1 * float(w1)) + (txtV2 * float(w2));
-      drawPixel(x, y, txtU, txtV,
-                v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
-      w1 += w1Step;
-      w2 += w2Step;
-      w0 = 1.0 - (w1 + w2);
-      x += xStep;
-    }
+    while (++y <= yMax);
   }
-  while (++y <= yMax);
 }
 
 Plot3D_TriShape::Plot3D_TriShape(
@@ -834,13 +806,7 @@ void Plot3D_TriShape::drawTriShape(
       drawPixelFunction = &drawPixel_NormalEnv;
     }
   }
-  for (size_t i = 0; i < triangleCntRendered; i++)
-  {
-    const NIFFile::NIFVertex& v0 = vertexBuf[triangleData[triangleBuf[i]].v0];
-    const NIFFile::NIFVertex& v1 = vertexBuf[triangleData[triangleBuf[i]].v1];
-    const NIFFile::NIFVertex& v2 = vertexBuf[triangleData[triangleBuf[i]].v2];
-    drawTriangle(&v0, &v1, &v2);
-  }
+  drawTriangles();
 }
 
 void Plot3D_TriShape::renderWater(

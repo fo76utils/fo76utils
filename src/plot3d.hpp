@@ -298,6 +298,15 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
             | (unsigned int) ((tmp >> 32) & 0x00FF0000U) | 0xFF000000U);
   }
  protected:
+  struct Triangle
+  {
+    float   z;                  // Z coordinate for sorting
+    unsigned int  n;            // NIFFile::NIFTriShape::triangleData index
+    inline bool operator<(const Triangle& r) const
+    {
+      return (z < r.z || (z == r.z && n < r.n));
+    }
+  };
   static const float  defaultLightingPolynomial[6];
   unsigned int  *bufRGBW;
   float   *bufZ;
@@ -322,12 +331,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                                int x, int y, float txtU, float txtV,
                                const NIFFile::NIFVertex& z);
   std::vector< NIFFile::NIFVertex > vertexBuf;
-  std::vector< unsigned int > triangleBuf;
+  std::vector< Triangle > triangleBuf;
   std::vector< unsigned short > vclrTable;
   std::vector< int >  lightTable;
   float   lightingPolynomial[6];
   void calculateWaterUV(const NIFFile::NIFVertexTransform& modelTransform);
-  void sortTriangles(size_t n0, size_t n2);
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                              const NIFFile::NIFVertexTransform& viewTransform,
                              float& lightX, float& lightY, float& lightZ);
@@ -374,8 +382,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       const NIFFile::NIFVertex& v1, const NIFFile::NIFVertex& v2,
       float w0, float w1, float w2);
   void drawLine(const NIFFile::NIFVertex *v0, const NIFFile::NIFVertex *v1);
-  void drawTriangle(const NIFFile::NIFVertex *v0, const NIFFile::NIFVertex *v1,
-                    const NIFFile::NIFVertex *v2);
+  void drawTriangles();
  public:
   // The alpha channel is 255 for solid geometry, 0 for air, and 1 to 254
   // for water. In the case of water, the pixel format changes to R5G6B5X8Y8,
