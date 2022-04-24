@@ -3,6 +3,108 @@
 #include "filebuf.hpp"
 #include "btdfile.hpp"
 
+static void calculateNormal(float& normalX, float& normalY, float& normalZ,
+                            float dx, float dy, float dz1, float dz2)
+{
+  // from terrmesh.cpp
+  float   tmp1 = 1.0f + (dz1 * dz1);
+  float   tmp2 = 1.0f + (dz2 * dz2);
+  float   tmp3 = float(std::sqrt(tmp2 / tmp1));
+  float   dz = (dz1 * tmp3 + dz2) / (tmp3 + 1.0f);
+  normalZ += 0.5f;
+  normalX -= (dz * dx);
+  normalY -= (dz * dy);
+}
+
+void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
+                   unsigned char l, int xMin, int yMin, int xMax, int yMax)
+{
+  btdFile.setTileCacheSize(size_t((((xMax + 1 - xMin) + 7) >> 3) + 1));
+  int     cellResolution = 128 >> l;
+  unsigned char m = 7 - l;
+  int     w = (xMax + 1 - xMin) << m;
+  int     h = (yMax + 1 - yMin) << m;
+  std::vector< unsigned short > buf((size_t(w) * size_t(h)) << 1, 0);
+  std::vector< unsigned short > cellBuf(size_t(16384 >> (l + l)), 0);
+  float   zMin = btdFile.getMinHeight();
+  float   zScale = (btdFile.getMaxHeight() - zMin) / 65535.0f;
+  float   normalScale1 = float(cellResolution) * (1.0f / 4096.0f);
+  float   normalScale2 = float(cellResolution) * (0.7071068f / 4096.0f);
+  for (int y = 0; y < h; y++)
+  {
+    if (!y || !((y + (cellResolution >> 1)) & (cellResolution - 1)))
+    {
+      int     cellY = yMax - ((y >> m) + (!y ? 0 : 1));
+      if (cellY >= yMin)
+      {
+        for (int cellX = xMin; cellX <= xMax; cellX++)
+        {
+          unsigned short  *srcPtr = &(cellBuf.front());
+          btdFile.getCellHeightMap(srcPtr, cellX, cellY, l);
+          for (int yc = 0; yc < cellResolution; yc++)
+          {
+            unsigned short  *dstPtr = &(buf.front());
+            dstPtr = dstPtr + (size_t((cellResolution << ((yMax - cellY) & 1))
+                                      - (yc + 1)) * size_t(w));
+            dstPtr = dstPtr + (size_t(cellX - xMin) << m);
+            for (int xc = 0; xc < cellResolution; xc++, srcPtr++, dstPtr++)
+              *dstPtr = *srcPtr;
+          }
+        }
+      }
+    }
+    for (int x = 0; x < w; x++)
+    {
+      static const int  xOffsTable[9] = { -1, 0, 1, -1, 0, 1, -1, 0, 1 };
+      static const int  yOffsTable[9] = { -1, -1, -1, 0, 0, 0, 1, 1, 1 };
+      float   z[9];
+      for (int i = 0; i < 9; i++)
+      {
+        int     xc = x + xOffsTable[i];
+        int     yc = y + yOffsTable[i];
+        xc = (xc > 0 ? (xc < (w - 1) ? xc : (w - 1)) : 0);
+        yc = (yc > 0 ? (yc < (h - 1) ? yc : (h - 1)) : 0);
+        yc = yc & ((cellResolution << 1) - 1);
+        z[i] = float(int(buf[size_t(yc) * size_t(w) + size_t(xc)]))
+               * zScale + zMin;
+      }
+      float   normalX = 0.0f;
+      float   normalY = 0.0f;
+      float   normalZ = 0.0f;
+      calculateNormal(normalX, normalY, normalZ, 1.0f, 0.0f,
+                      (z[4] - z[3]) * normalScale1,     // -W
+                      (z[5] - z[4]) * normalScale1);    // +E
+      calculateNormal(normalX, normalY, normalZ, 0.0f, 1.0f,
+                      (z[4] - z[7]) * normalScale1,     // -S
+                      (z[1] - z[4]) * normalScale1);    // +N
+      if ((x ^ y) & 1)
+      {
+        //    0 1 2
+        // -1 +-+-+
+        //    |\|/|
+        //  0 +-+-+
+        //    |/|\|
+        //  1 +-+-+
+        calculateNormal(normalX, normalY, normalZ, -0.7071068f, 0.7071068f,
+                        (z[4] - z[8]) * normalScale2,   // -SE
+                        (z[0] - z[4]) * normalScale2);  // +NW
+        calculateNormal(normalX, normalY, normalZ, 0.7071068f, 0.7071068f,
+                        (z[4] - z[6]) * normalScale2,   // -SW
+                        (z[2] - z[4]) * normalScale2);  // +NE
+      }
+      float   tmp =
+          (normalX * normalX) + (normalY * normalY) + (normalZ * normalZ);
+      tmp = 1.0f / float(std::sqrt(tmp));
+      int     r = roundFloat(normalX * tmp * 127.5f + 127.5f);
+      int     g = roundFloat(normalY * tmp * 127.5f + 127.5f);
+      int     b = roundFloat(normalZ * tmp * 127.5f + 127.5f);
+      outFile.writeByte((unsigned char) (b > 0 ? (b < 255 ? b : 255) : 0));
+      outFile.writeByte((unsigned char) (g > 0 ? (g < 255 ? g : 255) : 0));
+      outFile.writeByte((unsigned char) (r > 0 ? (r < 255 ? r : 255) : 0));
+    }
+  }
+}
+
 static void loadPalette(unsigned long long *buf, const char *fileName)
 {
   for (size_t i = 0; i < 256; i++)
@@ -50,7 +152,7 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "Usage: btddump INFILE.BTD OUTFILE FMT "
                          "XMIN YMIN XMAX YMAX [LOD [PALETTE.GPL]]\n");
     std::fprintf(stderr, "    FMT = 0: raw 16-bit height map\n");
-    std::fprintf(stderr, "    FMT = 1: dithered 8-bit height map\n");
+    std::fprintf(stderr, "    FMT = 1: vertex normals in 24-bit RGB format\n");
     std::fprintf(stderr, "    FMT = 2: raw landscape textures "
                          "(2 bytes / vertex)\n");
     std::fprintf(stderr, "    FMT = 3: dithered 8-bit landscape texture\n");
@@ -125,11 +227,11 @@ int main(int argc, char **argv)
     std::vector< unsigned char >  txtSetBuf(64, 0xFF);
     static const unsigned int outFmtDataSizes[12] =
     {
-      2, 1, 2, 1, 1, 1, 2, 3, 16, 64, 3, 3
+      2, 3, 2, 1, 1, 1, 2, 3, 16, 64, 3, 3
     };
     static const int  outFmtPixelFormats[12] =
     {
-      DDSInputFile::pixelFormatGRAY16,  DDSInputFile::pixelFormatGRAY8,
+      DDSInputFile::pixelFormatGRAY16,  DDSInputFile::pixelFormatRGB24,
       DDSInputFile::pixelFormatA16,     DDSInputFile::pixelFormatGRAY8,
       DDSInputFile::pixelFormatA8,      DDSInputFile::pixelFormatGRAY8,
       DDSInputFile::pixelFormatRGBA16,  DDSInputFile::pixelFormatRGB24,
@@ -151,7 +253,13 @@ int main(int argc, char **argv)
     DDSOutputFile outFile(argv[2],
                           (xMax + 1 - xMin) << ((outFmt & 14) != 8 ? m : 5),
                           (yMax + 1 - yMin) << m,
-                          outFmtPixelFormats[outFmt], hdrBuf, 0);
+                          outFmtPixelFormats[outFmt], hdrBuf,
+                          (outFmt != 1 ? 0 : 16384));
+    if (outFmt == 1)
+    {
+      vertexNormals(outFile, btdFile, l, xMin, yMin, xMax, yMax);
+      return 0;
+    }
     int     x0 = xMin;
     int     y0 = yMax;
     int     x = xMin;
