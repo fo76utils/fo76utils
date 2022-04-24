@@ -304,7 +304,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     unsigned int  n;            // NIFFile::NIFTriShape::triangleData index
     inline bool operator<(const Triangle& r) const
     {
-      return (z < r.z || (z == r.z && n < r.n));
+      return (z < r.z);
     }
   };
   static const float  defaultLightingPolynomial[6];

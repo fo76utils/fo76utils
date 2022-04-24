@@ -90,7 +90,6 @@ size_t Plot3D_TriShape::transformVertexData(
   }
   if (flags & 0x02)
     calculateWaterUV(modelTransform);
-  size_t  n = 0;
   for (size_t i = 0; i < triangleCnt; i++)
   {
     if (triangleData[i].v0 >= vertexCnt || triangleData[i].v1 >= vertexCnt ||
@@ -142,10 +141,9 @@ size_t Plot3D_TriShape::transformVertexData(
     tmp.z = v0.z + v1.z + v2.z;
     tmp.n = (unsigned int) i;
     triangleBuf.push_back(tmp);
-    n++;
   }
-  std::sort(triangleBuf.begin(), triangleBuf.end());
-  return n;
+  std::stable_sort(triangleBuf.begin(), triangleBuf.end());
+  return triangleBuf.size();
 }
 
 unsigned int Plot3D_TriShape::gradientMapAndVColor(unsigned int c,
