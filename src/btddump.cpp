@@ -278,7 +278,6 @@ int main(int argc, char **argv)
       switch (outFmt)
       {
         case 0:
-        case 1:
           heightBuf.resize(cellBufSize);
           btdFile.getCellHeightMap(&(heightBuf.front()), x, y, l);
           break;
@@ -315,18 +314,6 @@ int main(int argc, char **argv)
               unsigned int  tmp = heightBuf[(yy << m) | xx];
               p[0] = (unsigned char) (tmp & 0xFF);
               p[1] = (unsigned char) (tmp >> 8);
-            }
-            break;
-          case 1:               // dithered 8-bit height map
-            for (size_t xx = 0; xx < (1U << m); xx++, p++)
-            {
-              unsigned int  tmp = heightBuf[(yy << m) | xx];
-              tmp = (tmp * 0xFF01U) >> 16;
-              tmp = blendDithered((unsigned char) (tmp >> 8),
-                                  (unsigned char) ((tmp + 255) >> 8),
-                                  (unsigned char) (tmp & 0xFF),
-                                  int(xx), int(127U - yy));
-              p[0] = (unsigned char) tmp;
             }
             break;
           case 2:               // raw land textures
