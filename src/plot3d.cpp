@@ -184,22 +184,27 @@ inline int Plot3D_TriShape::normalMap(
 {
   float   tmpX = 1.0f - (float(int(n & 0xFF)) * (1.0f / 127.5f));
   float   tmpY = float(int((n >> 8) & 0xFF)) * (1.0f / 127.5f) - 1.0f;
-  float   tmpZ = (tmpX * tmpX) + (tmpY * tmpY);
-  if (tmpZ >= 1.0f)
+  float   tmpZ = (1.0f - (tmpX * tmpX)) + (tmpY * tmpY);
+  float   ry_c, rx_s, rx_c;
+  if (!(tmpZ > 0.000001f))
   {
-    tmpZ = (3.0f - tmpZ) * 0.5f;        // approximates 1.0 / sqrt(tmpZ)
+    // approximates 1.0 / sqrt(1.0 - tmpZ)
+    tmpZ = (tmpZ * 0.180885f + 0.473779f) * tmpZ + 1.0f;
     tmpX = tmpX * tmpZ;
     tmpY = tmpY * tmpZ;
     tmpZ = 0.0f;
+    ry_c = tmpY;                // ry_s = -tmpX
+    rx_s = 1.0f;
+    rx_c = 0.0f;
   }
   else
   {
-    tmpZ = float(std::sqrt(1.0001f - tmpZ));
+    ry_c = float(std::sqrt(1.0f - (tmpX * tmpX)));
+    tmpZ = float(std::sqrt(tmpZ));
+    rx_s = tmpY * (1.0f / ry_c);
+    rx_c = tmpZ * (1.0f / ry_c);
   }
   // convert normal map data to rotation matrix, and apply to input normal
-  float   ry_c = float(std::sqrt(1.0001f - (tmpX * tmpX)));
-  float   rx_s = tmpY * (1.0f / ry_c);
-  float   rx_c = tmpZ * (1.0f / ry_c);
   tmpZ = (normalZ * tmpZ) - (normalY * rx_s) - (normalX * tmpX * rx_c);
   tmpY = (normalZ * tmpY) + (normalY * rx_c) - (normalX * tmpX * rx_s);
   tmpX = (normalZ * tmpX) + (normalX * ry_c);
@@ -229,16 +234,18 @@ inline unsigned int Plot3D_TriShape::environmentMap(
 {
   float   u = float((height >> 1) - y) * envMapUVScale + 0.5f;
   float   v = float(x - (width >> 1)) * envMapUVScale + 0.5f;
-  if (normalZ < -0.5f)
+  if (normalZ < -0.25f)
   {
     u = u + (normalY * (0.25f / normalZ));
     v = v - (normalX * (0.25f / normalZ));
   }
   else
   {
-    u = u - (normalY * 0.5f);
-    v = v + (normalX * 0.5f);
+    u = u - normalY;
+    v = v + normalX;
   }
+  u = (u > 0.015625f ? (u < 0.984375f ? u : (1.96875f - u)) : (0.03125f - u));
+  v = (v > 0.015625f ? (v < 0.984375f ? v : (1.96875f - v)) : (0.03125f - v));
   unsigned int  tmp = textureE->getPixelB(u * float(textureE->getWidth()),
                                           v * float(textureE->getHeight()), 0);
   tmp = multiplyWithLight(tmp, reflectionLevel);
@@ -258,16 +265,18 @@ inline unsigned int Plot3D_TriShape::reflectionMap(
     return c;
   float   u = float((height >> 1) - y) * envMapUVScale + 0.5f;
   float   v = float(x - (width >> 1)) * envMapUVScale + 0.5f;
-  if (normalZ < -0.5f)
+  if (normalZ < -0.25f)
   {
     u = u + (normalY * (0.25f / normalZ));
     v = v - (normalX * (0.25f / normalZ));
   }
   else
   {
-    u = u - (normalY * 0.5f);
-    v = v + (normalX * 0.5f);
+    u = u - normalY;
+    v = v + normalX;
   }
+  u = (u > 0.015625f ? (u < 0.984375f ? u : (1.96875f - u)) : (0.03125f - u));
+  v = (v > 0.015625f ? (v < 0.984375f ? v : (1.96875f - v)) : (0.03125f - v));
   unsigned int  n = 0xFFC0C0C0U;
   if (BRANCH_EXPECT(textureE, true))
   {
