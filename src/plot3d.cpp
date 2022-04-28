@@ -185,43 +185,38 @@ inline int Plot3D_TriShape::normalMap(
   float   tmpX = 1.0f - (float(int(n & 0xFF)) * (1.0f / 127.5f));
   float   tmpY = float(int((n >> 8) & 0xFF)) * (1.0f / 127.5f) - 1.0f;
   float   tmpZ = (1.0f - (tmpX * tmpX)) + (tmpY * tmpY);
-  float   ry_c, rx_s, rx_c;
-  if (!(tmpZ > 0.000001f))
+  // convert normal map data to rotation matrix, and apply to input normal
+  if (BRANCH_EXPECT(!(tmpZ > 0.000001f), false))
   {
-    // approximates 1.0 / sqrt(1.0 - tmpZ)
-    tmpZ = (tmpZ * 0.180885f + 0.473779f) * tmpZ + 1.0f;
+    tmpZ = 1.0f / float(std::sqrt(1.0f - tmpZ));
     tmpX = tmpX * tmpZ;
     tmpY = tmpY * tmpZ;
-    tmpZ = 0.0f;
-    ry_c = tmpY;                // ry_s = -tmpX
-    rx_s = 1.0f;
-    rx_c = 0.0f;
+    float   ry_c = tmpY;        // ry_s = -tmpX, rx_s = 1.0, rx_c = 0.0
+    tmpZ = -normalY;
+    tmpY = (normalZ * tmpY) - (normalX * tmpX);
+    tmpX = (normalZ * tmpX) + (normalX * ry_c);
   }
   else
   {
-    ry_c = float(std::sqrt(1.0f - (tmpX * tmpX)));
+    // 1/sqrt() is faster with SSE instructions
+    float   ry_c = 1.0f / float(std::sqrt(1.0f - (tmpX * tmpX)));
     tmpZ = float(std::sqrt(tmpZ));
-    rx_s = tmpY * (1.0f / ry_c);
-    rx_c = tmpZ * (1.0f / ry_c);
+    float   rx_s = tmpY * ry_c;
+    float   rx_c = tmpZ * ry_c;
+    ry_c = 1.0f / ry_c;
+    tmpZ = (normalZ * tmpZ) - (normalY * rx_s) - (normalX * tmpX * rx_c);
+    tmpY = (normalZ * tmpY) + (normalY * rx_c) - (normalX * tmpX * rx_s);
+    tmpX = (normalZ * tmpX) + (normalX * ry_c);
   }
-  // convert normal map data to rotation matrix, and apply to input normal
-  tmpZ = (normalZ * tmpZ) - (normalY * rx_s) - (normalX * tmpX * rx_c);
-  tmpY = (normalZ * tmpY) + (normalY * rx_c) - (normalX * tmpX * rx_s);
-  tmpX = (normalZ * tmpX) + (normalX * ry_c);
   // normalize
   float   tmp = (tmpX * tmpX) + (tmpY * tmpY) + (tmpZ * tmpZ);
-  if (tmp > 0.0f)
-  {
-    if (tmp >= 0.96875f && tmp <= 1.03125f)
-      tmp = (3.0f - tmp) * 0.5f;
-    else
-      tmp = 1.0f / float(std::sqrt(tmp));
-    if (invNormals)
-      tmp = -tmp;
-    tmpX *= tmp;
-    tmpY *= tmp;
-    tmpZ *= tmp;
-  }
+  if (BRANCH_EXPECT((tmp > 0.0f), true))
+    tmp = 1.0f / float(std::sqrt(tmp));
+  if (invNormals)
+    tmp = -tmp;
+  tmpX *= tmp;
+  tmpY *= tmp;
+  tmpZ *= tmp;
   normalX = tmpX;
   normalY = tmpY;
   normalZ = tmpZ;
@@ -244,10 +239,8 @@ inline unsigned int Plot3D_TriShape::environmentMap(
     u = u - normalY;
     v = v + normalX;
   }
-  u = (u > 0.015625f ? (u < 0.984375f ? u : (1.96875f - u)) : (0.03125f - u));
-  v = (v > 0.015625f ? (v < 0.984375f ? v : (1.96875f - v)) : (0.03125f - v));
-  unsigned int  tmp = textureE->getPixelB(u * float(textureE->getWidth()),
-                                          v * float(textureE->getHeight()), 0);
+  unsigned int  tmp = textureE->getPixelBM(u * float(textureE->getWidth()),
+                                           v * float(textureE->getHeight()), 0);
   tmp = multiplyWithLight(tmp, reflectionLevel);
   unsigned int  rb = (c & 0x00FF00FFU) + (tmp & 0x00FF00FFU);
   unsigned int  g = (c & 0x0000FF00U) + (tmp & 0x0000FF00U);
@@ -275,13 +268,11 @@ inline unsigned int Plot3D_TriShape::reflectionMap(
     u = u - normalY;
     v = v + normalX;
   }
-  u = (u > 0.015625f ? (u < 0.984375f ? u : (1.96875f - u)) : (0.03125f - u));
-  v = (v > 0.015625f ? (v < 0.984375f ? v : (1.96875f - v)) : (0.03125f - v));
   unsigned int  n = 0xFFC0C0C0U;
   if (BRANCH_EXPECT(textureE, true))
   {
-    n = textureE->getPixelB(u * float(textureE->getWidth()),
-                            v * float(textureE->getHeight()), 0);
+    n = textureE->getPixelBM(u * float(textureE->getWidth()),
+                             v * float(textureE->getHeight()), 0);
   }
   unsigned int  r = ((tmp & 0xFFU) * (n & 0xFFU) + 0x80U) >> 8;
   unsigned int  g = ((tmp & 0xFF00U) * (n & 0xFF00U) + 0x00800000U) >> 24;
@@ -325,12 +316,9 @@ int Plot3D_TriShape::calculateLighting(
     float normalX, float normalY, float normalZ) const
 {
   float   tmp = (normalX * normalX) + (normalY * normalY) + (normalZ * normalZ);
-  if (tmp > 0.0f)
+  if (BRANCH_EXPECT((tmp > 0.0f), true))
   {
-    if (tmp >= 0.875f && tmp <= 1.125f)
-      tmp = (tmp * 0.378732f - 1.260466f) * tmp + 1.881728f;
-    else
-      tmp = 1.0f / float(std::sqrt(tmp));
+    tmp = 1.0f / float(std::sqrt(tmp));
     normalX *= tmp;
     normalY *= tmp;
     normalZ *= tmp;
