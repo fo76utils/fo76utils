@@ -625,9 +625,9 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
       }
       unsigned int  c;
       if (integerMip)
-        c = m.texture->getPixelB(txtX, txtY, mipLevelI);
+        c = m.texture->getPixelBC(txtX, txtY, mipLevelI);
       else
-        c = m.texture->getPixelT(txtX, txtY, m.mipLevel);
+        c = m.texture->getPixelTC(txtX, txtY, m.mipLevel);
       unsigned int  a = c >> 24;
       if (!a)
         continue;
