@@ -664,6 +664,7 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
     float   offsX = 0.0f;
     float   offsY = 0.0f;
     float   offsZ = 0.0f;
+    unsigned int  refrMSWPFormID = 0U;
     {
       ESMFile::ESMField f(esmFile, *r);
       while (f.next())
@@ -685,6 +686,10 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
         {
           scale = f.readFloat();
         }
+        else if (f == "XMSP" && f.size() >= 4)
+        {
+          refrMSWPFormID = f.readUInt32Fast();
+        }
       }
     }
     if (!r2)
@@ -705,7 +710,8 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
                                                      offsX, offsY, offsZ);
     if (setScreenAreaUsed(tmp) < 0)
       continue;
-    tmp.mswpFormID = loadMaterialSwap(tmp.mswpFormID);
+    tmp.mswpFormID =
+        loadMaterialSwap(!refrMSWPFormID ? tmp.mswpFormID : refrMSWPFormID);
     objectList.push_back(tmp);
   }
   while ((formID = r->next) != 0U);
