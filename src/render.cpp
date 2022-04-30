@@ -973,54 +973,74 @@ unsigned int Renderer::loadMaterialSwap(unsigned int formID)
     if (i != materialSwaps.end())
       return (i->second.size() > 0 ? formID : 0U);
   }
+  std::vector< MaterialSwap > *v;
+  {
+    std::map< unsigned int, std::vector< MaterialSwap > >::iterator i =
+        materialSwaps.insert(
+            std::pair< unsigned int, std::vector< MaterialSwap > >(
+                formID, std::vector< MaterialSwap >())).first;
+    v = &(i->second);
+  }
   const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
   if (!(r && *r == "MSWP"))
     return 0U;
-  std::vector< MaterialSwap > *v = (std::vector< MaterialSwap > *) 0;
-  MaterialSwap  *m = (MaterialSwap *) 0;
+  MaterialSwap  m;
   ESMFile::ESMField f(esmFile, *r);
   while (f.next())
   {
     if (f == "BNAM")
     {
       f.readPath(stringBuf, std::string::npos, "materials/", ".bgsm");
-      if (stringBuf.empty())
-      {
-        m = (MaterialSwap *) 0;
-        continue;
-      }
-      if (!v)
-      {
-        std::map< unsigned int, std::vector< MaterialSwap > >::iterator i =
-            materialSwaps.insert(
-                std::pair< unsigned int, std::vector< MaterialSwap > >(
-                    formID, std::vector< MaterialSwap >())).first;
-        v = &(i->second);
-      }
-      v->push_back(MaterialSwap());
-      m = &(v->front()) + (v->size() - 1);
-      m->materialPath = stringBuf;
+      m.materialPath = stringBuf;
     }
-    else if (f == "SNAM" && m)
+    else if (f == "SNAM" && !m.materialPath.empty())
     {
       f.readPath(stringBuf, std::string::npos, "materials/", ".bgsm");
       if (!stringBuf.empty())
       {
-        try
+        static const char *bgsmNamePatterns[14] =
         {
-          ba2File.extractFile(fileBuf, stringBuf);
-          FileBuffer  tmp(&(fileBuf.front()), fileBuf.size());
-          m->bgsmFile.loadBGSMFile(m->texturePaths, tmp);
-        }
-        catch (std::runtime_error&)
+          "*",            "",             "01",           "01decal",
+          "02",           "_2sided",      "_8bit",        "alpha",
+          "alpha_2sided", "_decal",       "decal",        "decal_8bit",
+          "noalpha",      "wet"
+        };
+        size_t  n1 = m.materialPath.find('*');
+        size_t  n2 = std::string::npos;
+        if (n1 != std::string::npos)
+          n2 = stringBuf.find('*');
+        for (size_t i = 1; i < (sizeof(bgsmNamePatterns) / sizeof(char *)); i++)
         {
-          m = (MaterialSwap *) 0;
-          v->resize(v->size() - 1);
+          if (n1 != std::string::npos)
+          {
+            m.materialPath.erase(n1, std::strlen(bgsmNamePatterns[i - 1]));
+            m.materialPath.insert(n1, bgsmNamePatterns[i]);
+            if (n2 != std::string::npos)
+            {
+              stringBuf.erase(n2, std::strlen(bgsmNamePatterns[i - 1]));
+              stringBuf.insert(n2, bgsmNamePatterns[i]);
+            }
+            if (ba2File.getFileSize(m.materialPath, true) < 0L)
+              continue;
+          }
+          try
+          {
+            ba2File.extractFile(fileBuf, stringBuf);
+            FileBuffer  tmp(&(fileBuf.front()), fileBuf.size());
+            m.bgsmFile.loadBGSMFile(m.texturePaths, tmp);
+            v->push_back(m);
+          }
+          catch (std::runtime_error&)
+          {
+          }
+          if (n1 == std::string::npos)
+            break;
         }
       }
+      m.materialPath.clear();
     }
   }
-  if (v && v->size() > 0)
+  if (v->size() > 0)
     return formID;
   return 0U;
 }
