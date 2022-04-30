@@ -346,11 +346,12 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   inline int normalMap(float& normalX, float& normalY, float& normalZ,
                        unsigned int n) const;
   inline unsigned int environmentMap(
-      unsigned int c, float normalX, float normalY, float normalZ,
-      int x, int y) const;
-  inline unsigned int reflectionMap(
-      unsigned int c, float normalX, float normalY, float normalZ,
-      int x, int y, float txtU, float txtV) const;
+      float normalX, float normalY, float normalZ, int x, int y) const;
+  inline unsigned int addReflection(unsigned int c, unsigned int e) const;
+  inline unsigned int addReflectionM(
+      unsigned int c, unsigned int e, unsigned int m) const;
+  inline unsigned int addReflectionR(
+      unsigned int c, unsigned int e, unsigned int r) const;
   // fill with water
   static void drawPixel_Water(Plot3D_TriShape& p,
                               int x, int y, float txtU, float txtV,
@@ -369,6 +370,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   static void drawPixel_NormalEnv(Plot3D_TriShape& p,
                                   int x, int y, float txtU, float txtV,
                                   const NIFFile::NIFVertex& z);
+  // diffuse + normal and environment map/mask with trilinear filtering
+  static void drawPixel_NormalEnvM(Plot3D_TriShape& p,
+                                   int x, int y, float txtU, float txtV,
+                                   const NIFFile::NIFVertex& z);
   // diffuse + normal and reflection map with trilinear filtering
   static void drawPixel_NormalRefl(Plot3D_TriShape& p,
                                    int x, int y, float txtU, float txtV,
@@ -402,6 +407,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // textures[1] = normal
   // textures[3] = gradient map
   // textures[4] = environment map
+  // textures[6] = environment mask
   // textures[8] = Fallout 76 reflection map
   void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,
                     const NIFFile::NIFVertexTransform& viewTransform,

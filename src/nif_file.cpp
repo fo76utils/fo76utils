@@ -442,7 +442,7 @@ NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(NIFFile& f)
   texturePaths.resize((f.bsVersion < 0x90 ? 9 : 10), s);
   unsigned long long  texturePathMap = 0xFFFFFFFF6E743210ULL;   // Fallout 4
   if (f.bsVersion < 0x80)
-    texturePathMap = 0xFFFFFFFFEE84E210ULL;     // Skyrim
+    texturePathMap = 0xFFFFFFFFEE64E210ULL;     // Skyrim
   else if (f.bsVersion >= 0x90)
     texturePathMap = 0xFFFFF98EEE743210ULL;     // Fallout 76
   for ( ; (texturePathMap & 15U) != 15U; texturePathMap = texturePathMap >> 4)

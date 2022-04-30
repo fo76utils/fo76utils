@@ -31,9 +31,9 @@ struct BGSMFile
   // texturePaths[2] = glow
   // texturePaths[3] = gradient map
   // texturePaths[4] = environment map
-  // texturePaths[6] = Fallout 4 _s.dds
+  // texturePaths[6] = Fallout 4 _s.dds, or environment mask (_em.dds)
   // texturePaths[7] = wrinkles
-  // texturePaths[8] = Fallout 76 _r.dds, or environment mask (_em.dds)
+  // texturePaths[8] = Fallout 76 _r.dds
   // texturePaths[9] = Fallout 76 _l.dds
   BGSMFile(std::vector< std::string >& texturePaths, const char *fileName);
   BGSMFile(std::vector< std::string >& texturePaths,

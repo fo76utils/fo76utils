@@ -224,8 +224,7 @@ inline int Plot3D_TriShape::normalMap(
 }
 
 inline unsigned int Plot3D_TriShape::environmentMap(
-    unsigned int c, float normalX, float normalY, float normalZ,
-    int x, int y) const
+    float normalX, float normalY, float normalZ, int x, int y) const
 {
   float   u = float((height >> 1) - y) * envMapUVScale + 0.5f;
   float   v = float(x - (width >> 1)) * envMapUVScale + 0.5f;
@@ -239,49 +238,48 @@ inline unsigned int Plot3D_TriShape::environmentMap(
     u = u - normalY;
     v = v + normalX;
   }
-  unsigned int  tmp = textureE->getPixelBM(u * float(textureE->getWidth()),
-                                           v * float(textureE->getHeight()), 0);
-  tmp = multiplyWithLight(tmp, reflectionLevel);
-  unsigned int  rb = (c & 0x00FF00FFU) + (tmp & 0x00FF00FFU);
-  unsigned int  g = (c & 0x0000FF00U) + (tmp & 0x0000FF00U);
-  tmp = (((rb & 0x01000100U) | (g & 0x00010000U)) >> 8) * 0xFFU;
-  return (0xFF000000U | (rb & 0x00FF00FFU) | (g & 0x0000FF00U) | tmp);
+  return textureE->getPixelBM(u * float(textureE->getWidth()),
+                              v * float(textureE->getHeight()), 0);
 }
 
-inline unsigned int Plot3D_TriShape::reflectionMap(
-    unsigned int c, float normalX, float normalY, float normalZ,
-    int x, int y, float txtU, float txtV) const
+inline unsigned int Plot3D_TriShape::addReflection(
+    unsigned int c, unsigned int e) const
 {
-  unsigned int  tmp =
-      textureR->getPixelT(txtU * textureScaleR, txtV * textureScaleR, mipLevel);
-  if (!(tmp & 0x00FFFFFFU))
-    return c;
-  float   u = float((height >> 1) - y) * envMapUVScale + 0.5f;
-  float   v = float(x - (width >> 1)) * envMapUVScale + 0.5f;
-  if (normalZ < -0.25f)
-  {
-    u = u + (normalY * (0.25f / normalZ));
-    v = v - (normalX * (0.25f / normalZ));
-  }
-  else
-  {
-    u = u - normalY;
-    v = v + normalX;
-  }
-  unsigned int  n = 0xFFC0C0C0U;
-  if (BRANCH_EXPECT(textureE, true))
-  {
-    n = textureE->getPixelBM(u * float(textureE->getWidth()),
-                             v * float(textureE->getHeight()), 0);
-  }
-  unsigned int  r = ((tmp & 0xFFU) * (n & 0xFFU) + 0x80U) >> 8;
-  unsigned int  g = ((tmp & 0xFF00U) * (n & 0xFF00U) + 0x00800000U) >> 24;
-  unsigned int  b = (((tmp >> 16) & 0xFFU) * ((n >> 16) & 0xFFU) + 0x80U) >> 8;
-  tmp = multiplyWithLight(r | (g << 8) | (b << 16), reflectionLevel);
-  unsigned int  rb = (c & 0x00FF00FFU) + (tmp & 0x00FF00FFU);
-  g = (c & 0x0000FF00U) + (tmp & 0x0000FF00U);
-  tmp = (((rb & 0x01000100U) | (g & 0x00010000U)) >> 8) * 0xFFU;
-  return (0xFF000000U | (rb & 0x00FF00FFU) | (g & 0x0000FF00U) | tmp);
+  e = multiplyWithLight(e, reflectionLevel);
+  unsigned int  rb = (c & 0x00FF00FFU) + (e & 0x00FF00FFU);
+  unsigned int  g = (c & 0x0000FF00U) + (e & 0x0000FF00U);
+  return (0xFF000000U | (rb & 0x00FF00FFU) | (g & 0x0000FF00U)
+          | ((((rb & 0x01000100U) | (g & 0x00010000U)) >> 8) * 0xFFU));
+}
+
+inline unsigned int Plot3D_TriShape::addReflectionM(
+    unsigned int c, unsigned int e, unsigned int m) const
+{
+  int     l = int(((unsigned int) reflectionLevel * (m & 0xFFU) + 0x80U) >> 8);
+  e = multiplyWithLight(e, l);
+  unsigned int  rb = (c & 0x00FF00FFU) + (e & 0x00FF00FFU);
+  unsigned int  g = (c & 0x0000FF00U) + (e & 0x0000FF00U);
+  return (0xFF000000U | (rb & 0x00FF00FFU) | (g & 0x0000FF00U)
+          | ((((rb & 0x01000100U) | (g & 0x00010000U)) >> 8) * 0xFFU));
+}
+
+inline unsigned int Plot3D_TriShape::addReflectionR(
+    unsigned int c, unsigned int e, unsigned int r) const
+{
+  unsigned int  l = (unsigned int) reflectionLevel;
+  unsigned int  tmpR =
+      (((e & 0xFFU) * ((r & 0xFFU) * l) + 0x8000U) >> 16)
+      + (c & 0xFFU);
+  unsigned int  tmpG =
+      ((((e >> 8) & 0xFFU) * (((r >> 8) & 0xFFU) * l) + 0x8000U) >> 16)
+      + ((c >> 8) & 0xFFU);
+  unsigned int  tmpB =
+      ((((e >> 16) & 0xFFU) * (((r >> 16) & 0xFFU) * l) + 0x8000U) >> 16)
+      + ((c >> 16) & 0xFFU);
+  tmpR = (tmpR < 255U ? tmpR : 255U);
+  tmpG = (tmpG < 255U ? tmpG : 255U);
+  tmpB = (tmpB < 255U ? tmpB : 255U);
+  return (0xFF000000U | tmpR | (tmpG << 8) | (tmpB << 16));
 }
 
 void Plot3D_TriShape::drawPixel_Water(Plot3D_TriShape& p,
@@ -382,7 +380,35 @@ void Plot3D_TriShape::drawPixel_NormalEnv(Plot3D_TriShape& p,
   float   normalY = z.normalY;
   float   normalZ = z.normalZ;
   c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
-  p.bufRGBW[offs] = p.environmentMap(c, normalX, normalY, normalZ, x, y);
+  p.bufRGBW[offs] =
+      p.addReflection(c, p.environmentMap(normalX, normalY, normalZ, x, y));
+}
+
+void Plot3D_TriShape::drawPixel_NormalEnvM(Plot3D_TriShape& p,
+                                           int x, int y, float txtU, float txtV,
+                                           const NIFFile::NIFVertex& z)
+{
+  size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
+  unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
+  if (BRANCH_EXPECT((p.textureG || z.vertexColor != 0xFFFFFFFFU), false))
+    c = p.gradientMapAndVColor(c, z.vertexColor);
+  if (c < p.alphaThresholdScaled)
+    return;
+  p.bufZ[offs] = z.z;
+  unsigned int  n = p.textureN->getPixelT(txtU * p.textureScaleN,
+                                          txtV * p.textureScaleN, p.mipLevel);
+  float   normalX = z.normalX;
+  float   normalY = z.normalY;
+  float   normalZ = z.normalZ;
+  c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
+  unsigned int  m = p.textureR->getPixelT(txtU * p.textureScaleR,
+                                          txtV * p.textureScaleR, p.mipLevel);
+  if (BRANCH_EXPECT((m & 0xFFU), true))
+  {
+    c = p.addReflectionM(c,
+                         p.environmentMap(normalX, normalY, normalZ, x, y), m);
+  }
+  p.bufRGBW[offs] = c;
 }
 
 void Plot3D_TriShape::drawPixel_NormalRefl(Plot3D_TriShape& p,
@@ -402,8 +428,14 @@ void Plot3D_TriShape::drawPixel_NormalRefl(Plot3D_TriShape& p,
   float   normalY = z.normalY;
   float   normalZ = z.normalZ;
   c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
-  p.bufRGBW[offs] = p.reflectionMap(c, normalX, normalY, normalZ,
-                                    x, y, txtU, txtV);
+  unsigned int  r = p.textureR->getPixelT(txtU * p.textureScaleR,
+                                          txtV * p.textureScaleR, p.mipLevel);
+  if (BRANCH_EXPECT((r & 0x00FFFFFFU), true))
+  {
+    c = p.addReflectionR(c,
+                         p.environmentMap(normalX, normalY, normalZ, x, y), r);
+  }
+  p.bufRGBW[offs] = c;
 }
 
 unsigned int Plot3D_TriShape::interpVertexColors(
@@ -792,6 +824,16 @@ void Plot3D_TriShape::drawTriShape(
           roundFloat(float(lightTable[128]) * (0.7217095f / 256.0f));
       drawPixelFunction = &drawPixel_NormalRefl;
     }
+    else if (textureCnt >= 7 && textures[6])
+    {
+      textureE = textures[4];
+      textureR = textures[6];
+      textureScaleR = float(textureR->getWidth()) / float(textureD->getWidth());
+      reflectionLevel =
+          roundFloat(float(lightTable[128])
+                     * (float(int(envMapScale)) * (0.7217095f / 32768.0f)));
+      drawPixelFunction = &drawPixel_NormalEnvM;
+    }
     else
     {
       textureE = textures[4];
@@ -842,7 +884,7 @@ void Plot3D_TriShape::renderWater(
       c = ((c & 0x001FU) << 3) | ((c & 0x07E0U) << 5) | ((c & 0xF800U) << 8);
       c = blendRGBA32(c, tmp, int(waterColor >> 24));
       if (envMap)
-        c = environmentMap(c, normalX, normalY, normalZ, x, y);
+        c = addReflection(c, environmentMap(normalX, normalY, normalZ, x, y));
       *p = c;
     }
   }

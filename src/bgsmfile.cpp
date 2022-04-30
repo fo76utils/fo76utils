@@ -73,7 +73,7 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   buf.setPosition(58);
   if (version == 2)                     // Fallout 4
   {
-    tmp = roundFloat(buf.readFloat() * 64.0f);  // half level
+    tmp = roundFloat(buf.readFloat() * 128.0f);
     envMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
     // gradient map disabled / enabled
     texturePathMap = (!buf.readUInt8Fast() ?
@@ -96,6 +96,19 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
       buf.setPosition(buf.getPosition() + len);
     else
       buf.readPath(texturePaths[n], len, "textures/", ".dds");
+  }
+  if (version == 2 && texturePaths[4].empty() && !texturePaths[6].empty())
+  {
+    buf.setPosition(buf.getPosition() + 15);
+    envMapScale = 0;
+    if (buf.readUInt8() != 0)           // specular enabled
+    {
+      buf.setPosition(buf.getPosition() + 12);
+      tmp = roundFloat(buf.readFloat() * 128.0f);
+      envMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+    }
+    if (!envMapScale)
+      texturePaths[6].clear();
   }
   if (!texturePaths[3].empty())
   {

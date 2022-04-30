@@ -124,9 +124,9 @@ class NIFFile : public FileBuffer
     // texturePaths[2] = glow texture
     // texturePaths[3] = gradient map
     // texturePaths[4] = environment map
-    // texturePaths[6] = Fallout 4 specular
+    // texturePaths[6] = Fallout 4 specular, or environment mask (_em)
     // texturePaths[7] = wrinkles
-    // texturePaths[8] = Fallout 76 _r, or environment mask (_em)
+    // texturePaths[8] = Fallout 76 _r
     // texturePaths[9] = Fallout 76 _l
     const std::string * const * texturePaths;
     // BGSM file name for Fallout 4 and 76

@@ -135,8 +135,7 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
         std::fprintf(f, "    Material gradient map scale: %.3f\n",
                      double(int(lspBlock->bgsmGradientMapV)) * (1.0 / 255.0));
         std::fprintf(f, "    Material environment map scale: %.3f\n",
-                     double(int(lspBlock->bgsmEnvMapScale))
-                     * (lspBlock->bgsmVersion == 2 ? 1.0 / 64.0 : 1.0 / 128.0));
+                     double(int(lspBlock->bgsmEnvMapScale)) * (1.0 / 128.0));
         for (size_t j = 0; j < lspBlock->bgsmTextures.size(); j++)
         {
           if (!lspBlock->bgsmTextures[j]->empty())
@@ -395,11 +394,11 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         {
           textures[j] = (DDSTexture *) 0;
           const std::string *texturePath = (std::string *) 0;
-          if (j < meshData[i].texturePathCnt && ((1 << int(j)) & 0x011B))
+          if (j < meshData[i].texturePathCnt && ((1 << int(j)) & 0x015B))
             texturePath = meshData[i].texturePaths[j];
           if (!texturePath || texturePath->empty())
           {
-            if (j == 4 && textures[8])
+            if (j == 4 && (textures[6] || textures[8]))
               texturePath = &defaultEnvMap;
             else if (j == 1 && (meshData[i].flags & 0x02))
               texturePath = &waterTexture;

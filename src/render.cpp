@@ -1298,7 +1298,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           }
         }
         bool    isHDModel = bool(p.flags & 0x40);
-        unsigned int  txtSetMask = (!isHDModel ? 0x0009U : 0x011BU);
+        unsigned int  txtSetMask = (!isHDModel ? 0x0009U : 0x015BU);
         for (size_t k = size_t(!isHDModel ? 4 : 10); k-- > 0; )
         {
           if (!((1U << (unsigned char) k) & txtSetMask))
@@ -1306,7 +1306,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           const std::string *texturePath = (std::string *) 0;
           if (texturePaths[k] && !texturePaths[k]->empty())
             texturePath = texturePaths[k];
-          else if (k == 4 && textures[8])
+          else if (k == 4 && (textures[6] || textures[8]))
             texturePath = &defaultEnvMap;
           if (texturePath && !texturePath->empty())
             textures[k] = loadTexture(*texturePath);
