@@ -97,12 +97,7 @@ float FileBuffer::readFloat16()
 {
   if ((filePos + 2) > fileBufSize)
     throw errorMessage("end of input file");
-  unsigned int  tmp = readUInt16Fast();
-  unsigned char e = (unsigned char) ((tmp >> 10) & 0x1F);
-  if (!e)
-    return 0.0f;
-  long long m = (long long) ((tmp & 0x03FF) | 0x0400) << e;
-  return (float(!(tmp & 0x8000) ? m : -m) * (1.0f / 33554432.0f));
+  return convertFloat16(readUInt16Fast());
 }
 
 void FileBuffer::readString(std::string& s, size_t n)
