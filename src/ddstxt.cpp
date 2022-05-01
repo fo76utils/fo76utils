@@ -10,13 +10,23 @@ static inline unsigned long long decodeBC3Alpha(unsigned int *a,
   a[1] = src[1] ^ (!isSigned ? 0U : 0x80U);
   if (a[0] > a[1])
   {
-    for (unsigned int i = 1; i < 7; i++)
-      a[i + 1] = ((a[0] * (7 - i)) + (a[1] * i) + 3) / 7;
+    int     n = int((a[0] << 18) + 0x00020000U);
+    int     d = (int(a[1]) - int(a[0])) * 37449;
+    for (unsigned int i = 2; i < 8; i++)
+    {
+      n = n + d;
+      a[i] = (unsigned int) n >> 18;
+    }
   }
   else
   {
-    for (unsigned int i = 1; i < 5; i++)
-      a[i + 1] = ((a[0] * (5 - i)) + (a[1] * i) + 2) / 5;
+    int     n = int((a[0] << 20) + 0x00080000U);
+    int     d = (int(a[1]) - int(a[0])) * 209715;
+    for (unsigned int i = 2; i < 6; i++)
+    {
+      n = n + d;
+      a[i] = (unsigned int) n >> 20;
+    }
     a[6] = 0;
     a[7] = 255;
   }
@@ -31,26 +41,30 @@ static inline unsigned int decodeBC1Colors(unsigned int *c,
 {
   unsigned int  c0 = FileBuffer::readUInt16Fast(src);
   unsigned int  c1 = FileBuffer::readUInt16Fast(src + 2);
-  unsigned int  r0 = (((c0 >> 11) & 0x1F) * 255 + 15) / 31;
-  unsigned int  g0 = (((c0 >> 5) & 0x3F) * 255 + 31) / 63;
-  unsigned int  b0 = ((c0 & 0x1F) * 255 + 15) / 31;
-  unsigned int  r1 = (((c1 >> 11) & 0x1F) * 255 + 15) / 31;
-  unsigned int  g1 = (((c1 >> 5) & 0x3F) * 255 + 31) / 63;
-  unsigned int  b1 = ((c1 & 0x1F) * 255 + 15) / 31;
-  c[0] = r0 | (g0 << 8) | (b0 << 16) | a;
-  c[1] = r1 | (g1 << 8) | (b1 << 16) | a;
+  unsigned int  rb0 =
+      ((((c0 & 0x001F) << 16) | ((c0 & 0xF800) >> 11)) * 2106U) + 0x007F007FU;
+  unsigned int  g0 = ((c0 & 0x07E0) * (1036U << 3)) + 0x00008500U;
+  c[0] = (((rb0 & 0xFF00FF00U) | (g0 & 0x00FF0000U)) >> 8) | a;
+  unsigned int  rb1 =
+      ((((c1 & 0x001F) << 16) | ((c1 & 0xF800) >> 11)) * 2106U) + 0x007F007FU;
+  unsigned int  g1 = ((c1 & 0x07E0) * (1036U << 3)) + 0x00008500U;
+  c[1] = (((rb1 & 0xFF00FF00U) | (g1 & 0x00FF0000U)) >> 8) | a;
   if (BRANCH_EXPECT(c0 > c1, true))
   {
-    c[2] = ((r0 + r0 + r1 + 1) / 3) | (((g0 + g0 + g1 + 1) / 3) << 8)
-           | (((b0 + b0 + b1 + 1) / 3) << 16) | a;
-    c[3] = ((r0 + r1 + r1 + 1) / 3) | (((g0 + g1 + g1 + 1) / 3) << 8)
-           | (((b0 + b1 + b1 + 1) / 3) << 16) | a;
+    unsigned long long  c0l = rgba32ToRBGA64(c[0]);
+    unsigned long long  c1l = rgba32ToRBGA64(c[1]);
+    unsigned long long  tmp0 = (c0l + c0l + c1l) * 85U;
+    unsigned long long  tmp1 = (c0l + c1l + c1l) * 85U;
+    tmp0 = tmp0 + ((tmp0 & 0xFF00FF00FF00FF00ULL) >> 8) + 0x0080008000800080ULL;
+    tmp1 = tmp1 + ((tmp1 & 0xFF00FF00FF00FF00ULL) >> 8) + 0x0080008000800080ULL;
+    c[2] = rbga64ToRGBA32(tmp0 >> 8);
+    c[3] = rbga64ToRGBA32(tmp1 >> 8);
   }
   else
   {
-    c[3] = ((r0 + r1 + 1) / 2) | (((g0 + g1 + 1) / 2) << 8)
-           | (((b0 + b1 + 1) / 2) << 16);
-    c[2] = c[3] | a;
+    c[2] = ((c[0] >> 1) & 0x7F7F7F7FU) + ((c[1] >> 1) & 0x7F7F7F7FU)
+           + ((c[0] | c[1]) & 0x01010101U);
+    c[3] = c[2] & ~a;
   }
   unsigned int  bc = FileBuffer::readUInt32Fast(src + 4);
   return bc;
