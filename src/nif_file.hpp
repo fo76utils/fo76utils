@@ -20,14 +20,6 @@ class NIFFile : public FileBuffer
     unsigned short  u;
     unsigned short  v;
     unsigned int    vertexColor;
-    static inline float convertFloat16(unsigned short n)
-    {
-      unsigned char e = (unsigned char) ((n >> 10) & 0x1F);
-      if (!e)
-        return 0.0f;
-      long long m = (long long) ((n & 0x03FF) | 0x0400) << e;
-      return (float(!(n & 0x8000) ? m : -m) * (1.0f / 33554432.0f));
-    }
     NIFVertex()
       : x(0.0f), y(0.0f), z(0.0f),
         normalX(0.0f), normalY(0.0f), normalZ(1.0f),

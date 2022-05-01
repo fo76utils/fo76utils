@@ -17,6 +17,12 @@
 
 std::runtime_error errorMessage(const char *fmt, ...);
 
+#if defined(__GNUC__)
+#  define BRANCH_EXPECT(x, y)   (__builtin_expect(long(bool(x)), long(y)))
+#else
+#  define BRANCH_EXPECT(x, y)   (x)
+#endif
+
 inline int roundFloat(float x)
 {
 #if 0
@@ -38,6 +44,35 @@ inline int uint32ToSigned(unsigned int x)
   if (sizeof(int) == 4)
     return int(x);
   return (int(x ^ 0x80000000U) + int(-0x80000000));
+}
+
+inline float convertFloat16(unsigned short n)
+{
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  unsigned int  m = (unsigned int) int((signed short) n);
+  union
+  {
+    unsigned int  i;
+    float   f;
+  }
+  tmp;
+  tmp.i = ((m << 13) & 0x8FFFE000U) + 0x38000000U;
+  float   r = tmp.f;
+  if (BRANCH_EXPECT(!(m & 0x7C00U), false))
+  {
+    // zero or denormal
+    tmp.i = tmp.i & 0xFF800000U;
+    r = r - tmp.f;
+    r = r + r;
+  }
+  return r;
+#else
+  unsigned char e = (unsigned char) ((n >> 10) & 0x1F);
+  if (!e)
+    return 0.0f;
+  long long m = (long long) ((n & 0x03FF) | 0x0400) << e;
+  return (float(!(n & 0x8000) ? m : -m) * (1.0f / 33554432.0f));
+#endif
 }
 
 unsigned short convertToFloat16(float x);
@@ -105,12 +140,6 @@ long parseInteger(const char *s, int base = 0, const char *errMsg = (char *) 0,
 
 double parseFloat(const char *s, const char *errMsg = (char *) 0,
                   double minVal = -1.0e38, double maxVal = 1.0e38);
-
-#if defined(__GNUC__)
-#  define BRANCH_EXPECT(x, y)   (__builtin_expect(long(bool(x)), long(y)))
-#else
-#  define BRANCH_EXPECT(x, y)   (x)
-#endif
 
 #endif
 
