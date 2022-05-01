@@ -296,9 +296,9 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
       }
       else
       {
-        v.x = NIFFile::NIFVertex::convertFloat16(f.readUInt16Fast());
-        v.y = NIFFile::NIFVertex::convertFloat16(f.readUInt16Fast());
-        v.z = NIFFile::NIFVertex::convertFloat16(f.readUInt16Fast());
+        v.x = convertFloat16(f.readUInt16Fast());
+        v.y = convertFloat16(f.readUInt16Fast());
+        v.z = convertFloat16(f.readUInt16Fast());
       }
     }
     if (uvOffs >= 0)
@@ -369,6 +369,13 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
   for (unsigned int i = f.readUInt32(); i--; )
     extraData.push_back(f.readUInt32());
   controller = f.readBlockID();
+  bgsmVersion = 0;
+  bgsmFlags = 0;
+  bgsmGradientMapV = 128;
+  bgsmEnvMapScale = 128;
+  bgsmAlphaFlags = 0x00EC;
+  bgsmAlphaThreshold = 0;
+  bgsmAlpha = 128;
   if (f.bsVersion < 0x90)
   {
     flags = f.readUInt64();
@@ -377,6 +384,27 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
     scaleU = f.readFloat();
     scaleV = f.readFloat();
     textureSet = f.readBlockID();
+    if (shaderType == 1 &&              // environment map
+        (f.getPosition() + (f.bsVersion < 0x80 ? 60 : 100)) <= f.size())
+    {
+      f.setPosition(f.getPosition() + (f.bsVersion < 0x80 ? 16 : 20));
+      bgsmFlags = (unsigned char) (f.readUInt32Fast() & 0x03);
+      int     tmp = roundFloat(f.readFloat() * 128.0f);
+      bgsmAlpha = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+      if (f.bsVersion < 0x80)
+      {
+        f.setPosition(f.getPosition() + 32);
+      }
+      else
+      {
+        f.setPosition(f.getPosition() + 36);
+        tmp = roundFloat(f.readFloat() * 255.0f);
+        bgsmGradientMapV = (unsigned char) (tmp & 0xFF);
+        f.setPosition(f.getPosition() + 28);
+      }
+      tmp = roundFloat(f.readFloat() * 128.0f);
+      bgsmEnvMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+    }
   }
   else
   {
@@ -389,13 +417,6 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
     textureSet =
         (nxtBlkType == NIFFile::BlkTypeBSShaderTextureSet ? int(nxtBlk) : -1);
   }
-  bgsmVersion = 0;
-  bgsmFlags = 0;
-  bgsmGradientMapV = 128;
-  bgsmEnvMapScale = 128;
-  bgsmAlphaFlags = 0x00EC;
-  bgsmAlphaThreshold = 0;
-  bgsmAlpha = 128;
   if (materialName && ba2File)
   {
     BGSMFile  bgsmFile;
@@ -721,15 +742,15 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       t.textureOffsetV = lsBlock.offsetV;
       t.textureScaleU = lsBlock.scaleU;
       t.textureScaleV = lsBlock.scaleV;
+      // decal, two sided, tree
+      t.flags = t.flags | (unsigned char) ((lsBlock.bgsmFlags & 0x1C) << 1);
+      t.gradientMapV = lsBlock.bgsmGradientMapV;
+      t.envMapScale = lsBlock.bgsmEnvMapScale;
+      alpha = lsBlock.bgsmAlpha;
       if (lsBlock.bgsmVersion)
       {
-        // decal, two sided, tree
-        t.flags = t.flags | (unsigned char) ((lsBlock.bgsmFlags & 0x1C) << 1);
-        t.gradientMapV = lsBlock.bgsmGradientMapV;
-        t.envMapScale = lsBlock.bgsmEnvMapScale;
         alphaFlags = lsBlock.bgsmAlphaFlags;
         alphaThreshold = lsBlock.bgsmAlphaThreshold;
-        alpha = lsBlock.bgsmAlpha;
         haveMaterial = true;
         if (lsBlock.bgsmTextures.size() > 0)
         {
