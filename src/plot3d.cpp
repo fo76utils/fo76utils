@@ -151,22 +151,22 @@ unsigned int Plot3D_TriShape::gradientMapAndVColor(unsigned int c,
 {
   if (textureG)
   {
-    unsigned int  u = (c >> 8) & 0xFFU;
-    unsigned int  v = ((unsigned int) gradientMapV + 0xFFU) & 0xFFU;
-    u = (u + (u >> 7)) * (unsigned int) (textureG->getWidth() - 1);
-    v = (v * (unsigned int) textureG->getHeight()) >> 8;
-    unsigned int  c0 = textureG->getPixelN(int(u >> 8), int(v), 0);
-    unsigned int  c1 = textureG->getPixelN(int(u >> 8) + 1, int(v), 0);
-    c = (c & 0xFF000000U) | (blendRGBA32(c0, c1, int(u & 0xFFU)) & 0x00FFFFFFU);
-    if (BRANCH_EXPECT((vColor == 0xFFFFFFFFU), true))
-      return c;
+    float   u = float(int((c >> 8) & 0xFFU) * (textureG->getWidth() - 1))
+                * (1.0f / 255.0f);
+    float   v = float(int(((unsigned int) gradientMapV + vColor + 1U) & 0xFFU)
+                      * (textureG->getHeight() - 1)) * (1.0f / 255.0f);
+    unsigned int  a = c;
+    c = textureG->getPixelB(u, v, 0) & 0x00FFFFFFU;
+    if (BRANCH_EXPECT((vColor < 0xFF000000U), false))
+      a = ((a >> 24) & 0xFFU) * ((vColor >> 24) & 0xFFU) * 65793U + 0x00800000U;
+    return (c | (a & 0xFF000000U));
   }
   unsigned int  r, g, b, a;
   r = ((c & 0xFFU) * vclrTable[vColor & 0xFFU] + 0x4000U) >> 15;
   g = (((c >> 8) & 0xFFU) * vclrTable[(vColor >> 8) & 0xFFU] + 0x4000U) >> 15;
   b = (((c >> 16) & 0xFFU) * vclrTable[(vColor >> 16) & 0xFFU] + 0x4000U) >> 15;
-  a = (((c >> 24) & 0xFFU) * vclrTable[(vColor >> 24) & 0xFFU] + 0x4000U) >> 15;
-  return (r | (g << 8) | (b << 16) | (a << 24));
+  a = ((c >> 24) & 0xFFU) * ((vColor >> 24) & 0xFFU) * 65793U + 0x00800000U;
+  return (r | (g << 8) | (b << 16) | (a & 0xFF000000U));
 }
 
 inline int Plot3D_TriShape::getLightLevel(float d) const
@@ -331,7 +331,7 @@ void Plot3D_TriShape::drawPixel_Diffuse(Plot3D_TriShape& p,
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
   unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
-  if (BRANCH_EXPECT((p.textureG || z.vertexColor != 0xFFFFFFFFU), false))
+  if (BRANCH_EXPECT((p.textureG || ~(z.vertexColor)), false))
     c = p.gradientMapAndVColor(c, z.vertexColor);
   if (c < p.alphaThresholdScaled)
     return;
@@ -349,7 +349,7 @@ void Plot3D_TriShape::drawPixel_Normal(Plot3D_TriShape& p,
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
   unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
-  if (BRANCH_EXPECT((p.textureG || z.vertexColor != 0xFFFFFFFFU), false))
+  if (BRANCH_EXPECT((p.textureG || ~(z.vertexColor)), false))
     c = p.gradientMapAndVColor(c, z.vertexColor);
   if (c < p.alphaThresholdScaled)
     return;
@@ -369,7 +369,7 @@ void Plot3D_TriShape::drawPixel_NormalEnv(Plot3D_TriShape& p,
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
   unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
-  if (BRANCH_EXPECT((p.textureG || z.vertexColor != 0xFFFFFFFFU), false))
+  if (BRANCH_EXPECT((p.textureG || ~(z.vertexColor)), false))
     c = p.gradientMapAndVColor(c, z.vertexColor);
   if (c < p.alphaThresholdScaled)
     return;
@@ -390,7 +390,7 @@ void Plot3D_TriShape::drawPixel_NormalEnvM(Plot3D_TriShape& p,
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
   unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
-  if (BRANCH_EXPECT((p.textureG || z.vertexColor != 0xFFFFFFFFU), false))
+  if (BRANCH_EXPECT((p.textureG || ~(z.vertexColor)), false))
     c = p.gradientMapAndVColor(c, z.vertexColor);
   if (c < p.alphaThresholdScaled)
     return;
@@ -417,7 +417,7 @@ void Plot3D_TriShape::drawPixel_NormalRefl(Plot3D_TriShape& p,
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
   unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
-  if (BRANCH_EXPECT((p.textureG || z.vertexColor != 0xFFFFFFFFU), false))
+  if (BRANCH_EXPECT((p.textureG || ~(z.vertexColor)), false))
     c = p.gradientMapAndVColor(c, z.vertexColor);
   if (c < p.alphaThresholdScaled)
     return;
@@ -675,7 +675,8 @@ void Plot3D_TriShape::drawTriangles()
 }
 
 Plot3D_TriShape::Plot3D_TriShape(
-    unsigned int *outBufRGBW, float *outBufZ, int imageWidth, int imageHeight)
+    unsigned int *outBufRGBW, float *outBufZ, int imageWidth, int imageHeight,
+    float vclrGamma)
   : bufRGBW(outBufRGBW),
     bufZ(outBufZ),
     width(imageWidth),
@@ -701,7 +702,7 @@ Plot3D_TriShape::Plot3D_TriShape(
   vclrTable.resize(256, 0);
   for (int i = 1; i < 256; i++)
   {
-    float   tmp = float(std::pow(double(i) * (1.0 / 255.0), 1.0 / 1.0));
+    float   tmp = float(std::pow(double(i) * (1.0 / 255.0), 1.0 / vclrGamma));
     vclrTable[i] = (unsigned short) roundFloat(tmp * 32768.0f);
   }
 }
