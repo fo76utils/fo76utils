@@ -100,12 +100,15 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   if (version == 2 && texturePaths[4].empty() && !texturePaths[6].empty())
   {
     buf.setPosition(buf.getPosition() + 15);
-    envMapScale = 0;
     if (buf.readUInt8() != 0)           // specular enabled
     {
       buf.setPosition(buf.getPosition() + 12);
-      tmp = roundFloat(buf.readFloat() * 128.0f);
+      tmp = roundFloat(buf.readFloat() * float(int(envMapScale)));
       envMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+    }
+    else if (buf[57] == 0)
+    {
+      envMapScale = 0;
     }
     if (!envMapScale)
       texturePaths[6].clear();
