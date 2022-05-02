@@ -9,6 +9,7 @@
 class LandscapeTexture
 {
  protected:
+  static const unsigned char  fo76VClrTable[32];
   const unsigned char *txtSetData;
   const unsigned char *ltexData32;
   const unsigned char *vclrData24;
@@ -34,11 +35,12 @@ class LandscapeTexture
             | ((unsigned long long) (c & 0x0000FF00) << 12)
             | ((unsigned long long) (c & 0x00FF0000) << 24));
   }
-  inline unsigned int getFO76VertexColor(size_t offs) const
+  inline unsigned long long getFO76VertexColor(size_t offs) const
   {
     unsigned int  c = FileBuffer::readUInt16Fast(vclrData16 + (offs << 1));
-    c = ((c & 0x7C00) << 6) | ((c & 0x03E0) << 3) | (c & 0x001F);
-    return (c * 6U + 0x00202020);
+    return ((unsigned long long) fo76VClrTable[(c >> 10) & 0x1F]
+            | ((unsigned long long) fo76VClrTable[(c >> 5) & 0x1F] << 32)
+            | ((unsigned long long) fo76VClrTable[c & 0x1F] << 16));
   }
   void getFO76VertexColor(unsigned int& r, unsigned int& g, unsigned int& b,
                           int x, int y) const;

@@ -395,7 +395,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // and the X and Y normals of the water surface (mapped to the range of
   // 2 to 254).
   Plot3D_TriShape(unsigned int *outBufRGBW, float *outBufZ,
-                  int imageWidth, int imageHeight);
+                  int imageWidth, int imageHeight, float vclrGamma = 1.0f);
   virtual ~Plot3D_TriShape();
   Plot3D_TriShape& operator=(const NIFFile::NIFTriShape& t);
   // set polynomial a[0..5] for mapping dot product (-1.0 to 1.0)

@@ -2,6 +2,15 @@
 #include "common.hpp"
 #include "landtxt.hpp"
 
+const unsigned char LandscapeTexture::fo76VClrTable[32] =
+{
+  // round(172.8918 * pow(x / 31.0, 1.0 / 2.2))
+    0,  36,  50,  60,  68,  75,  82,  88,
+   93,  99, 103, 108, 112, 116, 120, 124,
+  128, 132, 135, 138, 142, 145, 148, 151,
+  154, 157, 160, 162, 165, 168, 170, 173
+};
+
 void LandscapeTexture::getFO76VertexColor(
     unsigned int& r, unsigned int& g, unsigned int& b, int x, int y) const
 {
@@ -27,15 +36,15 @@ void LandscapeTexture::getFO76VertexColor(
     offs3++;
   }
   unsigned int  c =
-      rbga64ToRGBA32(blendRBGA64(blendRGBA32ToRBGA64(
+      rbga64ToRGBA32(blendRBGA64(blendRBGA64(
                                      getFO76VertexColor(offs0),
                                      getFO76VertexColor(offs1), xf),
-                                 blendRGBA32ToRBGA64(
+                                 blendRBGA64(
                                      getFO76VertexColor(offs2),
                                      getFO76VertexColor(offs3), xf), yf));
-  r = (r * ((c >> 16) & 0xFF) + 64) >> 7;
+  r = (r * (c & 0xFF) + 64) >> 7;
   g = (g * ((c >> 8) & 0xFF) + 64) >> 7;
-  b = (b * (c & 0xFF) + 64) >> 7;
+  b = (b * ((c >> 16) & 0xFF) + 64) >> 7;
 }
 
 unsigned long long LandscapeTexture::renderPixelFO76(int x, int y,

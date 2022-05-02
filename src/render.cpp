@@ -1584,8 +1584,9 @@ void Renderer::setThreadCount(int n)
   {
     if (!renderThreads[i].renderer)
     {
-      renderThreads[i].renderer = new Plot3D_TriShape(outBufRGBW, outBufZ,
-                                                      width, height);
+      renderThreads[i].renderer =
+          new Plot3D_TriShape(outBufRGBW, outBufZ, width, height,
+                              (esmFile.getESMVersion() < 0xC0 ? 1.0f : 2.2f));
     }
   }
 }

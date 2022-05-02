@@ -346,7 +346,8 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       defaultEnvMap = "textures/shared/cubemaps/metalchrome01cube_e.dds";
     std::string waterTexture("textures/water/defaultwater.dds");
     Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
-                           imageWidth, imageHeight);
+                           imageWidth, imageHeight,
+                           (nifFile.getVersion() < 0x90 ? 1.0f : 2.2f));
     while (true)
     {
       NIFFile::NIFVertexTransform
