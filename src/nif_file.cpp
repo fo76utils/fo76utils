@@ -372,7 +372,7 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
   bgsmVersion = 0;
   bgsmFlags = 0;
   bgsmGradientMapV = 128;
-  bgsmEnvMapScale = 128;
+  bgsmEnvMapScale = 0;
   bgsmAlphaFlags = 0x00EC;
   bgsmAlphaThreshold = 0;
   bgsmAlpha = 128;
