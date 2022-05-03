@@ -1,6 +1,7 @@
 
 #include "common.hpp"
 #include "plot3d.hpp"
+#include "fp32vec4.hpp"
 
 #include <algorithm>
 
@@ -442,24 +443,15 @@ unsigned int Plot3D_TriShape::interpVertexColors(
     const NIFFile::NIFVertex& v0, const NIFFile::NIFVertex& v1,
     const NIFFile::NIFVertex& v2, float w0, float w1, float w2)
 {
-  float   r0 = float(int(v0.vertexColor & 0xFFU));
-  float   g0 = float(int((v0.vertexColor >> 8) & 0xFFU));
-  float   b0 = float(int((v0.vertexColor >> 16) & 0xFFU));
-  float   a0 = float(int((v0.vertexColor >> 24) & 0xFFU));
-  float   r1 = float(int(v1.vertexColor & 0xFFU));
-  float   g1 = float(int((v1.vertexColor >> 8) & 0xFFU));
-  float   b1 = float(int((v1.vertexColor >> 16) & 0xFFU));
-  float   a1 = float(int((v1.vertexColor >> 24) & 0xFFU));
-  float   r2 = float(int(v2.vertexColor & 0xFFU));
-  float   g2 = float(int((v2.vertexColor >> 8) & 0xFFU));
-  float   b2 = float(int((v2.vertexColor >> 16) & 0xFFU));
-  float   a2 = float(int((v2.vertexColor >> 24) & 0xFFU));
-  unsigned int  r, g, b, a;
-  r = (unsigned int) roundFloat((r0 * w0) + (r1 * w1) + (r2 * w2));
-  g = (unsigned int) roundFloat((g0 * w0) + (g1 * w1) + (g2 * w2));
-  b = (unsigned int) roundFloat((b0 * w0) + (b1 * w1) + (b2 * w2));
-  a = (unsigned int) roundFloat((a0 * w0) + (a1 * w1) + (a2 * w2));
-  return (r | (g << 8) | (b << 16) | (a << 24));
+  FloatVector4  c0(v0.vertexColor);
+  FloatVector4  c1(v1.vertexColor);
+  FloatVector4  c2(v2.vertexColor);
+  c0 *= w0;
+  c1 *= w1;
+  c2 *= w2;
+  c0 += c1;
+  c0 += c2;
+  return (unsigned int) c0;
 }
 
 inline void Plot3D_TriShape::drawPixel(
