@@ -334,7 +334,9 @@ void Renderer::addTerrainCell(const ESMFile::ESMRecord& r)
   int     y0 = landData->getOriginY() - ((cellY + 1) * n);
   int     x1 = x0 + n;
   int     y1 = y0 + n;
-  if (n > 24)
+  if (debugMode == 1)
+    n = n >> 1;
+  else if (n > 24)
     n = n - 8;
   int     y = y0 - (y0 % n);
   y = (y >= 0 ? y : (y - n));
@@ -355,7 +357,11 @@ void Renderer::addTerrainCell(const ESMFile::ESMRecord& r)
       tmp.model.t.x1 = (signed short) (x2 < w ? x2 : w);
       tmp.model.t.y1 = (signed short) (y2 < h ? y2 : h);
       if (setScreenAreaUsed(tmp) >= 0)
+      {
+        if (debugMode == 1)
+          tmp.z = int(r.formID);
         objectList.push_back(tmp);
+      }
     }
   }
 }
@@ -402,7 +408,11 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   tmp.modelTransform.offsY = float(cellY) * 4096.0f;
   tmp.modelTransform.offsZ = waterLevel;
   if (setScreenAreaUsed(tmp) >= 0)
+  {
+    if (debugMode == 1)
+      tmp.z = int(r.formID);
     objectList.push_back(tmp);
+  }
 }
 
 const Renderer::BaseObject * Renderer::readModelProperties(
@@ -710,6 +720,8 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
                                                      offsX, offsY, offsZ);
     if (setScreenAreaUsed(tmp) < 0)
       continue;
+    if (debugMode == 1)
+      tmp.z = int(r->formID);
     tmp.mswpFormID =
         loadMaterialSwap(!refrMSWPFormID ? tmp.mswpFormID : refrMSWPFormID);
     objectList.push_back(tmp);
@@ -1244,6 +1256,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
                             unsigned long long tileMask)
 {
   const RenderObject& p = objectList[i];
+  t.renderer->setDebugMode(debugMode, (unsigned int) p.z);
   if (p.flags & 0x02)                   // object or water mesh
   {
     NIFFile::NIFVertexTransform vt(p.modelTransform);
@@ -1480,6 +1493,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     enableSCOL(false),
     enableAllObjects(false),
     enableTextures(true),
+    debugMode(0),
     bufRGBWAllocFlag(!bufRGBW),
     bufZAllocFlag(!bufZ),
     threadCnt(0),
@@ -1705,6 +1719,8 @@ static const char *usageStrings[] =
   "    --list-defaults     print defaults for all options, and exit",
   "    --                  remaining options are file names",
   "    -threads INT        set the number of threads to use",
+  "    -debug INT          set debug render mode (0: disabled, 1: form IDs,",
+  "                        2: depth, 3: normals, 4: diffuse, 5: light only)",
   "    -scol BOOL          enable the use of pre-combined meshes",
   "    -a                  render all object types",
   "    -textures BOOL      make all diffuse textures white if false",
@@ -1756,8 +1772,9 @@ int main(int argc, char **argv)
     bool    enableSCOL = false;
     bool    enableAllObjects = false;
     bool    enableTextures = true;
+    unsigned char debugMode = 0;
     unsigned int  formID = 0U;
-    int     btdLOD = 2;
+    int     btdLOD = 0;
     const char  *btdPath = (char *) 0;
     int     terrainX0 = -32768;
     int     terrainY0 = -32768;
@@ -1810,7 +1827,8 @@ int main(int argc, char **argv)
           std::printf(" (defaults to hardware threads: %d)",
                       int(std::thread::hardware_concurrency()));
         }
-        std::printf("\n-scol %d\n", int(enableSCOL));
+        std::printf("\n-debug %d\n", int(debugMode));
+        std::printf("-scol %d\n", int(enableSCOL));
         std::printf("-textures %d\n", int(enableTextures));
         std::printf("-txtcache %d\n", textureCacheSize);
         std::printf("-ssaa %d\n", int(enableDownscale));
@@ -1872,6 +1890,13 @@ int main(int argc, char **argv)
           throw errorMessage("missing argument for %s", argv[i - 1]);
         threadCnt = int(parseInteger(argv[i], 10, "invalid number of threads",
                                      1, 16));
+      }
+      else if (std::strcmp(argv[i], "-debug") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        debugMode = (unsigned char) parseInteger(argv[i], 10,
+                                                 "invalid debug mode", 0, 5);
       }
       else if (std::strcmp(argv[i], "-scol") == 0)
       {
@@ -2101,8 +2126,17 @@ int main(int argc, char **argv)
         std::fprintf(stderr, "%s\n", usageStrings[i]);
       return err;
     }
-    if (btdPath && *btdPath == '\0')
+    if (!(btdPath && *btdPath != '\0'))
+    {
       btdPath = (char *) 0;
+      btdLOD = 2;
+    }
+    if (debugMode == 1)
+    {
+      enableDownscale = false;
+      enableSCOL = true;
+      ltxtResolution = 128 >> btdLOD;
+    }
     if (!formID)
       formID = (!btdPath ? 0x0000003CU : 0x0025DA15U);
     for (int i = 0; i < 6; i++)
@@ -2141,6 +2175,7 @@ int main(int argc, char **argv)
     renderer.setEnableSCOL(enableSCOL);
     renderer.setEnableAllObjects(enableAllObjects);
     renderer.setEnableTextures(enableTextures);
+    renderer.setDebugMode(debugMode);
     renderer.setLandDefaultColor(ltxtDefColor);
     renderer.setLandTxtResolution(ltxtResolution);
     renderer.setTextureMipLevel(textureMip);

@@ -49,7 +49,7 @@ class Renderer
     //                             + ((Y0 & 3) * 256) + ((X0 & 3) * 64)
     // 1344:        8*8 tiles
     signed short  tileIndex;
-    int     z;                  // Z coordinate for sorting
+    int     z;                  // Z coordinate for sorting / debugMode 1 formID
     union
     {
       const BaseObject  *o;     // valid if flags & 2 is set
@@ -130,6 +130,7 @@ class Renderer
   bool    enableSCOL;
   bool    enableAllObjects;
   bool    enableTextures;
+  unsigned char debugMode;
   bool    bufRGBWAllocFlag;
   bool    bufZAllocFlag;
   int     threadCnt;
@@ -284,6 +285,16 @@ class Renderer
   void setEnableTextures(bool n)
   {
     enableTextures = n;         // if false, make all diffuse textures white
+  }
+  void setDebugMode(unsigned char n)
+  {
+    // n = 0: default mode (disable debug)
+    // n = 1: render form ID as a solid color (0x00RRGGBB)
+    // n = 2: Z * 16 (blue = LSB, red = MSB)
+    // n = 3: normal map
+    // n = 4: disable lighting and reflections
+    // n = 5: lighting only (white texture)
+    debugMode = n;
   }
   // models with path name including s are not rendered
   void addExcludeModelPattern(const std::string& s);

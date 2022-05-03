@@ -330,6 +330,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   void    (*drawPixelFunction)(Plot3D_TriShape& p,
                                int x, int y, float txtU, float txtV,
                                const NIFFile::NIFVertex& z);
+  unsigned int  debugMode;
   std::vector< NIFFile::NIFVertex > vertexBuf;
   std::vector< Triangle > triangleBuf;
   std::vector< unsigned short > vclrTable;
@@ -339,7 +340,6 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                              const NIFFile::NIFVertexTransform& viewTransform,
                              float& lightX, float& lightY, float& lightZ);
-  unsigned int gradientMapAndVColor(unsigned int c, unsigned int vColor) const;
   // d = dot product from normals and light vector
   inline int getLightLevel(float d) const;
   // returns light level
@@ -356,6 +356,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   static void drawPixel_Water(Plot3D_TriShape& p,
                               int x, int y, float txtU, float txtV,
                               const NIFFile::NIFVertex& z);
+  static void drawPixel_Debug(Plot3D_TriShape& p,
+                              int x, int y, float txtU, float txtV,
+                              const NIFFile::NIFVertex& z);
+  unsigned int gradientMapAndVColor(unsigned int c, unsigned int vColor) const;
   // calculate RGB multiplier from normals and light direction
   int calculateLighting(float normalX, float normalY, float normalZ) const;
   // diffuse texture with trilinear filtering
@@ -419,6 +423,16 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                    float lightX, float lightY, float lightZ,
                    const DDSTexture *envMap = (DDSTexture *) 0,
                    float envMapLevel = 1.0f);
+  // n = 0: default mode
+  // n = 1: render c as a solid color (0x00RRGGBB)
+  // n = 2: Z * 16 (blue = LSB, red = MSB)
+  // n = 3: normal map
+  // n = 4: disable lighting and reflections
+  // n = 5: lighting only (white texture)
+  void setDebugMode(unsigned int n, unsigned int c)
+  {
+    debugMode = (n <= 5U ? (n != 1U ? n : (0xFF000000U | c)) : 0U);
+  }
 };
 
 #endif
