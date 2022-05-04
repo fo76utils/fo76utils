@@ -10,12 +10,12 @@ if "win" in sys.platform:
 else:
     env.Append(LIBS = ["pthread"])
 if ARGUMENTS.get("debug", 0):
-    env.Append(CXXFLAGS = Split("-g -O0"))
+    env.Append(CXXFLAGS = Split("-g -Og"))
 elif ARGUMENTS.get("profile", 0):
     env.Append(CXXFLAGS = Split("-g -pg -O"))
     env.Prepend(LINKFLAGS = ["-pg"])
 else:
-    env.Append(CXXFLAGS = Split("-O3 -fomit-frame-pointer -ffast-math"))
+    env.Append(CXXFLAGS = Split("-O3 -march=sandybridge -mtune=generic -fomit-frame-pointer -ffast-math"))
     env.Append(LINKFLAGS = ["-s"])
 
 libSources = ["src/common.cpp", "src/filebuf.cpp", "src/zlib.cpp"]
