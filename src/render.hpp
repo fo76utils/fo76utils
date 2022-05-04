@@ -172,7 +172,8 @@ class Renderer
                       float scale, float rX, float rY, float rZ,
                       float offsX, float offsY, float offsZ);
   // type = 0: terrain, type = 1: solid objects, type = 2: water
-  void findObjects(unsigned int formID, int type, unsigned int parentID = 0U);
+  void findObjects(unsigned int formID, int type, bool isRecursive);
+  void findObjects(unsigned int formID, int type);
   void sortObjectList();
   // 0x0001: clear image data
   // 0x0002: clear Z buffer

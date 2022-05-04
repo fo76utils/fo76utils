@@ -614,26 +614,14 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
   }
 }
 
-void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
+void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
 {
-  if (!formID)
-    return;
   const ESMFile::ESMRecord  *r = (ESMFile::ESMRecord *) 0;
   do
   {
-    bool    noNextRecord = (r && !parentID);
     r = esmFile.getRecordPtr(formID);
-    if (!r)
+    if (BRANCH_EXPECT(!r, false))
       break;
-    if (BRANCH_EXPECT(*r == "GRUP", false))
-    {
-      if (r->formID >= 1U && r->formID <= 9U && r->formID != 7U)
-        findObjects(r->children, type, formID);
-    }
-    else if (noNextRecord)
-    {
-      break;
-    }
     if (BRANCH_EXPECT(!(*r == "REFR"), false))
     {
       if (*r == "CELL")
@@ -643,24 +631,12 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
         else if (type == 2)
           addWaterCell(*r);
       }
-      else if (*r == "WRLD")
+      if (!isRecursive)
+        break;
+      if (*r == "GRUP" && r->children)
       {
-        if (!r->next || !(r = esmFile.getRecordPtr(r->next)))
-          return;
-        if (!(*r == "GRUP" && r->formID == 1))          // world children
-          return;
-        if (!(formID = r->children) || !(r = esmFile.getRecordPtr(formID)))
-          return;
-        if (type == 0)
-        {
-          while (!(*r == "GRUP" && r->formID == 4))     // exterior cell block
-          {
-            if (!(formID = r->next) || !(r = esmFile.getRecordPtr(formID)))
-              return;
-          }
-        }
-        findObjects(formID, type, r->parent);
-        return;
+        if (r->formID > 0U && r->formID < (!type ? 6U : 10U) && r->formID != 7U)
+          findObjects(r->children, type, true);
       }
       continue;
     }
@@ -726,7 +702,98 @@ void Renderer::findObjects(unsigned int formID, int type, unsigned int parentID)
         loadMaterialSwap(!refrMSWPFormID ? tmp.mswpFormID : refrMSWPFormID);
     objectList.push_back(tmp);
   }
-  while ((formID = r->next) != 0U);
+  while ((formID = r->next) != 0U && isRecursive);
+}
+
+void Renderer::findObjects(unsigned int formID, int type)
+{
+  if (!formID)
+    return;
+  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
+  if (!r)
+    return;
+  if (*r == "WRLD")
+  {
+    r = esmFile.getRecordPtr(0U);
+    while (r && r->next)
+    {
+      r = esmFile.getRecordPtr(r->next);
+      if (!r)
+        break;
+      if (*r == "GRUP" && r->formID == 0 && r->children)
+      {
+        unsigned int  groupID = r->children;
+        while (groupID)
+        {
+          const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(groupID);
+          if (!r2)
+            break;
+          if (*r2 == "GRUP" && r2->formID == 1 && r2->flags == formID &&
+              r2->children)
+          {
+            // world children
+            if (type == 0)
+            {
+              unsigned int  cellBlockID = r2->children;
+              while (cellBlockID)
+              {
+                const ESMFile::ESMRecord  *r3 =
+                    esmFile.getRecordPtr(cellBlockID);
+                if (!r3)
+                  break;
+                if (*r3 == "GRUP" && r3->formID == 4 && r3->children)
+                {
+                  // exterior cell block
+                  findObjects(r3->children, type, true);
+                }
+                cellBlockID = r3->next;
+              }
+            }
+            else
+            {
+              findObjects(r2->children, type, true);
+            }
+          }
+          groupID = r2->next;
+        }
+      }
+    }
+  }
+  else if (*r == "CELL")
+  {
+    findObjects(formID, type, false);
+    r = esmFile.getRecordPtr(0U);
+    while (r)
+    {
+      if (*r == "GRUP")
+      {
+        if (r->formID <= 5U && r->children)
+        {
+          r = esmFile.getRecordPtr(r->children);
+          continue;
+        }
+        else if (r->formID <= 9U && r->formID != 7U && r->flags == formID &&
+                 r->children)
+        {
+          // cell children
+          findObjects(r->children, type, true);
+        }
+      }
+      while (r && !r->next && r->parent)
+        r = esmFile.getRecordPtr(r->parent);
+      if (!(r && r->next))
+        break;
+      r = esmFile.getRecordPtr(r->next);
+    }
+  }
+  else if (!(*r == "GRUP"))
+  {
+    findObjects(formID, type, false);
+  }
+  else if (r->children)
+  {
+    findObjects(r->children, type, true);
+  }
 }
 
 void Renderer::sortObjectList()
