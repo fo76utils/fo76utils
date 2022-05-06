@@ -583,19 +583,17 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
   {
     float   txtY = (yf + float(yy)) * mipMult;
     int     ay = 256;
-    if (!yy)
+    if (txtY < 0.0f)
     {
-      ay = int((txtY + 1.0f) * 256.0f + 0.5f);
+      ay = roundFloat((txtY + 1.0f) * 256.0f);
       if (ay <= 0)
         continue;
-      txtY = 0.0f;
     }
     else if (txtY > txtH)
     {
-      ay = int((txtH + 1.0f - txtY) * 256.0f + 0.5f);
+      ay = roundFloat((txtH + 1.0f - txtY) * 256.0f);
       if (ay <= 0)
         break;
-      txtY = txtH;
     }
     if ((yi + yy) < 0 || (yi + yy) >= int(imageHeight))
       continue;
@@ -609,19 +607,19 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
     {
       float   txtX = (xf + float(xx)) * mipMult;
       int     ax = ay << 8;
-      if (!xx)
+      if (txtX < 0.0f)
       {
-        ax = ay * int((txtX + 1.0f) * 256.0f + 0.5f);
+        ax = roundFloat((txtX + 1.0f) * 256.0f);
         if (ax <= 0)
           continue;
-        txtX = 0.0f;
+        ax = ax * ay;
       }
       else if (txtX > txtW)
       {
-        ax = ay * int((txtW + 1.0f - txtX) * 256.0f + 0.5f);
+        ax = roundFloat((txtW + 1.0f - txtX) * 256.0f);
         if (ax <= 0)
           break;
-        txtX = txtW;
+        ax = ax * ay;
       }
       unsigned int  c;
       if (integerMip)
