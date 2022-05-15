@@ -141,6 +141,7 @@ class Renderer
   std::mutex  textureCacheMutex;
   std::map< std::string, CachedTexture >  textureCache;
   std::vector< const DDSTexture * > landTextures;
+  std::vector< const DDSTexture * > landTexturesN;
   std::vector< RenderObject > objectList;
   std::vector< std::string >  excludeModelPatterns;
   std::vector< std::string >  hdModelNamePatterns;
@@ -185,7 +186,7 @@ class Renderer
   void clear(unsigned int flags);
   static size_t getTextureDataSize(const DDSTexture *t);
   // returns NULL on failure
-  const DDSTexture *loadTexture(const std::string& fileName);
+  const DDSTexture *loadTexture(const std::string& fileName, int m = -1);
   void shrinkTextureCache();
   bool isExcludedModel(const std::string& modelPath) const;
   bool isHighQualityModel(const std::string& modelPath) const;

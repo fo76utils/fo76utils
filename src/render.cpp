@@ -847,6 +847,7 @@ void Renderer::clear(unsigned int flags)
       landData = (LandscapeData *) 0;
     }
     landTextures.clear();
+    landTexturesN.clear();
   }
   if (flags & 0x08)
     objectList.clear();
@@ -887,7 +888,7 @@ size_t Renderer::getTextureDataSize(const DDSTexture *t)
   return dataSize;
 }
 
-const DDSTexture * Renderer::loadTexture(const std::string& fileName)
+const DDSTexture * Renderer::loadTexture(const std::string& fileName, int m)
 {
   if (fileName.find("/temp_ground") != std::string::npos)
     return (DDSTexture *) 0;
@@ -910,9 +911,8 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName)
     DDSTexture  *t = (DDSTexture *) 0;
     try
     {
-      int     m = 0;
-      if (fileName.find("/cubemaps/") == std::string::npos)
-        m = textureMip;
+      if (m < 0)
+        m = (fileName.find("/cubemaps/") == std::string::npos ? textureMip : 0);
       m = ba2File.extractTexture(fileBuf, fileName, m);
       t = new DDSTexture(&(fileBuf.front()), fileBuf.size(), m);
       CachedTexture tmp;
@@ -1407,11 +1407,15 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         landTxtScale++;
         j = j << 1;
       }
+      const DDSTexture * const  *ltxtN = (DDSTexture **) 0;
+      if (landTexturesN.size() >= landTextures.size())
+        ltxtN = &(landTexturesN.front());
       t.terrainMesh->createMesh(
           *landData, landTxtScale,
           p.model.t.x0, p.model.t.y0, p.model.t.x1, p.model.t.y1,
-          &(landTextures.front()), landTextures.size(),
-          landTextureMip, landTxtRGBScale, landTxtDefColor);
+          &(landTextures.front()), ltxtN, landTextures.size(),
+          landTextureMip - float(int(landTextureMip)),
+          landTxtRGBScale, landTxtDefColor);
       *(t.renderer) = *(t.terrainMesh);
       t.renderer->drawTriShape(
           p.modelTransform, viewTransform, lightX, lightY, lightZ,
@@ -1723,12 +1727,27 @@ void Renderer::loadTerrain(const char *btdFileName,
   if (verboseMode)
     std::fprintf(stderr, "Loading landscape textures\n");
   landTextures.resize(landData->getTextureCount(), (DDSTexture *) 0);
+  if (cellTextureResolution > landData->getCellResolution())
+    landTexturesN.resize(landData->getTextureCount(), (DDSTexture *) 0);
+  int     mipLevelD = textureMip + int(landTextureMip);
   for (size_t i = 0; i < landTextures.size(); i++)
   {
     if (!enableTextures)
       landTextures[i] = loadTexture(whiteTexturePath);
     else if (!landData->getTextureDiffuse(i).empty())
-      landTextures[i] = loadTexture(landData->getTextureDiffuse(i));
+      landTextures[i] = loadTexture(landData->getTextureDiffuse(i), mipLevelD);
+    if (i < landTexturesN.size())
+    {
+      int     mipLevelN = mipLevelD;
+      if (mipLevelN > 0 &&
+          ba2File.getFileSize(landData->getTextureNormal(i))
+          < ba2File.getFileSize(landData->getTextureDiffuse(i)))
+      {
+        // normal map at half resolution
+        mipLevelN--;
+      }
+      landTexturesN[i] = loadTexture(landData->getTextureNormal(i), mipLevelN);
+    }
   }
 }
 

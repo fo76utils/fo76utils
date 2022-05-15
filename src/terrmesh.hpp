@@ -16,7 +16,7 @@ class TerrainMesh : public NIFFile::NIFTriShape
   std::vector< unsigned char >  textureBuf;
   std::vector< unsigned char >  textureBuf2;
   std::vector< unsigned short > hmapBuf;
-  DDSTexture  *landTexture;
+  DDSTexture  *landTexture[2];
   static void calculateNormal(float& normalX, float& normalY, float& normalZ,
                               float dx, float dy, float dz1, float dz2);
  public:
@@ -24,22 +24,24 @@ class TerrainMesh : public NIFFile::NIFTriShape
   virtual ~TerrainMesh();
   // texture resolution is 2^textureScale per height map vertex
   void createMesh(const unsigned short *hmapData, int hmapWidth, int hmapHeight,
-                  const unsigned char *ltexData, int ltexWidth, int ltexHeight,
-                  int textureScale, int x0, int y0, int x1, int y1,
-                  int cellResolution, float xOffset, float yOffset,
-                  float zMin, float zMax);
+                  const unsigned char *ltexData, const unsigned char *ltexDataN,
+                  int ltexWidth, int ltexHeight, int textureScale,
+                  int x0, int y0, int x1, int y1, int cellResolution,
+                  float xOffset, float yOffset, float zMin, float zMax);
   void createMesh(const LandscapeData& landData,
                   int textureScale, int x0, int y0, int x1, int y1,
-                  const DDSTexture * const *landTextures, size_t landTextureCnt,
-                  float textureMip = 0.0f, float textureRGBScale = 1.0f,
+                  const DDSTexture * const *landTextures,
+                  const DDSTexture * const *landTexturesN,
+                  size_t landTextureCnt, float textureMip = 0.0f,
+                  float textureRGBScale = 1.0f,
                   unsigned int textureDefaultColor = 0x003F3F3FU);
   inline size_t getTextureCount() const
   {
-    return 1;
+    return (landTexture[1] ? 2 : 1);
   }
   inline const DDSTexture * const *getTextures() const
   {
-    return &landTexture;
+    return landTexture;
   }
 };
 

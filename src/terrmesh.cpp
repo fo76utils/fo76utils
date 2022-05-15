@@ -17,21 +17,25 @@ void TerrainMesh::calculateNormal(
 }
 
 TerrainMesh::TerrainMesh()
-  : NIFFile::NIFTriShape(),
-    landTexture((DDSTexture *) 0)
+  : NIFFile::NIFTriShape()
 {
+  landTexture[0] = (DDSTexture *) 0;
+  landTexture[1] = (DDSTexture *) 0;
 }
 
 TerrainMesh::~TerrainMesh()
 {
-  if (landTexture)
-    delete landTexture;
+  if (landTexture[0])
+    delete landTexture[0];
+  if (landTexture[1])
+    delete landTexture[1];
 }
 
 void TerrainMesh::createMesh(
     const unsigned short *hmapData, int hmapWidth, int hmapHeight,
-    const unsigned char *ltexData, int ltexWidth, int ltexHeight,
-    int textureScale, int x0, int y0, int x1, int y1, int cellResolution,
+    const unsigned char *ltexData, const unsigned char *ltexDataN,
+    int ltexWidth, int ltexHeight, int textureScale,
+    int x0, int y0, int x1, int y1, int cellResolution,
     float xOffset, float yOffset, float zMin, float zMax)
 {
   int     w = std::abs(x1 - x0) + 1;
@@ -187,18 +191,60 @@ void TerrainMesh::createMesh(
       dstPtr[2] = srcPtr[offs + 2];
     }
   }
-  if (landTexture)
+  for (int i = 0; i < 2; i++)
   {
-    delete landTexture;
-    landTexture = (DDSTexture *) 0;
+    if (landTexture[i])
+    {
+      delete landTexture[i];
+      landTexture[i] = (DDSTexture *) 0;
+    }
   }
-  landTexture = new DDSTexture(&(textureBuf.front()), textureBuf.size());
+  landTexture[0] = new DDSTexture(&(textureBuf.front()), textureBuf.size());
+  if (!ltexDataN)
+    return;
+  // create normal map texture
+  textureBuf.resize(size_t(txtWP2) * size_t(txtHP2) * 2U + 128U);
+  ddsHdrBuf[5] = (unsigned int) txtWP2 * 2U;    // pitch
+  ddsHdrBuf[22] = 16;           // bits per pixel
+  ddsHdrBuf[23] = 0x000000FF;   // red mask
+  ddsHdrBuf[24] = 0x0000FF00;   // green mask
+  ddsHdrBuf[25] = 0x00000000;   // blue mask
+  dstPtr = &(textureBuf.front());
+  for (size_t i = 0; i < 32; i++, dstPtr = dstPtr + 4)
+  {
+    unsigned int  n = ddsHdrBuf[i];
+    dstPtr[0] = (unsigned char) (n & 0xFF);
+    dstPtr[1] = (unsigned char) ((n >> 8) & 0xFF);
+    dstPtr[2] = (unsigned char) ((n >> 16) & 0xFF);
+    dstPtr[3] = (unsigned char) ((n >> 24) & 0xFF);
+  }
+  for (int y = 0; y < txtHP2; y++)
+  {
+    int     yc = (y0 << textureScale) + y;
+    if (y >= ((txtH + txtHP2) >> 1))
+      yc = yc - txtHP2;
+    yc = (yc > 0 ? (yc < (ltexHeight - 1) ? yc : (ltexHeight - 1)) : 0);
+    const unsigned char *srcPtr =
+        ltexDataN + (size_t(yc) * size_t(ltexWidth) * 2U);
+    for (int x = 0; x < txtWP2; x++, dstPtr = dstPtr + 2)
+    {
+      int     xc = (x0 << textureScale) + x;
+      if (x >= ((txtW + txtWP2) >> 1))
+        xc = xc - txtWP2;
+      xc = (xc > 0 ? (xc < (ltexWidth - 1) ? xc : (ltexWidth - 1)) : 0);
+      size_t  offs = size_t(xc) * 2U;
+      dstPtr[0] = srcPtr[offs];
+      dstPtr[1] = srcPtr[offs + 1];
+    }
+  }
+  landTexture[1] = new DDSTexture(&(textureBuf.front()), textureBuf.size());
 }
 
 void TerrainMesh::createMesh(
     const LandscapeData& landData,
     int textureScale, int x0, int y0, int x1, int y1,
-    const DDSTexture * const *landTextures, size_t landTextureCnt,
+    const DDSTexture * const *landTextures,
+    const DDSTexture * const *landTexturesN, size_t landTextureCnt,
     float textureMip, float textureRGBScale, unsigned int textureDefaultColor)
 {
   int     w = std::abs(x1 - x0) + 8;
@@ -209,13 +255,26 @@ void TerrainMesh::createMesh(
   y0 = (y0 < y1 ? y0 : y1) - 4;
   x1 = x0 + w - 1;
   y1 = y0 + h - 1;
+  unsigned char *ltexData = (unsigned char *) 0;
+  unsigned char *ltexDataN = (unsigned char *) 0;
   {
-    textureBuf2.resize(size_t(txtW) * size_t(txtH) * 3U);
-    LandscapeTexture  landTxt(landData, landTextures, landTextureCnt);
+    if (landTexturesN && textureScale > 0)
+    {
+      textureBuf2.resize(size_t(txtW) * size_t(txtH) * 5U);
+      ltexDataN = &(textureBuf2.front());
+      ltexData = ltexDataN + (size_t(txtW) * size_t(txtH) * 2U);
+    }
+    else
+    {
+      textureBuf2.resize(size_t(txtW) * size_t(txtH) * 3U);
+      ltexData = &(textureBuf2.front());
+    }
+    LandscapeTexture  landTxt(landData, landTextures, landTextureCnt,
+                              landTexturesN);
     landTxt.setMipLevel(textureMip);
     landTxt.setRGBScale(textureRGBScale);
     landTxt.setDefaultColor(textureDefaultColor);
-    landTxt.renderTexture(&(textureBuf2.front()), textureScale, x0, y0, x1, y1);
+    landTxt.renderTexture(ltexData, textureScale, x0, y0, x1, y1, ltexDataN);
   }
   hmapBuf.resize(size_t(w) * size_t(h));
   unsigned short  *dstPtr = &(hmapBuf.front());
@@ -237,7 +296,7 @@ void TerrainMesh::createMesh(
   float   yOffset = float(landData.getOriginY() - y0);
   xOffset = xOffset * (4096.0f / float(cellResolution));
   yOffset = yOffset * (4096.0f / float(cellResolution));
-  createMesh(&(hmapBuf.front()), w, h, &(textureBuf2.front()), txtW, txtH,
+  createMesh(&(hmapBuf.front()), w, h, ltexData, ltexDataN, txtW, txtH,
              textureScale, 4, 4, w - 4, h - 4, cellResolution,
              xOffset, yOffset, landData.getZMin(), landData.getZMax());
 }
