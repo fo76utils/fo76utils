@@ -278,6 +278,19 @@ size_t DDSTexture::decodeBlock_BGRA(unsigned int *dst, const unsigned char *src,
   return 16;
 }
 
+size_t DDSTexture::decodeBlock_R8G8(unsigned int *dst,
+                                    const unsigned char *src, unsigned int w)
+{
+  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w << 1))
+  {
+    dst[0] = 0xFF000000U | FileBuffer::readUInt16Fast(src);
+    dst[1] = 0xFF000000U | FileBuffer::readUInt16Fast(src + 2);
+    dst[2] = 0xFF000000U | FileBuffer::readUInt16Fast(src + 4);
+    dst[3] = 0xFF000000U | FileBuffer::readUInt16Fast(src + 6);
+  }
+  return 8;
+}
+
 void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
 {
   buf.setPosition(0);
@@ -320,7 +333,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     if (!(formatFlags & 0x40))          // DDPF_RGB
       throw errorMessage("unsupported texture file format");
     blockSize = buf.readUInt32();
-    if (blockSize != 24 && blockSize != 32)
+    if (blockSize != 16 && blockSize != 24 && blockSize != 32)
       throw errorMessage("unsupported texture file format");
     blockSize = blockSize << 1;
     unsigned long long  rgMask = buf.readUInt64();
@@ -337,6 +350,8 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       decodeFunction = &decodeBlock_RGBA;
     else if (rgMask == 0x0000FF0000FF0000ULL && baMask == 0xFF000000000000FFULL)
       decodeFunction = &decodeBlock_BGRA;
+    else if (rgMask == 0x0000FF00000000FFULL && !baMask)
+      decodeFunction = &decodeBlock_R8G8;
     else
       throw errorMessage("unsupported texture file format");
   }

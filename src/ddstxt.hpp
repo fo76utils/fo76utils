@@ -40,6 +40,8 @@ class DDSTexture
                                  unsigned int w);
   static size_t decodeBlock_BGRA(unsigned int *dst, const unsigned char *src,
                                  unsigned int w);
+  static size_t decodeBlock_R8G8(unsigned int *dst, const unsigned char *src,
+                                 unsigned int w);
   void loadTexture(FileBuffer& buf, int mipOffset);
  public:
   DDSTexture(const char *fileName, int mipOffset = 0);
