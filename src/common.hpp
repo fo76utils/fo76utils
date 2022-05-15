@@ -113,7 +113,13 @@ inline unsigned int blendRGBA32(unsigned int c0, unsigned int c1, int f)
           | ((unsigned int) (tmp0 >> 32) & 0xFF00FF00U));
 }
 
-inline unsigned long long blendRGB64(unsigned long long a, unsigned long long b,
+inline unsigned long long rgb24ToRBG64(unsigned int c)
+{
+  return ((unsigned long long) ((c & 0x000000FF) | ((c & 0x00FF0000) << 4))
+          | ((unsigned long long) (c & 0x0000FF00) << 32));
+}
+
+inline unsigned long long blendRBG64(unsigned long long a, unsigned long long b,
                                      unsigned int opacityB)
 {
   unsigned long long  tmp = (a << 8) + ((b - a) * opacityB);

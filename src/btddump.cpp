@@ -428,7 +428,7 @@ int main(int argc, char **argv)
               unsigned int  a = ltexBuf[(yy << m) | xx];
               for (size_t i = 1; i < 6; i++, a = a >> 3)
               {
-                tmp = blendRGB64(tmp, ltexPalette[txtSetPtr[i]],
+                tmp = blendRBG64(tmp, ltexPalette[txtSetPtr[i]],
                                  ((a & 7) * 73U) >> 1);
               }
               tmp = tmp + 0x0000080000800008ULL;
@@ -452,7 +452,7 @@ int main(int argc, char **argv)
                   continue;
                 g = (gcvrOffset + g) & 0xFFU;
                 n++;
-                tmp = blendRGB64(tmp, ltexPalette[g], (256U + (n >> 1)) / n);
+                tmp = blendRBG64(tmp, ltexPalette[g], (256U + (n >> 1)) / n);
               }
               tmp = tmp + 0x0000080000800008ULL;
               p[0] = (unsigned char) ((tmp >> 4) & 0xFF);
