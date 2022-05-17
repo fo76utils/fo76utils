@@ -277,7 +277,7 @@ class NIFFile : public FileBuffer
   void loadNIFFile(const BA2File *ba2File);
   void getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
                std::vector< unsigned int >& parentBlocks,
-               unsigned int switchActive) const;
+               unsigned int switchActive, bool noRootNodeTransform) const;
  public:
   NIFFile(const char *fileName, const BA2File *ba2File = (BA2File *) 0);
   NIFFile(const unsigned char *buf, size_t bufSize,
@@ -304,7 +304,8 @@ class NIFFile : public FileBuffer
   inline const NIFBlkBSShaderTextureSet *getShaderTextureSet(size_t n) const;
   inline const NIFBlkNiAlphaProperty *getAlphaProperty(size_t n) const;
   void getMesh(std::vector< NIFTriShape >& v, unsigned int rootNode = 0U,
-               unsigned int switchActive = 0U) const;
+               unsigned int switchActive = 0U,
+               bool noRootNodeTransform = false) const;
 };
 
 inline bool NIFFile::isNodeBlock(int blockType)

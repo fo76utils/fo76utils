@@ -678,7 +678,7 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
 
 void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
                       std::vector< unsigned int >& parentBlocks,
-                      unsigned int switchActive) const
+                      unsigned int switchActive, bool noRootNodeTransform) const
 {
   if (blockNum >= blocks.size())
     return;
@@ -699,7 +699,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
         }
       }
       if (!(loopFound || (b.type == BlkTypeNiSwitchNode && i != switchActive)))
-        getMesh(v, n, parentBlocks, switchActive);
+        getMesh(v, n, parentBlocks, switchActive, noRootNodeTransform);
     }
     parentBlocks.resize(parentBlocks.size() - 1);
     return;
@@ -719,7 +719,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   t.flags = (unsigned char) (b.flags & 0x01);   // hidden
   if (b.nameID >= 0)
     t.name = stringTable[b.nameID]->c_str();
-  for (size_t i = parentBlocks.size(); i-- > 0; )
+  for (size_t i = parentBlocks.size(); i-- > size_t(noRootNodeTransform); )
   {
     t.vertexTransform *=
         ((const NIFBlkNiNode *) blocks[parentBlocks[i]])->vertexTransform;
@@ -831,10 +831,10 @@ NIFFile::~NIFFile()
 }
 
 void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int rootNode,
-                      unsigned int switchActive) const
+                      unsigned int switchActive, bool noRootNodeTransform) const
 {
   v.clear();
   std::vector< unsigned int > parentBlocks;
-  getMesh(v, rootNode, parentBlocks, switchActive);
+  getMesh(v, rootNode, parentBlocks, switchActive, noRootNodeTransform);
 }
 
