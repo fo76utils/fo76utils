@@ -1009,7 +1009,8 @@ void Renderer::loadModels(unsigned int t, unsigned long long modelIDMask)
                                         nifFiles[t].fileBuf.size(), &ba2File);
       bool    isHDModel = bool(o.flags & 0x0040);
       nifFiles[n].nifFile->getMesh(nifFiles[n].meshData, 0U,
-                                   (unsigned int) (modelLOD > 0 && !isHDModel));
+                                   (unsigned int) (modelLOD > 0 && !isHDModel),
+                                   true);
       size_t  meshCnt = nifFiles[n].meshData.size();
       for (size_t i = 0; i < meshCnt; i++)
       {
