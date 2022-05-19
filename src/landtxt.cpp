@@ -73,14 +73,17 @@ inline void LandscapeTexture::getFO76VertexColor(
     offs1++;
     offs3++;
   }
+  unsigned int  f3 = ((unsigned int) xf * (unsigned int) yf + 128U) >> 8;
+  unsigned int  f1 = (unsigned int) xf - f3;
+  unsigned int  f2 = (unsigned int) yf - f3;
+  unsigned int  f0 = 256U - ((unsigned int) xf + ((unsigned int) yf - f3));
   unsigned long long  c =
-      blendRBG64(blendRBG64(getFO76VertexColor(offs0),
-                            getFO76VertexColor(offs1), xf),
-                 blendRBG64(getFO76VertexColor(offs2),
-                            getFO76VertexColor(offs3), xf), yf);
-  r = (unsigned int) (c & 0x0FFFU);
-  g = (unsigned int) ((c >> 40) & 0x0FFFU);
-  b = (unsigned int) ((c >> 20) & 0x0FFFU);
+      (getFO76VertexColor(offs0) * f0) + (getFO76VertexColor(offs1) * f1)
+      + (getFO76VertexColor(offs2) * f2) + (getFO76VertexColor(offs3) * f3)
+      + 0x0000800008000080ULL;
+  r = (unsigned int) ((c >> 8) & 0x0FFFU);
+  g = (unsigned int) ((c >> 48) & 0x0FFFU);
+  b = (unsigned int) ((c >> 28) & 0x0FFFU);
 }
 
 inline void LandscapeTexture::getTES4VertexColor(
@@ -107,14 +110,17 @@ inline void LandscapeTexture::getTES4VertexColor(
     offs1++;
     offs3++;
   }
+  unsigned int  f3 = ((unsigned int) xf * (unsigned int) yf + 128U) >> 8;
+  unsigned int  f1 = (unsigned int) xf - f3;
+  unsigned int  f2 = (unsigned int) yf - f3;
+  unsigned int  f0 = 256U - ((unsigned int) xf + ((unsigned int) yf - f3));
   unsigned long long  c =
-      blendRBG64(blendRBG64(getTES4VertexColor(offs0),
-                            getTES4VertexColor(offs1), xf),
-                 blendRBG64(getTES4VertexColor(offs2),
-                            getTES4VertexColor(offs3), xf), yf);
-  r = ((unsigned int) (c & 0x0FFFU) * 5061U + 4096U) >> 13;
-  g = ((unsigned int) ((c >> 40) & 0x0FFFU) * 5061U + 4096U) >> 13;
-  b = ((unsigned int) ((c >> 20) & 0x0FFFU) * 5061U + 4096U) >> 13;
+      (getTES4VertexColor(offs0) * f0) + (getTES4VertexColor(offs1) * f1)
+      + (getTES4VertexColor(offs2) * f2) + (getTES4VertexColor(offs3) * f3)
+      + 0x0000800008000080ULL;
+  r = ((unsigned int) ((c >> 8) & 0x0FFFU) * 5061U + 4096U) >> 13;
+  g = ((unsigned int) ((c >> 48) & 0x0FFFU) * 5061U + 4096U) >> 13;
+  b = ((unsigned int) ((c >> 28) & 0x0FFFU) * 5061U + 4096U) >> 13;
 }
 
 unsigned long long LandscapeTexture::renderPixelFO76I_NoNormals(
