@@ -153,10 +153,11 @@ class Renderer
   std::string stringBuf;
   std::vector< unsigned char >  fileBuf;
   unsigned int  waterColor;
-  bool    verboseMode;
+  int     zRangeMax;
   NIFFile::NIFBounds  worldBounds;
   std::string whiteTexturePath;
   std::map< unsigned int, BaseObject >  baseObjects;
+  bool    verboseMode;
   // bit Y * 8 + X of the return value is set if the bounds of the object
   // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
   // in the top left corner
@@ -208,7 +209,7 @@ class Renderer
  public:
   Renderer(int imageWidth, int imageHeight,
            const BA2File& archiveFiles, ESMFile& masterFiles,
-           unsigned int *bufRGBW = 0, float *bufZ = 0);
+           unsigned int *bufRGBW = 0, float *bufZ = 0, int zMax = 16777216);
   virtual ~Renderer();
   // returns 0 if formID is not in an exterior world, 0xFFFFFFFF on error
   static unsigned int findParentWorld(ESMFile& esmFile, unsigned int formID);

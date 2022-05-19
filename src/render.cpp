@@ -221,6 +221,8 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
     modelBounds.yMax = float(y0) * -xyScale + yOffset;
     int     w = landData->getImageWidth();
     int     h = landData->getImageHeight();
+    x0 = (x0 > 0 ? (x0 < (w - 1) ? x0 : (w - 1)) : 0);
+    x1 = (x1 > 0 ? (x1 < (w - 1) ? x1 : (w - 1)) : 0);
     unsigned short  z0 = 0xFFFF;
     unsigned short  z1 = 0;
     for (int y = y0; y <= y1; y++)
@@ -230,8 +232,7 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
       srcPtr = srcPtr + (size_t(yc) * size_t(w));
       for (int x = x0; x <= x1; x++)
       {
-        int     xc = (x > 0 ? (x < (w - 1) ? x : (w - 1)) : 0);
-        unsigned short  z = srcPtr[xc];
+        unsigned short  z = srcPtr[x];
         z0 = (z < z0 ? z : z0);
         z1 = (z > z1 ? z : z1);
       }
@@ -284,7 +285,7 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
   int     yMax = roundFloat(screenBounds.yMax + 2.0f);
   int     zMax = roundFloat(screenBounds.zMax + 2.0f);
   if (xMin >= width || xMax < 0 || yMin >= height || yMax < 0 ||
-      zMin >= 16777216 || zMax < 0)
+      zMin >= zRangeMax || zMax < 0)
   {
     return -1;
   }
@@ -835,8 +836,9 @@ void Renderer::clear(unsigned int flags)
     }
     if (flags & 0x02)
     {
+      float   tmp = float(zRangeMax);
       for (size_t i = 0; i < imageDataSize; i++)
-        outBufZ[i] = 16777216.0f;
+        outBufZ[i] = tmp;
     }
   }
   if (flags & 0x04)
@@ -1539,7 +1541,7 @@ void Renderer::threadFunction(Renderer *p, size_t threadNum,
 
 Renderer::Renderer(int imageWidth, int imageHeight,
                    const BA2File& archiveFiles, ESMFile& masterFiles,
-                   unsigned int *bufRGBW, float *bufZ)
+                   unsigned int *bufRGBW, float *bufZ, int zMax)
   : outBufRGBW(bufRGBW),
     outBufZ(bufZ),
     width(imageWidth),
@@ -1574,6 +1576,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     firstTexture((CachedTexture *) 0),
     lastTexture((CachedTexture *) 0),
     waterColor(0xC0302010U),
+    zRangeMax(zMax),
     verboseMode(true)
 {
   size_t  imageDataSize = size_t(width) * size_t(height);
@@ -1835,6 +1838,7 @@ static const char *usageStrings[] =
   "    -view SCALE RX RY RZ OFFS_X OFFS_Y OFFS_Z",
   "                        set transform from world coordinates to image",
   "                        coordinates, rotations are in degrees",
+  "    -zmax INT           limit Z range to less than the specified value",
   "    -light SCALE RX RY  set light level and X, Y rotation (0, 0 = top)",
   "    -lpoly A5 A4 A3 A2 A1 A0    set lighting polynomial, -1 <= x <= 1",
   "",
@@ -1881,6 +1885,7 @@ int main(int argc, char **argv)
     float   landTextureMult = 1.0f;
     int     modelLOD = 0;
     unsigned int  waterColor = 0x60102030U;
+    int     zMax = 16777216;
     float   viewScale = 0.0625f;
     float   viewRotationX = 180.0f;
     float   viewRotationY = 0.0f;
@@ -1897,6 +1902,7 @@ int main(int argc, char **argv)
     std::vector< const char * > hdModelNamePatterns;
     std::vector< const char * > excludeModelPatterns;
     Plot3D_TriShape::getDefaultLightingFunction(lightingPolynomial);
+    float   d = float(std::atan(1.0) / 45.0);   // degrees to radians
 
     for (int i = 1; i < argc; i++)
     {
@@ -1940,11 +1946,9 @@ int main(int argc, char **argv)
         std::printf("-view %.6f %.1f %.1f %.1f %.1f %.1f %.1f\n",
                     viewScale, viewRotationX, viewRotationY, viewRotationZ,
                     viewOffsX, viewOffsY, viewOffsZ);
-        float   tmp = float(std::atan(1.0) / 45.0);
         {
           NIFFile::NIFVertexTransform
-              vt(1.0f,
-                 viewRotationX * tmp, viewRotationY * tmp, viewRotationZ * tmp,
+              vt(1.0f, viewRotationX * d, viewRotationY * d, viewRotationZ * d,
                  0.0f, 0.0f, 0.0f);
           std::printf("    Rotation matrix:\n");
           std::printf("        X: %9.6f %9.6f %9.6f\n",
@@ -1954,11 +1958,12 @@ int main(int argc, char **argv)
           std::printf("        Z: %9.6f %9.6f %9.6f\n",
                       vt.rotateZX, vt.rotateZY, vt.rotateZZ);
         }
+        std::printf("-zmax %d\n", zMax);
         std::printf("-light %.1f %.4f %.4f\n",
                     lightLevel, lightRotationX, lightRotationY);
         {
           NIFFile::NIFVertexTransform
-              vt(1.0f, lightRotationX * tmp, lightRotationY * tmp, 0.0f,
+              vt(1.0f, lightRotationX * d, lightRotationY * d, 0.0f,
                  0.0f, 0.0f, 0.0f);
           std::printf("    Light vector: %9.6f %9.6f %9.6f\n",
                       vt.rotateXZ, vt.rotateYZ, vt.rotateZZ);
@@ -2131,6 +2136,12 @@ int main(int argc, char **argv)
                                      -1048576.0, 1048576.0));
         i = i + 7;
       }
+      else if (std::strcmp(argv[i], "-zmax") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        zMax = int(parseInteger(argv[i], 10, "invalid Z limit", 0, 16777216));
+      }
       else if (std::strcmp(argv[i], "-light") == 0)
       {
         if ((i + 3) >= argc)
@@ -2251,6 +2262,8 @@ int main(int argc, char **argv)
       viewOffsX = viewOffsX * 2.0f;
       viewOffsY = viewOffsY * 2.0f;
       viewOffsZ = viewOffsZ * 2.0f;
+      zMax = zMax << 1;
+      zMax = (zMax < 16777216 ? zMax : 16777216);
     }
 
     BA2File ba2File(args[4]);
@@ -2258,7 +2271,8 @@ int main(int argc, char **argv)
     unsigned int  worldID = Renderer::findParentWorld(esmFile, formID);
     if (worldID == 0xFFFFFFFFU)
       throw errorMessage("form ID not found in ESM, or invalid record type");
-    Renderer  renderer(width, height, ba2File, esmFile);
+    Renderer  renderer(width, height, ba2File, esmFile,
+                       (unsigned int *) 0, (float *) 0, zMax);
     if (threadCnt > 0)
       renderer.setThreadCount(threadCnt);
     renderer.setTextureCacheSize(size_t(textureCacheSize) << 20);
@@ -2276,14 +2290,10 @@ int main(int argc, char **argv)
     renderer.setLandTxtRGBScale(landTextureMult);
     renderer.setModelLOD(modelLOD);
     renderer.setWaterColor(waterColor);
-    {
-      float   tmp = float(std::atan(1.0) / 45.0);       // degrees to radians
-      renderer.setViewTransform(
-          viewScale,
-          viewRotationX * tmp, viewRotationY * tmp, viewRotationZ * tmp,
-          viewOffsX, viewOffsY, viewOffsZ);
-      renderer.setLightDirection(lightRotationX * tmp, lightRotationY * tmp);
-    }
+    renderer.setViewTransform(
+        viewScale, viewRotationX * d, viewRotationY * d, viewRotationZ * d,
+        viewOffsX, viewOffsY, viewOffsZ);
+    renderer.setLightDirection(lightRotationX * d, lightRotationY * d);
     renderer.setLightingFunction(lightingPolynomial);
     if (defaultEnvMap && *defaultEnvMap)
       renderer.setDefaultEnvMap(std::string(defaultEnvMap));
