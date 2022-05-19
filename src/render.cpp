@@ -374,7 +374,7 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   int     cellX = 0;
   int     cellY = 0;
   unsigned int  cellFlags = 0;
-  float   waterLevel = defaultWaterLevel;
+  float   waterLevel = 1.0e12f;
   ESMFile::ESMField f(esmFile, r);
   while (f.next())
   {
@@ -395,7 +395,11 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   if (!(cellFlags & 0x02))              // cell has no water
     return;
   if (!(waterLevel >= -1048576.0f && waterLevel <= 1048576.0f))
-    return;
+  {
+    if (cellFlags & 0x01)
+      return;
+    waterLevel = defaultWaterLevel;
+  }
   RenderObject  tmp;
   tmp.flags = 0x0004;                   // water cell
   tmp.tileIndex = -1;
@@ -1838,7 +1842,7 @@ static const char *usageStrings[] =
   "    -view SCALE RX RY RZ OFFS_X OFFS_Y OFFS_Z",
   "                        set transform from world coordinates to image",
   "                        coordinates, rotations are in degrees",
-  "    -zmax INT           limit Z range to less than the specified value",
+  "    -zrange MIN MAX     limit view Z range to MIN <= Z < MAX",
   "    -light SCALE RX RY  set light level and X, Y rotation (0, 0 = top)",
   "    -lpoly A5 A4 A3 A2 A1 A0    set lighting polynomial, -1 <= x <= 1",
   "",
@@ -1885,6 +1889,7 @@ int main(int argc, char **argv)
     float   landTextureMult = 1.0f;
     int     modelLOD = 0;
     unsigned int  waterColor = 0x60102030U;
+    int     zMin = 0;
     int     zMax = 16777216;
     float   viewScale = 0.0625f;
     float   viewRotationX = 180.0f;
@@ -1958,7 +1963,7 @@ int main(int argc, char **argv)
           std::printf("        Z: %9.6f %9.6f %9.6f\n",
                       vt.rotateZX, vt.rotateZY, vt.rotateZZ);
         }
-        std::printf("-zmax %d\n", zMax);
+        std::printf("-zrange %d %d\n", zMin, zMax);
         std::printf("-light %.1f %.4f %.4f\n",
                     lightLevel, lightRotationX, lightRotationY);
         {
@@ -2136,11 +2141,15 @@ int main(int argc, char **argv)
                                      -1048576.0, 1048576.0));
         i = i + 7;
       }
-      else if (std::strcmp(argv[i], "-zmax") == 0)
+      else if (std::strcmp(argv[i], "-zrange") == 0)
       {
-        if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
-        zMax = int(parseInteger(argv[i], 10, "invalid Z limit", 0, 16777216));
+        if ((i + 2) >= argc)
+          throw errorMessage("missing argument for %s", argv[i]);
+        zMin = int(parseInteger(argv[i + 1], 10, "invalid Z range",
+                                0, 1048575));
+        zMax = int(parseInteger(argv[i + 2], 10, "invalid Z range",
+                                zMin + 1, 16777216));
+        i = i + 2;
       }
       else if (std::strcmp(argv[i], "-light") == 0)
       {
@@ -2254,6 +2263,8 @@ int main(int argc, char **argv)
         int(parseInteger(args[3], 0, "invalid image height", 2, 32768));
     viewOffsX = viewOffsX + (float(width) * 0.5f);
     viewOffsY = viewOffsY + (float(height - 2) * 0.5f);
+    viewOffsZ = viewOffsZ - float(zMin);
+    zMax = zMax - zMin;
     if (enableDownscale)
     {
       width = width << 1;
