@@ -1715,6 +1715,15 @@ void Renderer::setWaterTexture(const std::string& s)
   defaultWaterTexture = s;
 }
 
+static int calculateLandTxtMip(long fileSize)
+{
+  int     m = 0;
+  while ((8L << (m + m)) <= (fileSize - 128L))
+    m++;
+  // return log2(resolution)
+  return (m - 1);
+}
+
 void Renderer::loadTerrain(const char *btdFileName,
                            unsigned int worldID, unsigned int defTxtID,
                            int mipLevel, int xMin, int yMin, int xMax, int yMax)
@@ -1739,14 +1748,11 @@ void Renderer::loadTerrain(const char *btdFileName,
       landTextures[i] = loadTexture(landData->getTextureDiffuse(i), mipLevelD);
     if (i < landTexturesN.size())
     {
-      int     mipLevelN = mipLevelD;
-      if (mipLevelN > 0 &&
-          ba2File.getFileSize(landData->getTextureNormal(i))
-          < ba2File.getFileSize(landData->getTextureDiffuse(i)))
-      {
-        // normal map at half resolution
-        mipLevelN--;
-      }
+      long    fileSizeD = ba2File.getFileSize(landData->getTextureDiffuse(i));
+      long    fileSizeN = ba2File.getFileSize(landData->getTextureNormal(i));
+      int     mipLevelN = mipLevelD + calculateLandTxtMip(fileSizeN)
+                          - calculateLandTxtMip(fileSizeD);
+      mipLevelN = (mipLevelN > 0 ? (mipLevelN < 15 ? mipLevelN : 15) : 0);
       landTexturesN[i] = loadTexture(landData->getTextureNormal(i), mipLevelN);
     }
   }
