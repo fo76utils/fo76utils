@@ -373,7 +373,7 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   int     cellX = 0;
   int     cellY = 0;
   unsigned int  cellFlags = 0;
-  float   waterLevel = 1.0e12f;
+  float   waterLevel = defaultWaterLevel;
   ESMFile::ESMField f(esmFile, r);
   while (f.next())
   {
@@ -394,7 +394,7 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   if (!(cellFlags & 0x02))              // cell has no water
     return;
   if (!(waterLevel >= -1048576.0f && waterLevel <= 1048576.0f))
-    waterLevel = defaultWaterLevel;
+    return;
   RenderObject  tmp;
   tmp.flags = 0x0004;                   // water cell
   tmp.tileIndex = -1;
@@ -1558,7 +1558,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     landTxtDefColor(0x003F3F3FU),
     landData((LandscapeData *) 0),
     cellTextureResolution(256),
-    defaultWaterLevel(-8192.0f),
+    defaultWaterLevel(0.0f),
     modelLOD(0),
     distantObjectsOnly(false),
     noDisabledObjects(false),
