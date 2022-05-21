@@ -84,7 +84,7 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   else                                  // Fallout 76
   {
     texturePathMap = (!(buf.readUInt16Fast() & 0xFF) ?
-                      0xFFFFFFFE98724E10ULL : 0xFFFFFFFE98723E10ULL);
+                      0xFFFFFFEE98724E10ULL : 0xFFFFFFEE98723E10ULL);
     flags = flags | ((unsigned char) bool(buf[buf.size() - 10]) << 4);
     texturePaths.resize(10);
   }
@@ -97,16 +97,16 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
     else
       buf.readPath(texturePaths[n], len, "textures/", ".dds");
   }
-  if (version == 2 && texturePaths[4].empty() && !texturePaths[6].empty())
+  if (texturePaths[4].empty() && !texturePaths[(version == 2 ? 6 : 8)].empty())
   {
-    buf.setPosition(buf.getPosition() + 15);
+    buf.setPosition(buf.getPosition() + (version == 2 ? 15 : 24));
     if (buf.readUInt8() != 0)           // specular enabled
     {
       buf.setPosition(buf.getPosition() + 12);
       tmp = roundFloat(buf.readFloat() * float(int(envMapScale)));
       envMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
     }
-    else if (buf[57] == 0)
+    else if (version != 2 || buf[57] == 0)
     {
       envMapScale = 0;
     }
