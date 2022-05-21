@@ -172,7 +172,8 @@ class Renderer
                                         const ESMFile::ESMRecord& r);
   void addSCOLObjects(const ESMFile::ESMRecord& r,      // SCOL
                       float scale, float rX, float rY, float rZ,
-                      float offsX, float offsY, float offsZ);
+                      float offsX, float offsY, float offsZ,
+                      unsigned int refrMSWPFormID);
   // type = 0: terrain, type = 1: solid objects, type = 2: water
   void findObjects(unsigned int formID, int type, bool isRecursive);
   void findObjects(unsigned int formID, int type);

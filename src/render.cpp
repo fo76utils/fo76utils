@@ -551,7 +551,8 @@ const Renderer::BaseObject * Renderer::readModelProperties(
 
 void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
                               float scale, float rX, float rY, float rZ,
-                              float offsX, float offsY, float offsZ)
+                              float offsX, float offsY, float offsZ,
+                              unsigned int refrMSWPFormID)
 {
   NIFFile::NIFVertexTransform vt(scale, rX, rY, rZ, offsX, offsY, offsZ);
   RenderObject  tmp;
@@ -573,8 +574,8 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
       unsigned int  modelFormID = f.readUInt32Fast();
       if (!modelFormID)
         continue;
-      modelMSWPFormID = 0U;
-      if (f.size() >= 8)
+      modelMSWPFormID = refrMSWPFormID;
+      if (!modelMSWPFormID && f.size() >= 8)
         modelMSWPFormID = f.readUInt32Fast();
       const ESMFile::ESMRecord  *r3 = esmFile.getRecordPtr(modelFormID);
       if (!r3 || (r3->flags | (!distantObjectsOnly ? 0xFF7FFFFFU : 0xFF7F7FFFU))
@@ -688,7 +689,10 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     if (*r2 == "SCOL" && !enableSCOL)
     {
       if (type == 1)
-        addSCOLObjects(*r2, scale, rX, rY, rZ, offsX, offsY, offsZ);
+      {
+        addSCOLObjects(*r2, scale, rX, rY, rZ, offsX, offsY, offsZ,
+                       refrMSWPFormID);
+      }
       continue;
     }
     RenderObject  tmp;
