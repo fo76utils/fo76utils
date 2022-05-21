@@ -435,7 +435,8 @@ void Plot3D_TriShape::drawPixel_NormalEnv(Plot3D_TriShape& p,
   float   normalZ = z.normalZ;
   c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
   p.bufRGBW[offs] =
-      p.addReflection(c, p.environmentMap(normalX, normalY, normalZ, x, y));
+      p.addReflectionM(c, p.environmentMap(normalX, normalY, normalZ, x, y),
+                       n >> 24);
 }
 
 void Plot3D_TriShape::drawPixel_NormalEnvM(Plot3D_TriShape& p,
@@ -866,32 +867,30 @@ void Plot3D_TriShape::drawTriShape(
     {
       drawPixelFunction = &drawPixel_Normal;
     }
-    else if (textureCnt >= 9 && textures[8])
-    {
-      textureE = textures[4];
-      textureR = textures[8];
-      textureScaleR = float(textureR->getWidth()) / float(textureD->getWidth());
-      reflectionLevel =
-          roundFloat(float(lightTable[128]) * (0.7217095f / 256.0f));
-      drawPixelFunction = &drawPixel_NormalRefl;
-    }
-    else if (textureCnt >= 7 && textures[6])
-    {
-      textureE = textures[4];
-      textureR = textures[6];
-      textureScaleR = float(textureR->getWidth()) / float(textureD->getWidth());
-      reflectionLevel =
-          roundFloat(float(lightTable[128])
-                     * (float(int(envMapScale)) * (0.7217095f / 32768.0f)));
-      drawPixelFunction = &drawPixel_NormalEnvM;
-    }
     else
     {
       textureE = textures[4];
       reflectionLevel =
           roundFloat(float(lightTable[128])
-                     * (float(int(envMapScale)) * (1.0f / 65536.0f)));
-      drawPixelFunction = &drawPixel_NormalEnv;
+                     * (float(int(envMapScale)) * (0.7217095f / 32768.0f)));
+      if (textureCnt >= 9 && textures[8])
+      {
+        textureR = textures[8];
+        textureScaleR =
+            float(textureR->getWidth()) / float(textureD->getWidth());
+        drawPixelFunction = &drawPixel_NormalRefl;
+      }
+      else if (textureCnt >= 7 && textures[6])
+      {
+        textureR = textures[6];
+        textureScaleR =
+            float(textureR->getWidth()) / float(textureD->getWidth());
+        drawPixelFunction = &drawPixel_NormalEnvM;
+      }
+      else
+      {
+        drawPixelFunction = &drawPixel_NormalEnv;
+      }
     }
   }
   if (BRANCH_EXPECT(debugMode, false))
