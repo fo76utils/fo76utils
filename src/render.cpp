@@ -559,14 +559,14 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
   tmp.tileIndex = -1;
   tmp.z = 0;
   ESMFile::ESMField f(esmFile, r);
-  unsigned int  mswpFormIDBase = 0U;
-  unsigned int  modelMSWPFormID = 0U;
+  unsigned int  mswpFormID_SCOL = 0U;
+  unsigned int  mswpFormID_ONAM = 0U;
   const BaseObject  *o = (BaseObject *) 0;
   while (f.next())
   {
     if (f == "MODS" && f.size() >= 4)
     {
-      mswpFormIDBase = f.readUInt32Fast();
+      mswpFormID_SCOL = f.readUInt32Fast();
     }
     else if (f == "ONAM" && f.size() >= 4)
     {
@@ -574,9 +574,9 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
       unsigned int  modelFormID = f.readUInt32Fast();
       if (!modelFormID)
         continue;
-      modelMSWPFormID = refrMSWPFormID;
-      if (!modelMSWPFormID && f.size() >= 8)
-        modelMSWPFormID = f.readUInt32Fast();
+      mswpFormID_ONAM = 0U;
+      if (f.size() >= 8)
+        mswpFormID_ONAM = f.readUInt32Fast();
       const ESMFile::ESMRecord  *r3 = esmFile.getRecordPtr(modelFormID);
       if (!r3 || (r3->flags | (!distantObjectsOnly ? 0xFF7FFFFFU : 0xFF7F7FFFU))
                  != 0xFF7FFFFFU)
@@ -589,10 +589,6 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
         o = (BaseObject *) 0;
         continue;
       }
-      if (!modelMSWPFormID)
-        modelMSWPFormID = tmp.mswpFormID;
-      if (!modelMSWPFormID)
-        modelMSWPFormID = mswpFormIDBase;
       tmp.mswpFormID = 0U;
     }
     else if (f == "DATA" && o)
@@ -611,8 +607,17 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
         tmp.modelTransform *= vt;
         if (setScreenAreaUsed(tmp) >= 0)
         {
-          if (!tmp.mswpFormID && modelMSWPFormID)
-            tmp.mswpFormID = loadMaterialSwap(modelMSWPFormID);
+          if (!tmp.mswpFormID)
+          {
+            if (o->mswpFormID)
+              tmp.mswpFormID = loadMaterialSwap(o->mswpFormID);
+            if (refrMSWPFormID && refrMSWPFormID != o->mswpFormID)
+              tmp.mswpFormID = loadMaterialSwap(refrMSWPFormID);
+            else if (mswpFormID_ONAM && mswpFormID_ONAM != o->mswpFormID)
+              tmp.mswpFormID = loadMaterialSwap(mswpFormID_ONAM);
+            else if (mswpFormID_SCOL && mswpFormID_SCOL != o->mswpFormID)
+              tmp.mswpFormID = loadMaterialSwap(mswpFormID_SCOL);
+          }
           objectList.push_back(tmp);
         }
       }
@@ -707,8 +712,10 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
       continue;
     if (debugMode == 1)
       tmp.z = int(r->formID);
-    tmp.mswpFormID =
-        loadMaterialSwap(!refrMSWPFormID ? tmp.mswpFormID : refrMSWPFormID);
+    if (o->mswpFormID && refrMSWPFormID != o->mswpFormID)
+      tmp.mswpFormID = loadMaterialSwap(o->mswpFormID);
+    if (refrMSWPFormID)
+      tmp.mswpFormID = loadMaterialSwap(refrMSWPFormID);
     objectList.push_back(tmp);
   }
   while ((formID = r->next) != 0U && isRecursive);
@@ -1374,6 +1381,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       }
       else
       {
+        if (p.model.o->mswpFormID && p.mswpFormID != p.model.o->mswpFormID)
+          materialSwap(*(t.renderer), texturePaths, 10, p.model.o->mswpFormID);
         if (p.mswpFormID)
           materialSwap(*(t.renderer), texturePaths, 10, p.mswpFormID);
         if (BRANCH_EXPECT(!enableTextures, false))
