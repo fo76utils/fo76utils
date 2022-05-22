@@ -479,17 +479,24 @@ void Plot3D_TriShape::drawPixel_NormalRefl(Plot3D_TriShape& p,
   p.bufZ[offs] = z.z;
   unsigned int  n = p.textureN->getPixelT(txtU * p.textureScaleN,
                                           txtV * p.textureScaleN, p.mipLevel);
+  unsigned int  r = p.textureR->getPixelT(txtU * p.textureScaleR,
+                                          txtV * p.textureScaleR, p.mipLevel);
   float   normalX = z.normalX;
   float   normalY = z.normalY;
   float   normalZ = z.normalZ;
-  c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
-  unsigned int  r = p.textureR->getPixelT(txtU * p.textureScaleR,
-                                          txtV * p.textureScaleR, p.mipLevel);
-  if (BRANCH_EXPECT((r & 0x00FFFFFFU), true))
+  int     l = p.normalMap(normalX, normalY, normalZ, n);
+  if (BRANCH_EXPECT(!(r & 0x00FFFFFFU), false))
   {
-    c = p.addReflectionR(c,
-                         p.environmentMap(normalX, normalY, normalZ, x, y), r);
+    p.bufRGBW[offs] = multiplyWithLight(c, l);
+    return;
   }
+  unsigned int  r_r = r & 0xFFU;
+  unsigned int  r_g = (r >> 8) & 0xFFU;
+  unsigned int  r_b = (r >> 16) & 0xFFU;
+  unsigned int  m = (r_r > r_g ? r_r : r_g);
+  m = (r_b > m ? r_b : m);
+  c = multiplyWithLight(blendRGBA32(c, (r >> 1) & 0x007F7F7FU, m), l);
+  c = p.addReflectionR(c, p.environmentMap(normalX, normalY, normalZ, x, y), r);
   p.bufRGBW[offs] = c;
 }
 
