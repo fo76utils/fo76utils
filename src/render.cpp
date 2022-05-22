@@ -930,8 +930,14 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName, int m)
     {
       if (m < 0)
         m = (fileName.find("/cubemaps/") == std::string::npos ? textureMip : 0);
-      m = ba2File.extractTexture(fileBuf, fileName, m);
-      t = new DDSTexture(&(fileBuf.front()), fileBuf.size(), m);
+      try
+      {
+        m = ba2File.extractTexture(fileBuf, fileName, m);
+        t = new DDSTexture(&(fileBuf.front()), fileBuf.size(), m);
+      }
+      catch (std::runtime_error&)
+      {
+      }
       CachedTexture tmp;
       tmp.texture = t;
       tmp.i = textureCache.end();
@@ -941,13 +947,6 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName, int m)
                                   fileName, tmp)).first;
       i->second.i = i;
       textureDataSize = textureDataSize + getTextureDataSize(t);
-    }
-    catch (std::runtime_error&)
-    {
-      textureCacheMutex.unlock();
-      if (t)
-        delete t;
-      return (DDSTexture *) 0;
     }
     catch (...)
     {
