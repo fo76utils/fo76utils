@@ -291,6 +291,70 @@ size_t DDSTexture::decodeBlock_R8G8(unsigned int *dst,
   return 8;
 }
 
+void DDSTexture::loadTextureData(
+    const unsigned char *srcPtr, int n, size_t blockSize,
+    size_t (*decodeFunction)(unsigned int *,
+                             const unsigned char *, unsigned int))
+{
+  size_t  dataOffs = size_t(n) * textureDataSize;
+  for (int i = 0; i < 20; i++)
+  {
+    unsigned int  *p = textureData[i] + dataOffs;
+    unsigned int  w = xSizeMip0 >> i;
+    unsigned int  h = ySizeMip0 >> i;
+    if (w < 1)
+      w = 1;
+    if (h < 1)
+      h = 1;
+    if (i < mipLevelCnt)
+    {
+      unsigned int  b = 0;
+      if (blockSize > 16)
+        b = w * (((unsigned int) blockSize * 3U) >> 4);
+      if (w < 4 || h < 4)
+      {
+        unsigned int  tmpBuf[16];
+        for (unsigned int y = 0; y < h; y = y + 4, srcPtr = srcPtr + b)
+        {
+          for (unsigned int x = 0; x < w; x = x + 4)
+          {
+            srcPtr = srcPtr + decodeFunction(tmpBuf, srcPtr, 4);
+            for (unsigned int j = 0; j < 16; j++)
+            {
+              if ((y + (j >> 2)) < h && (x + (j & 3)) < w)
+                p[(y + (j >> 2)) * w + (x + (j & 3))] = tmpBuf[j];
+            }
+          }
+        }
+      }
+      else
+      {
+        for (unsigned int y = 0; y < h; y = y + 4, srcPtr = srcPtr + b)
+        {
+          for (unsigned int x = 0; x < w; x = x + 4)
+            srcPtr = srcPtr + decodeFunction(p + (y * w + x), srcPtr, w);
+        }
+      }
+    }
+    else
+    {
+      for (unsigned int y = 0; y < h; y++)
+      {
+        for (unsigned int x = 0; x < w; x++)
+        {
+          p[y * w + x] =
+              rbga64ToRGBA32(blendToRBGA64Bilinear(
+                                 getPixelN(x << 1, y << 1, i - 1),
+                                 getPixelN((x << 1) + 1, y << 1, i - 1),
+                                 getPixelN(x << 1, (y << 1) + 1, i - 1),
+                                 getPixelN((x << 1) + 1, (y << 1) + 1, i - 1),
+                                 128, 128));
+        }
+      }
+    }
+  }
+}
+
 void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
 {
   buf.setPosition(0);
@@ -303,6 +367,8 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     throw errorMessage("unsupported texture file format");
   mipLevelCnt = 1;
   haveAlpha = false;
+  isCubeMap = false;
+  textureCnt = 1;
   ySizeMip0 = buf.readUInt32();
   xSizeMip0 = buf.readUInt32();
   if (ySizeMip0 < 1 || ySizeMip0 > 32768 ||
@@ -432,8 +498,19 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       }
     }
   }
+  size_t  sizeRequired = 0;
   if (blockSize > 16)
   {
+    for (int i = 0; i < mipLevelCnt; i++)
+    {
+      unsigned int  w = xSizeMip0 >> i;
+      unsigned int  h = ySizeMip0 >> i;
+      if (w < 1)
+        w = 1;
+      if (h < 1)
+        h = 1;
+      sizeRequired = sizeRequired + (size_t(w) * h * (blockSize >> 4));
+    }
     while ((xSizeMip0 >> (unsigned int) (mipLevelCnt - 1)) < 4U ||
            (ySizeMip0 >> (unsigned int) (mipLevelCnt - 1)) < 4U)
     {
@@ -441,29 +518,31 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
         throw errorMessage("unsupported RGB texture dimensions");
     }
   }
-  size_t  sizeRequired = dataOffs;
-  for (int i = 0; i < mipLevelCnt; i++)
+  else
   {
-    unsigned int  w = xSizeMip0 >> (i + 2);
-    unsigned int  h = ySizeMip0 >> (i + 2);
-    if (w < 1)
-      w = 1;
-    if (h < 1)
-      h = 1;
-    sizeRequired = sizeRequired + (size_t(w) * h * blockSize);
+    for (int i = 0; i < mipLevelCnt; i++)
+    {
+      unsigned int  w = xSizeMip0 >> (i + 2);
+      unsigned int  h = ySizeMip0 >> (i + 2);
+      if (w < 1)
+        w = 1;
+      if (h < 1)
+        h = 1;
+      sizeRequired = sizeRequired + (size_t(w) * h * blockSize);
+    }
   }
-  if (buf.size() < sizeRequired)
+  if (buf.size() > (dataOffs + sizeRequired))
+  {
+    size_t  n = (buf.size() - dataOffs) / sizeRequired;
+    if (n > 255)
+      n = 255;
+    isCubeMap = (n == 6);
+    textureCnt = (unsigned short) n;
+  }
+  else if (buf.size() < (dataOffs + sizeRequired))
+  {
     throw errorMessage("DDS file is shorter than expected");
-  const unsigned char *srcPtr = buf.getDataPtr() + dataOffs;
-  for ( ; mipOffset > 0 && mipLevelCnt > 1; mipOffset--, mipLevelCnt--)
-  {
-    unsigned int  w = (xSizeMip0 + 3) >> 2;
-    unsigned int  h = (ySizeMip0 + 3) >> 2;
-    srcPtr = srcPtr + (size_t(w) * h * blockSize);
-    xSizeMip0 = (xSizeMip0 + 1) >> 1;
-    ySizeMip0 = (ySizeMip0 + 1) >> 1;
   }
-
   size_t  dataOffsets[20];
   size_t  bufSize = 0;
   for (int i = 0; i < 20; i++)
@@ -477,70 +556,30 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     dataOffsets[i] = bufSize;
     bufSize = bufSize + (size_t(w) * h);
   }
-  textureDataBuf.resize(bufSize);
+  textureDataSize = bufSize;
+  textureDataBuf = new unsigned int[bufSize * size_t(textureCnt)];
   for (int i = 0; i < 20; i++)
+    textureData[i] = textureDataBuf + dataOffsets[i];
+  const unsigned char *srcPtr = buf.getDataPtr() + dataOffs;
+  for ( ; mipOffset > 0 && mipLevelCnt > 1; mipOffset--, mipLevelCnt--)
   {
-    unsigned int  *p = &(textureDataBuf.front()) + dataOffsets[i];
-    textureData[i] = p;
-    unsigned int  w = xSizeMip0 >> i;
-    unsigned int  h = ySizeMip0 >> i;
-    if (w < 1)
-      w = 1;
-    if (h < 1)
-      h = 1;
-    if (i < mipLevelCnt)
-    {
-      unsigned int  b = 0;
-      if (blockSize > 16)
-        b = w * (((unsigned int) blockSize * 3U) >> 4);
-      if (w < 4 || h < 4)
-      {
-        unsigned int  tmpBuf[16];
-        for (unsigned int y = 0; y < h; y = y + 4, srcPtr = srcPtr + b)
-        {
-          for (unsigned int x = 0; x < w; x = x + 4)
-          {
-            srcPtr = srcPtr + decodeFunction(tmpBuf, srcPtr, 4);
-            for (unsigned int j = 0; j < 16; j++)
-            {
-              if ((y + (j >> 2)) < h && (x + (j & 3)) < w)
-                p[(y + (j >> 2)) * w + (x + (j & 3))] = tmpBuf[j];
-            }
-          }
-        }
-      }
-      else
-      {
-        for (unsigned int y = 0; y < h; y = y + 4, srcPtr = srcPtr + b)
-        {
-          for (unsigned int x = 0; x < w; x = x + 4)
-            srcPtr = srcPtr + decodeFunction(p + (y * w + x), srcPtr, w);
-        }
-      }
-    }
-    else
-    {
-      for (unsigned int y = 0; y < h; y++)
-      {
-        for (unsigned int x = 0; x < w; x++)
-        {
-          p[y * w + x] =
-              rbga64ToRGBA32(blendToRBGA64Bilinear(
-                                 getPixelN(x << 1, y << 1, i - 1),
-                                 getPixelN((x << 1) + 1, y << 1, i - 1),
-                                 getPixelN(x << 1, (y << 1) + 1, i - 1),
-                                 getPixelN((x << 1) + 1, (y << 1) + 1, i - 1),
-                                 128, 128));
-        }
-      }
-    }
+    unsigned int  w = (xSizeMip0 + 3) >> 2;
+    unsigned int  h = (ySizeMip0 + 3) >> 2;
+    srcPtr = srcPtr + (size_t(w) * h * blockSize);
+    xSizeMip0 = (xSizeMip0 + 1) >> 1;
+    ySizeMip0 = (ySizeMip0 + 1) >> 1;
+  }
+  for (size_t i = 0; i < textureCnt; i++)
+  {
+    loadTextureData(srcPtr + (i * sizeRequired), int(i),
+                    blockSize, decodeFunction);
   }
   for ( ; mipOffset > 0; mipOffset--)
   {
     xSizeMip0 = (xSizeMip0 + 1) >> 1;
     ySizeMip0 = (ySizeMip0 + 1) >> 1;
     for (int i = 0; (i + 1) < 20; i++)
-      dataOffsets[i] = dataOffsets[i + 1];
+      textureData[i] = textureData[i + 1];
   }
 }
 
@@ -563,6 +602,8 @@ DDSTexture::DDSTexture(FileBuffer& buf, int mipOffset)
 
 DDSTexture::~DDSTexture()
 {
+  if (textureDataBuf)
+    delete[] textureDataBuf;
 }
 
 unsigned int DDSTexture::getPixelB(float x, float y, int mipLevel) const
@@ -722,6 +763,68 @@ unsigned int DDSTexture::getPixelTC(float x, float y, float mipLevel) const
                             getPixelC(x0m1, y0m1 + 1, m1),
                             getPixelC(x0m1 + 1, y0m1 + 1, m1), xfm1, yfm1);
   return rbga64ToRGBA32(blendRBGA64(c0, c1, mf));
+}
+
+unsigned int DDSTexture::cubeMap(float x, float y, float z, int mipLevel) const
+{
+  float   xm = float(std::fabs(x));
+  float   ym = float(std::fabs(y));
+  float   zm = float(std::fabs(z));
+  int     n = 0;
+  if (xm >= ym && xm >= zm)             // right (0), left (1)
+  {
+    float   tmp = 1.0f / xm;
+    if (x < 0.0f)
+    {
+      z = -z;
+      n++;
+    }
+    x = z * tmp;
+    y = y * tmp;
+  }
+  else if (ym >= xm && ym >= zm)        // front (2), back (3)
+  {
+    float   tmp = 1.0f / ym;
+    n = 2;
+    if (y < 0.0f)
+    {
+      z = -z;
+      n++;
+    }
+    x = x * tmp;
+    y = z * tmp;
+  }
+  else                                  // bottom (4), top (5)
+  {
+    float   tmp = 1.0f / zm;
+    n = 4;
+    if (z >= 0.0f)
+    {
+      x = -x;
+      n++;
+    }
+    x = x * tmp;
+    y = y * tmp;
+  }
+  int     w = int((xSizeMip0 - 1U) >> (unsigned char) mipLevel);
+  int     h = int((ySizeMip0 - 1U) >> (unsigned char) mipLevel);
+  x = (x + 1.0f) * (float(w) * 0.5f);
+  y = (1.0f - y) * (float(h) * 0.5f);
+  if (BRANCH_EXPECT(!isCubeMap, false))
+    return getPixelB(x, y, mipLevel);
+  int     x0 = roundFloat(x * 256.0f);
+  int     y0 = roundFloat(y * 256.0f);
+  int     xf = x0 & 0xFF;
+  int     yf = y0 & 0xFF;
+  x0 = int((unsigned int) x0 >> 8);
+  y0 = int((unsigned int) y0 >> 8);
+  const unsigned int  *p =
+      textureData[mipLevel] + (textureDataSize * size_t(n));
+  unsigned int  c0 = p[(y0 & h) * (w + 1) + (x0 & w)];
+  unsigned int  c1 = p[(y0 & h) * (w + 1) + ((x0 + 1) & w)];
+  unsigned int  c2 = p[((y0 + 1) & h) * (w + 1) + (x0 & w)];
+  unsigned int  c3 = p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)];
+  return rbga64ToRGBA32(blendToRBGA64Bilinear(c0, c1, c2, c3, xf, yf));
 }
 
 struct Downsample2xTables
