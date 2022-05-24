@@ -45,6 +45,7 @@ landtxt = env.Program("landtxt", ["src/ltxtmain.cpp"])
 markers = env.Program("markers", ["src/markers.cpp"])
 if buildNIFView and not "win" in sys.platform:
     nif_info = nifViewEnv.Program("nif_info", ["src/nif_info.cpp"])
+    cubeview = nifViewEnv.Program("cubeview", ["src/cubeview.cpp"])
 else:
     nif_info = env.Program("nif_info", ["src/nif_info.cpp"])
 render = env.Program("render", ["src/render.cpp"])
@@ -54,11 +55,13 @@ if "win" in sys.platform:
     if buildNIFView:
         nif_view_o = nifViewEnv.Object("nif_view", ["src/nif_info.cpp"])
         nif_view = nifViewEnv.Program("nif_view", nif_view_o)
+        cubeview = nifViewEnv.Program("cubeview", ["src/cubeview.cpp"])
     if buildPackage:
         pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, findwater]
         pkgFiles += [fo4land, landtxt, markers, nif_info, render, terrain]
         if buildNIFView:
-            pkgFiles += [nif_view, "/mingw64/bin/SDL.dll", "LICENSE.SDL"]
+            pkgFiles += [nif_view, cubeview]
+            pkgFiles += ["/mingw64/bin/SDL.dll", "LICENSE.SDL"]
         pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
         pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
         pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
