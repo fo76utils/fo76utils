@@ -5,6 +5,10 @@
 
 #include <algorithm>
 
+#if 0
+#  define FAST_ENVIRONMENT_MAP  1
+#endif
+
 // vertex coordinates closer than this to exact integers are rounded
 #ifndef VERTEX_XY_SNAP
 #  define VERTEX_XY_SNAP  0.03125f
@@ -204,20 +208,51 @@ inline int Plot3D_TriShape::normalMap(
 inline unsigned int Plot3D_TriShape::environmentMap(
     float normalX, float normalY, float normalZ, int x, int y) const
 {
-  float   u = float((height >> 1) - y) * envMapUVScale + 0.5f;
-  float   v = float(x - (width >> 1)) * envMapUVScale + 0.5f;
-  if (normalZ < -0.25f)
+#ifdef FAST_ENVIRONMENT_MAP
+  float   u = float((width >> 1) - x) * envMapUVScale;
+  float   v = float((height >> 1) - y) * envMapUVScale;
+  if (normalZ < -0.03125f)
   {
-    u = u + (normalY * (0.25f / normalZ));
-    v = v - (normalX * (0.25f / normalZ));
+    u = u + (normalX * (0.25f / normalZ));
+    v = v + (normalY * (0.25f / normalZ));
   }
   else
   {
-    u = u - normalY;
-    v = v + normalX;
+    u = u - (normalX * 8.0f);
+    v = v - (normalY * 8.0f);
   }
-  return textureE->getPixelBM(u * float(textureE->getWidth()),
-                              v * float(textureE->getHeight()), 0);
+  return textureE->cubeMap(0.46875f, u, v, 0);
+#else
+  // convert normal to X,Y rotation
+  float   ry_s = normalX;
+  float   ry_c = 0.0f;
+  float   rx_s = 0.0f;
+  float   rx_c = 1.0f;
+  if (BRANCH_EXPECT(((ry_s * ry_s) < 0.999999f), true))
+  {
+    ry_c = 1.0f / float(std::sqrt(1.0f - (ry_s * ry_s)));
+    rx_s = -normalY * ry_c;
+    rx_c = -normalZ * ry_c;
+    ry_c = 1.0f / ry_c;
+  }
+  // view vector
+  float   xc = float(x - (width >> 1)) * envMapUVScale;
+  float   yc = float(y - (height >> 1)) * envMapUVScale;
+  float   zc = -0.25f;
+  // rotate twice
+  float   tmpX = (xc * ry_c) - (zc * ry_s);
+  float   tmpY = (xc * (rx_s * ry_s)) + (yc * rx_c) + (zc * (rx_s * ry_c));
+  float   tmpZ = (xc * (rx_c * ry_s)) - (yc * rx_s) + (zc * (rx_c * ry_c));
+  xc = (tmpX * ry_c) - (tmpZ * ry_s);
+  yc = (tmpX * (rx_s * ry_s)) + (tmpY * rx_c) + (tmpZ * (rx_s * ry_c));
+  zc = (tmpX * (rx_c * ry_s)) - (tmpY * rx_s) + (tmpZ * (rx_c * ry_c));
+  const NIFFile::NIFVertexTransform&  vt = *viewTransformPtr;
+  // inverse rotation
+  tmpX = (xc * vt.rotateXX) + (yc * vt.rotateYX) + (zc * vt.rotateZX);
+  tmpY = (xc * vt.rotateXY) + (yc * vt.rotateYY) + (zc * vt.rotateZY);
+  tmpZ = (xc * vt.rotateXZ) + (yc * vt.rotateYZ) + (zc * vt.rotateZZ);
+  return textureE->cubeMap(tmpX, tmpY, tmpZ, 0);
+#endif
 }
 
 inline unsigned int Plot3D_TriShape::addReflection(
@@ -754,7 +789,8 @@ Plot3D_TriShape::Plot3D_TriShape(
     envMapUVScale(0.25f / float(imageHeight)),
     invNormals(false),
     drawPixelFunction(&drawPixel_Water),
-    debugMode(0)
+    debugMode(0),
+    viewTransformPtr((NIFFile::NIFVertexTransform *) 0)
 {
   setLightingFunction(defaultLightingPolynomial);
   vclrTable.resize(256, 0);
@@ -829,6 +865,7 @@ void Plot3D_TriShape::drawTriShape(
   bool    isWater = bool(flags & 0x02);
   if (!((textureCnt >= 1 && textures[0]) || isWater))
     return;
+  viewTransformPtr = &viewTransform;
   size_t  triangleCntRendered =
       transformVertexData(modelTransform, viewTransform,
                           lightX, lightY, lightZ);
@@ -910,6 +947,7 @@ void Plot3D_TriShape::renderWater(
     unsigned int waterColor, float lightX, float lightY, float lightZ,
     const DDSTexture *envMap, float envMapLevel)
 {
+  viewTransformPtr = &viewTransform;
   viewTransform.rotateXYZ(lightX, lightY, lightZ);
   textureE = envMap;
   reflectionLevel = roundFloat(lightingPolynomial[0] * (envMapLevel * 256.0f));

@@ -335,6 +335,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   std::vector< Triangle > triangleBuf;
   std::vector< unsigned short > vclrTable;
   std::vector< int >  lightTable;
+  const NIFFile::NIFVertexTransform *viewTransformPtr;
   float   lightingPolynomial[6];
   void calculateWaterUV(const NIFFile::NIFVertexTransform& modelTransform);
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
