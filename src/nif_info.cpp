@@ -305,6 +305,12 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                              int imageWidth, int imageHeight)
 {
   std::map< const std::string *, DDSTexture * > textureSet;
+  std::string defaultEnvMap;
+  if (nifFile.getVersion() < 0x80)
+    defaultEnvMap = "textures/cubemaps/chrome_e.dds";
+  else
+    defaultEnvMap = "textures/shared/cubemaps/mipblur_defaultoutside1.dds";
+  std::string waterTexture("textures/water/defaultwater.dds");
 #ifdef HAVE_SDL
   if (!outFileName)
   {
@@ -339,12 +345,6 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     float   viewRotationX = float(std::atan(std::sqrt(2.0)));
     float   viewRotationY = float(std::atan(1.0) * 4.0);
     float   viewRotationZ = float(std::atan(1.0));
-    std::string defaultEnvMap;
-    if (nifFile.getVersion() < 0x80)
-      defaultEnvMap = "textures/cubemaps/chrome_e.dds";
-    else
-      defaultEnvMap = "textures/shared/cubemaps/metalchrome01cube_e.dds";
-    std::string waterTexture("textures/water/defaultwater.dds");
     Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
                            imageWidth, imageHeight,
                            (nifFile.getVersion() < 0x90 ? 1.0f : 2.2f));
