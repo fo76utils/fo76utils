@@ -341,6 +341,9 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                              const NIFFile::NIFVertexTransform& viewTransform,
                              float& lightX, float& lightY, float& lightZ);
+  static inline void rotateByNormal(
+      float& x, float& y, float& z,
+      float normalX, float normalY, float normalZ);
   // d = dot product from normals and light vector
   inline int getLightLevel(float d) const;
   // returns light level

@@ -151,6 +151,32 @@ size_t Plot3D_TriShape::transformVertexData(
   return triangleBuf.size();
 }
 
+inline void Plot3D_TriShape::rotateByNormal(
+    float& x, float& y, float& z,
+    float normalX, float normalY, float normalZ)
+{
+  if (BRANCH_EXPECT(!(float(std::fabs(normalZ)) < 0.99999f), false))
+  {
+    if (normalZ < 0.0f)
+    {
+      x = -x;
+      y = -y;
+      z = -z;
+    }
+    return;
+  }
+  float   tmp = (1.0f - normalZ) / (1.0f - (normalZ * normalZ));
+  float   rotateXX = normalZ + (normalY * normalY * tmp);
+  float   rotateXY = -(normalX * normalY * tmp);
+  float   rotateYY = normalZ + (normalX * normalX * tmp);
+  float   tmpX = x;
+  float   tmpY = y;
+  float   tmpZ = z;
+  x = (tmpX * rotateXX) + (tmpY * rotateXY) + (tmpZ * normalX);
+  y = (tmpX * rotateXY) + (tmpY * rotateYY) + (tmpZ * normalY);
+  z = (tmpX * -normalX) + (tmpY * -normalY) + (tmpZ * normalZ);
+}
+
 inline int Plot3D_TriShape::getLightLevel(float d) const
 {
   int     x = roundFloat(d * 32768.0f);
@@ -164,32 +190,26 @@ inline int Plot3D_TriShape::getLightLevel(float d) const
 inline int Plot3D_TriShape::normalMap(
     float& normalX, float& normalY, float& normalZ, unsigned int n) const
 {
-  float   tmpX = 1.0f - (float(int(n & 0xFF)) * (1.0f / 127.5f));
-  float   tmpY = float(int((n >> 8) & 0xFF)) * (1.0f / 127.5f) - 1.0f;
-  float   tmpZ = (1.0f - (tmpX * tmpX)) + (tmpY * tmpY);
-  // convert normal map data to rotation matrix, and apply to input normal
-  if (BRANCH_EXPECT(!(tmpZ > 0.000001f), false))
+  float   x = 1.0f - (float(int(n & 0xFF)) * (1.0f / 127.5f));
+  float   y = float(int((n >> 8) & 0xFF)) * (1.0f / 127.5f) - 1.0f;
+  // calculate Z normal
+  float   z = 1.0f - ((x * x) + (y * y));
+  if (BRANCH_EXPECT(!(z > 0.000001f), false))
   {
-    tmpZ = 1.0f / float(std::sqrt(1.0f - tmpZ));
-    tmpX = tmpX * tmpZ;
-    tmpY = tmpY * tmpZ;
-    float   ry_c = tmpY;        // ry_s = -tmpX, rx_s = 1.0, rx_c = 0.0
-    tmpZ = -normalY;
-    tmpY = (normalZ * tmpY) - (normalX * tmpX);
-    tmpX = (normalZ * tmpX) + (normalX * ry_c);
+    z = 1.0f / float(std::sqrt(1.0f - z));
+    x = x * z;
+    y = y * z;
+    z = 0.0f;
   }
   else
   {
-    // 1/sqrt() is faster with SSE instructions
-    float   ry_c = 1.0f / float(std::sqrt(1.0f - (tmpX * tmpX)));
-    tmpZ = float(std::sqrt(tmpZ));
-    float   rx_s = tmpY * ry_c;
-    float   rx_c = tmpZ * ry_c;
-    ry_c = 1.0f / ry_c;
-    tmpZ = (normalZ * tmpZ) - (normalY * rx_s) - (normalX * tmpX * rx_c);
-    tmpY = (normalZ * tmpY) + (normalY * rx_c) - (normalX * tmpX * rx_s);
-    tmpX = (normalZ * tmpX) + (normalX * ry_c);
+    z = float(std::sqrt(z));
   }
+  // convert normal map data to rotation matrix, and apply to input normal
+  float   tmpX = normalX;
+  float   tmpY = normalY;
+  float   tmpZ = normalZ;
+  rotateByNormal(tmpX, tmpY, tmpZ, x, y, z);
   // normalize
   float   tmp = (tmpX * tmpX) + (tmpY * tmpY) + (tmpZ * tmpZ);
   if (BRANCH_EXPECT((tmp > 0.0f), true))
@@ -223,34 +243,21 @@ inline unsigned int Plot3D_TriShape::environmentMap(
   }
   return textureE->cubeMap(0.46875f, u, v, 0);
 #else
-  // convert normal to X,Y rotation
-  float   ry_s = normalX;
-  float   ry_c = 0.0f;
-  float   rx_s = 0.0f;
-  float   rx_c = 1.0f;
-  if (BRANCH_EXPECT(((ry_s * ry_s) < 0.999999f), true))
-  {
-    ry_c = 1.0f / float(std::sqrt(1.0f - (ry_s * ry_s)));
-    rx_s = -normalY * ry_c;
-    rx_c = -normalZ * ry_c;
-    ry_c = 1.0f / ry_c;
-  }
+  // invert normal and double angle
+  normalX = normalX * (normalZ * 2.0f);
+  normalY = normalY * (normalZ * 2.0f);
+  normalZ = normalZ * (normalZ * 2.0f) - 1.0f;
   // view vector
   float   xc = float(x - (width >> 1)) * envMapUVScale;
   float   yc = float(y - (height >> 1)) * envMapUVScale;
   float   zc = -0.25f;
-  // rotate twice
-  float   tmpX = (xc * ry_c) - (zc * ry_s);
-  float   tmpY = (xc * (rx_s * ry_s)) + (yc * rx_c) + (zc * (rx_s * ry_c));
-  float   tmpZ = (xc * (rx_c * ry_s)) - (yc * rx_s) + (zc * (rx_c * ry_c));
-  xc = (tmpX * ry_c) - (tmpZ * ry_s);
-  yc = (tmpX * (rx_s * ry_s)) + (tmpY * rx_c) + (tmpZ * (rx_s * ry_c));
-  zc = (tmpX * (rx_c * ry_s)) - (tmpY * rx_s) + (tmpZ * (rx_c * ry_c));
+  // rotate
+  rotateByNormal(xc, yc, zc, normalX, normalY, normalZ);
+  // inverse rotation by view matrix
   const NIFFile::NIFVertexTransform&  vt = *viewTransformPtr;
-  // inverse rotation
-  tmpX = (xc * vt.rotateXX) + (yc * vt.rotateYX) + (zc * vt.rotateZX);
-  tmpY = (xc * vt.rotateXY) + (yc * vt.rotateYY) + (zc * vt.rotateZY);
-  tmpZ = (xc * vt.rotateXZ) + (yc * vt.rotateYZ) + (zc * vt.rotateZZ);
+  float   tmpX = (xc * vt.rotateXX) + (yc * vt.rotateYX) + (zc * vt.rotateZX);
+  float   tmpY = (xc * vt.rotateXY) + (yc * vt.rotateYY) + (zc * vt.rotateZY);
+  float   tmpZ = (xc * vt.rotateXZ) + (yc * vt.rotateYZ) + (zc * vt.rotateZZ);
   return textureE->cubeMap(tmpX, tmpY, tmpZ, 0);
 #endif
 }
