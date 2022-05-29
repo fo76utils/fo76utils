@@ -38,7 +38,6 @@ class LandscapeTexture
     return ((((n0 * (256U - f)) + (n1 * f) + 0x00800080U) & 0xFF00FF00U) >> 8);
   }
   static inline void rotateNormalFO76(unsigned int& n);
-  static inline void rotateNormalTES4(unsigned int& n);
   inline unsigned long long getFO76VertexColor(size_t offs) const;
   inline unsigned long long getTES4VertexColor(size_t offs) const;
   inline void getFO76VertexColor(

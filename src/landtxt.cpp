@@ -15,16 +15,11 @@ inline void LandscapeTexture::rotateNormalFO76(unsigned int& n)
 {
   int     tmpX = int(n & 0xFFU) * 46341;        // 65536 * sqrt(0.5)
   int     tmpY = int((n >> 16) & 0xFFU) * 46341;
-  int     normalX = (tmpX + tmpY) - 3428347;    // 8388608 - (127.5 * 46341 * 2)
-  int     normalY = (tmpX - tmpY) + 8388608;
+  int     normalX = (tmpY + tmpX) - 3428347;    // 8388608 - (127.5 * 46341 * 2)
+  int     normalY = (tmpY - tmpX) + 8388608;
   normalX = (normalX > 0 ? (normalX < 0x00FF0000 ? (normalX >> 16) : 255) : 0);
   normalY = (normalY > 0 ? (normalY < 0x00FF0000 ? (normalY >> 16) : 255) : 0);
   n = (unsigned int) normalX | ((unsigned int) normalY << 16);
-}
-
-inline void LandscapeTexture::rotateNormalTES4(unsigned int& n)
-{
-  n = n ^ 0x00FF0000U;
 }
 
 inline unsigned long long LandscapeTexture::getFO76VertexColor(
@@ -707,8 +702,6 @@ void LandscapeTexture::renderTexture(unsigned char *outBuf, int renderScale,
       {
         if (isFO76)
           rotateNormalFO76(n);
-        else
-          rotateNormalTES4(n);
         outBufN[0] = (unsigned char) (n & 0xFFU);               // X
         outBufN[1] = (unsigned char) ((n >> 16) & 0xFFU);       // Y
         outBufN = outBufN + 2;
