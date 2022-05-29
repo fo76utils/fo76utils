@@ -327,6 +327,12 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   int     reflectionLevel;
   float   envMapUVScale;
   bool    invNormals;
+  float   bitangentX;
+  float   bitangentY;
+  float   bitangentZ;
+  float   tangentX;
+  float   tangentY;
+  float   tangentZ;
   void    (*drawPixelFunction)(Plot3D_TriShape& p,
                                int x, int y, float txtU, float txtV,
                                const NIFFile::NIFVertex& z);
@@ -341,14 +347,14 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                              const NIFFile::NIFVertexTransform& viewTransform,
                              float& lightX, float& lightY, float& lightZ);
-  static inline void rotateByNormal(
-      float& x, float& y, float& z,
-      float normalX, float normalY, float normalZ);
   // d = dot product from normals and light vector
   inline int getLightLevel(float d) const;
   // returns light level
   inline int normalMap(float& normalX, float& normalY, float& normalZ,
                        unsigned int n) const;
+  static inline void rotateByNormal(
+      float& x, float& y, float& z,
+      float normalX, float normalY, float normalZ);
   inline unsigned int environmentMap(
       float normalX, float normalY, float normalZ, int x, int y) const;
   inline unsigned int addReflection(unsigned int c, unsigned int e) const;
@@ -395,6 +401,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       const NIFFile::NIFVertex& v1, const NIFFile::NIFVertex& v2,
       float w0, float w1, float w2);
   void drawLine(const NIFFile::NIFVertex *v0, const NIFFile::NIFVertex *v1);
+  static inline void calculateTangent(
+      float& x, float& y, float& z, float v0, float v1, float v2,
+      float x0, float y0, float z0, float x1, float y1, float z1,
+      float x2, float y2, float z2, bool n);
   void drawTriangles();
  public:
   // The alpha channel is 255 for solid geometry, 0 for air, and 1 to 254

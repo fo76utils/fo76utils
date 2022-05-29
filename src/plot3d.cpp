@@ -151,6 +151,49 @@ size_t Plot3D_TriShape::transformVertexData(
   return triangleBuf.size();
 }
 
+inline int Plot3D_TriShape::getLightLevel(float d) const
+{
+  int     x = roundFloat(d * 32768.0f);
+  int     xf = x & 0xFF;
+  x = int((unsigned int) x >> 8);
+  int     y0 = lightTable[x & 0x01FF];
+  x++;
+  return (((y0 << 8) + ((lightTable[x & 0x01FF] - y0) * xf) + 32768) >> 16);
+}
+
+inline int Plot3D_TriShape::normalMap(
+    float& normalX, float& normalY, float& normalZ, unsigned int n) const
+{
+  float   x = float(int(n & 0xFF)) * (1.0f / 127.5f) - 1.0f;
+  float   y = float(int((n >> 8) & 0xFF)) * (1.0f / 127.5f) - 1.0f;
+  float   tmpX = normalX;
+  float   tmpY = normalY;
+  float   tmpZ = normalZ;
+  float   tmp = (tmpX * tmpX) + (tmpY * tmpY) + (tmpZ * tmpZ);
+  // calculate Z normal
+  float   z = 1.0f - ((x * x) + (y * y));
+  if (BRANCH_EXPECT((tmp > 0.0f && z > 0.0f), true))
+    z = float(std::sqrt(z / tmp));
+  else
+    z = 0.0f;
+  tmpX = (x * bitangentX) + (y * tangentX) + (z * tmpX);
+  tmpY = (x * bitangentY) + (y * tangentY) + (z * tmpY);
+  tmpZ = (x * bitangentZ) + (y * tangentZ) + (z * tmpZ);
+  // normalize
+  tmp = (tmpX * tmpX) + (tmpY * tmpY) + (tmpZ * tmpZ);
+  if (BRANCH_EXPECT((tmp > 0.0f), true))
+    tmp = 1.0f / float(std::sqrt(tmp));
+  if (invNormals)
+    tmp = -tmp;
+  tmpX *= tmp;
+  tmpY *= tmp;
+  tmpZ *= tmp;
+  normalX = tmpX;
+  normalY = tmpY;
+  normalZ = tmpZ;
+  return getLightLevel((tmpX * light_X) + (tmpY * light_Y) + (tmpZ * light_Z));
+}
+
 inline void Plot3D_TriShape::rotateByNormal(
     float& x, float& y, float& z,
     float normalX, float normalY, float normalZ)
@@ -175,54 +218,6 @@ inline void Plot3D_TriShape::rotateByNormal(
   x = (tmpX * rotateXX) + (tmpY * rotateXY) + (tmpZ * normalX);
   y = (tmpX * rotateXY) + (tmpY * rotateYY) + (tmpZ * normalY);
   z = (tmpX * -normalX) + (tmpY * -normalY) + (tmpZ * normalZ);
-}
-
-inline int Plot3D_TriShape::getLightLevel(float d) const
-{
-  int     x = roundFloat(d * 32768.0f);
-  int     xf = x & 0xFF;
-  x = int((unsigned int) x >> 8);
-  int     y0 = lightTable[x & 0x01FF];
-  x++;
-  return (((y0 << 8) + ((lightTable[x & 0x01FF] - y0) * xf) + 32768) >> 16);
-}
-
-inline int Plot3D_TriShape::normalMap(
-    float& normalX, float& normalY, float& normalZ, unsigned int n) const
-{
-  float   x = 1.0f - (float(int(n & 0xFF)) * (1.0f / 127.5f));
-  float   y = float(int((n >> 8) & 0xFF)) * (1.0f / 127.5f) - 1.0f;
-  // calculate Z normal
-  float   z = 1.0f - ((x * x) + (y * y));
-  if (BRANCH_EXPECT(!(z > 0.000001f), false))
-  {
-    z = 1.0f / float(std::sqrt(1.0f - z));
-    x = x * z;
-    y = y * z;
-    z = 0.0f;
-  }
-  else
-  {
-    z = float(std::sqrt(z));
-  }
-  // convert normal map data to rotation matrix, and apply to input normal
-  float   tmpX = normalX;
-  float   tmpY = normalY;
-  float   tmpZ = normalZ;
-  rotateByNormal(tmpX, tmpY, tmpZ, x, y, z);
-  // normalize
-  float   tmp = (tmpX * tmpX) + (tmpY * tmpY) + (tmpZ * tmpZ);
-  if (BRANCH_EXPECT((tmp > 0.0f), true))
-    tmp = 1.0f / float(std::sqrt(tmp));
-  if (invNormals)
-    tmp = -tmp;
-  tmpX *= tmp;
-  tmpY *= tmp;
-  tmpZ *= tmp;
-  normalX = tmpX;
-  normalY = tmpY;
-  normalZ = tmpZ;
-  return getLightLevel((tmpX * light_X) + (tmpY * light_Y) + (tmpZ * light_Z));
 }
 
 inline unsigned int Plot3D_TriShape::environmentMap(
@@ -637,6 +632,24 @@ void Plot3D_TriShape::drawLine(const NIFFile::NIFVertex *v0,
   }
 }
 
+inline void Plot3D_TriShape::calculateTangent(
+    float& x, float& y, float& z, float v0, float v1, float v2,
+    float x0, float y0, float z0, float x1, float y1, float z1,
+    float x2, float y2, float z2, bool n)
+{
+  float   tmpX = ((v2 - v0) * (x1 - x0)) - ((v1 - v0) * (x2 - x0));
+  float   tmpY = ((v2 - v0) * (y1 - y0)) - ((v1 - v0) * (y2 - y0));
+  float   tmpZ = ((v2 - v0) * (z1 - z0)) - ((v1 - v0) * (z2 - z0));
+  float   tmp = (tmpX * tmpX) + (tmpY * tmpY) + (tmpZ * tmpZ);
+  if (BRANCH_EXPECT((tmp > 0.0f), true))
+  {
+    tmp = (!n ? 1.0f : -1.0f) / float(std::sqrt(tmp));
+    x = tmpX * tmp;
+    y = tmpY * tmp;
+    z = tmpZ * tmp;
+  }
+}
+
 void Plot3D_TriShape::drawTriangles()
 {
   for (size_t n = 0; n < triangleBuf.size(); n++)
@@ -654,6 +667,12 @@ void Plot3D_TriShape::drawTriangles()
                             - ((double(v2->x) - double(v0->x))
                                * (double(v1->y) - double(v0->y))));
     invNormals = (xyArea2 >= 0.0f);
+    bitangentX = 1.0f;
+    bitangentY = 0.0f;
+    bitangentZ = 0.0f;
+    tangentX = 0.0f;
+    tangentY = 1.0f;
+    tangentZ = 0.0f;
     xyArea2 = float(std::fabs(xyArea2));
     if (xyArea2 < (1.0f / 1048576.0f))  // if area < 2^-21 square pixels
     {
@@ -698,8 +717,20 @@ void Plot3D_TriShape::drawTriangles()
     float   txtV2 = v2->getV() * textureScaleV + textureOffsetV;
     if (BRANCH_EXPECT(textureD, true))
     {
-      float   uvArea2 = float(std::fabs(((txtU1 - txtU0) * (txtV2 - txtV0))
-                                        - ((txtU2 - txtU0) * (txtV1 - txtV0))));
+      float   uvArea2 = ((txtU1 - txtU0) * (txtV2 - txtV0))
+                        - ((txtU2 - txtU0) * (txtV1 - txtV0));
+      if (BRANCH_EXPECT((textureN && uvArea2 != 0.0f), true))
+      {
+        calculateTangent(bitangentX, bitangentY, bitangentZ,
+                         txtV0, txtV1, txtV2, v0->x, v0->y, v0->z,
+                         v1->x, v1->y, v1->z, v2->x, v2->y, v2->z,
+                         (uvArea2 < 0.0f));
+        calculateTangent(tangentX, tangentY, tangentZ,
+                         txtU0, txtU2, txtU1, v0->x, v0->y, v0->z,
+                         v2->x, v2->y, v2->z, v1->x, v1->y, v1->z,
+                         (uvArea2 < 0.0f));
+      }
+      uvArea2 = float(std::fabs(uvArea2));
       bool    integerMipLevel = true;
       if (xyArea2 > uvArea2)
       {
@@ -795,6 +826,12 @@ Plot3D_TriShape::Plot3D_TriShape(
     reflectionLevel(0),
     envMapUVScale(0.25f / float(imageHeight)),
     invNormals(false),
+    bitangentX(1.0f),
+    bitangentY(0.0f),
+    bitangentZ(0.0f),
+    tangentX(0.0f),
+    tangentY(1.0f),
+    tangentZ(0.0f),
     drawPixelFunction(&drawPixel_Water),
     debugMode(0),
     viewTransformPtr((NIFFile::NIFVertexTransform *) 0)
