@@ -1592,6 +1592,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     firstTexture((CachedTexture *) 0),
     lastTexture((CachedTexture *) 0),
     waterColor(0xC0302010U),
+    waterReflectionLevel(0.375f),
     zRangeMax(zMax),
     verboseMode(true)
 {
@@ -1818,7 +1819,8 @@ void Renderer::renderWater(unsigned int formID)
     if (!defaultEnvMap.empty())
       envMap = loadTexture(defaultEnvMap);
     renderThreads[0].renderer->renderWater(
-        viewTransform, waterColor, lightX, lightY, lightZ, envMap, 0.375f);
+        viewTransform, waterColor, lightX, lightY, lightZ,
+        envMap, waterReflectionLevel);
   }
 }
 
@@ -1854,6 +1856,8 @@ static const char *usageStrings[] =
   "    -view SCALE RX RY RZ OFFS_X OFFS_Y OFFS_Z",
   "                        set transform from world coordinates to image",
   "                        coordinates, rotations are in degrees",
+  "    -cam SCALE RX RY RZ X Y Z",
+  "                        set view transform for camera position X,Y,Z",
   "    -zrange MIN MAX     limit view Z range to MIN <= Z < MAX",
   "    -light SCALE RX RY  set light level and X, Y rotation (0, 0 = top)",
   "    -lpoly A5 A4 A3 A2 A1 A0    set lighting polynomial, -1 <= x <= 1",
@@ -1867,6 +1871,7 @@ static const char *usageStrings[] =
   "    -env FILENAME.DDS   default environment map texture path in archives",
   "    -wtxt FILENAME.DDS  water normal map texture path in archives",
   "    -watercolor UINT32  water color (A7R8G8B8), 0 disables water",
+  "    -wrefl FLOAT        water environment map scale",
   (char *) 0
 };
 
@@ -1901,6 +1906,7 @@ int main(int argc, char **argv)
     float   landTextureMult = 1.0f;
     int     modelLOD = 0;
     unsigned int  waterColor = 0x60102030U;
+    float   waterReflectionLevel = 0.375f;
     int     zMin = 0;
     int     zMax = 16777216;
     float   viewScale = 0.0625f;
@@ -1993,6 +1999,7 @@ int main(int argc, char **argv)
         std::printf("-vis %d\n", int(distantObjectsOnly));
         std::printf("-ndis %d\n", int(noDisabledObjects));
         std::printf("-watercolor 0x%08X\n", waterColor);
+        std::printf("-wrefl %.3f\n", waterReflectionLevel);
         return 0;
       }
       else if (argv[i][0] != '-')
@@ -2133,7 +2140,8 @@ int main(int argc, char **argv)
                                            "invalid land texture RGB scale",
                                            0.5, 8.0));
       }
-      else if (std::strcmp(argv[i], "-view") == 0)
+      else if (std::strcmp(argv[i], "-view") == 0 ||
+               std::strcmp(argv[i], "-cam") == 0)
       {
         if ((i + 7) >= argc)
           throw errorMessage("missing argument for %s", argv[i]);
@@ -2151,6 +2159,22 @@ int main(int argc, char **argv)
                                      -1048576.0, 1048576.0));
         viewOffsZ = float(parseFloat(argv[i + 7], "invalid view Z offset",
                                      -1048576.0, 1048576.0));
+        if (argv[i][1] == 'c')
+        {
+          NIFFile::NIFVertexTransform vt(
+              viewScale,
+              viewRotationX * d, viewRotationY * d, viewRotationZ * d,
+              0.0f, 0.0f, 0.0f);
+          viewOffsX = -viewOffsX;
+          viewOffsY = -viewOffsY;
+          viewOffsZ = -viewOffsZ;
+          vt.transformXYZ(viewOffsX, viewOffsY, viewOffsZ);
+          if (verboseMode)
+          {
+            std::fprintf(stderr, "View offset: %.2f, %.2f, %.2f\n",
+                         viewOffsX, viewOffsY, viewOffsZ);
+          }
+        }
         i = i + 7;
       }
       else if (std::strcmp(argv[i], "-zrange") == 0)
@@ -2240,6 +2264,14 @@ int main(int argc, char **argv)
                                                  "invalid water color",
                                                  0, 0x7FFFFFFF);
       }
+      else if (std::strcmp(argv[i], "-wrefl") == 0)
+      {
+        if (++i >= argc)
+          throw errorMessage("missing argument for %s", argv[i - 1]);
+        waterReflectionLevel =
+            float(parseFloat(argv[i], "invalid water environment map scale",
+                             0.0, 1.0));
+      }
       else
       {
         throw errorMessage("invalid option: %s", argv[i]);
@@ -2313,6 +2345,7 @@ int main(int argc, char **argv)
     renderer.setLandTxtRGBScale(landTextureMult);
     renderer.setModelLOD(modelLOD);
     renderer.setWaterColor(waterColor);
+    renderer.setWaterEnvMapScale(waterReflectionLevel);
     renderer.setViewTransform(
         viewScale, viewRotationX * d, viewRotationY * d, viewRotationZ * d,
         viewOffsX, viewOffsY, viewOffsZ);

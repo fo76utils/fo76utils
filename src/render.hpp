@@ -153,11 +153,12 @@ class Renderer
   std::string stringBuf;
   std::vector< unsigned char >  fileBuf;
   unsigned int  waterColor;
+  float   waterReflectionLevel;
   int     zRangeMax;
+  bool    verboseMode;
   NIFFile::NIFBounds  worldBounds;
   std::string whiteTexturePath;
   std::map< unsigned int, BaseObject >  baseObjects;
-  bool    verboseMode;
   // bit Y * 8 + X of the return value is set if the bounds of the object
   // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
   // in the top left corner
@@ -313,6 +314,10 @@ class Renderer
   {
     waterColor = (n & 0xFF00FF00U)
                  | ((n & 0x000000FFU) << 16) | ((n & 0x00FF0000U) >> 16);
+  }
+  void setWaterEnvMapScale(float n)
+  {
+    waterReflectionLevel = n;
   }
   // disable printing messages if n is false
   void setVerboseMode(bool n)
