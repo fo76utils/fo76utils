@@ -3,15 +3,16 @@
 Simple command line utilities for extracting data from Elder Scrolls and Fallout game files, from Oblivion to Fallout 76.
 
 * baunpack - list the contents of, or extract from .BA2 or .BSA archives.
-* bcdecode - convert BC1 to BC5 block compressed DDS textures to headerless RGBA image data.
+* bcdecode - convert BC1 to BC5 block compressed DDS textures to uncompressed RGBA image data in raw or DDS format.
 * btddump - extract terrain data from Fallout 76 .BTD files to raw height map, land textures, ground cover, or terrain color.
+* cubeview - view a cube map from archive files. Does not work correctly with games older than Fallout 4.
 * esmdump - list records from .ESM files in text or TSV format.
 * esmview - interactive version of esmdump.
 * findwater - create a height map of water bodies, optionally using .NIF meshes for Skyrim and newer games.
 * fo4land - extract landscape data from Oblivion, Fallout 3, Skyrim, and Fallout 4.
 * landtxt - create an RGB land texture from the output of btddump (formats 2, 4, 6, and 8) or fo4land (formats 2, 4, and 5), or directly from terrain data in ESM/BTD file(s), using a set of DDS texture files.
 * markers - find references to a set of form IDs defined in a text file, and mark their locations on an RGBA format map, optionally using DDS icon files.
-* nif\_info - list data from a set of .NIF files in .BA2 or .BSA archives.
+* nif\_info - list data from a set of .NIF files in .BA2 or .BSA archives, or render the model to a DDS file, or display it (nif\_view on Windows).
 * render - render a world, cell, or object from ESM file(s), terrain data, and archives.
 * terrain - older and simpler program to render terrain and water only to an RGB image, using files created by btddump, findwater, or fo4land. Includes 2D and isometric mode.
 
@@ -76,10 +77,12 @@ Running any of the programs without arguments prints detailed usage information.
 
     ./nif_info -render1920x1080 glassdome.dds Fallout76/Data palaceofthewindingpath/palace_bld_glassdome01.nif
     ./nif_info -render1920x1080 44.dds Fallout4/Data weapons/44/44load.nif
+    ./nif_info -view1920x1080 Fallout76/Data meshes/test/testpbrmaterials01.nif
+    ./cubeview 1280 720 Fallout76/Data textures/shared/cubemaps/outsideoldtownreflectcube_e.dds
 
 #### Example 7
 
-    ./render Fallout76/Data/SeventySix.esm whitespring.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -32 -32 32 32 -view 0.125 54.7356 180 -135 4096 -256 32768 -light 1.25 63.4350 41.8103 -a -ssaa 1 -hqm meshes -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 512
-    ./markers Fallout76/Data/SeventySix.esm fo76mmap.dds 4096,4096,0.125,54.7356,180,-135,4096,-256,32768 fo76icondefs.txt
-    ./render Fallout76/Data/SeventySix.esm watoga.dds 9024 9024 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r 0 -71 71 0 -view 0.25 180 0 0 -36592.1 -35376.1 32768 -light 1.25 63.4350 41.8103 -a -ssaa 1 -hqm meshes -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 2048 -mip 1 -lmip 2
+    ./render Fallout76/Data/SeventySix.esm whitespring.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -32 -32 32 32 -cam 0.125 54.7356 180 -135 53340 -99681 74002.25 -light 1.25 63.4350 41.8103 -a -ssaa 1 -hqm meshes -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 512
+    ./markers Fallout76/Data/SeventySix.esm fo76mmap.dds 4096,4096,0.125,54.7356,180,-135,4096,-256,16384 fo76icondefs.txt
+    ./render Fallout76/Data/SeventySix.esm watoga.dds 9024 9024 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r 0 -71 71 0 -cam 0.25 180 0 0 146368.4 -141504.4 65536 -light 1.25 63.4350 41.8103 -a -ssaa 1 -hqm meshes -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 2048 -mip 1 -lmip 2
 
