@@ -300,22 +300,74 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
   }
 }
 
+static const char *cubeMapPaths[12] =
+{
+  "textures/cubemaps/chrome_e.dds",                             // Skyrim
+  "textures/shared/cubemaps/mipblur_defaultoutside1.dds",       // Fallout 4
+  "textures/shared/cubemaps/mipblur_defaultoutside1.dds",       // Fallout 76
+  "textures/cubemaps/wrtemple_e.dds",
+  "textures/shared/cubemaps/outsideoldtownreflectcube_e.dds",
+  "textures/shared/cubemaps/outsideoldtownreflectcube_e.dds",
+  "textures/cubemaps/cavegreencube_e.dds",
+  "textures/shared/cubemaps/cgprewarstreet_e.dds",
+  "textures/shared/cubemaps/swampcube.dds",
+  "textures/cubemaps/quickskydark_e.dds",
+  "textures/shared/cubemaps/metalchrome01cube_e.dds",
+  "textures/shared/cubemaps/metalchrome01cube_e.dds"
+};
+
+static float viewRotations[27] =
+{
+  54.73561f,  180.0f,     45.0f,        // isometric from NW
+  54.73561f,  180.0f,     135.0f,       // isometric from SW
+  54.73561f,  180.0f,     -135.0f,      // isometric from SE
+  54.73561f,  180.0f,     -45.0f,       // isometric from NE
+  180.0f,     0.0f,       0.0f,         // top
+  -90.0f,     0.0f,       0.0f,         // front
+  -90.0f,     0.0f,       90.0f,        // right
+  -90.0f,     0.0f,       180.0f,       // back
+  -90.0f,     0.0f,       -90.0f        // left
+};
+
+static inline float degreesToRadians(float x)
+{
+  return float(double(x) * (std::atan(1.0) / 45.0));
+}
+
 static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                              const BA2File& ba2File,
                              int imageWidth, int imageHeight)
 {
   std::map< const std::string *, DDSTexture * > textureSet;
   std::string defaultEnvMap;
-  if (nifFile.getVersion() < 0x80)
-    defaultEnvMap = "textures/cubemaps/chrome_e.dds";
-  else
-    defaultEnvMap = "textures/shared/cubemaps/mipblur_defaultoutside1.dds";
   std::string waterTexture("textures/water/defaultwater.dds");
 #ifdef HAVE_SDL
+  int     screenWidth = imageWidth;
+  int     screenHeight = imageHeight;
+  bool    enableDownscale = bool(outFileName);
+  bool    enableFullScreen = false;
   if (!outFileName)
   {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
       throw errorMessage("error initializing SDL");
+    const SDL_VideoInfo *v = SDL_GetVideoInfo();
+    if (v)
+    {
+      screenWidth = v->current_w;
+      screenHeight = v->current_h;
+      if ((imageWidth > screenWidth || imageHeight > screenHeight) &&
+          !((imageWidth | imageHeight) & 1))
+      {
+        enableDownscale = true;
+      }
+      if ((imageWidth >> int(enableDownscale)) == screenWidth &&
+          (imageHeight >> int(enableDownscale)) == screenHeight)
+      {
+        enableFullScreen = true;
+      }
+      screenWidth = imageWidth >> int(enableDownscale);
+      screenHeight = imageHeight >> int(enableDownscale);
+    }
   }
 #endif
   try
@@ -324,7 +376,9 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     SDL_Surface *sdlScreen = (SDL_Surface *) 0;
     if (!outFileName)
     {
-      sdlScreen = SDL_SetVideoMode(imageWidth, imageHeight, 24, SDL_SWSURFACE);
+      sdlScreen = SDL_SetVideoMode(screenWidth, screenHeight, 24,
+                                   SDL_SWSURFACE
+                                   | (enableFullScreen ? SDL_FULLSCREEN : 0));
       if (!sdlScreen)
         throw errorMessage("error setting SDL video mode");
     }
@@ -341,10 +395,9 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     // light direction: 45, -35.2644, 0 degrees
     float   lightRotationX = float(std::atan(1.0));
     float   lightRotationY = -(float(std::atan(std::sqrt(0.5))));
-    // isometric view (rotate by 54.7356, 180, 45 degrees)
-    float   viewRotationX = float(std::atan(std::sqrt(2.0)));
-    float   viewRotationY = float(std::atan(1.0) * 4.0);
-    float   viewRotationZ = float(std::atan(1.0));
+    int     viewRotation = 0;   // isometric from NW
+    int     viewScale = 0;      // 1.0
+    int     envMapNum = 0;
     Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
                            imageWidth, imageHeight,
                            (nifFile.getVersion() < 0x90 ? 1.0f : 2.2f));
@@ -354,7 +407,10 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
           modelTransform(1.0f, modelRotationX, modelRotationY, modelRotationZ,
                          0.0f, 0.0f, 0.0f);
       NIFFile::NIFVertexTransform
-          viewTransform(1.0f, viewRotationX, viewRotationY, viewRotationZ,
+          viewTransform(1.0f,
+                        degreesToRadians(viewRotations[viewRotation * 3]),
+                        degreesToRadians(viewRotations[viewRotation * 3 + 1]),
+                        degreesToRadians(viewRotations[viewRotation * 3 + 2]),
                         0.0f, 0.0f, 0.0f);
       NIFFile::NIFVertexTransform
           lightTransform(1.0f, lightRotationX, lightRotationY, 0.0f,
@@ -369,20 +425,26 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
           if (!(meshData[i].flags & 0x05))      // ignore if hidden or effect
             meshData[i].calculateBounds(b, &t);
         }
-        if (b.xMax > b.xMin && b.yMax > b.yMin)
-        {
-          float   xScale = float(imageWidth) * 0.9375f / (b.xMax - b.xMin);
-          float   yScale = float(imageHeight) * 0.9375f / (b.yMax - b.yMin);
-          viewTransform.scale = (xScale < yScale ? xScale : yScale);
-          viewTransform.offsX =
-              (float(imageWidth) - ((b.xMin + b.xMax) * viewTransform.scale))
-              * 0.5f;
-          viewTransform.offsY =
-              (float(imageHeight) - ((b.yMin + b.yMax) * viewTransform.scale))
-              * 0.5f;
-          viewTransform.offsZ = 1.0f - (b.zMin * viewTransform.scale);
-        }
+        float   xScale = float(imageWidth) * 0.9375f;
+        if (b.xMax > b.xMin)
+          xScale = xScale / (b.xMax - b.xMin);
+        float   yScale = float(imageHeight) * 0.9375f;
+        if (b.yMax > b.yMin)
+          yScale = yScale / (b.yMax - b.yMin);
+        viewTransform.scale = (xScale < yScale ? xScale : yScale)
+                              * float(std::pow(2.0f, float(viewScale) * 0.25f));
+        viewTransform.offsX =
+            (float(imageWidth) - ((b.xMin + b.xMax) * viewTransform.scale))
+            * 0.5f;
+        viewTransform.offsY =
+            (float(imageHeight) - ((b.yMin + b.yMax) * viewTransform.scale))
+            * 0.5f;
+        viewTransform.offsZ = 1.0f - (b.zMin * viewTransform.scale);
       }
+      defaultEnvMap =
+          std::string(cubeMapPaths[envMapNum * 3
+                                   + int(nifFile.getVersion() >= 0x80)
+                                   + int(nifFile.getVersion() >= 0x90)]);
       for (size_t i = 0; i < meshData.size(); i++)
       {
         if (meshData[i].flags & 0x05)           // ignore if hidden or effect
@@ -449,24 +511,47 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       if (!outFileName)
       {
         SDL_LockSurface(sdlScreen);
-        unsigned int  *srcPtr = &(outBufRGBW.front());
         unsigned char *dstPtr =
             reinterpret_cast< unsigned char * >(sdlScreen->pixels);
-        for (int y = 0; y < imageHeight; y++)
+        if (!enableDownscale)
         {
-          for (int x = 0; x < imageWidth; x++, srcPtr++, dstPtr = dstPtr + 3)
+          unsigned int  *srcPtr = &(outBufRGBW.front());
+          for (int y = 0; y < imageHeight; y++)
           {
-            unsigned int  c = *srcPtr;
-            dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);     // B
-            dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);      // G
-            dstPtr[2] = (unsigned char) (c & 0xFF);             // R
-            *srcPtr = 0U;
-            outBufZ[size_t(srcPtr - &(outBufRGBW.front()))] = 16777216.0f;
+            for (int x = 0; x < imageWidth; x++, srcPtr++, dstPtr = dstPtr + 3)
+            {
+              unsigned int  c = *srcPtr;
+              dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);   // B
+              dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);    // G
+              dstPtr[2] = (unsigned char) (c & 0xFF);           // R
+              *srcPtr = 0U;
+              outBufZ[size_t(srcPtr - &(outBufRGBW.front()))] = 16777216.0f;
+            }
+            dstPtr = dstPtr + (int(sdlScreen->pitch) - (imageWidth * 3));
           }
-          dstPtr = dstPtr + (int(sdlScreen->pitch) - (imageWidth * 3));
+        }
+        else
+        {
+          for (int y = 0; y < imageHeight; y = y + 2)
+          {
+            for (int x = 0; x < imageWidth; x = x + 2, dstPtr = dstPtr + 3)
+            {
+              unsigned int  c =
+                  downsample2xFilter(&(outBufRGBW.front()),
+                                     imageWidth, imageHeight, x, y);
+              dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);   // B
+              dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);    // G
+              dstPtr[2] = (unsigned char) (c & 0xFF);           // R
+            }
+            dstPtr = dstPtr + (int(sdlScreen->pitch) - (screenWidth * 3));
+          }
+          std::memset(&(outBufRGBW.front()), 0,
+                      sizeof(unsigned int) * imageDataSize);
+          for (size_t i = 0; i < imageDataSize; i++)
+            outBufZ[i] = 16777216.0f;
         }
         SDL_UnlockSurface(sdlScreen);
-        SDL_UpdateRect(sdlScreen, 0, 0, imageWidth, imageHeight);
+        SDL_UpdateRect(sdlScreen, 0, 0, screenWidth, screenHeight);
         bool    keyPressed = false;
         bool    quitFlag = false;
         while (!(keyPressed || quitFlag))
@@ -483,6 +568,59 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
             }
             switch (event.key.keysym.sym)
             {
+              case SDLK_0:
+              case SDLK_1:
+                plot3d.setDebugMode(0, 0);
+                break;
+              case SDLK_2:
+              case SDLK_3:
+              case SDLK_4:
+              case SDLK_5:
+                plot3d.setDebugMode(
+                    (unsigned int) (event.key.keysym.sym - SDLK_0), 0);
+                break;
+              case SDLK_MINUS:
+              case SDLK_KP_MINUS:
+                viewScale -= int(viewScale > -16);
+                break;
+              case SDLK_EQUALS:
+              case SDLK_KP_PLUS:
+                viewScale += int(viewScale < 16);
+                break;
+              case SDLK_KP7:
+                viewRotation = 0;                       // isometric / NW
+                break;
+              case SDLK_KP1:
+                viewRotation = 1;                       // isometric / SW
+                break;
+              case SDLK_KP3:
+                viewRotation = 2;                       // isometric / SE
+                break;
+              case SDLK_KP9:
+                viewRotation = 3;                       // isometric / NE
+                break;
+              case SDLK_KP5:
+                viewRotation = 4;                       // top
+                break;
+              case SDLK_KP2:
+                viewRotation = 5;                       // front
+                break;
+              case SDLK_KP6:
+                viewRotation = 6;                       // right
+                break;
+              case SDLK_KP8:
+                viewRotation = 7;                       // back
+                break;
+              case SDLK_KP4:
+                viewRotation = 8;                       // left
+                break;
+              case SDLK_F1:
+              case SDLK_F2:
+              case SDLK_F3:
+              case SDLK_F4:
+                textureSet.erase(&defaultEnvMap);
+                envMapNum = int(event.key.keysym.sym - SDLK_F1);
+                break;
               case SDLK_a:
                 modelRotationZ += 0.19634954f;          // 11.25 degrees
                 break;
