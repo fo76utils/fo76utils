@@ -7,13 +7,19 @@ int main(int argc, char **argv)
 {
   if (argc < 2)
   {
-    std::fprintf(stderr, "Usage: bcdecode INFILE.DDS [MULT | OUTFILE.RGBA]]\n");
+    std::fprintf(
+        stderr,
+        "Usage: bcdecode INFILE.DDS [MULT | OUTFILE.RGBA | OUTFILE.DDS]]\n");
     return 1;
   }
   OutputFile  *outFile = (OutputFile *) 0;
   try
   {
+    DDSTexture  t(argv[1]);
+    unsigned int  w = (unsigned int) t.getWidth();
+    unsigned int  h = (unsigned int) t.getHeight();
     double  rgbScale = 255.0;
+    bool    ddsOutFmt = false;
     if (argc > 2)
     {
       // TES5: 1.983
@@ -26,12 +32,24 @@ int main(int argc, char **argv)
       catch (...)
       {
         rgbScale = 255.0;
-        outFile = new OutputFile(argv[2], 16384);
+        size_t  n = std::strlen(argv[2]);
+        if (n > 4)
+        {
+          const char  *s = argv[2] + (n - 4);
+          ddsOutFmt =
+              (std::strcmp(s, ".dds") == 0 || std::strcmp(s, ".DDS") == 0);
+        }
+        if (!ddsOutFmt)
+        {
+          outFile = new OutputFile(argv[2], 16384);
+        }
+        else
+        {
+          outFile = new DDSOutputFile(argv[2], int(w), int(h),
+                                      DDSInputFile::pixelFormatRGBA32);
+        }
       }
     }
-    DDSTexture  t(argv[1]);
-    unsigned int  w = (unsigned int) t.getWidth();
-    unsigned int  h = (unsigned int) t.getHeight();
     const double  gamma = 2.2;
     std::vector< double > gammaTable(256, 0.0);
     for (int i = 0; i < 256; i++)
@@ -52,9 +70,18 @@ int main(int argc, char **argv)
         unsigned char a = (unsigned char) ((c >> 24) & 0xFF);
         if (outFile)
         {
-          outFile->writeByte(r);
-          outFile->writeByte(g);
-          outFile->writeByte(b);
+          if (!ddsOutFmt)
+          {
+            outFile->writeByte(r);
+            outFile->writeByte(g);
+            outFile->writeByte(b);
+          }
+          else
+          {
+            outFile->writeByte(b);
+            outFile->writeByte(g);
+            outFile->writeByte(r);
+          }
           outFile->writeByte(a);
         }
         else
