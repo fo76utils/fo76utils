@@ -7,9 +7,10 @@ int main(int argc, char **argv)
 {
   if (argc < 2)
   {
-    std::fprintf(
-        stderr,
-        "Usage: bcdecode INFILE.DDS [MULT | OUTFILE.RGBA | OUTFILE.DDS]]\n");
+    std::fprintf(stderr, "Usage:\n");
+    std::fprintf(stderr,
+                 "    bcdecode INFILE.DDS "
+                 "[MULT | OUTFILE.RGBA | OUTFILE.DDS [FACE [NOALPHA]]]\n");
     return 1;
   }
   OutputFile  *outFile = (OutputFile *) 0;
@@ -19,6 +20,8 @@ int main(int argc, char **argv)
     unsigned int  w = (unsigned int) t.getWidth();
     unsigned int  h = (unsigned int) t.getHeight();
     double  rgbScale = 255.0;
+    int     textureNum = 0;
+    unsigned int  alphaMask = 0U;
     bool    ddsOutFmt = false;
     if (argc > 2)
     {
@@ -33,11 +36,15 @@ int main(int argc, char **argv)
       {
         rgbScale = 255.0;
         size_t  n = std::strlen(argv[2]);
-        if (n > 4)
+        ddsOutFmt = true;
+        if (n > 5)
         {
-          const char  *s = argv[2] + (n - 4);
-          ddsOutFmt =
-              (std::strcmp(s, ".dds") == 0 || std::strcmp(s, ".DDS") == 0);
+          const char  *s = argv[2] + (n - 5);
+          if (std::strcmp(s, ".data") == 0 || std::strcmp(s, ".DATA") == 0 ||
+              std::strcmp(s, ".rgba") == 0 || std::strcmp(s, ".RGBA") == 0)
+          {
+            ddsOutFmt = false;
+          }
         }
         if (!ddsOutFmt)
         {
@@ -48,6 +55,16 @@ int main(int argc, char **argv)
           outFile = new DDSOutputFile(argv[2], int(w), int(h),
                                       DDSInputFile::pixelFormatRGBA32);
         }
+      }
+      if (argc > 3)
+      {
+        textureNum = int(parseInteger(argv[3], 10, "invalid texture number",
+                                      0, int(t.getTextureCount()) - 1));
+      }
+      if (argc > 4)
+      {
+        if (bool(parseInteger(argv[4], 10, "invalid boolean value", 0, 1)))
+          alphaMask = 0xFF000000U;
       }
     }
     const double  gamma = 2.2;
@@ -63,7 +80,7 @@ int main(int argc, char **argv)
     {
       for (size_t x = 0; x < w; x++)
       {
-        unsigned int  c = t.getPixelN(x, y, 0);
+        unsigned int  c = t.getPixelN(x, y, 0, textureNum) | alphaMask;
         unsigned char r = (unsigned char) (c & 0xFF);
         unsigned char g = (unsigned char) ((c >> 8) & 0xFF);
         unsigned char b = (unsigned char) ((c >> 16) & 0xFF);
