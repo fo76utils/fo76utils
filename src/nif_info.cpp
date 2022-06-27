@@ -521,9 +521,16 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
             for (int x = 0; x < imageWidth; x++, srcPtr++, dstPtr = dstPtr + 3)
             {
               unsigned int  c = *srcPtr;
+#if defined(_WIN32) || defined(_WIN64)
               dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);   // B
               dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);    // G
               dstPtr[2] = (unsigned char) (c & 0xFF);           // R
+#else
+              // FIXME: should detect pixel format
+              dstPtr[0] = (unsigned char) (c & 0xFF);           // R
+              dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);    // G
+              dstPtr[2] = (unsigned char) ((c >> 16) & 0xFF);   // B
+#endif
               *srcPtr = 0U;
               outBufZ[size_t(srcPtr - &(outBufRGBW.front()))] = 16777216.0f;
             }
@@ -539,9 +546,15 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
               unsigned int  c =
                   downsample2xFilter(&(outBufRGBW.front()),
                                      imageWidth, imageHeight, x, y);
+#if defined(_WIN32) || defined(_WIN64)
               dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);   // B
               dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);    // G
               dstPtr[2] = (unsigned char) (c & 0xFF);           // R
+#else
+              dstPtr[0] = (unsigned char) (c & 0xFF);           // R
+              dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);    // G
+              dstPtr[2] = (unsigned char) ((c >> 16) & 0xFF);   // B
+#endif
             }
             dstPtr = dstPtr + (int(sdlScreen->pitch) - (screenWidth * 3));
           }
