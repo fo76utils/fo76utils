@@ -716,6 +716,10 @@ void MapImage::findMarkers(unsigned int worldID)
     {
       findDisabledMarkers(*r);
     }
+    else if (*r == "CELL" && isInteriorMap)
+    {
+      break;
+    }
     unsigned int  nextFormID = 0U;
     if (searchChildRecords)
     {
