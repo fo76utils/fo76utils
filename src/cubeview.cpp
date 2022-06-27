@@ -9,7 +9,7 @@
 
 static void renderCubeMap(const BA2File& ba2File,
                           const std::string& texturePath,
-                          int imageWidth, int imageHeight)
+                          int imageWidth, int imageHeight, int mipLevel)
 {
   std::vector< unsigned char >  fileBuf;
   ba2File.extractFile(fileBuf, texturePath);
@@ -21,24 +21,29 @@ static void renderCubeMap(const BA2File& ba2File,
   }
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
     throw errorMessage("error initializing SDL");
+  bool    enableFullScreen = false;
+  const SDL_VideoInfo *v = SDL_GetVideoInfo();
+  if (v)
+  {
+    enableFullScreen =
+        (imageWidth == v->current_w && imageHeight == v->current_h);
+  }
   try
   {
     SDL_Surface *sdlScreen =
-        SDL_SetVideoMode(imageWidth, imageHeight, 24, SDL_SWSURFACE);
+        SDL_SetVideoMode(imageWidth, imageHeight, 24,
+                         SDL_SWSURFACE
+                         | (enableFullScreen ? SDL_FULLSCREEN : 0));
     if (!sdlScreen)
       throw errorMessage("error setting SDL video mode");
     size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
     std::vector< unsigned int > outBufRGBW(imageDataSize, 0U);
-    float   viewRotationX = 0.0f;
-    float   viewRotationY = 0.0f;
-    float   viewRotationZ = 0.0f;
+    NIFFile::NIFVertexTransform
+        viewTransform(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
     float   scale =
         1.0f / float(imageWidth > imageHeight ? imageWidth : imageHeight);
     while (true)
     {
-      NIFFile::NIFVertexTransform
-          viewTransform(1.0f, viewRotationX, viewRotationY, viewRotationZ,
-                        0.0f, 0.0f, 0.0f);
       for (int yc = 0; yc < imageHeight; yc++)
       {
         for (int xc = 0; xc < imageWidth; xc++)
@@ -47,7 +52,7 @@ static void renderCubeMap(const BA2File& ba2File,
           float   y = 1.0f;
           float   z = float((imageHeight >> 1) - yc) * scale;
           viewTransform.rotateXYZ(x, y, z);
-          unsigned int  c = texture.cubeMap(x, y, z, 0);
+          unsigned int  c = texture.cubeMap(x, y, z, mipLevel);
           outBufRGBW[size_t(yc) * size_t(imageWidth) + size_t(xc)] = c;
         }
       }
@@ -61,9 +66,16 @@ static void renderCubeMap(const BA2File& ba2File,
           for (int x = 0; x < imageWidth; x++, srcPtr++, dstPtr = dstPtr + 3)
           {
             unsigned int  c = *srcPtr;
+#if defined(_WIN32) || defined(_WIN64)
             dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);     // B
             dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);      // G
             dstPtr[2] = (unsigned char) (c & 0xFF);             // R
+#else
+            // FIXME: should detect pixel format
+            dstPtr[0] = (unsigned char) (c & 0xFF);             // R
+            dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);      // G
+            dstPtr[2] = (unsigned char) ((c >> 16) & 0xFF);     // B
+#endif
             *srcPtr = 0U;
           }
           dstPtr = dstPtr + (int(sdlScreen->pitch) - (imageWidth * 3));
@@ -84,31 +96,69 @@ static void renderCubeMap(const BA2File& ba2File,
                 quitFlag = true;
               continue;
             }
+            bool    rotateFlag = false;
+            float   viewRotationX = 0.0f;
+            float   viewRotationY = 0.0f;
+            float   viewRotationZ = 0.0f;
             switch (event.key.keysym.sym)
             {
               case SDLK_a:
-                viewRotationZ -= 0.19634954f;           // 11.25 degrees
+                viewRotationZ = -0.19634954f;           // 11.25 degrees
+                rotateFlag = true;
                 break;
               case SDLK_d:
-                viewRotationZ += 0.19634954f;
+                viewRotationZ = 0.19634954f;
+                rotateFlag = true;
                 break;
               case SDLK_s:
-                viewRotationX += 0.19634954f;
+                viewRotationX = 0.19634954f;
+                rotateFlag = true;
                 break;
               case SDLK_w:
-                viewRotationX -= 0.19634954f;
+                viewRotationX = -0.19634954f;
+                rotateFlag = true;
                 break;
               case SDLK_q:
-                viewRotationY += 0.19634954f;
+                viewRotationY = 0.19634954f;
+                rotateFlag = true;
                 break;
               case SDLK_e:
-                viewRotationY -= 0.19634954f;
+                viewRotationY = -0.19634954f;
+                rotateFlag = true;
                 break;
               case SDLK_ESCAPE:
                 quitFlag = true;
                 break;
               default:
                 continue;
+            }
+            if (rotateFlag)
+            {
+              NIFFile::NIFVertexTransform
+                  vt(1.0f, viewRotationX, viewRotationY, viewRotationZ,
+                     0.0f, 0.0f, 0.0f);
+              vt *= viewTransform;
+              // normalize
+              float   tmp = vt.rotateXX * vt.rotateXX;
+              tmp += (vt.rotateXY * vt.rotateXY);
+              tmp += (vt.rotateXZ * vt.rotateXZ);
+              tmp += (vt.rotateYX * vt.rotateYX);
+              tmp += (vt.rotateYY * vt.rotateYY);
+              tmp += (vt.rotateYZ * vt.rotateYZ);
+              tmp += (vt.rotateZX * vt.rotateZX);
+              tmp += (vt.rotateZY * vt.rotateZY);
+              tmp += (vt.rotateZZ * vt.rotateZZ);
+              tmp = float(std::sqrt(3.0f / tmp));
+              vt.rotateXX *= tmp;
+              vt.rotateXY *= tmp;
+              vt.rotateXZ *= tmp;
+              vt.rotateYX *= tmp;
+              vt.rotateYY *= tmp;
+              vt.rotateYZ *= tmp;
+              vt.rotateZX *= tmp;
+              vt.rotateZY *= tmp;
+              vt.rotateZZ *= tmp;
+              viewTransform = vt;
             }
             keyPressed = true;
             break;
@@ -136,18 +186,23 @@ int main(int argc, char **argv)
 #ifndef HAVE_SDL
     throw errorMessage("SDL 1.2 is required");
 #else
-    if (argc != 5)
+    if (argc != 5 && argc != 6)
     {
       std::fprintf(stderr,
-                   "Usage: cubeview WIDTH HEIGHT ARCHIVEPATH TEXTURE.DDS\n");
+                   "Usage: cubeview WIDTH HEIGHT ARCHIVEPATH TEXTURE.DDS "
+                   "[MIPLEVEL]\n");
       return 1;
     }
     int     renderWidth =
         int(parseInteger(argv[1], 10, "invalid image width", 8, 16384));
     int     renderHeight =
         int(parseInteger(argv[2], 10, "invalid image height", 8, 16384));
+    int     mipLevel = 0;
+    if (argc > 5)
+      mipLevel = int(parseInteger(argv[5], 10, "invalid mip level", 0, 15));
     BA2File ba2File(argv[3], ".dds");
-    renderCubeMap(ba2File, std::string(argv[4]), renderWidth, renderHeight);
+    renderCubeMap(ba2File, std::string(argv[4]), renderWidth, renderHeight,
+                  mipLevel);
 #endif
   }
   catch (std::exception& e)
