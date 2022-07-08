@@ -138,6 +138,17 @@ static void renderCubeMap(const BA2File& ba2File,
                 viewRotationY = -0.19634954f;
                 rotateFlag = true;
                 break;
+              case SDLK_HOME:
+                viewTransform.rotateXX = 1.0f;
+                viewTransform.rotateXY = 0.0f;
+                viewTransform.rotateXZ = 0.0f;
+                viewTransform.rotateYX = 0.0f;
+                viewTransform.rotateYY = 1.0f;
+                viewTransform.rotateYZ = 0.0f;
+                viewTransform.rotateZX = 0.0f;
+                viewTransform.rotateZY = 0.0f;
+                viewTransform.rotateZZ = 1.0f;
+                break;
               case SDLK_ESCAPE:
                 quitFlag = true;
                 break;
