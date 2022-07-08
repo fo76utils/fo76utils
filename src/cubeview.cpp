@@ -102,6 +102,18 @@ static void renderCubeMap(const BA2File& ba2File,
             float   viewRotationZ = 0.0f;
             switch (event.key.keysym.sym)
             {
+              case SDLK_0:
+              case SDLK_1:
+              case SDLK_2:
+              case SDLK_3:
+              case SDLK_4:
+              case SDLK_5:
+              case SDLK_6:
+              case SDLK_7:
+              case SDLK_8:
+              case SDLK_9:
+                mipLevel = int(event.key.keysym.sym - SDLK_0);
+                break;
               case SDLK_a:
                 viewRotationZ = -0.19634954f;           // 11.25 degrees
                 rotateFlag = true;
