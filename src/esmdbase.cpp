@@ -1013,6 +1013,23 @@ void ESMDump::dumpVersionInfo(unsigned int formID, const ESMRecord *parentGroup)
           }
         }
       }
+      else if (r == "DIAL")
+      {
+        unsigned int  questID = 0U;
+        ESMField  f(*this, r);
+        while (f.next())
+        {
+          if (f == "QNAM" && f.size() >= 4)
+            questID = f.readUInt32Fast();
+        }
+        if (questID && getRecordPtr(questID))
+        {
+          parentType = 0x54535551U;     // "QUST"
+          i = edidDB.find(questID);
+          if (i != edidDB.end())
+            parentEDID = i->second;
+        }
+      }
     }
     const ESMRecord *r2 = &r;
     while (parentEDID.empty() && r2 && r2->parent != 0U)
