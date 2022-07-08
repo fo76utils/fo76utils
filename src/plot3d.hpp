@@ -352,9 +352,6 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // returns light level
   inline int normalMap(float& normalX, float& normalY, float& normalZ,
                        unsigned int n) const;
-  static inline void rotateByNormal(
-      float& x, float& y, float& z,
-      float normalX, float normalY, float normalZ);
   inline unsigned int environmentMap(
       float normalX, float normalY, float normalZ, int x, int y) const;
   inline unsigned int addReflection(unsigned int c, unsigned int e) const;
