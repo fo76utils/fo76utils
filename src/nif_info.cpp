@@ -398,11 +398,11 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     int     viewRotation = 0;   // isometric from NW
     int     viewScale = 0;      // 1.0
     int     envMapNum = 0;
-    Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
-                           imageWidth, imageHeight,
-                           (nifFile.getVersion() < 0x90 ? 1.0f : 2.2f));
     while (true)
     {
+      Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
+                             imageWidth, imageHeight,
+                             (nifFile.getVersion() < 0x90 ? 1.0f : 2.2f));
       NIFFile::NIFVertexTransform
           modelTransform(1.0f, modelRotationX, modelRotationY, modelRotationZ,
                          0.0f, 0.0f, 0.0f);
@@ -663,6 +663,15 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                 break;
               case SDLK_UP:
                 lightRotationY -= 0.19634954f;
+                break;
+              case SDLK_PAGEUP:
+              case SDLK_PAGEDOWN:
+                enableDownscale = (event.key.keysym.sym == SDLK_PAGEUP);
+                imageWidth = screenWidth << int(enableDownscale);
+                imageHeight = screenHeight << int(enableDownscale);
+                imageDataSize = size_t(imageWidth) * size_t(imageHeight);
+                outBufRGBW.resize(imageDataSize, 0U);
+                outBufZ.resize(imageDataSize, 16777216.0f);
                 break;
               case SDLK_ESCAPE:
                 quitFlag = true;
