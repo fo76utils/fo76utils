@@ -31,20 +31,20 @@ class DDSTexture
                                 unsigned int w);
   static size_t decodeBlock_BC5S(unsigned int *dst, const unsigned char *src,
                                  unsigned int w);
-  static size_t decodeBlock_RGB(unsigned int *dst, const unsigned char *src,
+  static size_t decodeLine_RGB(unsigned int *dst, const unsigned char *src,
+                               unsigned int w);
+  static size_t decodeLine_BGR(unsigned int *dst, const unsigned char *src,
+                               unsigned int w);
+  static size_t decodeLine_RGB32(unsigned int *dst, const unsigned char *src,
+                                 unsigned int w);
+  static size_t decodeLine_BGR32(unsigned int *dst, const unsigned char *src,
+                                 unsigned int w);
+  static size_t decodeLine_RGBA(unsigned int *dst, const unsigned char *src,
                                 unsigned int w);
-  static size_t decodeBlock_BGR(unsigned int *dst, const unsigned char *src,
+  static size_t decodeLine_BGRA(unsigned int *dst, const unsigned char *src,
                                 unsigned int w);
-  static size_t decodeBlock_RGB32(unsigned int *dst, const unsigned char *src,
-                                  unsigned int w);
-  static size_t decodeBlock_BGR32(unsigned int *dst, const unsigned char *src,
-                                  unsigned int w);
-  static size_t decodeBlock_RGBA(unsigned int *dst, const unsigned char *src,
-                                 unsigned int w);
-  static size_t decodeBlock_BGRA(unsigned int *dst, const unsigned char *src,
-                                 unsigned int w);
-  static size_t decodeBlock_R8G8(unsigned int *dst, const unsigned char *src,
-                                 unsigned int w);
+  static size_t decodeLine_R8G8(unsigned int *dst, const unsigned char *src,
+                                unsigned int w);
   void loadTextureData(const unsigned char *srcPtr, int n, size_t blockSize,
                        size_t (*decodeFunction)(unsigned int *,
                                                 const unsigned char *,

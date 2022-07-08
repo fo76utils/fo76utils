@@ -186,109 +186,84 @@ static inline unsigned int bgraToRGBA(unsigned int c)
           | ((c << 16) & 0x00FF0000U) | ((c >> 16) & 0x000000FFU));
 }
 
-size_t DDSTexture::decodeBlock_RGB(unsigned int *dst, const unsigned char *src,
-                                   unsigned int w)
+size_t DDSTexture::decodeLine_RGB(unsigned int *dst, const unsigned char *src,
+                                  unsigned int w)
 {
-  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w * 3U))
+  unsigned int  x = 0;
+  for ( ; (x + 1U) <= w; x++, dst++, src = src + 3)
+    *dst = 0xFF000000U | FileBuffer::readUInt32Fast(src);
+  if (BRANCH_EXPECT((x < w), true))
   {
-    unsigned int  c0 = FileBuffer::readUInt32Fast(src);
-    unsigned int  c1 = FileBuffer::readUInt32Fast(src + 4);
-    unsigned int  c2 = FileBuffer::readUInt32Fast(src + 8);
-    unsigned int  c3 = ((c2 >> 8) & 0x00FFFFFFU) | 0xFF000000U;
-    c2 = ((c2 << 16) & 0x00FF0000U) | ((c1 >> 16) & 0x0000FFFFU) | 0xFF000000U;
-    c1 = ((c1 << 8) & 0x00FFFF00U) | ((c0 >> 24) & 0x000000FFU) | 0xFF000000U;
-    c0 = (c0 & 0x00FFFFFFU) | 0xFF000000U;
-    dst[0] = c0;
-    dst[1] = c1;
-    dst[2] = c2;
-    dst[3] = c3;
+    unsigned int  r = src[0];
+    unsigned int  g = src[1];
+    unsigned int  b = src[2];
+    *dst = 0xFF000000U | r | (g << 8) | (b << 16);
   }
-  return 12;
+  return (size_t(w) * 3);
 }
 
-size_t DDSTexture::decodeBlock_BGR(unsigned int *dst, const unsigned char *src,
-                                   unsigned int w)
+size_t DDSTexture::decodeLine_BGR(unsigned int *dst, const unsigned char *src,
+                                  unsigned int w)
 {
-  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w * 3U))
+  unsigned int  x = 0;
+  for ( ; (x + 1U) <= w; x++, dst++, src = src + 3)
+    *dst = bgraToRGBA(0xFF000000U | FileBuffer::readUInt32Fast(src));
+  if (BRANCH_EXPECT((x < w), true))
   {
-    unsigned int  c0 = FileBuffer::readUInt32Fast(src);
-    unsigned int  c1 = FileBuffer::readUInt32Fast(src + 4);
-    unsigned int  c2 = FileBuffer::readUInt32Fast(src + 8);
-    unsigned int  c3 = ((c2 >> 8) & 0x00FFFFFFU) | 0xFF000000U;
-    c2 = ((c2 << 16) & 0x00FF0000U) | ((c1 >> 16) & 0x0000FFFFU) | 0xFF000000U;
-    c1 = ((c1 << 8) & 0x00FFFF00U) | ((c0 >> 24) & 0x000000FFU) | 0xFF000000U;
-    c0 = (c0 & 0x00FFFFFFU) | 0xFF000000U;
-    dst[0] = bgraToRGBA(c0);
-    dst[1] = bgraToRGBA(c1);
-    dst[2] = bgraToRGBA(c2);
-    dst[3] = bgraToRGBA(c3);
+    unsigned int  b = src[0];
+    unsigned int  g = src[1];
+    unsigned int  r = src[2];
+    *dst = 0xFF000000U | r | (g << 8) | (b << 16);
   }
-  return 12;
+  return (size_t(w) * 3);
 }
 
-size_t DDSTexture::decodeBlock_RGB32(unsigned int *dst,
-                                     const unsigned char *src, unsigned int w)
-{
-  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w << 2))
-  {
-    dst[0] = FileBuffer::readUInt32Fast(src) | 0xFF000000U;
-    dst[1] = FileBuffer::readUInt32Fast(src + 4) | 0xFF000000U;
-    dst[2] = FileBuffer::readUInt32Fast(src + 8) | 0xFF000000U;
-    dst[3] = FileBuffer::readUInt32Fast(src + 12) | 0xFF000000U;
-  }
-  return 16;
-}
-
-size_t DDSTexture::decodeBlock_BGR32(unsigned int *dst,
-                                     const unsigned char *src, unsigned int w)
-{
-  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w << 2))
-  {
-    dst[0] = bgraToRGBA(FileBuffer::readUInt32Fast(src) | 0xFF000000U);
-    dst[1] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 4) | 0xFF000000U);
-    dst[2] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 8) | 0xFF000000U);
-    dst[3] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 12) | 0xFF000000U);
-  }
-  return 16;
-}
-
-size_t DDSTexture::decodeBlock_RGBA(unsigned int *dst, const unsigned char *src,
-                                    unsigned int w)
-{
-  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w << 2))
-  {
-    dst[0] = FileBuffer::readUInt32Fast(src);
-    dst[1] = FileBuffer::readUInt32Fast(src + 4);
-    dst[2] = FileBuffer::readUInt32Fast(src + 8);
-    dst[3] = FileBuffer::readUInt32Fast(src + 12);
-  }
-  return 16;
-}
-
-size_t DDSTexture::decodeBlock_BGRA(unsigned int *dst, const unsigned char *src,
-                                    unsigned int w)
-{
-  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w << 2))
-  {
-    dst[0] = bgraToRGBA(FileBuffer::readUInt32Fast(src));
-    dst[1] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 4));
-    dst[2] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 8));
-    dst[3] = bgraToRGBA(FileBuffer::readUInt32Fast(src + 12));
-  }
-  return 16;
-}
-
-size_t DDSTexture::decodeBlock_R8G8(unsigned int *dst,
+size_t DDSTexture::decodeLine_RGB32(unsigned int *dst,
                                     const unsigned char *src, unsigned int w)
 {
-  for (unsigned int y = 0; y < 4; y++, dst = dst + w, src = src + (w << 1))
+  for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
+    *dst = 0xFF000000U | FileBuffer::readUInt32Fast(src);
+  return (size_t(w) << 2);
+}
+
+size_t DDSTexture::decodeLine_BGR32(unsigned int *dst,
+                                    const unsigned char *src, unsigned int w)
+{
+  for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
+    *dst = bgraToRGBA(0xFF000000U | FileBuffer::readUInt32Fast(src));
+  return (size_t(w) << 2);
+}
+
+size_t DDSTexture::decodeLine_RGBA(unsigned int *dst, const unsigned char *src,
+                                   unsigned int w)
+{
+  for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
+    *dst = FileBuffer::readUInt32Fast(src);
+  return (size_t(w) << 2);
+}
+
+size_t DDSTexture::decodeLine_BGRA(unsigned int *dst, const unsigned char *src,
+                                   unsigned int w)
+{
+  for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
+    *dst = bgraToRGBA(FileBuffer::readUInt32Fast(src));
+  return (size_t(w) << 2);
+}
+
+size_t DDSTexture::decodeLine_R8G8(unsigned int *dst,
+                                   const unsigned char *src, unsigned int w)
+{
+  unsigned int  x = 0;
+  for ( ; (x + 4U) <= w; x = x + 4U, dst = dst + 4, src = src + 8)
   {
     dst[0] = 0xFF000000U | FileBuffer::readUInt16Fast(src);
     dst[1] = 0xFF000000U | FileBuffer::readUInt16Fast(src + 2);
     dst[2] = 0xFF000000U | FileBuffer::readUInt16Fast(src + 4);
     dst[3] = 0xFF000000U | FileBuffer::readUInt16Fast(src + 6);
   }
-  return 8;
+  for ( ; x < w; x++, dst++, src = src + 2)
+    *dst = 0xFF000000U | FileBuffer::readUInt16Fast(src);
+  return (size_t(w) << 1);
 }
 
 void DDSTexture::loadTextureData(
@@ -308,13 +283,16 @@ void DDSTexture::loadTextureData(
       h = 1;
     if (i < mipLevelCnt)
     {
-      unsigned int  b = 0;
       if (blockSize > 16)
-        b = w * (((unsigned int) blockSize * 3U) >> 4);
-      if (w < 4 || h < 4)
+      {
+        // uncompressed format
+        for (unsigned int y = 0; y < h; y++)
+          srcPtr = srcPtr + decodeFunction(p + (y * w), srcPtr, w);
+      }
+      else if (w < 4 || h < 4)
       {
         unsigned int  tmpBuf[16];
-        for (unsigned int y = 0; y < h; y = y + 4, srcPtr = srcPtr + b)
+        for (unsigned int y = 0; y < h; y = y + 4)
         {
           for (unsigned int x = 0; x < w; x = x + 4)
           {
@@ -329,7 +307,7 @@ void DDSTexture::loadTextureData(
       }
       else
       {
-        for (unsigned int y = 0; y < h; y = y + 4, srcPtr = srcPtr + b)
+        for (unsigned int y = 0; y < h; y = y + 4)
         {
           for (unsigned int x = 0; x < w; x = x + 4)
             srcPtr = srcPtr + decodeFunction(p + (y * w + x), srcPtr, w);
@@ -409,15 +387,15 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     else
       haveAlpha = true;
     if (rgMask == 0x0000FF00000000FFULL && baMask == 0x0000000000FF0000ULL)
-      decodeFunction = (blockSize < 64 ? &decodeBlock_RGB : &decodeBlock_RGB32);
+      decodeFunction = (blockSize < 64 ? &decodeLine_RGB : &decodeLine_RGB32);
     else if (rgMask == 0x0000FF0000FF0000ULL && baMask == 0x00000000000000FFULL)
-      decodeFunction = (blockSize < 64 ? &decodeBlock_BGR : &decodeBlock_BGR32);
+      decodeFunction = (blockSize < 64 ? &decodeLine_BGR : &decodeLine_BGR32);
     else if (rgMask == 0x0000FF00000000FFULL && baMask == 0xFF00000000FF0000ULL)
-      decodeFunction = &decodeBlock_RGBA;
+      decodeFunction = &decodeLine_RGBA;
     else if (rgMask == 0x0000FF0000FF0000ULL && baMask == 0xFF000000000000FFULL)
-      decodeFunction = &decodeBlock_BGRA;
+      decodeFunction = &decodeLine_BGRA;
     else if (rgMask == 0x0000FF00000000FFULL && !baMask)
-      decodeFunction = &decodeBlock_R8G8;
+      decodeFunction = &decodeLine_R8G8;
     else
       throw errorMessage("unsupported texture file format");
   }
@@ -434,7 +412,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
         case 0x1D:                      // DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
           haveAlpha = true;
           blockSize = 64;
-          decodeFunction = &decodeBlock_RGBA;
+          decodeFunction = &decodeLine_RGBA;
           break;
         case 0x47:                      // DXGI_FORMAT_BC1_UNORM
         case 0x48:                      // DXGI_FORMAT_BC1_UNORM_SRGB
@@ -468,7 +446,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
         case 0x57:                      // DXGI_FORMAT_B8G8R8A8_UNORM
           haveAlpha = true;
           blockSize = 64;
-          decodeFunction = &decodeBlock_BGRA;
+          decodeFunction = &decodeLine_BGRA;
           break;
         default:
           throw errorMessage("unsupported DXGI_FORMAT: 0x%08X", tmp);
@@ -510,12 +488,6 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       if (h < 1)
         h = 1;
       sizeRequired = sizeRequired + (size_t(w) * h * (blockSize >> 4));
-    }
-    while ((xSizeMip0 >> (unsigned int) (mipLevelCnt - 1)) < 4U ||
-           (ySizeMip0 >> (unsigned int) (mipLevelCnt - 1)) < 4U)
-    {
-      if (--mipLevelCnt < 1)
-        throw errorMessage("unsupported RGB texture dimensions");
     }
   }
   else
@@ -563,9 +535,12 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   const unsigned char *srcPtr = buf.getDataPtr() + dataOffs;
   for ( ; mipOffset > 0 && mipLevelCnt > 1; mipOffset--, mipLevelCnt--)
   {
-    unsigned int  w = (xSizeMip0 + 3) >> 2;
-    unsigned int  h = (ySizeMip0 + 3) >> 2;
-    srcPtr = srcPtr + (size_t(w) * h * blockSize);
+    unsigned int  w = xSizeMip0;
+    unsigned int  h = ySizeMip0;
+    if (blockSize > 16)
+      srcPtr = srcPtr + (size_t(w) * h * (blockSize >> 4));
+    else
+      srcPtr = srcPtr + (size_t((w + 3) >> 2) * ((h + 3) >> 2) * blockSize);
     xSizeMip0 = (xSizeMip0 + 1) >> 1;
     ySizeMip0 = (ySizeMip0 + 1) >> 1;
   }
