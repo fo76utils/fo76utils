@@ -634,6 +634,12 @@ void LandscapeData::loadWorldInfo(ESMFile& esmFile, unsigned int worldID)
     {
       waterFormID = f.readUInt32Fast();
     }
+    else if (f == "WNAM" && f.size() >= 4)
+    {
+      unsigned int  parentID = f.readUInt32Fast();
+      if (parentID && parentID < worldID)
+        loadWorldInfo(esmFile, parentID);
+    }
   }
 }
 
