@@ -28,7 +28,7 @@ gameInfo = [["tes4", tes4Path, "Oblivion.esm",   "",
             ["tes5", tes5Path, "Skyrim.esm",     "",
              0x0000003C, 0x00000C16, 3808, 3008, 160],
             ["fo4",  fo4Path,  "Fallout4.esm",   "",
-             0x0000003C, 0x000BE9B6, 6144, 6144, 125],
+             0x0000003C, 0x000AB07E, 6144, 6144, 125],
             ["fo76", fo76Path, "SeventySix.esm", "Appalachia.btd",
              0x0025DA15, 0x00000000, 6432, 6432, 120]]
 
