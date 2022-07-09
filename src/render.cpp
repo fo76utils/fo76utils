@@ -1094,6 +1094,14 @@ unsigned int Renderer::loadMaterialSwap(unsigned int formID)
       f.readPath(stringBuf, std::string::npos, "materials/", ".bgsm");
       if (!stringBuf.empty())
       {
+        int     gradientMapV = -1;
+        if (f.dataRemaining >= 4U &&
+            FileBuffer::readUInt32Fast(f.getDataPtr() + f.size())
+            == 0x4D414E43U)             // "CNAM"
+        {
+          if (f.next() && f.size() >= 4)
+            gradientMapV = roundFloat(f.readFloat() * 255.0f) & 0xFF;
+        }
         static const char *bgsmNamePatterns[14] =
         {
           "*",            "",             "01",           "01decal",
@@ -1124,6 +1132,8 @@ unsigned int Renderer::loadMaterialSwap(unsigned int formID)
             ba2File.extractFile(fileBuf, stringBuf);
             FileBuffer  tmp(&(fileBuf.front()), fileBuf.size());
             m.bgsmFile.loadBGSMFile(m.texturePaths, tmp);
+            if (gradientMapV >= 0)
+              m.bgsmFile.gradientMapV = (unsigned char) gradientMapV;
             v->push_back(m);
           }
           catch (std::runtime_error&)
