@@ -65,7 +65,7 @@ if "win" in sys.platform:
         pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
         pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
         pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
-        pkgFiles += Split("ltex scripts src SConstruct SConstruct.maps")
+        pkgFiles += Split("doc ltex scripts src SConstruct SConstruct.maps")
         pkgFiles += Split(".gitignore LICENSE README.md README.mman-win32")
         pkgFiles += Split("mapicons.py tes5cell.txt")
         package = env.Command(
