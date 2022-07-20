@@ -1,5 +1,7 @@
     esmview FILENAME.ESM[,...] [LOCALIZATION.BA2 [STRINGS_PREFIX]] [OPTIONS...]
 
+Interactive version of [esmdump](esmdump.md). On Windows, it is recommended to run esmview in the MSYS2 terminal for correct support of ANSI escape sequences, and for easy copying and pasting of form IDs with the mouse (double click to copy and middle button to paste).
+
 ### Options
 
 * **-h**: Print usage.

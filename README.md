@@ -12,7 +12,7 @@ Simple command line utilities for extracting data from Elder Scrolls and Fallout
 * [fo4land](doc/fo4land.md) - extract landscape data from Oblivion, Fallout 3, Skyrim, and Fallout 4.
 * [landtxt](doc/landtxt.md) - create an RGB land texture from the output of btddump (formats 2, 4, 6, and 8) or fo4land (formats 2, 4, and 5), or directly from terrain data in ESM/BTD file(s), using a set of DDS texture files.
 * [markers](doc/markers.md) - find references to a set of form IDs defined in a text file, and mark their locations on an RGBA format map, optionally using DDS icon files.
-* [nif\_info](doc/nif_info.md) - list data from a set of .NIF files in .BA2 or .BSA archives, convert to .obj format, or render the model to a DDS file, or display it (nif\_view on Windows).
+* [nif\_info](doc/nif_info.md) - list data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ format, or render the model to a DDS file, or display it (nif\_view on Windows).
 * [render](doc/render.md) - render a world, cell, or object from ESM file(s), terrain data, and archives.
 * [terrain](doc/terrain.md) - older and simpler program to render terrain and water only to an RGB image, using files created by btddump, findwater, or fo4land. Includes 2D and isometric mode.
 

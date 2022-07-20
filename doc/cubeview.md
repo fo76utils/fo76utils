@@ -1,4 +1,22 @@
     cubeview WIDTH HEIGHT ARCHIVEPATH TEXTURE.DDS [MIPLEVEL]
 
+### Options
+
+* **WIDTH**, **HEIGHT**: Image dimensions to display, matching the current screen resolution enables full screen mode.
+* **ARCHIVEPATH**: Path to archive(s) containing the cube map texture.
+* **TEXTURE.DDS**: Full path to texture file within the archives, it is expected to be a cube map with the faces in the order used by Fallout 4 and 76. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures.
+* **MIPLEVEL**: Initial mip level to display.
+
 ### Keyboard controls
+
+* **A**, **D**: Turn left or right.
+* **W**, **S**: Look up or down.
+* **Q**, **E**: Roll left or right.
+* **Home**: Reset view direction.
+* **0** to **9**: Set mip level.
+* **Esc**: Quit program.
+
+### Example
+
+    ./cubeview 1920 1080 Fallout76/Data textures/shared/cubemaps/outsideoldtownreflectcube_e.dds
 
