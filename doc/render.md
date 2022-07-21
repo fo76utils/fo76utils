@@ -29,7 +29,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 * **-defclr 0x00RRGGBB**: Default color for untextured terrain.
 * **-lmip FLOAT**: Additional mip level for land textures, defaults to 3.0.
 * **-lmult FLOAT**: Land texture RGB level scale.
-* **-ltxtres INT**: Land texture resolution per cell, must be power of two, and in the range 2^l to 4096. Using a value greater than 2^l enables normal mapping on terrain. For approximately correct scaling, use 16384 / 2^(mip + lmip) for Fallout 4 and 76, and 8192 / 2^(mip + lmip) for Skyrim.
+* **-ltxtres INT**: Land texture resolution per cell, must be power of two, and in the range 2<sup>(7-l)</sup> to 4096. Using a value greater than 2<sup>(7-l)</sup> enables normal mapping on terrain. For approximately correct scaling, use 16384 / 2<sup>(mip+lmip)</sup> for Fallout 4 and 76, and 8192 / 2<sup>(mip+lmip)</sup> for Skyrim.
 
 ### Model options
 
@@ -43,14 +43,14 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 
 ### View options
 
-* **-view SCALE RX RY RZ OFFS_X OFFS_Y OFFS_Z**: Set transform from world coordinates to image coordinates, rotations are in degrees (see [figure](view.png)). At a scale of 1.0, one cell is 4096 pixels. X and Y offsets are relative to the center of the image.
+* **-view SCALE RX RY RZ OFFS_X OFFS_Y OFFS_Z**: Set transform from world coordinates to image coordinates, rotations are in degrees (see [figure](view.png)). At a scale of 1.0, the size of one exterior cell is 4096 pixels. X and Y offsets are relative to the center of the image.
 * **-cam SCALE RX RY RZ X Y Z**: Set view transform for camera position X,Y,Z. The scale and rotation parameters are identical to **-view**, offsets are calculated from the specified camera world coordinates.
 * **-zrange MIN MAX**: Limit view Z range to MIN <= Z < MAX.
 
 ### Lighting options
 
 * **-light SCALE RX RY**: Set light level and X, Y rotation (0, 0 = top, see [figure](light.png)).
-* **-lpoly A5 A4 A3 A2 A1 A0**: Use the polynomial **x^5 \* A5 + x^4 \* A4 + x^3 \* A3 + x^2 \* A2 + x \* A1 + A0** to convert the dot product **x** of the light vector and the surface normal to a multiplier to be applied to RGB values. **x** is 1.0, -1.0, or 0.0 if the normal is facing directly towards or away from, or is perpendicular to the light source, respectively. The result is multiplied by the light level from **-light**, and limited to the range of 0 to 3.996. [This figure](lpoly.png) shows the default polynomial, and a few examples.
+* **-lpoly A5 A4 A3 A2 A1 A0**: Use the polynomial **x<sup>5</sup> \* A5 + x<sup>4</sup> \* A4 + x<sup>3</sup> \* A3 + x<sup>2</sup> \* A2 + x \* A1 + A0** to convert the dot product **x** of the light vector and the surface normal to a multiplier to be applied to RGB values. **x** is 1.0, -1.0, or 0.0 if the normal is facing directly towards or away from, or is perpendicular to the light source, respectively. The result is multiplied by the light level from **-light**, and limited to the range of 0 to 3.996. [This figure](lpoly.png) shows the default polynomial, and a few examples.
 
 For testing view and light settings, it is recommended to use faster low quality rendering, with no downsampling, low landscape texture resolution, no high quality models, and if necessary, disabling all meshes.
 
