@@ -341,6 +341,11 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
   std::map< const std::string *, DDSTexture * > textureSet;
   std::string defaultEnvMap;
   std::string waterTexture("textures/water/defaultwater.dds");
+  std::string whiteTexture;
+  if (nifFile.getVersion() < 0x80U)
+    whiteTexture = "textures/white.dds";
+  else
+    whiteTexture = "textures/effects/rainscene/test_flat_white.dds";
 #ifdef HAVE_SDL
   int     screenWidth = imageWidth;
   int     screenHeight = imageHeight;
@@ -467,6 +472,8 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
               texturePath = &defaultEnvMap;
             else if (j == 1 && (meshData[i].flags & 0x02))
               texturePath = &waterTexture;
+            else if (j == 0)
+              texturePath = &whiteTexture;
             else
               continue;
           }
@@ -474,9 +481,22 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
               textureSet.find(texturePath);
           if (k == textureSet.end())
           {
-            ba2File.extractFile(fileBuf, *texturePath);
-            DDSTexture  *texture =
-                new DDSTexture(&(fileBuf.front()), fileBuf.size());
+            DDSTexture  *texture = (DDSTexture *) 0;
+            try
+            {
+              ba2File.extractFile(fileBuf, *texturePath);
+              texture = new DDSTexture(&(fileBuf.front()), fileBuf.size());
+            }
+            catch (std::runtime_error& e)
+            {
+              std::fprintf(stderr, "Warning: failed to load texture '%s': %s\n",
+                           texturePath->c_str(), e.what());
+            }
+            if (j == 0 && !texture)
+            {
+              ba2File.extractFile(fileBuf, whiteTexture);
+              texture = new DDSTexture(&(fileBuf.front()), fileBuf.size());
+            }
             k = textureSet.insert(
                     std::pair< const std::string *, DDSTexture * >(
                         texturePath, texture)).first;
