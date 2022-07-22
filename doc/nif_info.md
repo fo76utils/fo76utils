@@ -28,3 +28,19 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **Page Down**: Disable downsampling.
 * **Esc**: Quit program.
 
+### Examples
+
+##### Text output formats
+
+    ./nif_info -q Fallout76/Data golf_ball.nif
+    ./nif_info Fallout76/Data golf_ball.nif > golf_ball.txt
+    ./nif_info -v Fallout76/Data golf_ball.nif > golf_ball_full.txt
+    ./nif_info -obj Fallout76/Data golf_ball.nif > golf_ball.obj
+    ./nif_info -mtl Fallout76/Data golf_ball.nif > golf_ball.mtl
+
+##### Rendering and viewing
+
+    ./nif_info -render1920x1080 glassdome.dds Fallout76/Data palaceofthewindingpath/palace_bld_glassdome01.nif
+    ./nif_info -render1920x1080 44.dds Fallout4/Data weapons/44/44load.nif
+    ./nif_info -view1920x1080 Fallout76/Data meshes/test/testpbrmaterials01.nif
+
