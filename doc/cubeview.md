@@ -1,5 +1,7 @@
     cubeview WIDTH HEIGHT ARCHIVEPATH TEXTURE.DDS [MIPLEVEL]
 
+View a Fallout 4 or 76 cube map from archive files.
+
 ### Options
 
 * **WIDTH**, **HEIGHT**: Image dimensions to display, matching the current screen resolution enables full screen mode.

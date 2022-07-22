@@ -5,7 +5,7 @@ Extract terrain data from [Fallout 76 .BTD files](../src/btdfile.cpp) to raw hei
 ### Output formats
 
 * **FMT = 0**: Raw 16-bit height map.
-* **FMT = 1**: Vertex normals in 24-bit RGB format.
+* **FMT = 1**: Vertex normals calculated from the height map, in 24-bit RGB format.
 * **FMT = 2**: Raw landscape textures. The pixel format is 2 bytes per vertex, defining 3-bit alphas for 5 additional texture layers (the bottom layer in bits 0 to 2, and the top layer in bits 12 to 14).
 * **FMT = 3**: Dithered 8-bit landscape texture.
 * **FMT = 4**: Raw ground cover. The pixel format is 1 byte per vertex, each bit defines whether the corresponding ground cover layer (0 = bottom, 7 = top) is enabled on the vertex.
