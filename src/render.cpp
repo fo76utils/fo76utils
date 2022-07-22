@@ -1602,7 +1602,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     firstTexture((CachedTexture *) 0),
     lastTexture((CachedTexture *) 0),
     waterColor(0xC0302010U),
-    waterReflectionLevel(0.375f),
+    waterReflectionLevel(0.5f),
     zRangeMax(zMax),
     verboseMode(true)
 {
@@ -1916,7 +1916,7 @@ int main(int argc, char **argv)
     float   landTextureMult = 1.0f;
     int     modelLOD = 0;
     unsigned int  waterColor = 0x60102030U;
-    float   waterReflectionLevel = 0.375f;
+    float   waterReflectionLevel = 0.5f;
     int     zMin = 0;
     int     zMax = 16777216;
     float   viewScale = 0.0625f;

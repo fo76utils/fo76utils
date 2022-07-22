@@ -967,7 +967,7 @@ void Plot3D_TriShape::renderWater(
   viewTransformPtr = &viewTransform;
   viewTransform.rotateXYZ(lightX, lightY, lightZ);
   textureE = envMap;
-  reflectionLevel = roundFloat(lightingPolynomial[0] * (envMapLevel * 256.0f));
+  envMapLevel = envMapLevel * (lightingPolynomial[0] * 256.0f);
   light_X = lightX;
   light_Y = lightY;
   light_Z = lightZ;
@@ -981,24 +981,29 @@ void Plot3D_TriShape::renderWater(
         continue;
       float   normalX = float(int((c >> 16) & 0xFFU) - 128) * (1.0f / 126.0f);
       float   normalY = float(int((c >> 24) & 0xFFU) - 128) * (1.0f / 126.0f);
-      float   normalZ = (normalX * normalX) + (normalY * normalY);
-      if (normalZ >= 1.0f)
+      float   normalZ = 0.0f;
+      float   normalXY2 = (normalX * normalX) + (normalY * normalY);
+      if (BRANCH_EXPECT((normalXY2 >= 1.0f), false))
       {
-        normalZ = (3.0f - normalZ) * 0.5f;  // approximates 1.0 / sqrt(normalZ)
-        normalX = normalX * normalZ;
-        normalY = normalY * normalZ;
-        normalZ = 0.0f;
+        // approximates 1.0 / sqrt(normalXY2)
+        normalXY2 = (3.0f - normalXY2) * 0.5f;
+        normalX = normalX * normalXY2;
+        normalY = normalY * normalXY2;
+        normalXY2 = 1.0f;
       }
       else
       {
-        normalZ = -(float(std::sqrt(1.0001f - normalZ)));
+        normalZ = -(float(std::sqrt(1.0001f - normalXY2)));
       }
       int     l = calculateLighting(normalX, normalY, normalZ);
       unsigned int  tmp = multiplyWithLight(waterColor, l);
       c = ((c & 0x001FU) << 3) | ((c & 0x07E0U) << 5) | ((c & 0xF800U) << 8);
       c = blendRGBA32(c, tmp, int(waterColor >> 24));
       if (envMap)
+      {
+        reflectionLevel = roundFloat(envMapLevel * (normalXY2 * 0.75f + 0.25f));
         c = addReflection(c, environmentMap(normalX, normalY, normalZ, x, y));
+      }
       *p = c;
     }
   }
