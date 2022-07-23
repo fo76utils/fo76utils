@@ -373,6 +373,9 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
   bgsmFlags = 0;
   bgsmGradientMapV = 128;
   bgsmEnvMapScale = 0;
+  bgsmSpecularColor = 0xFFFFFFFFU;
+  bgsmSpecularScale = 0;
+  bgsmSpecularSmoothness = 128;
   bgsmAlphaFlags = 0x00EC;
   bgsmAlphaThreshold = 0;
   bgsmAlpha = 128;
@@ -391,13 +394,32 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
       bgsmFlags = (unsigned char) (f.readUInt32Fast() & 0x03);
       int     tmp = roundFloat(f.readFloat() * 128.0f);
       bgsmAlpha = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+      f.setPosition(f.getPosition() + 4);
+      float   s = f.readFloat();
+      if (f.bsVersion < 0x80)
+        s = (s > 2.0f ? ((float(std::log2(s)) - 1.0f) * (1.0f / 9.0f)) : 0.0f);
+      tmp = roundFloat(s * 255.0f);
+      tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+      bgsmSpecularSmoothness = (unsigned char) tmp;
+      tmp = roundFloat(f.readFloat() * 255.0f);
+      tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+      bgsmSpecularColor = (unsigned int) tmp | 0xFF000000U;     // R
+      tmp = roundFloat(f.readFloat() * 255.0f);
+      tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+      bgsmSpecularColor |= ((unsigned int) tmp << 8);           // G
+      tmp = roundFloat(f.readFloat() * 255.0f);
+      tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+      bgsmSpecularColor |= ((unsigned int) tmp << 16);          // B
+      tmp = roundFloat(f.readFloat() * 128.0f);
+      tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+      bgsmSpecularScale = (unsigned char) tmp;
       if (f.bsVersion < 0x80)
       {
-        f.setPosition(f.getPosition() + 32);
+        f.setPosition(f.getPosition() + 8);
       }
       else
       {
-        f.setPosition(f.getPosition() + 36);
+        f.setPosition(f.getPosition() + 12);
         tmp = roundFloat(f.readFloat() * 255.0f);
         bgsmGradientMapV = (unsigned char) (tmp & 0xFF);
         f.setPosition(f.getPosition() + 28);
@@ -434,6 +456,9 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
       bgsmFlags = bgsmFile.flags;
       bgsmGradientMapV = bgsmFile.gradientMapV;
       bgsmEnvMapScale = bgsmFile.envMapScale;
+      bgsmSpecularColor = bgsmFile.specularColor;
+      bgsmSpecularScale = bgsmFile.specularScale;
+      bgsmSpecularSmoothness = bgsmFile.specularSmoothness;
       bgsmAlphaFlags = bgsmFile.alphaFlags;
       bgsmAlphaThreshold = bgsmFile.alphaThreshold;
       bgsmAlpha = bgsmFile.alpha;
@@ -463,7 +488,7 @@ NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(NIFFile& f)
   texturePaths.resize((f.bsVersion < 0x90 ? 9 : 10), s);
   unsigned long long  texturePathMap = 0xFFFFFFFF6E743210ULL;   // Fallout 4
   if (f.bsVersion < 0x80)
-    texturePathMap = 0xFFFFFFFFEE64E210ULL;     // Skyrim
+    texturePathMap = 0xFFFFFFFFEE54E210ULL;     // Skyrim
   else if (f.bsVersion >= 0x90)
     texturePathMap = 0xFFFFF98EEE743210ULL;     // Fallout 76
   for ( ; (texturePathMap & 15U) != 15U; texturePathMap = texturePathMap >> 4)
@@ -746,6 +771,9 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       t.flags = t.flags | (unsigned char) ((lsBlock.bgsmFlags & 0x1C) << 1);
       t.gradientMapV = lsBlock.bgsmGradientMapV;
       t.envMapScale = lsBlock.bgsmEnvMapScale;
+      t.specularColor = lsBlock.bgsmSpecularColor;
+      t.specularScale = lsBlock.bgsmSpecularScale;
+      t.specularSmoothness = lsBlock.bgsmSpecularSmoothness;
       alpha = lsBlock.bgsmAlpha;
       if (lsBlock.bgsmVersion)
       {

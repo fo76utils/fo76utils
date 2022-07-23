@@ -130,19 +130,26 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
                      (unsigned int) lspBlock->bgsmAlphaFlags);
         std::fprintf(f, "    Material alpha threshold: %3u\n",
                      (unsigned int) lspBlock->bgsmAlphaThreshold);
-        std::fprintf(f, "    Material alpha: %.3f\n",
-                     double(int(lspBlock->bgsmAlpha)) * (1.0 / 128.0));
-        std::fprintf(f, "    Material gradient map scale: %.3f\n",
-                     double(int(lspBlock->bgsmGradientMapV)) * (1.0 / 255.0));
-        std::fprintf(f, "    Material environment map scale: %.3f\n",
-                     double(int(lspBlock->bgsmEnvMapScale)) * (1.0 / 128.0));
-        for (size_t j = 0; j < lspBlock->bgsmTextures.size(); j++)
+      }
+      std::fprintf(f, "    Material alpha: %.3f\n",
+                   double(int(lspBlock->bgsmAlpha)) * (1.0 / 128.0));
+      std::fprintf(f, "    Material gradient map scale: %.3f\n",
+                   double(int(lspBlock->bgsmGradientMapV)) * (1.0 / 255.0));
+      std::fprintf(f, "    Material environment map scale: %.3f\n",
+                   double(int(lspBlock->bgsmEnvMapScale)) * (1.0 / 128.0));
+      std::fprintf(f, "    Material specular color (0xAABBGGRR): 0x%08X\n",
+                   lspBlock->bgsmSpecularColor);
+      std::fprintf(f, "    Material specular scale: %.3f\n",
+                   double(int(lspBlock->bgsmSpecularScale)) * (1.0 / 128.0));
+      std::fprintf(f, "    Material specular smoothness: %.3f\n",
+                   double(int(lspBlock->bgsmSpecularSmoothness))
+                   * (1.0 / 255.0));
+      for (size_t j = 0; j < lspBlock->bgsmTextures.size(); j++)
+      {
+        if (!lspBlock->bgsmTextures[j]->empty())
         {
-          if (!lspBlock->bgsmTextures[j]->empty())
-          {
-            std::fprintf(f, "    Material texture %d: %s\n",
-                         int(j), lspBlock->bgsmTextures[j]->c_str());
-          }
+          std::fprintf(f, "    Material texture %d: %s\n",
+                       int(j), lspBlock->bgsmTextures[j]->c_str());
         }
       }
     }
@@ -283,9 +290,28 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "newmtl Material%06u\n", (unsigned int) (i + 1));
     std::fprintf(f, "Ka 1.0 1.0 1.0\n");
     std::fprintf(f, "Kd 1.0 1.0 1.0\n");
-    std::fprintf(f, "Ks 1.0 1.0 1.0\n");
+    float   specularR = float(int(meshData[i].specularColor & 0xFFU));
+    float   specularG = float(int((meshData[i].specularColor >> 8) & 0xFFU));
+    float   specularB = float(int((meshData[i].specularColor >> 16) & 0xFFU));
+    float   specularScale =
+        float(int(meshData[i].specularScale)) / (128.0f * 255.0f);
+    float   specularGlossiness = float(int(meshData[i].specularSmoothness));
+    if ((meshData[i].texturePathCnt >= 7 && meshData[i].texturePaths[6] &&
+         !meshData[i].texturePaths[6]->empty()) ||
+        (meshData[i].texturePathCnt >= 10 && meshData[i].texturePaths[9] &&
+         !meshData[i].texturePaths[9]->empty()))
+    {
+      specularScale *= 0.5f;
+      specularGlossiness *= 0.5f;
+    }
+    specularR *= specularScale;
+    specularG *= specularScale;
+    specularB *= specularScale;
+    specularGlossiness =
+        float(std::pow(2.0f, specularGlossiness * (9.0f / 255.0f) + 1.0f));
+    std::fprintf(f, "Ks %.3f %.3f %.3f\n", specularR, specularG, specularB);
     std::fprintf(f, "d 1.0\n");
-    std::fprintf(f, "Ns 33.0\n");
+    std::fprintf(f, "Ns %.1f\n", specularGlossiness);
     for (size_t j = 0; j < 2; j++)
     {
       if (j < meshData[i].texturePathCnt &&
@@ -459,12 +485,12 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         if (meshData[i].flags & 0x02)
           haveWater = true;
         plot3d = meshData[i];
-        const DDSTexture  *textures[9];
-        for (size_t j = 9; j-- > 0; )
+        const DDSTexture  *textures[10];
+        for (size_t j = 10; j-- > 0; )
         {
           textures[j] = (DDSTexture *) 0;
           const std::string *texturePath = (std::string *) 0;
-          if (j < meshData[i].texturePathCnt && ((1 << int(j)) & 0x015B))
+          if (j < meshData[i].texturePathCnt && ((1 << int(j)) & 0x037B))
             texturePath = meshData[i].texturePaths[j];
           if (!texturePath || texturePath->empty())
           {
@@ -505,7 +531,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         }
         plot3d.drawTriShape(modelTransform, viewTransform,
                             lightTransform.rotateXZ, lightTransform.rotateYZ,
-                            lightTransform.rotateZZ, textures, 9);
+                            lightTransform.rotateZZ, textures, 10);
       }
       if (haveWater)
       {

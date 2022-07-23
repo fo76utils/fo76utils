@@ -13,6 +13,9 @@ struct BGSMFile
   unsigned char flags;
   unsigned char gradientMapV;           // 255 = 1.0
   unsigned char envMapScale;            // 128 = 1.0
+  unsigned int  specularColor;
+  unsigned char specularScale;          // 128 = 1.0
+  unsigned char specularSmoothness;     // 255 = 1.0, glossiness from 2 to 1024
   // bit 0 = blending enabled
   // bits 1-4 = source blend mode
   // bits 5-8 = destination blend mode
@@ -31,7 +34,8 @@ struct BGSMFile
   // texturePaths[2] = glow
   // texturePaths[3] = gradient map
   // texturePaths[4] = environment map
-  // texturePaths[6] = Fallout 4 _s.dds, or environment mask (_em.dds)
+  // texturePaths[5] = unused / Skyrim _em.dds
+  // texturePaths[6] = Fallout 4 _s.dds
   // texturePaths[7] = wrinkles
   // texturePaths[8] = Fallout 76 _r.dds
   // texturePaths[9] = Fallout 76 _l.dds

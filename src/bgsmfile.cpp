@@ -97,14 +97,30 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
     else
       buf.readPath(texturePaths[n], len, "textures/", ".dds");
   }
+  buf.setPosition(buf.getPosition() + (version == 2 ? 15 : 24));
+  if (buf.readUInt8() != 0)             // specular enabled
+  {
+    tmp = roundFloat(buf.readFloat() * 255.0f);
+    tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+    specularColor = (unsigned int) tmp | 0xFF000000U;   // R
+    tmp = roundFloat(buf.readFloat() * 255.0f);
+    tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+    specularColor |= ((unsigned int) tmp << 8);         // G
+    tmp = roundFloat(buf.readFloat() * 255.0f);
+    tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+    specularColor |= ((unsigned int) tmp << 16);        // B
+    tmp = roundFloat(buf.readFloat() * 128.0f);
+    specularScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+    tmp = roundFloat(buf.readFloat() * 255.0f);
+    specularSmoothness =
+        (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+  }
   if (texturePaths[4].empty() && !texturePaths[(version == 2 ? 6 : 8)].empty())
   {
-    buf.setPosition(buf.getPosition() + (version == 2 ? 15 : 24));
-    if (buf.readUInt8() != 0)           // specular enabled
+    if (specularScale)
     {
-      buf.setPosition(buf.getPosition() + 12);
-      tmp = roundFloat(buf.readFloat() * float(int(envMapScale)));
-      envMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+      tmp = (int(envMapScale) * int(specularScale) + 64) >> 7;
+      envMapScale = (unsigned char) (tmp < 255 ? tmp : 255);
     }
     else if (version != 2 || buf[57] == 0)
     {
@@ -136,6 +152,9 @@ void BGSMFile::clear()
   flags = 0;
   gradientMapV = 128;
   envMapScale = 128;
+  specularColor = 0xFFFFFFFFU;
+  specularScale = 0;
+  specularSmoothness = 128;
   alphaFlags = 0x00EC;
   alphaThreshold = 0;
   alpha = 128;

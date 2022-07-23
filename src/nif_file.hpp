@@ -110,13 +110,17 @@ class NIFFile : public FileBuffer
     unsigned char gradientMapV;
     unsigned char envMapScale;          // 128 = 1.0
     unsigned char alphaThreshold;
-    unsigned int  texturePathCnt;
+    unsigned int  specularColor;
+    unsigned char specularScale;        // 128 = 1.0
+    unsigned char specularSmoothness;   // 255 = 1.0, glossiness from 2 to 1024
+    unsigned short  texturePathCnt;
     // texturePaths[0] = diffuse texture
     // texturePaths[1] = normal map
     // texturePaths[2] = glow texture
     // texturePaths[3] = gradient map
     // texturePaths[4] = environment map
-    // texturePaths[6] = Fallout 4 specular, or environment mask (_em)
+    // texturePaths[5] = Skyrim environment mask (_em)
+    // texturePaths[6] = Fallout 4 specular map
     // texturePaths[7] = wrinkles
     // texturePaths[8] = Fallout 76 _r
     // texturePaths[9] = Fallout 76 _l
@@ -131,7 +135,8 @@ class NIFFile : public FileBuffer
     NIFTriShape()
       : vertexCnt(0), triangleCnt(0), vertexData((NIFVertex *) 0),
         triangleData((NIFTriangle *) 0), flags(0x00), gradientMapV(128),
-        envMapScale(128), alphaThreshold(0), texturePathCnt(0),
+        envMapScale(128), alphaThreshold(0), specularColor(0xFFFFFFFFU),
+        specularScale(0), specularSmoothness(128), texturePathCnt(0),
         texturePaths((std::string **) 0), materialPath((std::string *) 0),
         textureOffsetU(0.0f), textureOffsetV(0.0f),
         textureScaleU(1.0f), textureScaleV(1.0f), name("")
@@ -221,6 +226,9 @@ class NIFFile : public FileBuffer
     unsigned char   bgsmFlags;
     unsigned char   bgsmGradientMapV;
     unsigned char   bgsmEnvMapScale;
+    unsigned int    bgsmSpecularColor;
+    unsigned char   bgsmSpecularScale;
+    unsigned char   bgsmSpecularSmoothness;
     unsigned short  bgsmAlphaFlags;
     unsigned char   bgsmAlphaThreshold;
     unsigned char   bgsmAlpha;          // 128 = 1.0
