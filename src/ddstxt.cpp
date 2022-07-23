@@ -740,12 +740,13 @@ unsigned int DDSTexture::getPixelTC(float x, float y, float mipLevel) const
   return rbga64ToRGBA32(blendRBGA64(c0, c1, mf));
 }
 
-unsigned int DDSTexture::cubeMap(float x, float y, float z, int mipLevel) const
+unsigned int DDSTexture::cubeMap(float x, float y, float z,
+                                 float mipLevel) const
 {
   float   xm = float(std::fabs(x));
   float   ym = float(std::fabs(y));
   float   zm = float(std::fabs(z));
-  int     n = 0;
+  size_t  n = 0;
   if (xm >= ym && xm >= zm)             // right (0), left (1)
   {
     float   tmp = 1.0f / xm;
@@ -781,25 +782,49 @@ unsigned int DDSTexture::cubeMap(float x, float y, float z, int mipLevel) const
     x = x * tmp;
     y = y * tmp;
   }
-  int     w = int((xSizeMip0 - 1U) >> (unsigned char) mipLevel);
-  int     h = int((ySizeMip0 - 1U) >> (unsigned char) mipLevel);
-  x = (x + 1.0f) * (float(w) * 0.5f);
-  y = (1.0f - y) * (float(h) * 0.5f);
   if (BRANCH_EXPECT(!isCubeMap, false))
-    return getPixelB(x, y, mipLevel);
-  int     x0 = roundFloat(x * 256.0f);
-  int     y0 = roundFloat(y * 256.0f);
+    n = 0;
+  else
+    n *= textureDataSize;
+  int     m0 = roundFloat(mipLevel * 256.0f);
+  int     mf = m0 & 0xFF;
+  m0 = int((unsigned int) m0 >> 8);
+  int     w = int((xSizeMip0 - 1U) >> (unsigned char) m0);
+  int     h = int((ySizeMip0 - 1U) >> (unsigned char) m0);
+  float   txtX = (x + 1.0f) * (float(w) * 0.5f);
+  float   txtY = (1.0f - y) * (float(h) * 0.5f);
+  int     x0 = roundFloat(txtX * 256.0f);
+  int     y0 = roundFloat(txtY * 256.0f);
   int     xf = x0 & 0xFF;
   int     yf = y0 & 0xFF;
   x0 = int((unsigned int) x0 >> 8);
   y0 = int((unsigned int) y0 >> 8);
-  const unsigned int  *p =
-      textureData[mipLevel] + (textureDataSize * size_t(n));
+  const unsigned int  *p = textureData[m0] + n;
   unsigned int  c0 = p[(y0 & h) * (w + 1) + (x0 & w)];
   unsigned int  c1 = p[(y0 & h) * (w + 1) + ((x0 + 1) & w)];
   unsigned int  c2 = p[((y0 + 1) & h) * (w + 1) + (x0 & w)];
   unsigned int  c3 = p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)];
-  return rbga64ToRGBA32(blendToRBGA64Bilinear(c0, c1, c2, c3, xf, yf));
+  unsigned long long  c = blendToRBGA64Bilinear(c0, c1, c2, c3, xf, yf);
+  if (BRANCH_EXPECT(mf, true))
+  {
+    w = w >> 1;
+    h = h >> 1;
+    txtX = (x + 1.0f) * (float(w) * 0.5f);
+    txtY = (1.0f - y) * (float(h) * 0.5f);
+    x0 = roundFloat(txtX * 256.0f);
+    y0 = roundFloat(txtY * 256.0f);
+    xf = x0 & 0xFF;
+    yf = y0 & 0xFF;
+    x0 = int((unsigned int) x0 >> 8);
+    y0 = int((unsigned int) y0 >> 8);
+    p = textureData[m0 + 1] + n;
+    c0 = p[(y0 & h) * (w + 1) + (x0 & w)];
+    c1 = p[(y0 & h) * (w + 1) + ((x0 + 1) & w)];
+    c2 = p[((y0 + 1) & h) * (w + 1) + (x0 & w)];
+    c3 = p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)];
+    c = blendRBGA64(c, blendToRBGA64Bilinear(c0, c1, c2, c3, xf, yf), mf);
+  }
+  return rbga64ToRGBA32(c);
 }
 
 struct Downsample2xTables

@@ -129,7 +129,7 @@ class DDSTexture
   // x = -1.0 to 1.0: left to right
   // y = -1.0 to 1.0: back to front
   // z = -1.0 to 1.0: bottom to top
-  unsigned int cubeMap(float x, float y, float z, int mipLevel) const;
+  unsigned int cubeMap(float x, float y, float z, float mipLevel) const;
 };
 
 unsigned int downsample2xFilter(const unsigned int *buf,

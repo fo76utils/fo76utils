@@ -9,7 +9,7 @@
 
 static void renderCubeMap(const BA2File& ba2File,
                           const std::string& texturePath,
-                          int imageWidth, int imageHeight, int mipLevel)
+                          int imageWidth, int imageHeight, float mipLevel)
 {
   std::vector< unsigned char >  fileBuf;
   ba2File.extractFile(fileBuf, texturePath);
@@ -112,7 +112,15 @@ static void renderCubeMap(const BA2File& ba2File,
               case SDLK_7:
               case SDLK_8:
               case SDLK_9:
-                mipLevel = int(event.key.keysym.sym - SDLK_0);
+                mipLevel = float(int(event.key.keysym.sym - SDLK_0));
+                break;
+              case SDLK_MINUS:
+              case SDLK_KP_MINUS:
+                mipLevel = (mipLevel > 0.125f ? (mipLevel - 0.125f) : 0.0f);
+                break;
+              case SDLK_EQUALS:
+              case SDLK_KP_PLUS:
+                mipLevel = (mipLevel < 8.875f ? (mipLevel + 0.125f) : 9.0f);
                 break;
               case SDLK_a:
                 viewRotationZ = -0.19634954f;           // 11.25 degrees
@@ -220,9 +228,9 @@ int main(int argc, char **argv)
         int(parseInteger(argv[1], 10, "invalid image width", 8, 16384));
     int     renderHeight =
         int(parseInteger(argv[2], 10, "invalid image height", 8, 16384));
-    int     mipLevel = 0;
+    float   mipLevel = 0.0f;
     if (argc > 5)
-      mipLevel = int(parseInteger(argv[5], 10, "invalid mip level", 0, 15));
+      mipLevel = float(parseFloat(argv[5], "invalid mip level", 0.0, 15.0));
     BA2File ba2File(argv[3], ".dds");
     renderCubeMap(ba2File, std::string(argv[4]), renderWidth, renderHeight,
                   mipLevel);

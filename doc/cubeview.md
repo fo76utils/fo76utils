@@ -16,6 +16,7 @@ View a Fallout 4 or 76 cube map from archive files.
 * **Q**, **E**: Roll left or right.
 * **Home**: Reset view direction.
 * **0** to **9**: Set mip level.
+* **+**, **-**: Increase or decrease mip level by 0.125.
 * **Esc**: Quit program.
 
 ### Example
