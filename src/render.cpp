@@ -1331,6 +1331,9 @@ void Renderer::materialSwap(
     t.gradientMapV = bgsmFile.gradientMapV;
     t.envMapScale = bgsmFile.envMapScale;
     t.alphaThreshold = bgsmFile.calculateAlphaThreshold();
+    t.specularColor = bgsmFile.specularColor;
+    t.specularScale = bgsmFile.specularScale;
+    t.specularSmoothness = bgsmFile.specularSmoothness;
     t.textureOffsetU = bgsmFile.offsetU;
     t.textureOffsetV = bgsmFile.offsetV;
     t.textureScaleU = bgsmFile.scaleU;
@@ -1407,7 +1410,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           }
         }
         bool    isHDModel = bool(p.flags & 0x40);
-        unsigned int  txtSetMask = (!isHDModel ? 0x0009U : 0x015BU);
+        unsigned int  txtSetMask = (!isHDModel ? 0x0009U : 0x037BU);
         for (size_t k = size_t(!isHDModel ? 4 : 10); k-- > 0; )
         {
           if (!((1U << (unsigned char) k) & txtSetMask))
