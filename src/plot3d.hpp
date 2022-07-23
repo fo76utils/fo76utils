@@ -312,12 +312,14 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   float   *bufZ;
   int     width;
   int     height;
-  const DDSTexture  *textureD;
-  const DDSTexture  *textureG;
-  const DDSTexture  *textureN;
-  const DDSTexture  *textureE;
-  const DDSTexture  *textureR;
+  const DDSTexture  *textureD;          // diffuse texture
+  const DDSTexture  *textureG;          // gradient (grayscale to palette) map
+  const DDSTexture  *textureN;          // normal map
+  const DDSTexture  *textureE;          // environment map
+  const DDSTexture  *textureS;          // TES5 _em.dds, FO4 _s.dds, FO76 _l.dds
+  const DDSTexture  *textureR;          // Fallout 76 reflection map
   float   textureScaleN;
+  float   textureScaleS;
   float   textureScaleR;
   float   mipLevel;
   unsigned int  alphaThresholdScaled;
@@ -353,7 +355,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   inline int normalMap(float& normalX, float& normalY, float& normalZ,
                        unsigned int n) const;
   inline unsigned int environmentMap(
-      float normalX, float normalY, float normalZ, int x, int y) const;
+      float normalX, float normalY, float normalZ, int x, int y,
+      unsigned int smoothness = 255U) const;
   inline unsigned int addReflection(unsigned int c, unsigned int e) const;
   inline unsigned int addReflectionM(
       unsigned int c, unsigned int e, unsigned int m) const;
@@ -383,6 +386,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                                   const NIFFile::NIFVertex& z);
   // diffuse + normal and environment map/mask with trilinear filtering
   static void drawPixel_NormalEnvM(Plot3D_TriShape& p,
+                                   int x, int y, float txtU, float txtV,
+                                   const NIFFile::NIFVertex& z);
+  // diffuse + normal and environment + specular map with trilinear filtering
+  static void drawPixel_NormalEnvS(Plot3D_TriShape& p,
                                    int x, int y, float txtU, float txtV,
                                    const NIFFile::NIFVertex& z);
   // diffuse + normal and reflection map with trilinear filtering

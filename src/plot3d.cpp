@@ -195,8 +195,12 @@ inline int Plot3D_TriShape::normalMap(
 }
 
 inline unsigned int Plot3D_TriShape::environmentMap(
-    float normalX, float normalY, float normalZ, int x, int y) const
+    float normalX, float normalY, float normalZ,
+    int x, int y, unsigned int smoothness) const
 {
+  float   s = float(int(smoothness * (unsigned int) specularSmoothness))
+              * (1.0f / 65025.0f);
+  float   m = (1.0f - s) * float(textureE->getMaxMipLevel() + 1);
 #ifdef FAST_ENVIRONMENT_MAP
   float   u = float((width >> 1) - x) * envMapUVScale;
   float   v = float((height >> 1) - y) * envMapUVScale;
@@ -210,7 +214,7 @@ inline unsigned int Plot3D_TriShape::environmentMap(
     u = u - (normalX * 8.0f);
     v = v - (normalY * 8.0f);
   }
-  return textureE->cubeMap(0.46875f, u, v, 0);
+  return textureE->cubeMap(0.46875f, u, v, m);
 #else
   // view vector
   float   xc = float(x - (width >> 1)) * envMapUVScale;
@@ -226,7 +230,7 @@ inline unsigned int Plot3D_TriShape::environmentMap(
   float   tmpX = (xc * vt.rotateXX) + (yc * vt.rotateYX) + (zc * vt.rotateZX);
   float   tmpY = (xc * vt.rotateXY) + (yc * vt.rotateYY) + (zc * vt.rotateZY);
   float   tmpZ = (xc * vt.rotateXZ) + (yc * vt.rotateYZ) + (zc * vt.rotateZZ);
-  return textureE->cubeMap(tmpX, tmpY, tmpZ, 0);
+  return textureE->cubeMap(tmpX, tmpY, tmpZ, m);
 #endif
 }
 
@@ -466,8 +470,35 @@ void Plot3D_TriShape::drawPixel_NormalEnvM(Plot3D_TriShape& p,
   float   normalY = z.normalY;
   float   normalZ = z.normalZ;
   c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
-  unsigned int  m = p.textureR->getPixelT(txtU * p.textureScaleR,
-                                          txtV * p.textureScaleR, p.mipLevel);
+  unsigned int  m = p.textureS->getPixelT(txtU * p.textureScaleS,
+                                          txtV * p.textureScaleS, p.mipLevel);
+  if (BRANCH_EXPECT((m & 0xFFU), true))
+  {
+    c = p.addReflectionM(c,
+                         p.environmentMap(normalX, normalY, normalZ, x, y), m);
+  }
+  p.bufRGBW[offs] = c;
+}
+
+void Plot3D_TriShape::drawPixel_NormalEnvS(Plot3D_TriShape& p,
+                                           int x, int y, float txtU, float txtV,
+                                           const NIFFile::NIFVertex& z)
+{
+  size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
+  unsigned int  c = p.textureD->getPixelT(txtU, txtV, p.mipLevel);
+  if (BRANCH_EXPECT((p.textureG || ~(z.vertexColor)), false))
+    c = p.gradientMapAndVColor(c, z.vertexColor);
+  if (c < p.alphaThresholdScaled)
+    return;
+  p.bufZ[offs] = z.z;
+  unsigned int  n = p.textureN->getPixelT(txtU * p.textureScaleN,
+                                          txtV * p.textureScaleN, p.mipLevel);
+  float   normalX = z.normalX;
+  float   normalY = z.normalY;
+  float   normalZ = z.normalZ;
+  c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
+  unsigned int  m = p.textureS->getPixelT(txtU * p.textureScaleS,
+                                          txtV * p.textureScaleS, p.mipLevel);
   if (BRANCH_EXPECT((m & 0xFFU), true))
   {
     c = p.addReflectionM(c,
@@ -491,6 +522,8 @@ void Plot3D_TriShape::drawPixel_NormalRefl(Plot3D_TriShape& p,
                                           txtV * p.textureScaleN, p.mipLevel);
   unsigned int  r = p.textureR->getPixelT(txtU * p.textureScaleR,
                                           txtV * p.textureScaleR, p.mipLevel);
+  unsigned int  s = p.textureS->getPixelT(txtU * p.textureScaleS,
+                                          txtV * p.textureScaleS, p.mipLevel);
   float   normalX = z.normalX;
   float   normalY = z.normalY;
   float   normalZ = z.normalZ;
@@ -505,8 +538,9 @@ void Plot3D_TriShape::drawPixel_NormalRefl(Plot3D_TriShape& p,
   unsigned int  r_b = (r >> 16) & 0xFFU;
   unsigned int  m = (r_r > r_g ? r_r : r_g);
   m = (r_b > m ? r_b : m);
-  c = multiplyWithLight(blendRGBA32(c, (r >> 1) & 0x007F7F7FU, m), l);
-  c = p.addReflectionR(c, p.environmentMap(normalX, normalY, normalZ, x, y), r);
+  c = multiplyWithLight(c, int(((unsigned int) l * (256U - m) + 128U) >> 8));
+  c = p.addReflectionR(c, p.environmentMap(normalX, normalY, normalZ,
+                                           x, y, s & 0xFFU), r);
   p.bufRGBW[offs] = c;
 }
 
@@ -788,8 +822,10 @@ Plot3D_TriShape::Plot3D_TriShape(
     textureG((DDSTexture *) 0),
     textureN((DDSTexture *) 0),
     textureE((DDSTexture *) 0),
+    textureS((DDSTexture *) 0),
     textureR((DDSTexture *) 0),
     textureScaleN(1.0f),
+    textureScaleS(1.0f),
     textureScaleR(1.0f),
     mipLevel(15.0f),
     alphaThresholdScaled(0U),
@@ -833,6 +869,9 @@ Plot3D_TriShape& Plot3D_TriShape::operator=(const NIFFile::NIFTriShape& t)
   gradientMapV = t.gradientMapV;
   envMapScale = t.envMapScale;
   alphaThreshold = t.alphaThreshold;
+  specularColor = t.specularColor;
+  specularScale = t.specularScale;
+  specularSmoothness = t.specularSmoothness;
   texturePathCnt = t.texturePathCnt;
   texturePaths = t.texturePaths;
   materialPath = t.materialPath;
@@ -892,8 +931,10 @@ void Plot3D_TriShape::drawTriShape(
   textureG = (DDSTexture *) 0;
   textureN = (DDSTexture *) 0;
   textureE = (DDSTexture *) 0;
+  textureS = (DDSTexture *) 0;
   textureR = (DDSTexture *) 0;
   textureScaleN = 1.0f;
+  textureScaleS = 1.0f;
   textureScaleR = 1.0f;
   mipLevel = 15.0f;
   alphaThresholdScaled = (unsigned int) alphaThreshold << 24;
@@ -934,18 +975,28 @@ void Plot3D_TriShape::drawTriShape(
       reflectionLevel =
           roundFloat(float(lightTable[128])
                      * (float(int(envMapScale)) * (0.7217095f / 32768.0f)));
-      if (textureCnt >= 9 && textures[8])
+      if (textureCnt >= 10 && textures[8] && textures[9])       // Fallout 76
       {
         textureR = textures[8];
+        textureS = textures[9];
         textureScaleR =
             float(textureR->getWidth()) / float(textureD->getWidth());
+        textureScaleS =
+            float(textureS->getWidth()) / float(textureD->getWidth());
         drawPixelFunction = &drawPixel_NormalRefl;
       }
-      else if (textureCnt >= 7 && textures[6])
+      else if (textureCnt >= 7 && textures[6])  // Fallout 4
       {
-        textureR = textures[6];
-        textureScaleR =
-            float(textureR->getWidth()) / float(textureD->getWidth());
+        textureS = textures[6];
+        textureScaleS =
+            float(textureS->getWidth()) / float(textureD->getWidth());
+        drawPixelFunction = &drawPixel_NormalEnvS;
+      }
+      else if (textureCnt >= 6 && textures[5])  // Skyrim with environment mask
+      {
+        textureS = textures[5];
+        textureScaleS =
+            float(textureS->getWidth()) / float(textureD->getWidth());
         drawPixelFunction = &drawPixel_NormalEnvM;
       }
       else
