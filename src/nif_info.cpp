@@ -5,8 +5,8 @@
 #include "ddstxt.hpp"
 #include "plot3d.hpp"
 
-#ifdef HAVE_SDL
-#  include <SDL/SDL.h>
+#ifdef HAVE_SDL2
+#  include <SDL2/SDL.h>
 #endif
 
 static void printAuthorName(std::FILE *f,
@@ -372,20 +372,22 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     whiteTexture = "textures/white.dds";
   else
     whiteTexture = "textures/effects/rainscene/test_flat_white.dds";
-#ifdef HAVE_SDL
+#ifdef HAVE_SDL2
   int     screenWidth = imageWidth;
   int     screenHeight = imageHeight;
   bool    enableDownscale = bool(outFileName);
   bool    enableFullScreen = false;
+  SDL_Window  *sdlWindow = (SDL_Window *) 0;
+  SDL_Surface *sdlScreen = (SDL_Surface *) 0;
   if (!outFileName)
   {
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) != 0)
       throw errorMessage("error initializing SDL");
-    const SDL_VideoInfo *v = SDL_GetVideoInfo();
-    if (v)
+    SDL_DisplayMode m;
+    if (SDL_GetDesktopDisplayMode(0, &m) == 0)
     {
-      screenWidth = v->current_w;
-      screenHeight = v->current_h;
+      screenWidth = m.w;
+      screenHeight = m.h;
       if ((imageWidth > screenWidth || imageHeight > screenHeight) &&
           !((imageWidth | imageHeight) & 1))
       {
@@ -403,15 +405,26 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
 #endif
   try
   {
-#ifdef HAVE_SDL
-    SDL_Surface *sdlScreen = (SDL_Surface *) 0;
+#ifdef HAVE_SDL2
     if (!outFileName)
     {
-      sdlScreen = SDL_SetVideoMode(screenWidth, screenHeight, 24,
-                                   SDL_SWSURFACE
-                                   | (enableFullScreen ? SDL_FULLSCREEN : 0));
+      sdlWindow = SDL_CreateWindow(
+#if defined(_WIN32) || defined(_WIN64)
+                      "nif_view",
+#else
+                      "nif_info",
+#endif
+                      SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                      screenWidth, screenHeight,
+                      (enableFullScreen ? SDL_WINDOW_FULLSCREEN : 0));
+      if (!sdlWindow)
+        throw errorMessage("error creating SDL window");
+      sdlScreen = SDL_CreateRGBSurface(0, screenWidth, screenHeight, 32,
+                                       0x000000FFU, 0x0000FF00U,
+                                       0x00FF0000U, 0xFF000000U);
       if (!sdlScreen)
         throw errorMessage("error setting SDL video mode");
+      SDL_SetSurfaceBlendMode(sdlScreen, SDL_BLENDMODE_NONE);
     }
 #endif
     size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
@@ -555,56 +568,35 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                            lightTransform.rotateXZ, lightTransform.rotateYZ,
                            lightTransform.rotateZZ, envMap, 0.5f);
       }
-#ifdef HAVE_SDL
+#ifdef HAVE_SDL2
       if (!outFileName)
       {
         SDL_LockSurface(sdlScreen);
-        unsigned char *dstPtr =
-            reinterpret_cast< unsigned char * >(sdlScreen->pixels);
+        Uint32  *dstPtr = reinterpret_cast< Uint32 * >(sdlScreen->pixels);
         if (!enableDownscale)
         {
           unsigned int  *srcPtr = &(outBufRGBW.front());
           for (int y = 0; y < imageHeight; y++)
           {
-            for (int x = 0; x < imageWidth; x++, srcPtr++, dstPtr = dstPtr + 3)
+            for (int x = 0; x < imageWidth; x++, srcPtr++, dstPtr++)
             {
-              unsigned int  c = *srcPtr;
-#if defined(_WIN32) || defined(_WIN64)
-              dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);   // B
-              dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);    // G
-              dstPtr[2] = (unsigned char) (c & 0xFF);           // R
-#else
-              // FIXME: should detect pixel format
-              dstPtr[0] = (unsigned char) (c & 0xFF);           // R
-              dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);    // G
-              dstPtr[2] = (unsigned char) ((c >> 16) & 0xFF);   // B
-#endif
+              *dstPtr = *srcPtr;
               *srcPtr = 0U;
               outBufZ[size_t(srcPtr - &(outBufRGBW.front()))] = 16777216.0f;
             }
-            dstPtr = dstPtr + (int(sdlScreen->pitch) - (imageWidth * 3));
+            dstPtr = dstPtr + (int(sdlScreen->pitch >> 2) - screenWidth);
           }
         }
         else
         {
           for (int y = 0; y < imageHeight; y = y + 2)
           {
-            for (int x = 0; x < imageWidth; x = x + 2, dstPtr = dstPtr + 3)
+            for (int x = 0; x < imageWidth; x = x + 2, dstPtr++)
             {
-              unsigned int  c =
-                  downsample2xFilter(&(outBufRGBW.front()),
-                                     imageWidth, imageHeight, x, y);
-#if defined(_WIN32) || defined(_WIN64)
-              dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);   // B
-              dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);    // G
-              dstPtr[2] = (unsigned char) (c & 0xFF);           // R
-#else
-              dstPtr[0] = (unsigned char) (c & 0xFF);           // R
-              dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);    // G
-              dstPtr[2] = (unsigned char) ((c >> 16) & 0xFF);   // B
-#endif
+              *dstPtr = downsample2xFilter(&(outBufRGBW.front()),
+                                           imageWidth, imageHeight, x, y);
             }
-            dstPtr = dstPtr + (int(sdlScreen->pitch) - (screenWidth * 3));
+            dstPtr = dstPtr + (int(sdlScreen->pitch >> 2) - screenWidth);
           }
           std::memset(&(outBufRGBW.front()), 0,
                       sizeof(unsigned int) * imageDataSize);
@@ -612,7 +604,9 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
             outBufZ[i] = 16777216.0f;
         }
         SDL_UnlockSurface(sdlScreen);
-        SDL_UpdateRect(sdlScreen, 0, 0, screenWidth, screenHeight);
+        SDL_BlitSurface(sdlScreen, (SDL_Rect *) 0,
+                        SDL_GetWindowSurface(sdlWindow), (SDL_Rect *) 0);
+        SDL_UpdateWindowSurface(sdlWindow);
         bool    keyPressed = false;
         bool    quitFlag = false;
         while (!(keyPressed || quitFlag))
@@ -647,31 +641,31 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
               case SDLK_KP_PLUS:
                 viewScale += int(viewScale < 16);
                 break;
-              case SDLK_KP7:
+              case SDLK_KP_7:
                 viewRotation = 0;                       // isometric / NW
                 break;
-              case SDLK_KP1:
+              case SDLK_KP_1:
                 viewRotation = 1;                       // isometric / SW
                 break;
-              case SDLK_KP3:
+              case SDLK_KP_3:
                 viewRotation = 2;                       // isometric / SE
                 break;
-              case SDLK_KP9:
+              case SDLK_KP_9:
                 viewRotation = 3;                       // isometric / NE
                 break;
-              case SDLK_KP5:
+              case SDLK_KP_5:
                 viewRotation = 4;                       // top
                 break;
-              case SDLK_KP2:
+              case SDLK_KP_2:
                 viewRotation = 5;                       // front
                 break;
-              case SDLK_KP6:
+              case SDLK_KP_6:
                 viewRotation = 6;                       // right
                 break;
-              case SDLK_KP8:
+              case SDLK_KP_8:
                 viewRotation = 7;                       // back
                 break;
-              case SDLK_KP4:
+              case SDLK_KP_4:
                 viewRotation = 8;                       // left
                 break;
               case SDLK_F1:
@@ -727,7 +721,6 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                 continue;
             }
             keyPressed = true;
-            break;
           }
         }
         if (!quitFlag)
@@ -736,7 +729,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
 #endif
       break;
     }
-#ifdef HAVE_SDL
+#ifdef HAVE_SDL2
     if (outFileName)
 #endif
     {
@@ -759,9 +752,13 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     {
       delete i->second;
     }
-#ifdef HAVE_SDL
+#ifdef HAVE_SDL2
     if (!outFileName)
+    {
+      SDL_FreeSurface(sdlScreen);
+      SDL_DestroyWindow(sdlWindow);
       SDL_Quit();
+    }
 #endif
   }
   catch (...)
@@ -771,9 +768,15 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     {
       delete i->second;
     }
-#ifdef HAVE_SDL
+#ifdef HAVE_SDL2
     if (!outFileName)
+    {
+      if (sdlScreen)
+        SDL_FreeSurface(sdlScreen);
+      if (sdlWindow)
+        SDL_DestroyWindow(sdlWindow);
       SDL_Quit();
+    }
 #endif
     throw;
   }
@@ -790,7 +793,7 @@ int main(int argc, char **argv)
     // 3: .obj format
     // 4: .mtl format
     // 5: render to DDS file
-    // 6: render and view in real time (requires SDL 1.2)
+    // 6: render and view in real time (requires SDL 2)
     int     outFmt = 0;
     int     renderWidth = 1344;
     int     renderHeight = 896;
@@ -845,7 +848,7 @@ int main(int argc, char **argv)
       std::fprintf(stderr, "    -mtl    Print material data in .mtl format\n");
       std::fprintf(stderr, "    -render[WIDTHxHEIGHT] DDSFILE       "
                            "Render model to DDS file (experimental)\n");
-#ifdef HAVE_SDL
+#ifdef HAVE_SDL2
       std::fprintf(stderr, "    -view[WIDTHxHEIGHT] View model\n");
 #endif
       return 1;
@@ -913,11 +916,11 @@ int main(int argc, char **argv)
         }
         else
         {
-#ifdef HAVE_SDL
+#ifdef HAVE_SDL2
           renderMeshToFile((char *) 0, nifFile, ba2File,
                            renderWidth, renderHeight);
 #else
-          throw errorMessage("viewing the model requires SDL 1.2");
+          throw errorMessage("viewing the model requires SDL 2");
 #endif
         }
         break;

@@ -4,8 +4,8 @@
 #include "ba2file.hpp"
 #include "ddstxt.hpp"
 
-#ifdef HAVE_SDL
-#  include <SDL/SDL.h>
+#ifdef HAVE_SDL2
+#  include <SDL2/SDL.h>
 
 static void renderCubeMap(const BA2File& ba2File,
                           const std::string& texturePath,
@@ -19,69 +19,56 @@ static void renderCubeMap(const BA2File& ba2File,
     std::fprintf(stderr, "Warning: %s is not a cube map\n",
                  texturePath.c_str());
   }
-  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) != 0)
     throw errorMessage("error initializing SDL");
   bool    enableFullScreen = false;
-  const SDL_VideoInfo *v = SDL_GetVideoInfo();
-  if (v)
   {
-    enableFullScreen =
-        (imageWidth == v->current_w && imageHeight == v->current_h);
+    SDL_DisplayMode m;
+    if (SDL_GetDesktopDisplayMode(0, &m) == 0)
+      enableFullScreen = (imageWidth == m.w && imageHeight == m.h);
   }
+  SDL_Window  *sdlWindow = (SDL_Window *) 0;
+  SDL_Surface *sdlScreen = (SDL_Surface *) 0;
   try
   {
-    SDL_Surface *sdlScreen =
-        SDL_SetVideoMode(imageWidth, imageHeight, 24,
-                         SDL_SWSURFACE
-                         | (enableFullScreen ? SDL_FULLSCREEN : 0));
+    sdlWindow =
+        SDL_CreateWindow("cubeview",
+                         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                         imageWidth, imageHeight,
+                         (enableFullScreen ? SDL_WINDOW_FULLSCREEN : 0));
+    if (!sdlWindow)
+      throw errorMessage("error creating SDL window");
+    sdlScreen = SDL_CreateRGBSurface(0, imageWidth, imageHeight, 32,
+                                     0x000000FFU, 0x0000FF00U,
+                                     0x00FF0000U, 0xFF000000U);
     if (!sdlScreen)
       throw errorMessage("error setting SDL video mode");
-    size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
-    std::vector< unsigned int > outBufRGBW(imageDataSize, 0U);
+    SDL_SetSurfaceBlendMode(sdlScreen, SDL_BLENDMODE_NONE);
     NIFFile::NIFVertexTransform
         viewTransform(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
     float   scale =
         1.0f / float(imageWidth > imageHeight ? imageWidth : imageHeight);
     while (true)
     {
+      SDL_LockSurface(sdlScreen);
       for (int yc = 0; yc < imageHeight; yc++)
       {
-        for (int xc = 0; xc < imageWidth; xc++)
+        Uint32  *dstPtr = reinterpret_cast< Uint32 * >(sdlScreen->pixels);
+        dstPtr = dstPtr + (size_t(sdlScreen->pitch >> 2) * size_t(yc));
+        for (int xc = 0; xc < imageWidth; xc++, dstPtr++)
         {
           float   x = float(xc - (imageWidth >> 1)) * scale;
           float   y = 1.0f;
           float   z = float((imageHeight >> 1) - yc) * scale;
           viewTransform.rotateXYZ(x, y, z);
-          unsigned int  c = texture.cubeMap(x, y, z, mipLevel);
-          outBufRGBW[size_t(yc) * size_t(imageWidth) + size_t(xc)] = c;
+          *dstPtr = texture.cubeMap(x, y, z, mipLevel);
         }
       }
+      SDL_UnlockSurface(sdlScreen);
+      SDL_BlitSurface(sdlScreen, (SDL_Rect *) 0,
+                      SDL_GetWindowSurface(sdlWindow), (SDL_Rect *) 0);
+      SDL_UpdateWindowSurface(sdlWindow);
       {
-        SDL_LockSurface(sdlScreen);
-        unsigned int  *srcPtr = &(outBufRGBW.front());
-        unsigned char *dstPtr =
-            reinterpret_cast< unsigned char * >(sdlScreen->pixels);
-        for (int y = 0; y < imageHeight; y++)
-        {
-          for (int x = 0; x < imageWidth; x++, srcPtr++, dstPtr = dstPtr + 3)
-          {
-            unsigned int  c = *srcPtr;
-#if defined(_WIN32) || defined(_WIN64)
-            dstPtr[0] = (unsigned char) ((c >> 16) & 0xFF);     // B
-            dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);      // G
-            dstPtr[2] = (unsigned char) (c & 0xFF);             // R
-#else
-            // FIXME: should detect pixel format
-            dstPtr[0] = (unsigned char) (c & 0xFF);             // R
-            dstPtr[1] = (unsigned char) ((c >> 8) & 0xFF);      // G
-            dstPtr[2] = (unsigned char) ((c >> 16) & 0xFF);     // B
-#endif
-            *srcPtr = 0U;
-          }
-          dstPtr = dstPtr + (int(sdlScreen->pitch) - (imageWidth * 3));
-        }
-        SDL_UnlockSurface(sdlScreen);
-        SDL_UpdateRect(sdlScreen, 0, 0, imageWidth, imageHeight);
         bool    keyPressed = false;
         bool    quitFlag = false;
         while (!(keyPressed || quitFlag))
@@ -200,10 +187,16 @@ static void renderCubeMap(const BA2File& ba2File,
       }
       break;
     }
+    SDL_FreeSurface(sdlScreen);
+    SDL_DestroyWindow(sdlWindow);
     SDL_Quit();
   }
   catch (...)
   {
+    if (sdlScreen)
+      SDL_FreeSurface(sdlScreen);
+    if (sdlWindow)
+      SDL_DestroyWindow(sdlWindow);
     SDL_Quit();
     throw;
   }
@@ -214,8 +207,8 @@ int main(int argc, char **argv)
 {
   try
   {
-#ifndef HAVE_SDL
-    throw errorMessage("SDL 1.2 is required");
+#ifndef HAVE_SDL2
+    throw errorMessage("SDL 2 is required");
 #else
     if (argc != 5 && argc != 6)
     {

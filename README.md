@@ -28,8 +28,8 @@ Running any of the programs without arguments prints detailed usage information.
         pacman -Su
         pacman -S --needed base-devel mingw-w64-x86_64-toolchain
         pacman -S msys/scons
-* Optionally, for nif\_view and plotting scripts only, install SDL and matplotlib:
-  *     pacman -S mingw64/mingw-w64-x86_64-SDL
+* Optionally, for nif\_view and plotting scripts only, install SDL 2 and matplotlib:
+  *     pacman -S mingw64/mingw-w64-x86_64-SDL2
   *     pacman -S mingw64/mingw-w64-x86_64-python-matplotlib
 * In the MSYS2 MinGW x64 terminal, compile the utilities with **scons**. Use **scons -j 8** for building with 8 parallel jobs, and **scons -c** to clean up and delete the object files and executables.
 * Optionally, for the makemap and icon extraction scripts only, download and install [ImageMagick](https://imagemagick.org/script/download.php#windows) and [SWFTools](http://www.swftools.org/download.html).
