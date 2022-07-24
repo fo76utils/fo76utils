@@ -28,9 +28,9 @@ env.Prepend(LIBS = [fo76utilsLib])
 nifViewEnv = env.Clone()
 buildNIFView = True
 try:
-    sdlPackageName = ["sdl", "SDL"][int("win" in sys.platform)]
+    sdlPackageName = ["sdl2", "SDL2"][int("win" in sys.platform)]
     nifViewEnv.ParseConfig("pkg-config --cflags --libs " + sdlPackageName)
-    nifViewEnv.Append(CXXFLAGS = ["-DHAVE_SDL=1"])
+    nifViewEnv.Append(CXXFLAGS = ["-DHAVE_SDL2=1"])
 except:
     buildNIFView = False
 
@@ -61,7 +61,7 @@ if "win" in sys.platform:
         pkgFiles += [fo4land, landtxt, markers, nif_info, render, terrain]
         if buildNIFView:
             pkgFiles += [nif_view, cubeview]
-            pkgFiles += ["/mingw64/bin/SDL.dll", "LICENSE.SDL"]
+            pkgFiles += ["/mingw64/bin/SDL2.dll", "LICENSE.SDL"]
         pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
         pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
         pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
