@@ -190,7 +190,7 @@ size_t DDSTexture::decodeLine_RGB(unsigned int *dst, const unsigned char *src,
                                   unsigned int w)
 {
   unsigned int  x = 0;
-  for ( ; (x + 1U) <= w; x++, dst++, src = src + 3)
+  for ( ; (x + 1U) < w; x++, dst++, src = src + 3)
     *dst = 0xFF000000U | FileBuffer::readUInt32Fast(src);
   if (BRANCH_EXPECT((x < w), true))
   {
@@ -206,7 +206,7 @@ size_t DDSTexture::decodeLine_BGR(unsigned int *dst, const unsigned char *src,
                                   unsigned int w)
 {
   unsigned int  x = 0;
-  for ( ; (x + 1U) <= w; x++, dst++, src = src + 3)
+  for ( ; (x + 1U) < w; x++, dst++, src = src + 3)
     *dst = bgraToRGBA(0xFF000000U | FileBuffer::readUInt32Fast(src));
   if (BRANCH_EXPECT((x < w), true))
   {
