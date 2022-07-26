@@ -327,6 +327,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   float   light_Y;
   float   light_Z;
   int     reflectionLevel;
+  float   specularLevel;
   float   envMapUVScale;
   bool    invNormals;
   float   bitangentX;
@@ -363,6 +364,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       unsigned int c, unsigned int e, unsigned int m) const;
   inline unsigned int addReflectionR(
       unsigned int c, unsigned int e, unsigned int r) const;
+  inline unsigned int addSpecular(
+      unsigned int c, float s, unsigned int m = 65280U) const;
   // fill with water
   static void drawPixel_Water(Plot3D_TriShape& p,
                               int x, int y, float txtU, float txtV,

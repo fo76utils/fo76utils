@@ -205,24 +205,20 @@ inline unsigned int Plot3D_TriShape::environmentMap(
   xc = xc - (normalX * tmp);
   yc = yc - (normalY * tmp);
   zc = zc - (normalZ * tmp);
-  if (specPtr)
+  if (specPtr && specularLevel > 0.0f)
   {
     *specPtr = 0.0f;
-    if (((normalX * light_X) + (normalY * light_Y) + (normalZ * light_Z))
-        >= 0.0f)
+    // calculate specular reflection
+    float   s = (xc * light_X) + (yc * light_Y) + (zc * light_Z);
+    if (s > 0.0f)
     {
-      // calculate specular reflection
-      float   s = (xc * light_X) + (yc * light_Y) + (zc * light_Z);
-      if (s > 0.0f)
-      {
-        tmp = (xc * xc) + (yc * yc) + (zc * zc);
-        s = s * (1.0f / float(std::sqrt(tmp)));         // normalize
-        if (s >= 1.0f)
-          s = 1.0f;
-        else
-          s = float(std::pow(s, float(std::pow(2.0f, 9.0f * (1.0f - r)))));
-        *specPtr = s;
-      }
+      tmp = (xc * xc) + (yc * yc) + (zc * zc);
+      s = s * (1.0f / float(std::sqrt(tmp)));           // normalize
+      if (s >= 1.0f)
+        s = 1.0f;
+      else
+        s = float(std::pow(s, float(std::pow(2.0f, 9.0f * (1.0f - r)))));
+      *specPtr = s;
     }
   }
   // inverse rotation by view matrix
@@ -271,6 +267,20 @@ inline unsigned int Plot3D_TriShape::addReflectionR(
   tmpG = (tmpG < 255U ? tmpG : 255U);
   tmpB = (tmpB < 255U ? tmpB : 255U);
   return (0xFF000000U | tmpR | (tmpG << 8) | (tmpB << 16));
+}
+
+inline unsigned int Plot3D_TriShape::addSpecular(
+    unsigned int c, float s, unsigned int m) const
+{
+  int     l = roundFloat(s * float(int(m)) * specularLevel);
+  if (l <= 0)
+    return c;
+  l = (l < 1023 ? l : 1023);
+  unsigned int  tmp = multiplyWithLight(specularColor, l);
+  unsigned int  rb = (c & 0x00FF00FFU) + (tmp & 0x00FF00FFU);
+  unsigned int  g = (c & 0x0000FF00U) + (tmp & 0x0000FF00U);
+  tmp = ((rb & 0x01000100U) | (g & 0x00010000U)) * 0xFFU;
+  return ((rb & 0x00FF00FFU) | (g & 0x0000FF00U) | (tmp >> 8) | 0xFF000000U);
 }
 
 void Plot3D_TriShape::drawPixel_Water(Plot3D_TriShape& p,
@@ -447,11 +457,14 @@ void Plot3D_TriShape::drawPixel_NormalEnv(Plot3D_TriShape& p,
   float   normalY = z.normalY;
   float   normalZ = z.normalZ;
   c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
-  p.bufRGBW[offs] =
-      p.addReflectionM(
-          c, p.environmentMap(normalX, normalY, normalZ, x, y,
-                              (unsigned int) p.specularSmoothness * 255U),
-          n >> 24);
+  float   specular = 0.0f;
+  unsigned int  e =
+      p.environmentMap(normalX, normalY, normalZ, x, y,
+                       (unsigned int) p.specularSmoothness * 255U, &specular);
+  c = p.addReflectionM(c, e, n >> 24);
+  if (p.specularLevel > 0.0f && specular > 0.0f)
+    c = p.addSpecular(c, specular, (n >> 16) & 0xFF00U);
+  p.bufRGBW[offs] = c;
 }
 
 void Plot3D_TriShape::drawPixel_NormalEnvM(Plot3D_TriShape& p,
@@ -473,12 +486,13 @@ void Plot3D_TriShape::drawPixel_NormalEnvM(Plot3D_TriShape& p,
   c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
   unsigned int  m = p.textureS->getPixelT(txtU * p.textureScaleS,
                                           txtV * p.textureScaleS, p.mipLevel);
-  if (BRANCH_EXPECT((m & 0xFFU), true))
-  {
-    c = p.addReflectionM(
-            c, p.environmentMap(normalX, normalY, normalZ, x, y,
-                                (unsigned int) p.specularSmoothness * 255U), m);
-  }
+  float   specular = 0.0f;
+  unsigned int  e =
+      p.environmentMap(normalX, normalY, normalZ, x, y,
+                       (unsigned int) p.specularSmoothness * 255U, &specular);
+  c = p.addReflectionM(c, e, m);
+  if (p.specularLevel > 0.0f && specular > 0.0f)
+    c = p.addSpecular(c, specular, (m & 0xFFU) << 8);
   p.bufRGBW[offs] = c;
 }
 
@@ -501,13 +515,14 @@ void Plot3D_TriShape::drawPixel_NormalEnvS(Plot3D_TriShape& p,
   c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
   unsigned int  m = p.textureS->getPixelT(txtU * p.textureScaleS,
                                           txtV * p.textureScaleS, p.mipLevel);
-  if (BRANCH_EXPECT((m & 0xFFU), true))
-  {
-    c = p.addReflectionM(
-            c, p.environmentMap(normalX, normalY, normalZ, x, y,
-                                (unsigned int) p.specularSmoothness
-                                * ((m >> 8) & 0xFFU)), m);
-  }
+  float   specular = 0.0f;
+  unsigned int  e =
+      p.environmentMap(normalX, normalY, normalZ, x, y,
+                       (unsigned int) p.specularSmoothness * ((m >> 8) & 0xFFU),
+                       &specular);
+  c = p.addReflectionM(c, e, m);
+  if (p.specularLevel > 0.0f && specular > 0.0f)
+    c = p.addSpecular(c, specular, (m & 0xFFU) << 8);
   p.bufRGBW[offs] = c;
 }
 
@@ -526,27 +541,33 @@ void Plot3D_TriShape::drawPixel_NormalRefl(Plot3D_TriShape& p,
                                           txtV * p.textureScaleN, p.mipLevel);
   unsigned int  r = p.textureR->getPixelT(txtU * p.textureScaleR,
                                           txtV * p.textureScaleR, p.mipLevel);
-  unsigned int  s = p.textureS->getPixelT(txtU * p.textureScaleS,
-                                          txtV * p.textureScaleS, p.mipLevel);
+  unsigned int  s = 0xFF80U;
+  if (BRANCH_EXPECT(p.textureS, true))
+  {
+    s = p.textureS->getPixelT(txtU * p.textureScaleS,
+                              txtV * p.textureScaleS, p.mipLevel);
+  }
   float   normalX = z.normalX;
   float   normalY = z.normalY;
   float   normalZ = z.normalZ;
   int     l = p.normalMap(normalX, normalY, normalZ, n);
-  if (BRANCH_EXPECT(!(r & 0x00FFFFFFU), false))
-  {
-    p.bufRGBW[offs] = multiplyWithLight(c, l);
-    return;
-  }
   unsigned int  r_r = r & 0xFFU;
   unsigned int  r_g = (r >> 8) & 0xFFU;
   unsigned int  r_b = (r >> 16) & 0xFFU;
   unsigned int  m = (r_r > r_g ? r_r : r_g);
   m = (r_b > m ? r_b : m);
   c = multiplyWithLight(c, int(((unsigned int) l * (256U - m) + 128U) >> 8));
-  c = p.addReflectionR(
-          c, p.environmentMap(normalX, normalY, normalZ, x, y,
-                              (unsigned int) p.specularSmoothness
-                              * (s & 0xFFU)), r);
+  unsigned int  smoothness = (unsigned int) p.specularSmoothness * (s & 0xFFU);
+  float   specular = 0.0f;
+  unsigned int  e =
+      p.environmentMap(normalX, normalY, normalZ, x, y, smoothness, &specular);
+  c = p.addReflectionR(c, e, r);
+  if (p.specularLevel > 0.0f && specular > 0.0f)
+  {
+    float   tmp = float(int(smoothness)) * (1.0f / 65025.0f);
+    specular *= (tmp * tmp * 2.0f);
+    c = p.addSpecular(c, specular, ((s >> 8) & 0xFFU) * (256U - m));
+  }
   p.bufRGBW[offs] = c;
 }
 
@@ -865,6 +886,7 @@ Plot3D_TriShape::Plot3D_TriShape(
     light_Y(0.0f),
     light_Z(1.0f),
     reflectionLevel(0),
+    specularLevel(0.0f),
     envMapUVScale(0.25f / float(imageHeight)),
     invNormals(false),
     bitangentX(1.0f),
@@ -974,6 +996,7 @@ void Plot3D_TriShape::drawTriShape(
   light_Y = lightY;
   light_Z = lightZ;
   reflectionLevel = 0;
+  specularLevel = 0.0f;
   if (textureCnt >= 1)
     textureD = textures[0];
   if (textureCnt >= 4)
@@ -1007,14 +1030,17 @@ void Plot3D_TriShape::drawTriShape(
       reflectionLevel =
           roundFloat(float(lightTable[128])
                      * (float(int(envMapScale)) * (0.7217095f / 32768.0f)));
-      if (textureCnt >= 10 && textures[8] && textures[9])       // Fallout 76
+      if (textureCnt >= 10 && textures[8])      // Fallout 76
       {
         textureR = textures[8];
-        textureS = textures[9];
         textureScaleR =
             float(textureR->getWidth()) / float(textureD->getWidth());
-        textureScaleS =
-            float(textureS->getWidth()) / float(textureD->getWidth());
+        if (textures[9])
+        {
+          textureS = textures[9];
+          textureScaleS =
+              float(textureS->getWidth()) / float(textureD->getWidth());
+        }
         drawPixelFunction = &drawPixel_NormalRefl;
       }
       else if (textureCnt >= 7 && textures[6])  // Fallout 4
@@ -1035,6 +1061,8 @@ void Plot3D_TriShape::drawTriShape(
       {
         drawPixelFunction = &drawPixel_NormalEnv;
       }
+      specularLevel = float(lightTable[128]) * float(int(specularScale))
+                      * (0.7217095f * 256.0f / (65536.0f * 128.0f * 65280.0f));
     }
   }
   if (BRANCH_EXPECT(debugMode, false))
@@ -1054,6 +1082,9 @@ void Plot3D_TriShape::renderWater(
   light_X = lightX;
   light_Y = lightY;
   light_Z = lightZ;
+  specularColor = 0xFFFFFFFFU;
+  specularScale = 128;
+  specularSmoothness = 255;
   unsigned int  *p = bufRGBW;
   for (int y = 0; y < height; y++)
   {
@@ -1084,8 +1115,13 @@ void Plot3D_TriShape::renderWater(
       c = blendRGBA32(c, tmp, int(waterColor >> 24));
       if (envMap)
       {
-        reflectionLevel = roundFloat(envMapLevel * (normalXY2 * 0.75f + 0.25f));
-        c = addReflection(c, environmentMap(normalX, normalY, normalZ, x, y));
+        specularLevel = envMapLevel * (normalXY2 * 0.75f + 0.25f);
+        reflectionLevel = roundFloat(specularLevel);
+        specularLevel = specularLevel * (1.0f / 65280.0f);
+        float   s = 0.0f;
+        c = addReflection(c, environmentMap(normalX, normalY, normalZ, x, y,
+                                            65025U, &s));
+        c = addSpecular(c, s, 65280U);
       }
       *p = c;
     }
