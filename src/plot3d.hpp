@@ -356,7 +356,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                        unsigned int n) const;
   inline unsigned int environmentMap(
       float normalX, float normalY, float normalZ, int x, int y,
-      unsigned int smoothness = 255U) const;
+      unsigned int smoothness = 65025U,         // 255 * 255
+      float *specPtr = (float *) 0) const;
   inline unsigned int addReflection(unsigned int c, unsigned int e) const;
   inline unsigned int addReflectionM(
       unsigned int c, unsigned int e, unsigned int m) const;
@@ -406,7 +407,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       float w0, float w1, float w2);
   void drawLine(const NIFFile::NIFVertex *v0, const NIFFile::NIFVertex *v1);
   static inline void calculateTangent(
-      float& x, float& y, float& z, float v0, float v1, float v2,
+      float& x, float& y, float& z, float v1d, float v2d,
       float x0, float y0, float z0, float x1, float y1, float z1,
       float x2, float y2, float z2, bool n);
   void drawTriangles();

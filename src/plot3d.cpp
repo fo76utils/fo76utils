@@ -5,10 +5,6 @@
 
 #include <algorithm>
 
-#if 0
-#  define FAST_ENVIRONMENT_MAP  1
-#endif
-
 // vertex coordinates closer than this to exact integers are rounded
 #ifndef VERTEX_XY_SNAP
 #  define VERTEX_XY_SNAP  0.03125f
@@ -196,26 +192,10 @@ inline int Plot3D_TriShape::normalMap(
 
 inline unsigned int Plot3D_TriShape::environmentMap(
     float normalX, float normalY, float normalZ,
-    int x, int y, unsigned int smoothness) const
+    int x, int y, unsigned int smoothness, float *specPtr) const
 {
-  float   s = float(int(smoothness * (unsigned int) specularSmoothness))
-              * (1.0f / 65025.0f);
-  float   m = (1.0f - s) * float(textureE->getMaxMipLevel() + 1);
-#ifdef FAST_ENVIRONMENT_MAP
-  float   u = float((width >> 1) - x) * envMapUVScale;
-  float   v = float((height >> 1) - y) * envMapUVScale;
-  if (normalZ < -0.03125f)
-  {
-    u = u + (normalX * (0.25f / normalZ));
-    v = v + (normalY * (0.25f / normalZ));
-  }
-  else
-  {
-    u = u - (normalX * 8.0f);
-    v = v - (normalY * 8.0f);
-  }
-  return textureE->cubeMap(0.46875f, u, v, m);
-#else
+  float   r = float(int(65025U - smoothness)) * (1.0f / 65025.0f);  // roughness
+  float   m = r * float(textureE->getMaxMipLevel() + 1);
   // view vector
   float   xc = float(x - (width >> 1)) * envMapUVScale;
   float   yc = float(y - (height >> 1)) * envMapUVScale;
@@ -225,13 +205,32 @@ inline unsigned int Plot3D_TriShape::environmentMap(
   xc = xc - (normalX * tmp);
   yc = yc - (normalY * tmp);
   zc = zc - (normalZ * tmp);
+  if (specPtr)
+  {
+    *specPtr = 0.0f;
+    if (((normalX * light_X) + (normalY * light_Y) + (normalZ * light_Z))
+        >= 0.0f)
+    {
+      // calculate specular reflection
+      float   s = (xc * light_X) + (yc * light_Y) + (zc * light_Z);
+      if (s > 0.0f)
+      {
+        tmp = (xc * xc) + (yc * yc) + (zc * zc);
+        s = s * (1.0f / float(std::sqrt(tmp)));         // normalize
+        if (s >= 1.0f)
+          s = 1.0f;
+        else
+          s = float(std::pow(s, float(std::pow(2.0f, 9.0f * (1.0f - r)))));
+        *specPtr = s;
+      }
+    }
+  }
   // inverse rotation by view matrix
   const NIFFile::NIFVertexTransform&  vt = *viewTransformPtr;
   float   tmpX = (xc * vt.rotateXX) + (yc * vt.rotateYX) + (zc * vt.rotateZX);
   float   tmpY = (xc * vt.rotateXY) + (yc * vt.rotateYY) + (zc * vt.rotateZY);
   float   tmpZ = (xc * vt.rotateXZ) + (yc * vt.rotateYZ) + (zc * vt.rotateZZ);
   return textureE->cubeMap(tmpX, tmpY, tmpZ, m);
-#endif
 }
 
 inline unsigned int Plot3D_TriShape::addReflection(
@@ -449,8 +448,10 @@ void Plot3D_TriShape::drawPixel_NormalEnv(Plot3D_TriShape& p,
   float   normalZ = z.normalZ;
   c = multiplyWithLight(c, p.normalMap(normalX, normalY, normalZ, n));
   p.bufRGBW[offs] =
-      p.addReflectionM(c, p.environmentMap(normalX, normalY, normalZ, x, y),
-                       n >> 24);
+      p.addReflectionM(
+          c, p.environmentMap(normalX, normalY, normalZ, x, y,
+                              (unsigned int) p.specularSmoothness * 255U),
+          n >> 24);
 }
 
 void Plot3D_TriShape::drawPixel_NormalEnvM(Plot3D_TriShape& p,
@@ -474,8 +475,9 @@ void Plot3D_TriShape::drawPixel_NormalEnvM(Plot3D_TriShape& p,
                                           txtV * p.textureScaleS, p.mipLevel);
   if (BRANCH_EXPECT((m & 0xFFU), true))
   {
-    c = p.addReflectionM(c,
-                         p.environmentMap(normalX, normalY, normalZ, x, y), m);
+    c = p.addReflectionM(
+            c, p.environmentMap(normalX, normalY, normalZ, x, y,
+                                (unsigned int) p.specularSmoothness * 255U), m);
   }
   p.bufRGBW[offs] = c;
 }
@@ -501,8 +503,10 @@ void Plot3D_TriShape::drawPixel_NormalEnvS(Plot3D_TriShape& p,
                                           txtV * p.textureScaleS, p.mipLevel);
   if (BRANCH_EXPECT((m & 0xFFU), true))
   {
-    c = p.addReflectionM(c,
-                         p.environmentMap(normalX, normalY, normalZ, x, y), m);
+    c = p.addReflectionM(
+            c, p.environmentMap(normalX, normalY, normalZ, x, y,
+                                (unsigned int) p.specularSmoothness
+                                * ((m >> 8) & 0xFFU)), m);
   }
   p.bufRGBW[offs] = c;
 }
@@ -539,8 +543,10 @@ void Plot3D_TriShape::drawPixel_NormalRefl(Plot3D_TriShape& p,
   unsigned int  m = (r_r > r_g ? r_r : r_g);
   m = (r_b > m ? r_b : m);
   c = multiplyWithLight(c, int(((unsigned int) l * (256U - m) + 128U) >> 8));
-  c = p.addReflectionR(c, p.environmentMap(normalX, normalY, normalZ,
-                                           x, y, s & 0xFFU), r);
+  c = p.addReflectionR(
+          c, p.environmentMap(normalX, normalY, normalZ, x, y,
+                              (unsigned int) p.specularSmoothness
+                              * (s & 0xFFU)), r);
   p.bufRGBW[offs] = c;
 }
 
@@ -618,7 +624,6 @@ void Plot3D_TriShape::drawLine(const NIFFile::NIFVertex *v0,
       if (w1 > -0.000001 && w1 < 1.000001)
       {
         float   yf = (v1->y - v0->y) * float(w1) + v0->y;
-        y = roundFloat(yf);
         if (float(std::fabs(yf - float(y))) < (1.0f / 1024.0f))
         {
           float   w0 = float(1.0 - w1);
@@ -640,13 +645,13 @@ void Plot3D_TriShape::drawLine(const NIFFile::NIFVertex *v0,
 }
 
 inline void Plot3D_TriShape::calculateTangent(
-    float& x, float& y, float& z, float v0, float v1, float v2,
+    float& x, float& y, float& z, float v1d, float v2d,
     float x0, float y0, float z0, float x1, float y1, float z1,
     float x2, float y2, float z2, bool n)
 {
-  float   tmpX = ((v2 - v0) * (x1 - x0)) - ((v1 - v0) * (x2 - x0));
-  float   tmpY = ((v2 - v0) * (y1 - y0)) - ((v1 - v0) * (y2 - y0));
-  float   tmpZ = ((v2 - v0) * (z1 - z0)) - ((v1 - v0) * (z2 - z0));
+  float   tmpX = (v2d * (x1 - x0)) - (v1d * (x2 - x0));
+  float   tmpY = (v2d * (y1 - y0)) - (v1d * (y2 - y0));
+  float   tmpZ = (v2d * (z1 - z0)) - (v1d * (z2 - z0));
   float   tmp = (tmpX * tmpX) + (tmpY * tmpY) + (tmpZ * tmpZ);
   if (BRANCH_EXPECT((tmp > 0.0f), true))
   {
@@ -659,6 +664,7 @@ inline void Plot3D_TriShape::calculateTangent(
 
 void Plot3D_TriShape::drawTriangles()
 {
+  NIFFile::NIFVertex  v;
   for (size_t n = 0; n < triangleBuf.size(); n++)
   {
     mipLevel = 15.0f;
@@ -715,27 +721,25 @@ void Plot3D_TriShape::drawTriangles()
     double  x2 = double(v2->x);
     double  y2 = double(v2->y);
     double  r2xArea = 1.0 / (((x1 - x0) * (y2 - y0)) - ((x2 - x0) * (y1 - y0)));
-    NIFFile::NIFVertex  v;
-    float   txtU0 = v0->getU() * textureScaleU + textureOffsetU;
-    float   txtV0 = v0->getV() * textureScaleV + textureOffsetV;
-    float   txtU1 = v1->getU() * textureScaleU + textureOffsetU;
-    float   txtV1 = v1->getV() * textureScaleV + textureOffsetV;
-    float   txtU2 = v2->getU() * textureScaleU + textureOffsetU;
-    float   txtV2 = v2->getV() * textureScaleV + textureOffsetV;
+    float   txtU0 = v0->getU() * textureScaleU;
+    float   txtV0 = v0->getV() * textureScaleV;
+    float   txtU1d = v1->getU() * textureScaleU - txtU0;
+    float   txtV1d = v1->getV() * textureScaleV - txtV0;
+    float   txtU2d = v2->getU() * textureScaleU - txtU0;
+    float   txtV2d = v2->getV() * textureScaleV - txtV0;
+    txtU0 = txtU0 + textureOffsetU;
+    txtV0 = txtV0 + textureOffsetV;
     if (BRANCH_EXPECT(textureD, true))
     {
-      float   uvArea2 = ((txtU1 - txtU0) * (txtV2 - txtV0))
-                        - ((txtU2 - txtU0) * (txtV1 - txtV0));
+      float   uvArea2 = (txtU1d * txtV2d) - (txtU2d * txtV1d);
       if (BRANCH_EXPECT((textureN && uvArea2 != 0.0f), true))
       {
-        calculateTangent(bitangentX, bitangentY, bitangentZ,
-                         txtV0, txtV1, txtV2, v0->x, v0->y, v0->z,
-                         v1->x, v1->y, v1->z, v2->x, v2->y, v2->z,
-                         (uvArea2 < 0.0f));
-        calculateTangent(tangentX, tangentY, tangentZ,
-                         txtU0, txtU2, txtU1, v0->x, v0->y, v0->z,
-                         v2->x, v2->y, v2->z, v1->x, v1->y, v1->z,
-                         (uvArea2 < 0.0f));
+        calculateTangent(bitangentX, bitangentY, bitangentZ, txtV1d, txtV2d,
+                         v0->x, v0->y, v0->z, v1->x, v1->y, v1->z,
+                         v2->x, v2->y, v2->z, (uvArea2 < 0.0f));
+        calculateTangent(tangentX, tangentY, tangentZ, txtU2d, txtU1d,
+                         v0->x, v0->y, v0->z, v2->x, v2->y, v2->z,
+                         v1->x, v1->y, v1->z, (uvArea2 < 0.0f));
       }
       uvArea2 = float(std::fabs(uvArea2));
       bool    integerMipLevel = true;
@@ -764,10 +768,10 @@ void Plot3D_TriShape::drawTriangles()
         txtH *= txtScale;
         txtU0 *= txtW;
         txtV0 *= txtH;
-        txtU1 *= txtW;
-        txtV1 *= txtH;
-        txtU2 *= txtW;
-        txtV2 *= txtH;
+        txtU1d *= txtW;
+        txtV1d *= txtH;
+        txtU2d *= txtW;
+        txtV2d *= txtH;
         mipLevel += float(mipLevel_i);
       }
     }
@@ -776,38 +780,66 @@ void Plot3D_TriShape::drawTriangles()
     double  b1 = -((x2 - x0) * a1);
     double  a2 = (y0 - y1) * r2xArea;
     double  b2 = 1.0 - ((x2 - x0) * a2);
-    int     y = int(y0 + (y0 < 0.0 ? -0.0000005 : 0.9999995));
-    int     yMax = int(y2 + (y2 < 0.0 ? -0.9999995 : 0.0000005));
-    double  w1Step = (a1 < 0.0 ? -a1 : a1);
-    double  w2Step = (a1 < 0.0 ? -a2 : a2);
-    int     xStep = (a1 < 0.0 ? -1 : 1);
-    do
+    int     y = int(y0 + 0.9999995);
+    int     yMax = int(y2 + 0.0000005);
+    if (a1 < 0.0)                       // negative X direction
     {
-      double  yf = (double(y) - y0) * dy2;
-      int     x = roundFloat(float((x2 - x0) * yf + x0));
-      double  w1 = ((double(x) - x0) * a1) + (yf * b1);
-      if (!(w1 >= -0.000001))
+      do
       {
-        w1 += w1Step;
-        x += xStep;
+        double  yf = (double(y) - y0) * dy2;
+        int     x = roundFloat(float((x2 - x0) * yf + x0));
+        double  w1 = ((double(x) - x0) * a1) + (yf * b1);
+        if (!(w1 >= -0.000001))
+        {
+          w1 -= a1;
+          x--;
+        }
+        double  w2 = ((double(x) - x0) * a2) + (yf * b2);
+        double  w0 = 1.0 - (w1 + w2);
+        while (!(!(w0 >= -0.000001) | !(w2 >= -0.000001)))
+        {
+          v.z = (v0->z * float(w0)) + (v1->z * float(w1)) + (v2->z * float(w2));
+          float   txtU = txtU0 + (txtU1d * float(w1)) + (txtU2d * float(w2));
+          float   txtV = txtV0 + (txtV1d * float(w1)) + (txtV2d * float(w2));
+          drawPixel(x, y, txtU, txtV,
+                    v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
+          w1 -= a1;
+          w2 -= a2;
+          w0 = 1.0 - (w1 + w2);
+          x--;
+        }
       }
-      double  w2 = ((double(x) - x0) * a2) + (yf * b2);
-      double  w0 = 1.0 - (w1 + w2);
-      while (!(!(w0 >= -0.000001) | !(w2 >= -0.000001)))
-      {
-        v.z = (v0->z * float(w0)) + (v1->z * float(w1)) + (v2->z * float(w2));
-        float   txtU, txtV;
-        txtU = (txtU0 * float(w0)) + (txtU1 * float(w1)) + (txtU2 * float(w2));
-        txtV = (txtV0 * float(w0)) + (txtV1 * float(w1)) + (txtV2 * float(w2));
-        drawPixel(x, y, txtU, txtV,
-                  v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
-        w1 += w1Step;
-        w2 += w2Step;
-        w0 = 1.0 - (w1 + w2);
-        x += xStep;
-      }
+      while (++y <= yMax);
     }
-    while (++y <= yMax);
+    else                                // positive X direction
+    {
+      do
+      {
+        double  yf = (double(y) - y0) * dy2;
+        int     x = roundFloat(float((x2 - x0) * yf + x0));
+        double  w1 = ((double(x) - x0) * a1) + (yf * b1);
+        if (!(w1 >= -0.000001))
+        {
+          w1 += a1;
+          x++;
+        }
+        double  w2 = ((double(x) - x0) * a2) + (yf * b2);
+        double  w0 = 1.0 - (w1 + w2);
+        while (!(!(w0 >= -0.000001) | !(w2 >= -0.000001)))
+        {
+          v.z = (v0->z * float(w0)) + (v1->z * float(w1)) + (v2->z * float(w2));
+          float   txtU = txtU0 + (txtU1d * float(w1)) + (txtU2d * float(w2));
+          float   txtV = txtV0 + (txtV1d * float(w1)) + (txtV2d * float(w2));
+          drawPixel(x, y, txtU, txtV,
+                    v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
+          w1 += a1;
+          w2 += a2;
+          w0 = 1.0 - (w1 + w2);
+          x++;
+        }
+      }
+      while (++y <= yMax);
+    }
   }
 }
 
