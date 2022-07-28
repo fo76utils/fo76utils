@@ -103,20 +103,6 @@ inline unsigned long long blendRGBA32ToRBGA64(unsigned int c0,
   return blendRBGA64(rgba32ToRBGA64(c0), rgba32ToRBGA64(c1), f);
 }
 
-inline unsigned long long blendToRBGA64Bilinear(
-    unsigned int c0, unsigned int c1, unsigned int c2, unsigned int c3,
-    int xf, int yf)
-{
-  unsigned int  f3 = ((unsigned int) xf * (unsigned int) yf + 128U) >> 8;
-  unsigned int  f1 = (unsigned int) xf - f3;
-  unsigned int  f2 = (unsigned int) yf - f3;
-  unsigned int  f0 = 256U - ((unsigned int) xf + ((unsigned int) yf - f3));
-  unsigned long long  c =
-      (rgba32ToRBGA64(c0) * f0) + (rgba32ToRBGA64(c1) * f1)
-      + (rgba32ToRBGA64(c2) * f2) + (rgba32ToRBGA64(c3) * f3);
-  return (((c + 0x0080008000800080ULL) >> 8) & 0x00FF00FF00FF00FFULL);
-}
-
 inline unsigned int blendRGBA32(unsigned int c0, unsigned int c1, int f)
 {
   unsigned long long  tmp0 = rgba32ToRBGA64(c0);
