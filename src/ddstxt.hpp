@@ -4,6 +4,7 @@
 
 #include "common.hpp"
 #include "filebuf.hpp"
+#include "fp32vec4.hpp"
 
 class DDSTexture
 {
@@ -113,23 +114,23 @@ class DDSTexture
     return textureData[mipLevel][y * (xMask + 1) + x];
   }
   // bilinear filtering
-  unsigned int getPixelB(float x, float y, int mipLevel) const;
+  FloatVector4 getPixelB(float x, float y, int mipLevel) const;
   // trilinear filtering
-  unsigned int getPixelT(float x, float y, float mipLevel) const;
+  FloatVector4 getPixelT(float x, float y, float mipLevel) const;
   // bilinear filtering with mirrored texture coordinates
-  unsigned int getPixelBM(float x, float y, int mipLevel) const;
+  FloatVector4 getPixelBM(float x, float y, int mipLevel) const;
   // trilinear filtering with mirrored texture coordinates
-  unsigned int getPixelTM(float x, float y, float mipLevel) const;
+  FloatVector4 getPixelTM(float x, float y, float mipLevel) const;
   // bilinear filtering with clamped texture coordinates
-  unsigned int getPixelBC(float x, float y, int mipLevel) const;
+  FloatVector4 getPixelBC(float x, float y, int mipLevel) const;
   // trilinear filtering with clamped texture coordinates
-  unsigned int getPixelTC(float x, float y, float mipLevel) const;
+  FloatVector4 getPixelTC(float x, float y, float mipLevel) const;
   // cube map with bilinear filtering, faces are expected to be
   // in Fallout 4 order (right, left, front, back, bottom, top)
   // x = -1.0 to 1.0: left to right
   // y = -1.0 to 1.0: back to front
   // z = -1.0 to 1.0: bottom to top
-  unsigned int cubeMap(float x, float y, float z, float mipLevel) const;
+  FloatVector4 cubeMap(float x, float y, float z, float mipLevel) const;
 };
 
 unsigned int downsample2xFilter(const unsigned int *buf,

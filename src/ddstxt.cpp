@@ -2,6 +2,67 @@
 #include "common.hpp"
 #include "ddstxt.hpp"
 
+static inline unsigned long long blendToRBGA64Bilinear(
+    unsigned int c0, unsigned int c1, unsigned int c2, unsigned int c3,
+    int xf, int yf)
+{
+  unsigned int  f3 = ((unsigned int) xf * (unsigned int) yf + 128U) >> 8;
+  unsigned int  f1 = (unsigned int) xf - f3;
+  unsigned int  f2 = (unsigned int) yf - f3;
+  unsigned int  f0 = 256U - ((unsigned int) xf + ((unsigned int) yf - f3));
+  unsigned long long  c =
+      (rgba32ToRBGA64(c0) * f0) + (rgba32ToRBGA64(c1) * f1)
+      + (rgba32ToRBGA64(c2) * f2) + (rgba32ToRBGA64(c3) * f3);
+  return (((c + 0x0080008000800080ULL) >> 8) & 0x00FF00FF00FF00FFULL);
+}
+
+static const float mipScaleTable[8] =
+{
+  0.5f, 0.25f, 0.125f, 0.0625f, 0.03125f, 0.015625f, 0.0078125f, 0.00390625f
+};
+
+static inline void fixNegativeMipLevel(float& x, float& y, int& m)
+{
+  if (BRANCH_EXPECT((m < 0), false))
+  {
+    float   tmp = mipScaleTable[~m & 7];
+    x *= tmp;
+    y *= tmp;
+    m = 0;
+  }
+}
+
+static inline void convertTexCoord(int& x0, int& y0, float& xf, float& yf,
+                                   float x, float y)
+{
+  x0 = int(float(std::floor(x)));
+  y0 = int(float(std::floor(y)));
+  xf = x - float(x0);
+  yf = y - float(y0);
+}
+
+static inline FloatVector4 blendFP32Vec4Bilinear(
+    unsigned int c0, unsigned int c1, unsigned int c2, unsigned int c3,
+    float xf, float yf)
+{
+  float   f3 = xf * yf;
+  float   f2 = yf - f3;
+  float   f1 = xf - f3;
+  float   f0 = 1.0f - (xf + f2);
+  FloatVector4  c0_f(c0);
+  FloatVector4  c1_f(c1);
+  FloatVector4  c2_f(c2);
+  FloatVector4  c3_f(c3);
+  c0_f *= f0;
+  c1_f *= f1;
+  c2_f *= f2;
+  c3_f *= f3;
+  c0_f += c1_f;
+  c0_f += c2_f;
+  c0_f += c3_f;
+  return c0_f;
+}
+
 static inline unsigned long long decodeBC3Alpha(unsigned int *a,
                                                 const unsigned char *src,
                                                 bool isSigned = false)
@@ -581,166 +642,133 @@ DDSTexture::~DDSTexture()
     delete[] textureDataBuf;
 }
 
-unsigned int DDSTexture::getPixelB(float x, float y, int mipLevel) const
+FloatVector4 DDSTexture::getPixelB(float x, float y, int mipLevel) const
 {
-  int     x0 = roundFloat(x * 256.0f);
-  int     y0 = roundFloat(y * 256.0f);
-  int     xf = x0 & 0xFF;
-  int     yf = y0 & 0xFF;
-  x0 = int((unsigned int) x0 >> 8);
-  y0 = int((unsigned int) y0 >> 8);
-  unsigned long long  c =
-      blendToRBGA64Bilinear(getPixelN(x0, y0, mipLevel),
-                            getPixelN(x0 + 1, y0, mipLevel),
-                            getPixelN(x0, y0 + 1, mipLevel),
-                            getPixelN(x0 + 1, y0 + 1, mipLevel), xf, yf);
-  return rbga64ToRGBA32(c);
+  fixNegativeMipLevel(x, y, mipLevel);
+  int     x0, y0;
+  float   xf, yf;
+  convertTexCoord(x0, y0, xf, yf, x, y);
+  return blendFP32Vec4Bilinear(getPixelN(x0, y0, mipLevel),
+                               getPixelN(x0 + 1, y0, mipLevel),
+                               getPixelN(x0, y0 + 1, mipLevel),
+                               getPixelN(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
-unsigned int DDSTexture::getPixelT(float x, float y, float mipLevel) const
+FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
 {
-  int     m0 = roundFloat(mipLevel * 256.0f);
-  int     mf = m0 & 0xFF;
-  m0 = int((unsigned int) m0 >> 8);
-  if (BRANCH_EXPECT(!mf, false))
+  int     m0 = int(float(std::floor(mipLevel)));
+  float   mf = mipLevel - float(m0);
+  fixNegativeMipLevel(x, y, m0);
+  if (BRANCH_EXPECT(!(((xSizeMip0 - 1) | (ySizeMip0 - 1)) >> m0), false))
+    return textureData[m0][0];
+  int     x0, y0;
+  float   xf, yf;
+  convertTexCoord(x0, y0, xf, yf, x, y);
+  FloatVector4  c0(blendFP32Vec4Bilinear(
+                       getPixelN(x0, y0, m0),
+                       getPixelN(x0 + 1, y0, m0),
+                       getPixelN(x0, y0 + 1, m0),
+                       getPixelN(x0 + 1, y0 + 1, m0), xf, yf));
+  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
   {
-    if (BRANCH_EXPECT(!(((xSizeMip0 - 1) | (ySizeMip0 - 1)) >> m0), false))
-      return textureData[m0][0];
-    return getPixelB(x, y, m0);
+    convertTexCoord(x0, y0, xf, yf, x * 0.5f, y * 0.5f);
+    FloatVector4  c1(blendFP32Vec4Bilinear(
+                         getPixelN(x0, y0, m0 + 1),
+                         getPixelN(x0 + 1, y0, m0 + 1),
+                         getPixelN(x0, y0 + 1, m0 + 1),
+                         getPixelN(x0 + 1, y0 + 1, m0 + 1), xf, yf));
+    c0 *= (1.0f - mf);
+    c1 *= mf;
+    c0 += c1;
   }
-  int     x0 = roundFloat(x * 256.0f);
-  int     y0 = roundFloat(y * 256.0f);
-  int     x0m1 = int((unsigned int) x0 >> 1);
-  int     y0m1 = int((unsigned int) y0 >> 1);
-  int     xf = x0 & 0xFF;
-  int     yf = y0 & 0xFF;
-  x0 = int((unsigned int) x0 >> 8);
-  y0 = int((unsigned int) y0 >> 8);
-  int     m1 = m0 + 1;
-  int     xfm1 = x0m1 & 0xFF;
-  int     yfm1 = y0m1 & 0xFF;
-  x0m1 = int((unsigned int) x0m1 >> 8);
-  y0m1 = int((unsigned int) y0m1 >> 8);
-  unsigned long long  c0 =
-      blendToRBGA64Bilinear(getPixelN(x0, y0, m0),
-                            getPixelN(x0 + 1, y0, m0),
-                            getPixelN(x0, y0 + 1, m0),
-                            getPixelN(x0 + 1, y0 + 1, m0), xf, yf);
-  unsigned long long  c1 =
-      blendToRBGA64Bilinear(getPixelN(x0m1, y0m1, m1),
-                            getPixelN(x0m1 + 1, y0m1, m1),
-                            getPixelN(x0m1, y0m1 + 1, m1),
-                            getPixelN(x0m1 + 1, y0m1 + 1, m1), xfm1, yfm1);
-  return rbga64ToRGBA32(blendRBGA64(c0, c1, mf));
+  return c0;
 }
 
-unsigned int DDSTexture::getPixelBM(float x, float y, int mipLevel) const
+FloatVector4 DDSTexture::getPixelBM(float x, float y, int mipLevel) const
 {
-  int     x0 = roundFloat(x * 256.0f);
-  int     y0 = roundFloat(y * 256.0f);
-  int     xf = x0 & 0xFF;
-  int     yf = y0 & 0xFF;
-  x0 = int((unsigned int) x0 >> 8);
-  y0 = int((unsigned int) y0 >> 8);
-  unsigned long long  c =
-      blendToRBGA64Bilinear(getPixelM(x0, y0, mipLevel),
-                            getPixelM(x0 + 1, y0, mipLevel),
-                            getPixelM(x0, y0 + 1, mipLevel),
-                            getPixelM(x0 + 1, y0 + 1, mipLevel), xf, yf);
-  return rbga64ToRGBA32(c);
+  fixNegativeMipLevel(x, y, mipLevel);
+  int     x0, y0;
+  float   xf, yf;
+  convertTexCoord(x0, y0, xf, yf, x, y);
+  return blendFP32Vec4Bilinear(getPixelM(x0, y0, mipLevel),
+                               getPixelM(x0 + 1, y0, mipLevel),
+                               getPixelM(x0, y0 + 1, mipLevel),
+                               getPixelM(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
-unsigned int DDSTexture::getPixelTM(float x, float y, float mipLevel) const
+FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
 {
-  int     m0 = roundFloat(mipLevel * 256.0f);
-  int     mf = m0 & 0xFF;
-  m0 = int((unsigned int) m0 >> 8);
-  if (BRANCH_EXPECT(!mf, false))
+  int     m0 = int(float(std::floor(mipLevel)));
+  float   mf = mipLevel - float(m0);
+  fixNegativeMipLevel(x, y, m0);
+  if (BRANCH_EXPECT(!(((xSizeMip0 - 1) | (ySizeMip0 - 1)) >> m0), false))
+    return textureData[m0][0];
+  int     x0, y0;
+  float   xf, yf;
+  convertTexCoord(x0, y0, xf, yf, x, y);
+  FloatVector4  c0(blendFP32Vec4Bilinear(
+                       getPixelM(x0, y0, m0),
+                       getPixelM(x0 + 1, y0, m0),
+                       getPixelM(x0, y0 + 1, m0),
+                       getPixelM(x0 + 1, y0 + 1, m0), xf, yf));
+  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
   {
-    if (BRANCH_EXPECT(!(((xSizeMip0 - 1) | (ySizeMip0 - 1)) >> m0), false))
-      return textureData[m0][0];
-    return getPixelBM(x, y, m0);
+    convertTexCoord(x0, y0, xf, yf, x * 0.5f, y * 0.5f);
+    FloatVector4  c1(blendFP32Vec4Bilinear(
+                         getPixelM(x0, y0, m0 + 1),
+                         getPixelM(x0 + 1, y0, m0 + 1),
+                         getPixelM(x0, y0 + 1, m0 + 1),
+                         getPixelM(x0 + 1, y0 + 1, m0 + 1), xf, yf));
+    c0 *= (1.0f - mf);
+    c1 *= mf;
+    c0 += c1;
   }
-  int     x0 = roundFloat(x * 256.0f);
-  int     y0 = roundFloat(y * 256.0f);
-  int     x0m1 = int((unsigned int) x0 >> 1);
-  int     y0m1 = int((unsigned int) y0 >> 1);
-  int     xf = x0 & 0xFF;
-  int     yf = y0 & 0xFF;
-  x0 = int((unsigned int) x0 >> 8);
-  y0 = int((unsigned int) y0 >> 8);
-  int     m1 = m0 + 1;
-  int     xfm1 = x0m1 & 0xFF;
-  int     yfm1 = y0m1 & 0xFF;
-  x0m1 = int((unsigned int) x0m1 >> 8);
-  y0m1 = int((unsigned int) y0m1 >> 8);
-  unsigned long long  c0 =
-      blendToRBGA64Bilinear(getPixelM(x0, y0, m0),
-                            getPixelM(x0 + 1, y0, m0),
-                            getPixelM(x0, y0 + 1, m0),
-                            getPixelM(x0 + 1, y0 + 1, m0), xf, yf);
-  unsigned long long  c1 =
-      blendToRBGA64Bilinear(getPixelM(x0m1, y0m1, m1),
-                            getPixelM(x0m1 + 1, y0m1, m1),
-                            getPixelM(x0m1, y0m1 + 1, m1),
-                            getPixelM(x0m1 + 1, y0m1 + 1, m1), xfm1, yfm1);
-  return rbga64ToRGBA32(blendRBGA64(c0, c1, mf));
+  return c0;
 }
 
-unsigned int DDSTexture::getPixelBC(float x, float y, int mipLevel) const
+FloatVector4 DDSTexture::getPixelBC(float x, float y, int mipLevel) const
 {
-  int     x0 = roundFloat(x * 256.0f);
-  int     y0 = roundFloat(y * 256.0f);
-  int     xf = x0 & 0xFF;
-  int     yf = y0 & 0xFF;
-  x0 = int((unsigned int) x0 >> 8);
-  y0 = int((unsigned int) y0 >> 8);
-  unsigned long long  c =
-      blendToRBGA64Bilinear(getPixelC(x0, y0, mipLevel),
-                            getPixelC(x0 + 1, y0, mipLevel),
-                            getPixelC(x0, y0 + 1, mipLevel),
-                            getPixelC(x0 + 1, y0 + 1, mipLevel), xf, yf);
-  return rbga64ToRGBA32(c);
+  fixNegativeMipLevel(x, y, mipLevel);
+  int     x0, y0;
+  float   xf, yf;
+  convertTexCoord(x0, y0, xf, yf, x, y);
+  return blendFP32Vec4Bilinear(getPixelC(x0, y0, mipLevel),
+                               getPixelC(x0 + 1, y0, mipLevel),
+                               getPixelC(x0, y0 + 1, mipLevel),
+                               getPixelC(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
-unsigned int DDSTexture::getPixelTC(float x, float y, float mipLevel) const
+FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
 {
-  int     m0 = roundFloat(mipLevel * 256.0f);
-  int     mf = m0 & 0xFF;
-  m0 = int((unsigned int) m0 >> 8);
-  if (BRANCH_EXPECT(!mf, false))
+  int     m0 = int(float(std::floor(mipLevel)));
+  float   mf = mipLevel - float(m0);
+  fixNegativeMipLevel(x, y, m0);
+  if (BRANCH_EXPECT(!(((xSizeMip0 - 1) | (ySizeMip0 - 1)) >> m0), false))
+    return textureData[m0][0];
+  int     x0, y0;
+  float   xf, yf;
+  convertTexCoord(x0, y0, xf, yf, x, y);
+  FloatVector4  c0(blendFP32Vec4Bilinear(
+                       getPixelC(x0, y0, m0),
+                       getPixelC(x0 + 1, y0, m0),
+                       getPixelC(x0, y0 + 1, m0),
+                       getPixelC(x0 + 1, y0 + 1, m0), xf, yf));
+  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
   {
-    if (BRANCH_EXPECT(!(((xSizeMip0 - 1) | (ySizeMip0 - 1)) >> m0), false))
-      return textureData[m0][0];
-    return getPixelBC(x, y, m0);
+    convertTexCoord(x0, y0, xf, yf, x * 0.5f, y * 0.5f);
+    FloatVector4  c1(blendFP32Vec4Bilinear(
+                         getPixelC(x0, y0, m0 + 1),
+                         getPixelC(x0 + 1, y0, m0 + 1),
+                         getPixelC(x0, y0 + 1, m0 + 1),
+                         getPixelC(x0 + 1, y0 + 1, m0 + 1), xf, yf));
+    c0 *= (1.0f - mf);
+    c1 *= mf;
+    c0 += c1;
   }
-  int     x0 = roundFloat(x * 256.0f);
-  int     y0 = roundFloat(y * 256.0f);
-  int     x0m1 = int((unsigned int) x0 >> 1);
-  int     y0m1 = int((unsigned int) y0 >> 1);
-  int     xf = x0 & 0xFF;
-  int     yf = y0 & 0xFF;
-  x0 = int((unsigned int) x0 >> 8);
-  y0 = int((unsigned int) y0 >> 8);
-  int     m1 = m0 + 1;
-  int     xfm1 = x0m1 & 0xFF;
-  int     yfm1 = y0m1 & 0xFF;
-  x0m1 = int((unsigned int) x0m1 >> 8);
-  y0m1 = int((unsigned int) y0m1 >> 8);
-  unsigned long long  c0 =
-      blendToRBGA64Bilinear(getPixelC(x0, y0, m0),
-                            getPixelC(x0 + 1, y0, m0),
-                            getPixelC(x0, y0 + 1, m0),
-                            getPixelC(x0 + 1, y0 + 1, m0), xf, yf);
-  unsigned long long  c1 =
-      blendToRBGA64Bilinear(getPixelC(x0m1, y0m1, m1),
-                            getPixelC(x0m1 + 1, y0m1, m1),
-                            getPixelC(x0m1, y0m1 + 1, m1),
-                            getPixelC(x0m1 + 1, y0m1 + 1, m1), xfm1, yfm1);
-  return rbga64ToRGBA32(blendRBGA64(c0, c1, mf));
+  return c0;
 }
 
-unsigned int DDSTexture::cubeMap(float x, float y, float z,
+FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
                                  float mipLevel) const
 {
   float   xm = float(std::fabs(x));
@@ -786,48 +814,43 @@ unsigned int DDSTexture::cubeMap(float x, float y, float z,
     n = 0;
   else
     n *= textureDataSize;
-  int     m0 = roundFloat(mipLevel * 256.0f);
-  int     mf = m0 & 0xFF;
-  m0 = int((unsigned int) m0 >> 8);
+  mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
+  int     m0 = int(float(std::floor(mipLevel)));
+  float   mf = mipLevel - float(m0);
   int     w = int((xSizeMip0 - 1U) >> (unsigned char) m0);
   int     h = int((ySizeMip0 - 1U) >> (unsigned char) m0);
   float   txtX = (x + 1.0f) * (float(w) * 0.5f);
   float   txtY = (1.0f - y) * (float(h) * 0.5f);
-  int     x0 = roundFloat(txtX * 256.0f);
-  int     y0 = roundFloat(txtY * 256.0f);
-  int     xf = x0 & 0xFF;
-  int     yf = y0 & 0xFF;
-  x0 = int((unsigned int) x0 >> 8);
-  y0 = int((unsigned int) y0 >> 8);
+  int     x0, y0;
+  float   xf, yf;
+  convertTexCoord(x0, y0, xf, yf, txtX, txtY);
   const unsigned int  *p = textureData[m0] + n;
-  unsigned int  c0 = p[(y0 & h) * (w + 1) + (x0 & w)];
-  unsigned int  c1 = p[(y0 & h) * (w + 1) + ((x0 + 1) & w)];
-  unsigned int  c2 = p[((y0 + 1) & h) * (w + 1) + (x0 & w)];
-  unsigned int  c3 = p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)];
-  unsigned long long  c = blendToRBGA64Bilinear(c0, c1, c2, c3, xf, yf);
-  if (BRANCH_EXPECT(mf, true))
+  FloatVector4  c0(blendFP32Vec4Bilinear(
+                       p[(y0 & h) * (w + 1) + (x0 & w)],
+                       p[(y0 & h) * (w + 1) + ((x0 + 1) & w)],
+                       p[((y0 + 1) & h) * (w + 1) + (x0 & w)],
+                       p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)], xf, yf));
+  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
   {
     w = w >> 1;
     h = h >> 1;
     txtX = (x + 1.0f) * (float(w) * 0.5f);
     txtY = (1.0f - y) * (float(h) * 0.5f);
-    x0 = roundFloat(txtX * 256.0f);
-    y0 = roundFloat(txtY * 256.0f);
-    xf = x0 & 0xFF;
-    yf = y0 & 0xFF;
-    x0 = int((unsigned int) x0 >> 8);
-    y0 = int((unsigned int) y0 >> 8);
+    convertTexCoord(x0, y0, xf, yf, txtX, txtY);
     p = textureData[m0 + 1] + n;
-    c0 = p[(y0 & h) * (w + 1) + (x0 & w)];
-    c1 = p[(y0 & h) * (w + 1) + ((x0 + 1) & w)];
-    c2 = p[((y0 + 1) & h) * (w + 1) + (x0 & w)];
-    c3 = p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)];
-    c = blendRBGA64(c, blendToRBGA64Bilinear(c0, c1, c2, c3, xf, yf), mf);
+    FloatVector4  c1(blendFP32Vec4Bilinear(
+                         p[(y0 & h) * (w + 1) + (x0 & w)],
+                         p[(y0 & h) * (w + 1) + ((x0 + 1) & w)],
+                         p[((y0 + 1) & h) * (w + 1) + (x0 & w)],
+                         p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)], xf, yf));
+    c0 *= (1.0f - mf);
+    c1 *= mf;
+    c0 += c1;
   }
-  return rbga64ToRGBA32(c);
+  return c0;
 }
 
-struct Downsample2xTables
+struct Downsample2xTable
 {
   //   1   0  -3   0  10  16  10   0  -3   0   1
   //   0   0   0   0   0   0   0   0   0   0   0
@@ -840,109 +863,99 @@ struct Downsample2xTables
   //  -3   0   9   0 -30 -48 -30   0   9   0  -3
   //   0   0   0   0   0   0   0   0   0   0   0
   //   1   0  -3   0  10  16  10   0  -3   0   1
-  static const int  filterTable1[10];
-  // Y offset, (X offset, multTable offset) * 4
-  static const int  filterTable2[27];
-  int     multTable[2560];
-  Downsample2xTables();
-  static inline void getPixelFast(int& r, int& g, int& b,
-                                  const unsigned int *buf, int w,
-                                  int x, int y, const int *m)
+  // Y offset, (X offset, multiplier) * 4
+  static const int  filterTable[27];
+  static inline void getPixelFast(FloatVector4& c, const unsigned int *buf,
+                                  int w, int x, int y)
   {
-    unsigned int  c = *(buf + (y * w + x));
-    r = r + m[c & 0xFF];
-    g = g + m[(c >> 8) & 0xFF];
-    b = b + m[(c >> 16) & 0xFF];
+    FloatVector4  tmp(*(buf + (y * w + x)));
+    tmp *= tmp;
+    c += tmp;
   }
-  static inline void getPixel(int& r, int& g, int& b,
-                              const unsigned int *buf, int w, int h,
-                              int x, int y, const int *m)
+  static inline void getPixelFast(FloatVector4& c, const unsigned int *buf,
+                                  int w, int x, int y, int m)
+  {
+    FloatVector4  tmp(*(buf + (y * w + x)));
+    tmp *= tmp;
+    tmp *= float(m);
+    c += tmp;
+  }
+  static inline void getPixel(FloatVector4& c, const unsigned int *buf,
+                              int w, int h, int x, int y)
   {
     x = (x > 0 ? (x < (w - 1) ? x : (w - 1)) : 0);
     y = (y > 0 ? (y < (h - 1) ? y : (h - 1)) : 0);
-    unsigned int  c = buf[size_t(y) * size_t(w) + size_t(x)];
-    r = r + m[c & 0xFF];
-    g = g + m[(c >> 8) & 0xFF];
-    b = b + m[(c >> 16) & 0xFF];
+    FloatVector4  tmp(buf[size_t(y) * size_t(w) + size_t(x)]);
+    tmp *= tmp;
+    c += tmp;
+  }
+  static inline void getPixel(FloatVector4& c, const unsigned int *buf,
+                              int w, int h, int x, int y, int m)
+  {
+    x = (x > 0 ? (x < (w - 1) ? x : (w - 1)) : 0);
+    y = (y > 0 ? (y < (h - 1) ? y : (h - 1)) : 0);
+    FloatVector4  tmp(buf[size_t(y) * size_t(w) + size_t(x)]);
+    tmp *= tmp;
+    tmp *= float(m);
+    c += tmp;
   }
 };
 
-const int Downsample2xTables::filterTable1[10] =
+const int Downsample2xTable::filterTable[27] =
 {
-  256, 160, 100, -48, -30,  16,  10,   9,  -3,   1
+  1,  0, 160,  1, 100,  3, -30,  5,  10,
+  3,  0, -48,  1, -30,  3,   9,  5,  -3,
+  5,  0,  16,  1,  10,  3,  -3,  5,   1
 };
-
-const int Downsample2xTables::filterTable2[27] =
-{
-  1,  0, 0x0100,  1, 0x0200,  3, 0x0400,  5, 0x0600,
-  3,  0, 0x0300,  1, 0x0400,  3, 0x0700,  5, 0x0800,
-  5,  0, 0x0500,  1, 0x0600,  3, 0x0800,  5, 0x0900
-};
-
-Downsample2xTables::Downsample2xTables()
-{
-  for (int i = 0; i < 2560; i++)
-    multTable[i] = (i & 255) * (i & 255) * filterTable1[i >> 8];
-}
 
 unsigned int downsample2xFilter(const unsigned int *buf,
                                 int imageWidth, int imageHeight, int x, int y)
 {
-  static Downsample2xTables t;
-  const int   *p = t.filterTable2;
-  int     r = 0;
-  int     g = 0;
-  int     b = 0;
-  unsigned int  c = buf[size_t(y) * size_t(imageWidth) + size_t(x)];
+  static Downsample2xTable  t;
+  const int   *p = t.filterTable;
+  FloatVector4  c(0U);
   if (BRANCH_EXPECT((x >= 5 && x < (imageWidth - 5) &&
                      y >= 5 && y < (imageHeight - 5)), true))
   {
     buf = buf + (size_t(y) * size_t(imageWidth) + size_t(x));
-    t.getPixelFast(r, g, b, buf, imageWidth, 0, 0, t.multTable);
+    t.getPixelFast(c, buf, imageWidth, 0, 0, 256);
     for (int i = 0; i < 3; i++)
     {
       int     yOffs = *(p++);
       for (int j = 0; j < 4; j++, p = p + 2)
       {
+        FloatVector4  tmp(0U);
         int     xOffs = p[0];
-        const int *m = &(t.multTable[p[1]]);
-        t.getPixelFast(r, g, b, buf, imageWidth, xOffs, yOffs, m);
-        t.getPixelFast(r, g, b, buf, imageWidth, yOffs, -xOffs, m);
-        t.getPixelFast(r, g, b, buf, imageWidth, -xOffs, -yOffs, m);
-        t.getPixelFast(r, g, b, buf, imageWidth, -yOffs, xOffs, m);
+        t.getPixelFast(tmp, buf, imageWidth, xOffs, yOffs);
+        t.getPixelFast(tmp, buf, imageWidth, yOffs, -xOffs);
+        t.getPixelFast(tmp, buf, imageWidth, -xOffs, -yOffs);
+        t.getPixelFast(tmp, buf, imageWidth, -yOffs, xOffs);
+        tmp *= float(p[1]);
+        c += tmp;
       }
     }
   }
   else
   {
-    t.getPixel(r, g, b, buf, imageWidth, imageHeight, x, y, t.multTable);
+    t.getPixel(c, buf, imageWidth, imageHeight, x, y, 256);
     for (int i = 0; i < 3; i++)
     {
       int     yOffs = *(p++);
       for (int j = 0; j < 4; j++, p = p + 2)
       {
+        FloatVector4  tmp(0U);
         int     xOffs = p[0];
-        const int *m = &(t.multTable[p[1]]);
-        t.getPixel(r, g, b, buf, imageWidth, imageHeight,
-                   x + xOffs, y + yOffs, m);
-        t.getPixel(r, g, b, buf, imageWidth, imageHeight,
-                   x + yOffs, y - xOffs, m);
-        t.getPixel(r, g, b, buf, imageWidth, imageHeight,
-                   x - xOffs, y - yOffs, m);
-        t.getPixel(r, g, b, buf, imageWidth, imageHeight,
-                   x - yOffs, y + xOffs, m);
+        t.getPixel(tmp, buf, imageWidth, imageHeight, x + xOffs, y + yOffs);
+        t.getPixel(tmp, buf, imageWidth, imageHeight, x + yOffs, y - xOffs);
+        t.getPixel(tmp, buf, imageWidth, imageHeight, x - xOffs, y - yOffs);
+        t.getPixel(tmp, buf, imageWidth, imageHeight, x - yOffs, y + xOffs);
+        tmp *= float(p[1]);
+        c += tmp;
       }
     }
   }
-  r = (r >= 256 ? (r <= 0x03FC0100 ?
-                   roundFloat(float(std::sqrt(float(r) * (1.0f / 1024.0f))))
-                   : 255) : 0);
-  g = (g >= 256 ? (g <= 0x03FC0100 ?
-                   roundFloat(float(std::sqrt(float(g) * (1.0f / 1024.0f))))
-                   : 255) : 0);
-  b = (b >= 256 ? (b <= 0x03FC0100 ?
-                   roundFloat(float(std::sqrt(float(b) * (1.0f / 1024.0f))))
-                   : 255) : 0);
-  return ((c & 0xFF000000U) | (unsigned int) (r | (g << 8) | (b << 16)));
+  c *= (1.0f / 1024.0f);
+  c.squareRoot();
+  return (unsigned int) c;
 }
 
