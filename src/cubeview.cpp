@@ -61,7 +61,7 @@ static void renderCubeMap(const BA2File& ba2File,
           float   y = 1.0f;
           float   z = float((imageHeight >> 1) - yc) * scale;
           viewTransform.rotateXYZ(x, y, z);
-          *dstPtr = texture.cubeMap(x, y, z, mipLevel);
+          *dstPtr = (unsigned int) texture.cubeMap(x, y, z, mipLevel);
         }
       }
       SDL_UnlockSurface(sdlScreen);
