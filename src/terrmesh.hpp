@@ -17,8 +17,6 @@ class TerrainMesh : public NIFFile::NIFTriShape
   std::vector< unsigned char >  textureBuf2;
   std::vector< unsigned short > hmapBuf;
   DDSTexture  *landTexture[2];
-  static void calculateNormal(float& normalX, float& normalY, float& normalZ,
-                              float dx, float dy, float dz1, float dz2);
  public:
   TerrainMesh();
   virtual ~TerrainMesh();

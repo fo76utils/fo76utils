@@ -1468,9 +1468,9 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       vTmp[j].x = float(j == 0 || j == 3 ? x0 : x1);
       vTmp[j].y = float(j == 0 || j == 1 ? y0 : y1);
       vTmp[j].z = 0.0f;
-      vTmp[j].normalX = 0.0f;
-      vTmp[j].normalY = 0.0f;
-      vTmp[j].normalZ = 1.0f;
+      vTmp[j].bitangent = 0x008080FFU;
+      vTmp[j].tangent = 0x0080FF80U;
+      vTmp[j].normal = 0x00FF8080U;
       vTmp[j].u = (unsigned short) (j == 0 || j == 3 ? 0x0000 : 0x4000);
       vTmp[j].v = (unsigned short) (j == 0 || j == 1 ? 0x0000 : 0x4000);
       vTmp[j].vertexColor = 0xFFFFFFFFU;
@@ -1705,7 +1705,7 @@ void Renderer::setThreadCount(int n)
     {
       renderThreads[i].renderer =
           new Plot3D_TriShape(outBufRGBW, outBufZ, width, height,
-                              (esmFile.getESMVersion() < 0xC0 ? 1.0f : 2.2f));
+                              (esmFile.getESMVersion() >= 0xC0));
     }
   }
 }

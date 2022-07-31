@@ -2,18 +2,17 @@
 #include "common.hpp"
 #include "terrmesh.hpp"
 #include "landtxt.hpp"
+#include "fp32vec4.hpp"
 
-void TerrainMesh::calculateNormal(
-    float& normalX, float& normalY, float& normalZ,
-    float dx, float dy, float dz1, float dz2)
+static inline FloatVector4 calculateNormal(
+    FloatVector4 normal, float dx, float dy, float dz1, float dz2)
 {
   float   tmp1 = 1.0f + (dz1 * dz1);
   float   tmp2 = 1.0f + (dz2 * dz2);
   float   tmp3 = float(std::sqrt(tmp2 / tmp1));
   float   dz = (dz1 * tmp3 + dz2) / (tmp3 + 1.0f);
-  normalZ += 0.5f;
-  normalX -= (dz * dx);
-  normalY -= (dz * dy);
+  normal -= FloatVector4(dz * dx, dz * dy, -0.5f, 0.0f);
+  return normal;
 }
 
 TerrainMesh::TerrainMesh()
@@ -88,15 +87,13 @@ void TerrainMesh::createMesh(
       vertexPtr->x = xOffset + (float(x) * xyScale);
       vertexPtr->y = yOffset - (float(y) * xyScale);
       vertexPtr->z = z[4];
-      float   normalX = 0.0f;
-      float   normalY = 0.0f;
-      float   normalZ = 0.0f;
-      calculateNormal(normalX, normalY, normalZ, 1.0f, 0.0f,
-                      (z[4] - z[3]) * normalScale1,     // -W
-                      (z[5] - z[4]) * normalScale1);    // +E
-      calculateNormal(normalX, normalY, normalZ, 0.0f, 1.0f,
-                      (z[4] - z[7]) * normalScale1,     // -S
-                      (z[1] - z[4]) * normalScale1);    // +N
+      FloatVector4  normal(0.0f, 0.0f, 0.0f, 0.0f);
+      normal = calculateNormal(normal, 1.0f, 0.0f,
+                               (z[4] - z[3]) * normalScale1,    // -W
+                               (z[5] - z[4]) * normalScale1);   // +E
+      normal = calculateNormal(normal, 0.0f, 1.0f,
+                               (z[4] - z[7]) * normalScale1,    // -S
+                               (z[1] - z[4]) * normalScale1);   // +N
       if ((x ^ y) & 1)
       {
         //    0 1 2
@@ -105,19 +102,22 @@ void TerrainMesh::createMesh(
         //  0 +-+-+
         //    |/|\|
         //  1 +-+-+
-        calculateNormal(normalX, normalY, normalZ, -0.7071068f, 0.7071068f,
-                        (z[4] - z[8]) * normalScale2,   // -SE
-                        (z[0] - z[4]) * normalScale2);  // +NW
-        calculateNormal(normalX, normalY, normalZ, 0.7071068f, 0.7071068f,
-                        (z[4] - z[6]) * normalScale2,   // -SW
-                        (z[2] - z[4]) * normalScale2);  // +NE
+        normal = calculateNormal(normal, -0.7071068f, 0.7071068f,
+                                 (z[4] - z[8]) * normalScale2,  // -SE
+                                 (z[0] - z[4]) * normalScale2); // +NW
+        normal = calculateNormal(normal, 0.7071068f, 0.7071068f,
+                                 (z[4] - z[6]) * normalScale2,  // -SW
+                                 (z[2] - z[4]) * normalScale2); // +NE
       }
-      float   tmp =
-          (normalX * normalX) + (normalY * normalY) + (normalZ * normalZ);
-      tmp = 1.0f / float(std::sqrt(tmp));
-      vertexPtr->normalX = normalX * tmp;
-      vertexPtr->normalY = normalY * tmp;
-      vertexPtr->normalZ = normalZ * tmp;
+      normal.normalize();
+      normal += 1.0f;
+      normal *= 127.5f;
+      normal.setElement(3, 0.0f);
+      FloatVector4  tangent(normal[0], normal[2], normal[1], 0.0f);
+      FloatVector4  bitangent(normal[2], normal[1], normal[0], 0.0f);
+      vertexPtr->bitangent = (unsigned int) bitangent ^ 0x00FF0000U;
+      vertexPtr->tangent = (unsigned int) tangent ^ 0x0000FF00U;
+      vertexPtr->normal = (unsigned int) normal;
       vertexPtr->u = convertToFloat16(float(x - x0) * uScale);
       vertexPtr->v = convertToFloat16(float(y - y0) * vScale);
       if (x != x1 && y != y0)
