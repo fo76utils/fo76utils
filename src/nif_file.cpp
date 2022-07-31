@@ -116,22 +116,6 @@ void NIFFile::NIFVertexTransform::transformXYZ(
   z = tmpZ * scale + offsZ;
 }
 
-void NIFFile::NIFVertexTransform::transformVertex(NIFVertex& v) const
-{
-  float   x = v.x;
-  float   y = v.y;
-  float   z = v.z;
-  v.x = ((x * rotateXX) + (y * rotateXY) + (z * rotateXZ)) * scale + offsX;
-  v.y = ((x * rotateYX) + (y * rotateYY) + (z * rotateYZ)) * scale + offsY;
-  v.z = ((x * rotateZX) + (y * rotateZY) + (z * rotateZZ)) * scale + offsZ;
-  x = v.normalX;
-  y = v.normalY;
-  z = v.normalZ;
-  v.normalX = (x * rotateXX) + (y * rotateXY) + (z * rotateXZ);
-  v.normalY = (x * rotateYX) + (y * rotateYY) + (z * rotateYZ);
-  v.normalZ = (x * rotateZX) + (y * rotateZY) + (z * rotateZZ);
-}
-
 void NIFFile::NIFTriShape::calculateBounds(NIFBounds& b,
                                            const NIFVertexTransform *vt) const
 {
@@ -261,7 +245,8 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
   }
   int     xyzOffs = -1;
   int     uvOffs = -1;
-  int     normalsOffs = -1;
+  int     normalOffs = -1;
+  int     tangentOffs = -1;
   int     vclrOffs = -1;
   bool    useFloat16 = (f.bsVersion >= 0x80 && !(vertexFmtDesc & (1ULL << 54)));
   if (vertexFmtDesc & (1ULL << 44))
@@ -269,12 +254,15 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
   if (vertexFmtDesc & (1ULL << 45))
     uvOffs = int((vertexFmtDesc >> 8) & 0x0FU) << 2;
   if (vertexFmtDesc & (1ULL << 47))
-    normalsOffs = int((vertexFmtDesc >> 16) & 0x0FU) << 2;
+    normalOffs = int((vertexFmtDesc >> 16) & 0x0FU) << 2;
+  if (vertexFmtDesc & (1ULL << 48))
+    tangentOffs = int((vertexFmtDesc >> 20) & 0x0FU) << 2;
   if (vertexFmtDesc & (1ULL << 49))
     vclrOffs = int((vertexFmtDesc >> 24) & 0x0FU) << 2;
-  if ((xyzOffs >= 0 && (xyzOffs + (useFloat16 ? 6 : 12)) > int(vertexSize)) ||
+  if ((xyzOffs >= 0 && (xyzOffs + (useFloat16 ? 8 : 16)) > int(vertexSize)) ||
       (uvOffs >= 0 && (uvOffs + 4) > int(vertexSize)) ||
-      (normalsOffs >= 0 && (normalsOffs + 3) > int(vertexSize)) ||
+      (normalOffs >= 0 && (normalOffs + 4) > int(vertexSize)) ||
+      (tangentOffs >= 0 && (tangentOffs + 4) > int(vertexSize)) ||
       (vclrOffs >= 0 && (vclrOffs + 4) > int(vertexSize)))
   {
     throw errorMessage("invalid vertex format in NIF file");
@@ -285,6 +273,9 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
   {
     NIFVertex&  v = vertexData[i];
     size_t  offs = f.getPosition();
+    int     bitangentX = 255;
+    int     bitangentY = 128;
+    int     bitangentZ = 128;
     if (xyzOffs >= 0)
     {
       f.setPosition(offs + size_t(xyzOffs));
@@ -293,13 +284,17 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
         v.x = f.readFloat();
         v.y = f.readFloat();
         v.z = f.readFloat();
+        bitangentX = roundFloat((f.readFloat() + 1.0f) * 127.5f);
       }
       else
       {
         v.x = convertFloat16(f.readUInt16Fast());
         v.y = convertFloat16(f.readUInt16Fast());
         v.z = convertFloat16(f.readUInt16Fast());
+        bitangentX =
+            roundFloat((convertFloat16(f.readUInt16Fast()) + 1.0f) * 127.5f);
       }
+      bitangentX = (bitangentX > 0 ? (bitangentX < 255 ? bitangentX : 255) : 0);
     }
     if (uvOffs >= 0)
     {
@@ -307,18 +302,27 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
       v.u = f.readUInt16Fast();
       v.v = f.readUInt16Fast();
     }
-    if (normalsOffs >= 0)
+    if (normalOffs >= 0)
     {
-      f.setPosition(offs + size_t(normalsOffs));
-      v.normalX = (float(int(f.readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
-      v.normalY = (float(int(f.readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
-      v.normalZ = (float(int(f.readUInt8Fast())) - 127.5f) * (1.0f / 127.5f);
+      f.setPosition(offs + size_t(normalOffs));
+      v.normal = f.readUInt32Fast();
+      bitangentY = int((v.normal >> 24) & 0xFFU);
+      v.normal = v.normal & 0x00FFFFFFU;
+    }
+    if (tangentOffs >= 0)
+    {
+      f.setPosition(offs + size_t(tangentOffs));
+      v.tangent = f.readUInt32Fast();
+      bitangentZ = int((v.tangent >> 24) & 0xFFU);
+      v.tangent = v.tangent & 0x00FFFFFFU;
     }
     if (vclrOffs >= 0)
     {
       f.setPosition(offs + size_t(vclrOffs));
       v.vertexColor = f.readUInt32Fast();
     }
+    v.bitangent =
+        (unsigned int) (bitangentX | (bitangentY << 8) | (bitangentZ << 16));
     f.setPosition(offs + vertexSize);
   }
   for (size_t i = 0; i < triangleCnt; i++)

@@ -14,15 +14,15 @@ class NIFFile : public FileBuffer
     float   x;
     float   y;
     float   z;
-    float   normalX;
-    float   normalY;
-    float   normalZ;
-    unsigned short  u;
+    unsigned int  bitangent;            // 0x00ZZYYXX
+    unsigned int  tangent;
+    unsigned int  normal;
+    unsigned short  u;                  // FP16 format
     unsigned short  v;
-    unsigned int    vertexColor;
+    unsigned int    vertexColor;        // 0xAABBGGRR
     NIFVertex()
       : x(0.0f), y(0.0f), z(0.0f),
-        normalX(0.0f), normalY(0.0f), normalZ(1.0f),
+        bitangent(0x008080FFU), tangent(0x0080FF80U), normal(0x00FF8080U),
         u(0), v(0), vertexColor(0xFFFFFFFFU)
     {
     }
@@ -33,6 +33,24 @@ class NIFFile : public FileBuffer
     inline float getV() const
     {
       return convertFloat16(v);
+    }
+    inline void getBitangent(float& btngX, float& btngY, float& btngZ) const
+    {
+      btngX = float(int(bitangent & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+      btngY = float(int((bitangent >> 8) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+      btngZ = float(int((bitangent >> 16) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+    }
+    inline void getTangent(float& tangX, float& tangY, float& tangZ) const
+    {
+      tangX = float(int(tangent & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+      tangY = float(int((tangent >> 8) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+      tangZ = float(int((tangent >> 16) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+    }
+    inline void getNormal(float& normX, float& normY, float& normZ) const
+    {
+      normX = float(int(normal & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+      normY = float(int((normal >> 8) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+      normZ = float(int((normal >> 16) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
     }
   };
   struct NIFTriangle
@@ -55,7 +73,6 @@ class NIFFile : public FileBuffer
     NIFVertexTransform& operator*=(const NIFVertexTransform& r);
     void rotateXYZ(float& x, float& y, float& z) const;
     void transformXYZ(float& x, float& y, float& z) const;
-    void transformVertex(NIFVertex& v) const;
   };
   struct NIFBounds
   {
@@ -196,11 +213,11 @@ class NIFFile : public FileBuffer
     int     shaderProperty;
     int     alphaProperty;
     // bits  0 -  3: vertex data size / 4
-    // bits  4 -  7: offset of vertex coordinates (X, Y, Z) / 4
+    // bits  4 -  7: offset of vertex coordinates (X, Y, Z, bitangent X) / 4
     // bits  8 - 11: offset of texture coordinates (U, V) / 4
     // bits 12 - 15: offset of texture coordinates 2 / 4
-    // bits 16 - 19: offset of vertex normals / 4
-    // bits 20 - 23: offset of vertex tangents / 4
+    // bits 16 - 19: offset of vertex normal (X, Y, Z, bitangent Y) / 4
+    // bits 20 - 23: offset of vertex tangent (X, Y, Z, bitangent Z) / 4
     // bits 24 - 27: offset of vertex color / 4
     // bits 44 - 53: set if attribute N - 44 is present
     // bit  54:      set if X, Y, Z are 32-bit floats (always for Skyrim)
