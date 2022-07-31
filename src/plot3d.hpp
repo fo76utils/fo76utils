@@ -5,6 +5,7 @@
 #include "common.hpp"
 #include "ddstxt.hpp"
 #include "nif_file.hpp"
+#include "fp32vec4.hpp"
 
 template< typename T, typename ColorType > class Plot3D : public T
 {
@@ -285,19 +286,50 @@ struct ColorV4 : public ColorV2
 
 class Plot3D_TriShape : public NIFFile::NIFTriShape
 {
- public:
-  static inline unsigned int multiplyWithLight(unsigned int c, int lightLevel)
-  {
-    unsigned long long  tmp =
-        (unsigned long long) ((c & 0x000000FFU) | ((c & 0x0000FF00U) << 12))
-        | ((unsigned long long) (c & 0x00FF0000U) << 24);
-    tmp = (tmp * (unsigned int) lightLevel) + 0x0000800008000080ULL;
-    tmp = tmp | (((tmp >> 10) & 0x0001C0001C0001C0ULL) * 0x03FFU);
-    return ((unsigned int) ((tmp >> 8) & 0x000000FFU)
-            | (unsigned int) ((tmp >> 20) & 0x0000FF00U)
-            | (unsigned int) ((tmp >> 32) & 0x00FF0000U) | 0xFF000000U);
-  }
  protected:
+  struct Vertex
+  {
+    FloatVector4  xyz;
+    FloatVector4  bitangent;            // bitangent[3] = texture U
+    FloatVector4  tangent;              // tangent[3] = texture V
+    FloatVector4  normal;
+    FloatVector4  vertexColor;
+    Vertex()
+      : xyz(0.0f, 0.0f, 0.0f, 0.0f),
+        bitangent(0.0f, 0.0f, 0.0f, 0.0f),
+        tangent(0.0f, 0.0f, 0.0f, 0.0f),
+        normal(0.0f, 0.0f, 0.0f, 0.0f),
+        vertexColor(1.0f, 1.0f, 1.0f, 1.0f)
+    {
+    }
+    Vertex(const NIFFile::NIFVertex& r)
+      : xyz(r.x, r.y, r.z, 0.0f),
+        bitangent(r.bitangent), tangent(r.tangent), normal(r.normal),
+        vertexColor(r.vertexColor)
+    {
+      bitangent *= (1.0f / 127.5f);
+      tangent *= (1.0f / 127.5f);
+      normal *= (1.0f / 127.5f);
+      bitangent -= 1.0f;
+      tangent -= 1.0f;
+      normal -= 1.0f;
+      bitangent.setElement(3, r.getU());
+      tangent.setElement(3, r.getV());
+      normal.setElement(3, 0.0f);
+      vertexColor *= (1.0f / 255.0f);
+    }
+  };
+  struct VertexTransform
+  {
+    FloatVector4  rotateX;              // rotateX,Y,Z[3] = X,Y,Z offset
+    FloatVector4  rotateY;
+    FloatVector4  rotateZ;
+    float   scale;
+    VertexTransform(const NIFFile::NIFVertexTransform& vt);
+    FloatVector4 transformXYZ(FloatVector4 v) const;
+    FloatVector4 rotateXYZ(FloatVector4 v) const;
+    VertexTransform& operator*=(const VertexTransform& r);
+  };
   struct Triangle
   {
     float   z;                  // Z coordinate for sorting
@@ -318,101 +350,72 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   const DDSTexture  *textureE;          // environment map
   const DDSTexture  *textureS;          // TES5 _em.dds, FO4 _s.dds, FO76 _l.dds
   const DDSTexture  *textureR;          // Fallout 76 reflection map
-  float   textureScaleN;
-  float   textureScaleS;
-  float   textureScaleR;
+  float   mipOffsetN;
+  float   mipOffsetS;
+  float   mipOffsetR;
   float   mipLevel;
-  unsigned int  alphaThresholdScaled;
-  float   light_X;
-  float   light_Y;
-  float   light_Z;
-  int     reflectionLevel;
+  float   alphaThresholdFloat;
+  float   envMapZ;
+  FloatVector4  lightVector;
+  FloatVector4  viewTransformInvX;
+  FloatVector4  viewTransformInvY;
+  FloatVector4  viewTransformInvZ;
+  FloatVector4  specularColorFloat;
+  float   reflectionLevel;
   float   specularLevel;
-  float   envMapUVScale;
   bool    invNormals;
-  float   bitangentX;
-  float   bitangentY;
-  float   bitangentZ;
-  float   tangentX;
-  float   tangentY;
-  float   tangentZ;
-  void    (*drawPixelFunction)(Plot3D_TriShape& p,
-                               int x, int y, float txtU, float txtV,
-                               const NIFFile::NIFVertex& z);
+  bool    gammaCorrectEnabled;
   unsigned int  debugMode;
-  std::vector< NIFFile::NIFVertex > vertexBuf;
+  void    (*drawPixelFunction)(Plot3D_TriShape& p,
+                               int x, int y, float txtU, float txtV, Vertex& z);
+  std::vector< Vertex > vertexBuf;
   std::vector< Triangle > triangleBuf;
-  std::vector< unsigned short > vclrTable;
-  std::vector< int >  lightTable;
-  const NIFFile::NIFVertexTransform *viewTransformPtr;
   float   lightingPolynomial[6];
-  void calculateWaterUV(const NIFFile::NIFVertexTransform& modelTransform);
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
-                             const NIFFile::NIFVertexTransform& viewTransform,
-                             float& lightX, float& lightY, float& lightZ);
+                             const NIFFile::NIFVertexTransform& viewTransform);
   // d = dot product from normals and light vector
-  inline int getLightLevel(float d) const;
+  inline float getLightLevel(float d) const;
   // returns light level
-  inline int normalMap(float& normalX, float& normalY, float& normalZ,
-                       unsigned int n) const;
-  inline unsigned int environmentMap(
-      float normalX, float normalY, float normalZ, int x, int y,
-      unsigned int smoothness = 65025U,         // 255 * 255
+  inline float normalMap(Vertex& v, FloatVector4 n) const;
+  inline FloatVector4 environmentMap(
+      const Vertex& v, int x, int y, float smoothness = 1.0f,
       float *specPtr = (float *) 0) const;
-  inline unsigned int addReflection(unsigned int c, unsigned int e) const;
-  inline unsigned int addReflectionM(
-      unsigned int c, unsigned int e, unsigned int m) const;
-  inline unsigned int addReflectionR(
-      unsigned int c, unsigned int e, unsigned int r) const;
-  inline unsigned int addSpecular(
-      unsigned int c, float s, unsigned int m = 65280U) const;
   // fill with water
-  static void drawPixel_Water(Plot3D_TriShape& p,
-                              int x, int y, float txtU, float txtV,
-                              const NIFFile::NIFVertex& z);
-  static void drawPixel_Debug(Plot3D_TriShape& p,
-                              int x, int y, float txtU, float txtV,
-                              const NIFFile::NIFVertex& z);
-  unsigned int gradientMapAndVColor(unsigned int c, unsigned int vColor) const;
-  // calculate RGB multiplier from normals and light direction
-  int calculateLighting(float normalX, float normalY, float normalZ) const;
+  static void drawPixel_Water(Plot3D_TriShape& p, int x, int y,
+                              float txtU, float txtV, Vertex& z);
+  // alphaFlag is set to true if the pixel is visible (alpha >= threshold)
+  inline FloatVector4 getDiffuseColor(
+      float txtU, float txtV, const Vertex& z, bool& alphaFlag) const;
+  static void drawPixel_Debug(Plot3D_TriShape& p, int x, int y,
+                              float txtU, float txtV, Vertex& z);
+  // calculate RGB multiplier from normal and light direction
+  float calculateLighting(FloatVector4 normal) const;
   // diffuse texture with trilinear filtering
-  static void drawPixel_Diffuse(Plot3D_TriShape& p,
-                                int x, int y, float txtU, float txtV,
-                                const NIFFile::NIFVertex& z);
+  static void drawPixel_Diffuse(Plot3D_TriShape& p, int x, int y,
+                                float txtU, float txtV, Vertex& z);
   // diffuse + normal map with trilinear filtering
-  static void drawPixel_Normal(Plot3D_TriShape& p,
-                               int x, int y, float txtU, float txtV,
-                               const NIFFile::NIFVertex& z);
+  static void drawPixel_Normal(Plot3D_TriShape& p, int x, int y,
+                               float txtU, float txtV, Vertex& z);
   // diffuse + normal and environment map with trilinear filtering
-  static void drawPixel_NormalEnv(Plot3D_TriShape& p,
-                                  int x, int y, float txtU, float txtV,
-                                  const NIFFile::NIFVertex& z);
+  static void drawPixel_NormalEnv(Plot3D_TriShape& p, int x, int y,
+                                  float txtU, float txtV, Vertex& z);
   // diffuse + normal and environment map/mask with trilinear filtering
-  static void drawPixel_NormalEnvM(Plot3D_TriShape& p,
-                                   int x, int y, float txtU, float txtV,
-                                   const NIFFile::NIFVertex& z);
+  static void drawPixel_NormalEnvM(Plot3D_TriShape& p, int x, int y,
+                                   float txtU, float txtV, Vertex& z);
   // diffuse + normal and environment + specular map with trilinear filtering
-  static void drawPixel_NormalEnvS(Plot3D_TriShape& p,
-                                   int x, int y, float txtU, float txtV,
-                                   const NIFFile::NIFVertex& z);
+  static void drawPixel_NormalEnvS(Plot3D_TriShape& p, int x, int y,
+                                   float txtU, float txtV, Vertex& z);
   // diffuse + normal and reflection map with trilinear filtering
-  static void drawPixel_NormalRefl(Plot3D_TriShape& p,
-                                   int x, int y, float txtU, float txtV,
-                                   const NIFFile::NIFVertex& z);
-  static unsigned int interpVertexColors(
-      const NIFFile::NIFVertex& v0, const NIFFile::NIFVertex& v1,
-      const NIFFile::NIFVertex& v2, float w0, float w1, float w2);
-  inline void drawPixel(
-      int x, int y, float txtU, float txtV,
-      NIFFile::NIFVertex& v, const NIFFile::NIFVertex& v0,
-      const NIFFile::NIFVertex& v1, const NIFFile::NIFVertex& v2,
+  static void drawPixel_NormalRefl(Plot3D_TriShape& p, int x, int y,
+                                   float txtU, float txtV, Vertex& z);
+  static inline FloatVector4 interpolateVectors(
+      FloatVector4 v0, FloatVector4 v1, FloatVector4 v2,
       float w0, float w1, float w2);
-  void drawLine(const NIFFile::NIFVertex *v0, const NIFFile::NIFVertex *v1);
-  static inline void calculateTangent(
-      float& x, float& y, float& z, float v1d, float v2d,
-      float x0, float y0, float z0, float x1, float y1, float z1,
-      float x2, float y2, float z2, bool n);
+  inline void drawPixel(
+      int x, int y, float txtScaleU, float txtScaleV, Vertex& v,
+      const Vertex& v0, const Vertex& v1, const Vertex& v2,
+      float w0, float w1, float w2);
+  void drawLine(Vertex& v, const Vertex& v0, const Vertex& v1);
   void drawTriangles();
  public:
   // The alpha channel is 255 for solid geometry, 0 for air, and 1 to 254
@@ -421,8 +424,20 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // and the X and Y normals of the water surface (mapped to the range of
   // 2 to 254).
   Plot3D_TriShape(unsigned int *outBufRGBW, float *outBufZ,
-                  int imageWidth, int imageHeight, float vclrGamma = 1.0f);
+                  int imageWidth, int imageHeight, bool enableGamma = false);
   virtual ~Plot3D_TriShape();
+  inline void setBuffers(unsigned int *outBufRGBW, float *outBufZ,
+                         int imageWidth, int imageHeight)
+  {
+    bufRGBW = outBufRGBW;
+    bufZ = outBufZ;
+    width = imageWidth;
+    height = imageHeight;
+  }
+  inline void setEnvironmentMapZ(float z)
+  {
+    envMapZ = z;        // defaults to image height
+  }
   Plot3D_TriShape& operator=(const NIFFile::NIFTriShape& t);
   // set polynomial a[0..5] for mapping dot product (-1.0 to 1.0)
   // to RGB multiplier
