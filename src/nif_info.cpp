@@ -222,10 +222,13 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
     for (size_t j = 0; j < meshData[i].vertexCnt; j++)
     {
       NIFFile::NIFVertex  v = meshData[i].vertexData[j];
-      meshData[i].vertexTransform.transformVertex(v);
+      meshData[i].vertexTransform.transformXYZ(v.x, v.y, v.z);
+      float   normalX, normalY, normalZ;
+      v.getNormal(normalX, normalY, normalZ);
+      meshData[i].vertexTransform.rotateXYZ(normalX, normalY, normalZ);
       std::fprintf(f, "    %4d: XYZ: (%f, %f, %f), normals: (%f, %f, %f), "
                    "UV: (%f, %f), color: 0x%08X\n",
-                   int(j), v.x, v.y, v.z, v.normalX, v.normalY, v.normalZ,
+                   int(j), v.x, v.y, v.z, normalX, normalY, normalZ,
                    v.getU(), v.getV(), v.vertexColor);
     }
     std::fprintf(f, "  Triangle list:\n");
@@ -254,7 +257,7 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
     for (size_t j = 0; j < meshData[i].vertexCnt; j++)
     {
       NIFFile::NIFVertex  v = meshData[i].vertexData[j];
-      meshData[i].vertexTransform.transformVertex(v);
+      meshData[i].vertexTransform.transformXYZ(v.x, v.y, v.z);
       std::fprintf(f, "v %.8f %.8f %.8f\n", v.x, v.y, v.z);
     }
     for (size_t j = 0; j < meshData[i].vertexCnt; j++)
@@ -264,9 +267,10 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
     }
     for (size_t j = 0; j < meshData[i].vertexCnt; j++)
     {
-      NIFFile::NIFVertex  v = meshData[i].vertexData[j];
-      meshData[i].vertexTransform.transformVertex(v);
-      std::fprintf(f, "vn %.8f %.8f %.8f\n", v.normalX, v.normalY, v.normalZ);
+      float   normalX, normalY, normalZ;
+      meshData[i].vertexData[j].getNormal(normalX, normalY, normalZ);
+      meshData[i].vertexTransform.rotateXYZ(normalX, normalY, normalZ);
+      std::fprintf(f, "vn %.8f %.8f %.8f\n", normalX, normalY, normalZ);
     }
     for (size_t j = 0; j < meshData[i].triangleCnt; j++)
     {
@@ -447,7 +451,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     {
       Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
                              imageWidth, imageHeight,
-                             (nifFile.getVersion() < 0x90 ? 1.0f : 2.2f));
+                             (nifFile.getVersion() >= 0x90));
       plot3d.setDebugMode(debugMode, 0);
       NIFFile::NIFVertexTransform
           modelTransform(1.0f, modelRotationX, modelRotationY, modelRotationZ,

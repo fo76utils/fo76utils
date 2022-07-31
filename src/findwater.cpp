@@ -95,9 +95,9 @@ static void fillWaterMesh(const NIFFile::NIFTriShape *meshData, size_t meshCnt,
           meshData[i].vertexData[meshData[i].triangleData[j].v1];
       NIFFile::NIFVertex  v2 =
           meshData[i].vertexData[meshData[i].triangleData[j].v2];
-      t.transformVertex(v0);
-      t.transformVertex(v1);
-      t.transformVertex(v2);
+      t.transformXYZ(v0.x, v0.y, v0.z);
+      t.transformXYZ(v1.x, v1.y, v1.z);
+      t.transformXYZ(v2.x, v2.y, v2.z);
       int     x0 = convertX(v0.x);
       int     y0 = convertY(v0.y);
       int     x1 = convertX(v1.x);
