@@ -92,6 +92,30 @@ struct FloatVector4
       v *= ((tmp * tmp2 * tmp2 - 3.0f) * (tmp2 * (!invFlag ? -0.5f : 0.5f)));
     }
   }
+  inline void normalizeFast()
+  {
+    float   tmp = dotProduct(*this);
+    if (__builtin_expect(long(tmp > 0.0f), 1L))
+    {
+      float   tmp2;
+      __asm__ ("vrsqrtss %1, %1, %0" : "=x" (tmp2) : "x" (tmp));
+      v *= tmp2;
+    }
+  }
+  inline void minValues(const FloatVector4& r)
+  {
+    float   tmp __attribute__ ((__vector_size__ (16))) = v;
+    float   tmp2 __attribute__ ((__vector_size__ (16))) = r.v;
+    __asm__ ("vminps %0, %1, %0" : "+x" (tmp) : "x" (tmp2));
+    v = tmp;
+  }
+  inline void maxValues(const FloatVector4& r)
+  {
+    float   tmp __attribute__ ((__vector_size__ (16))) = v;
+    float   tmp2 __attribute__ ((__vector_size__ (16))) = r.v;
+    __asm__ ("vmaxps %0, %1, %0" : "+x" (tmp) : "x" (tmp2));
+    v = tmp;
+  }
   inline operator unsigned int() const
   {
     float   tmp __attribute__ ((__vector_size__ (16))) = v;
@@ -210,6 +234,26 @@ struct FloatVector4
       tmp = (!invFlag ? 1.0f : -1.0f) / float(std::sqrt(tmp));
       *this *= tmp;
     }
+  }
+  inline void normalizeFast()
+  {
+    float   tmp = dotProduct(*this);
+    if (tmp > 0.0f)
+      *this *= (1.0f / float(std::sqrt(tmp)));
+  }
+  inline void minValues(const FloatVector4& r)
+  {
+    v[0] = (r.v[0] < v[0] ? r.v[0] : v[0]);
+    v[1] = (r.v[1] < v[1] ? r.v[1] : v[1]);
+    v[2] = (r.v[2] < v[2] ? r.v[2] : v[2]);
+    v[3] = (r.v[3] < v[3] ? r.v[3] : v[3]);
+  }
+  inline void maxValues(const FloatVector4& r)
+  {
+    v[0] = (r.v[0] > v[0] ? r.v[0] : v[0]);
+    v[1] = (r.v[1] > v[1] ? r.v[1] : v[1]);
+    v[2] = (r.v[2] > v[2] ? r.v[2] : v[2]);
+    v[3] = (r.v[3] > v[3] ? r.v[3] : v[3]);
   }
   inline operator unsigned int() const
   {
