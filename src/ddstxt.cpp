@@ -660,7 +660,7 @@ FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
   float   mf = mipLevel - float(m0);
   fixNegativeMipLevel(x, y, m0);
   if (BRANCH_EXPECT(!(((xSizeMip0 - 1) | (ySizeMip0 - 1)) >> m0), false))
-    return textureData[m0][0];
+    return FloatVector4(textureData[m0][0]);
   int     x0, y0;
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, x, y);
@@ -702,7 +702,7 @@ FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
   float   mf = mipLevel - float(m0);
   fixNegativeMipLevel(x, y, m0);
   if (BRANCH_EXPECT(!(((xSizeMip0 - 1) | (ySizeMip0 - 1)) >> m0), false))
-    return textureData[m0][0];
+    return FloatVector4(textureData[m0][0]);
   int     x0, y0;
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, x, y);
@@ -744,7 +744,7 @@ FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
   float   mf = mipLevel - float(m0);
   fixNegativeMipLevel(x, y, m0);
   if (BRANCH_EXPECT(!(((xSizeMip0 - 1) | (ySizeMip0 - 1)) >> m0), false))
-    return textureData[m0][0];
+    return FloatVector4(textureData[m0][0]);
   int     x0, y0;
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, x, y);
