@@ -46,8 +46,6 @@ static void renderCubeMap(const BA2File& ba2File,
     SDL_SetSurfaceBlendMode(sdlScreen, SDL_BLENDMODE_NONE);
     NIFFile::NIFVertexTransform
         viewTransform(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-    float   scale =
-        1.0f / float(imageWidth > imageHeight ? imageWidth : imageHeight);
     while (true)
     {
       SDL_LockSurface(sdlScreen);
@@ -57,9 +55,9 @@ static void renderCubeMap(const BA2File& ba2File,
         dstPtr = dstPtr + (size_t(sdlScreen->pitch >> 2) * size_t(yc));
         for (int xc = 0; xc < imageWidth; xc++, dstPtr++)
         {
-          float   x = float(xc - (imageWidth >> 1)) * scale;
-          float   y = 1.0f;
-          float   z = float((imageHeight >> 1) - yc) * scale;
+          float   x = float(xc - (imageWidth >> 1));
+          float   y = float(imageHeight);
+          float   z = float((imageHeight >> 1) - yc);
           viewTransform.rotateXYZ(x, y, z);
           *dstPtr = (unsigned int) texture.cubeMap(x, y, z, mipLevel);
         }
@@ -179,7 +177,6 @@ static void renderCubeMap(const BA2File& ba2File,
               viewTransform = vt;
             }
             keyPressed = true;
-            break;
           }
         }
         if (!quitFlag)
