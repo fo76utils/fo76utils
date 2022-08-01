@@ -355,8 +355,9 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   float   mipOffsetR;
   float   mipLevel;
   float   alphaThresholdFloat;
-  float   envMapZ;
+  int     mipLevelMin;
   FloatVector4  lightVector;
+  FloatVector4  envMapOffs;
   FloatVector4  viewTransformInvX;
   FloatVector4  viewTransformInvY;
   FloatVector4  viewTransformInvZ;
@@ -434,9 +435,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     width = imageWidth;
     height = imageHeight;
   }
-  inline void setEnvironmentMapZ(float z)
+  // Vector to be added to (image X, image Y, 0.0) for cube mapping.
+  // Defaults to -(imageWidth / 2), -(imageHeight / 2), imageHeight.
+  inline void setEnvMapOffset(float x, float y, float z)
   {
-    envMapZ = z;        // defaults to image height
+    envMapOffs = FloatVector4(x, y, z, 0.0f);
   }
   Plot3D_TriShape& operator=(const NIFFile::NIFTriShape& t);
   // set polynomial a[0..5] for mapping dot product (-1.0 to 1.0)

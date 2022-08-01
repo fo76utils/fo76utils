@@ -238,8 +238,8 @@ inline FloatVector4 Plot3D_TriShape::environmentMap(
   r = (r > 0.0f ? r : 0.0f);
   float   m = r * float(textureE->getMaxMipLevel());
   // view vector
-  FloatVector4  viewVector(float(x - (width >> 1)), float(y - (height >> 1)),
-                           envMapZ, 0.0f);
+  FloatVector4  viewVector(float(x), float(y), 0.0f, 0.0f);
+  viewVector += envMapOffs;
   // reflect
   FloatVector4  tmp2(v.normal);
   float   tmp = viewVector.dotProduct(tmp2) * 2.0f;
@@ -541,10 +541,11 @@ inline void Plot3D_TriShape::drawPixel(
     const Vertex& v0, const Vertex& v1, const Vertex& v2,
     float w0, float w1, float w2)
 {
-  if (x < 0 || x >= width || y < 0 || y >= height || v.xyz[2] < 0.0f)
+  if (x < 0 || x >= width || v.xyz[2] < 0.0f ||
+      bufZ[size_t(y) * size_t(width) + size_t(x)] <= v.xyz[2])
+  {
     return;
-  if (bufZ[size_t(y) * size_t(width) + size_t(x)] <= v.xyz[2])
-    return;
+  }
   v.bitangent =
       interpolateVectors(v0.bitangent, v1.bitangent, v2.bitangent, w0, w1, w2);
   float   txtU = v.bitangent[3] * txtScaleU;
@@ -575,7 +576,8 @@ void Plot3D_TriShape::drawLine(Vertex& v, const Vertex& v0, const Vertex& v1)
       {
         float   xf = (v1.xyz[0] - v0.xyz[0]) * float(w1) + v0.xyz[0];
         x = roundFloat(xf);
-        if (float(std::fabs(xf - float(x))) < (1.0f / 1024.0f))
+        if (float(std::fabs(xf - float(x))) < (1.0f / 1024.0f) &&
+            y >= 0 && y < height)
         {
           float   w0 = float(1.0 - w1);
           v.xyz.setElement(2, (v0.xyz[2] * w0) + (v1.xyz[2] * float(w1)));
@@ -586,8 +588,11 @@ void Plot3D_TriShape::drawLine(Vertex& v, const Vertex& v0, const Vertex& v1)
         break;
       y = y + (y < y1 ? 1 : -1);
     }
+    return;
   }
-  else if (float(std::fabs(v1.xyz[0] - v0.xyz[0])) >= (1.0f / 1024.0f))
+  if (y < 0 || y >= height)
+    return;
+  if (float(std::fabs(v1.xyz[0] - v0.xyz[0])) >= (1.0f / 1024.0f))
   {
     double  dx1 = 1.0 / (double(v1.xyz[0]) - double(v0.xyz[0]));
     int     x1 = roundFloat(v1.xyz[0]);
@@ -679,31 +684,27 @@ void Plot3D_TriShape::drawTriangles()
       float   txtV1d = v1->tangent[3] - v0->tangent[3];
       float   txtV2d = v2->tangent[3] - v0->tangent[3];
       float   uvArea2 = float(std::fabs((txtU1d * txtV2d) - (txtU2d * txtV1d)));
-      bool    integerMipLevel = true;
       if (xyArea2 > uvArea2)
       {
         float   txtW = float(textureD->getWidth());
         float   txtH = float(textureD->getHeight());
         uvArea2 *= (txtW * txtH);
-        mipLevel = 0.0f;
-        // calculate base 4 logarithm of texel area / pixel area
-        if (uvArea2 > xyArea2)
+        int     mipLevel_i = mipLevelMin;
+        mipLevel = float(mipLevel_i);
+        if ((uvArea2 * float(1 << ((-mipLevel_i) << 1))) > xyArea2)
         {
+          // calculate base 4 logarithm of texel area / pixel area
           mipLevel = float(std::log2(float(std::fabs(r2xArea * uvArea2))))
                      * 0.5f;
+          mipLevel_i = roundFloat(mipLevel);
+          if (float(std::fabs(mipLevel - float(mipLevel_i))) < 0.0625f)
+            mipLevel = float(mipLevel_i);
+          mipLevel_i = int(float(std::floor(mipLevel)));
         }
-        int     mipLevel_i = int(mipLevel);
-        mipLevel = mipLevel - float(mipLevel_i);
-        integerMipLevel = (mipLevel < 0.0625f || mipLevel >= 0.9375f);
-        if (integerMipLevel)
-        {
-          mipLevel_i += int(mipLevel >= 0.5f);
-          mipLevel = 0.0f;
-        }
-        float   txtScale = float(65536 >> mipLevel_i) * (1.0f / 65536.0f);
+        float   txtScale =
+            float(262144 >> (mipLevel_i + 2)) * (1.0f / 65536.0f);
         txtScaleU = txtW * txtScale;
         txtScaleV = txtH * txtScale;
-        mipLevel += float(mipLevel_i);
       }
     }
     double  dy2 = 1.0 / (y2 - y0);
@@ -713,6 +714,10 @@ void Plot3D_TriShape::drawTriangles()
     double  b2 = 1.0 - ((x2 - x0) * a2);
     int     y = int(y0 + 0.9999995);
     int     yMax = int(y2 + 0.0000005);
+    if (BRANCH_EXPECT((y > (height - 1) || yMax < 0), false))
+      continue;
+    y = (y > 0 ? y : 0);
+    yMax = (yMax < (height - 1) ? yMax : (height - 1));
     if (a1 < 0.0)                       // negative X direction
     {
       do
@@ -792,8 +797,10 @@ Plot3D_TriShape::Plot3D_TriShape(
     mipOffsetR(1.0f),
     mipLevel(15.0f),
     alphaThresholdFloat(0.0f),
-    envMapZ(float(imageHeight)),
+    mipLevelMin(0),
     lightVector(0.0f, 0.0f, 1.0f, 0.0f),
+    envMapOffs(float(imageWidth) * -0.5f, float(imageHeight) * -0.5f,
+               float(imageHeight), 0.0f),
     viewTransformInvX(1.0f, 0.0f, 0.0f, 0.0f),
     viewTransformInvY(0.0f, 1.0f, 0.0f, 0.0f),
     viewTransformInvZ(0.0f, 0.0f, 1.0f, 0.0f),
@@ -857,16 +864,13 @@ void Plot3D_TriShape::getDefaultLightingFunction(float *a)
 
 static float calculateMipOffset(const DDSTexture *t1, const DDSTexture *t2)
 {
-  if (!t1 || !t2)
-    return 0.0f;
   int     a1 = t1->getWidth() * t1->getHeight();
   int     a2 = t2->getWidth() * t2->getHeight();
-  if (BRANCH_EXPECT(!(a1 > 0 && a2 > 0 && a1 > (a2 >> 3) && (a1 >> 3) < a2),
-                    false))
-  {
-    return (a1 < a2 ? -3.0f : (a1 > a2 ? 3.0f : 0.0f));
-  }
-  return float(roundFloat(float(std::log2(float(a1) / float(a2))) * 0.5f));
+  if (a1 == a2)
+    return 0.0f;
+  if (a1 < a2)
+    return (a1 <= (a2 >> 3) ? -2.0f : (a1 <= (a2 >> 1) ? -1.0f : 0.0f));
+  return (a2 <= (a1 >> 3) ? 2.0f : (a2 <= (a1 >> 1) ? 1.0f : 0.0f));
 }
 
 void Plot3D_TriShape::drawTriShape(
@@ -969,6 +973,11 @@ void Plot3D_TriShape::drawTriShape(
       reflectionLevel = reflectionLevel * float(int(envMapScale));
     }
   }
+  float   tmp = 0.0f;
+  tmp = (mipOffsetN > tmp ? mipOffsetN : tmp);
+  tmp = (mipOffsetS > tmp ? mipOffsetS : tmp);
+  tmp = (mipOffsetR > tmp ? mipOffsetR : tmp);
+  mipLevelMin = roundFloat(-tmp);
   if (BRANCH_EXPECT(debugMode, false))
     drawPixelFunction = &drawPixel_Debug;
   drawTriangles();
