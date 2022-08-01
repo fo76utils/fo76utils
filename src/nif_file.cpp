@@ -3,6 +3,7 @@
 #include "nif_file.hpp"
 #include "ba2file.hpp"
 #include "bgsmfile.hpp"
+#include "fp32vec4.hpp"
 
 #include "nifblock.cpp"
 
@@ -122,26 +123,31 @@ void NIFFile::NIFTriShape::calculateBounds(NIFBounds& b,
   NIFVertexTransform  t(vertexTransform);
   if (vt)
     t *= *vt;
-  NIFBounds tmp;
-  NIFVertex v;
+  FloatVector4  rotateX(t.rotateXX, t.rotateXY, t.rotateXZ, 0.0f);
+  FloatVector4  rotateY(t.rotateYX, t.rotateYY, t.rotateYZ, 0.0f);
+  FloatVector4  rotateZ(t.rotateZX, t.rotateZY, t.rotateZZ, 0.0f);
+  rotateX *= t.scale;
+  rotateX.setElement(3, t.offsX);
+  rotateY *= t.scale;
+  rotateY.setElement(3, t.offsY);
+  rotateZ *= t.scale;
+  rotateZ.setElement(3, t.offsZ);
+  FloatVector4  boundsMin(b.xMin, b.yMin, b.zMin, b.xMax);
+  FloatVector4  boundsMax(b.xMax, b.yMax, b.zMax, 0.0f);
   for (size_t i = 0; i < vertexCnt; i++)
   {
-    float   x = vertexData[i].x;
-    float   y = vertexData[i].y;
-    float   z = vertexData[i].z;
-    v.x = (x * t.rotateXX) + (y * t.rotateXY) + (z * t.rotateXZ);
-    v.y = (x * t.rotateYX) + (y * t.rotateYY) + (z * t.rotateYZ);
-    v.z = (x * t.rotateZX) + (y * t.rotateZY) + (z * t.rotateZZ);
-    tmp += v;
+    FloatVector4  v(vertexData[i].x, vertexData[i].y, vertexData[i].z, 1.0f);
+    FloatVector4  tmp(v.dotProduct(rotateX), v.dotProduct(rotateY),
+                      v.dotProduct(rotateZ), 0.0f);
+    boundsMin.minValues(tmp);
+    boundsMax.maxValues(tmp);
   }
-  v.x = tmp.xMin * t.scale + t.offsX;
-  v.y = tmp.yMin * t.scale + t.offsY;
-  v.z = tmp.zMin * t.scale + t.offsZ;
-  b += v;
-  v.x = tmp.xMax * t.scale + t.offsX;
-  v.y = tmp.yMax * t.scale + t.offsY;
-  v.z = tmp.zMax * t.scale + t.offsZ;
-  b += v;
+  b.xMin = boundsMin[0];
+  b.yMin = boundsMin[1];
+  b.zMin = boundsMin[2];
+  b.xMax = boundsMax[0];
+  b.yMax = boundsMax[1];
+  b.zMax = boundsMax[2];
 }
 
 NIFFile::NIFBlock::NIFBlock(int blockType)
