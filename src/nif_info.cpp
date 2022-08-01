@@ -5,6 +5,9 @@
 #include "ddstxt.hpp"
 #include "plot3d.hpp"
 
+#include <thread>
+#include <mutex>
+
 #ifdef HAVE_SDL2
 #  include <SDL2/SDL.h>
 #endif
@@ -364,18 +367,259 @@ static inline float degreesToRadians(float x)
   return float(double(x) * (std::atan(1.0) / 45.0));
 }
 
+struct Renderer
+{
+  std::vector< Plot3D_TriShape * >  renderers;
+  std::vector< std::string >  threadErrMsg;
+  std::vector< int >  viewOffsetY;
+  std::vector< NIFFile::NIFTriShape > meshData;
+  std::map< std::string, DDSTexture * > textureSet;
+  std::mutex  textureSetMutex;
+  NIFFile::NIFVertexTransform modelTransform;
+  NIFFile::NIFVertexTransform viewTransform;
+  float   lightX;
+  float   lightY;
+  float   lightZ;
+  float   waterEnvMapLevel;
+  unsigned int  waterColor;
+  int     threadCnt;
+  const BA2File *ba2File;
+  std::vector< unsigned char >  fileBuf;
+  std::string defaultEnvMap;
+  std::string waterTexture;
+  std::string whiteTexture;
+  Renderer(unsigned int *outBufRGBW, float *outBufZ,
+           int imageWidth, int imageHeight, bool isFO76);
+  ~Renderer();
+  void setBuffers(unsigned int *outBufRGBW, float *outBufZ,
+                  int imageWidth, int imageHeight);
+  const DDSTexture *loadTexture(const std::string *texturePath, bool isDiffuse);
+  static void threadFunction(Renderer *p, size_t n);
+  void renderModel();
+};
+
+Renderer::Renderer(unsigned int *outBufRGBW, float *outBufZ,
+                   int imageWidth, int imageHeight, bool isFO76)
+{
+  lightX = 0.0f;
+  lightY = 0.0f;
+  lightZ = 1.0f;
+  waterEnvMapLevel = 0.5f;
+  waterColor = 0xC0804000U;
+  threadCnt = int(std::thread::hardware_concurrency());
+  if (threadCnt < 1 || imageHeight < 64)
+    threadCnt = 1;
+  else if (threadCnt > 8)
+    threadCnt = 8;
+  ba2File = (BA2File *) 0;
+  renderers.resize(size_t(threadCnt), (Plot3D_TriShape *) 0);
+  threadErrMsg.resize(size_t(threadCnt));
+  viewOffsetY.resize(size_t(threadCnt), 0);
+  try
+  {
+    for (size_t i = 0; i < renderers.size(); i++)
+    {
+      renderers[i] = new Plot3D_TriShape(outBufRGBW, outBufZ,
+                                         imageWidth, imageHeight, isFO76);
+    }
+  }
+  catch (...)
+  {
+    for (size_t i = 0; i < renderers.size(); i++)
+    {
+      if (renderers[i])
+      {
+        delete renderers[i];
+        renderers[i] = (Plot3D_TriShape *) 0;
+      }
+    }
+    throw;
+  }
+  setBuffers(outBufRGBW, outBufZ, imageWidth, imageHeight);
+}
+
+Renderer::~Renderer()
+{
+  for (size_t i = 0; i < renderers.size(); i++)
+  {
+    if (renderers[i])
+      delete renderers[i];
+  }
+  for (std::map< std::string, DDSTexture * >::iterator
+           i = textureSet.begin(); i != textureSet.end(); i++)
+  {
+    if (i->second)
+      delete i->second;
+  }
+}
+
+void Renderer::setBuffers(unsigned int *outBufRGBW, float *outBufZ,
+                          int imageWidth, int imageHeight)
+{
+  float   y0 = 0.0f;
+  for (size_t i = 0; i < renderers.size(); i++)
+  {
+    int     y0i = roundFloat(y0);
+    int     y1i = imageHeight;
+    if ((i + 1) < renderers.size())
+    {
+      float   y1 = float(int(i + 1)) / float(int(renderers.size()));
+      y1 = (y1 - 0.5f) * (y1 - 0.5f) * 2.0f;
+      if (i < (renderers.size() >> 1))
+        y1 = 0.5f - y1;
+      else
+        y1 = 0.5f + y1;
+      y1 = y1 * float(imageHeight);
+      y1i = roundFloat(y1);
+      y0 = y1;
+    }
+    viewOffsetY[i] = y0i;
+    size_t  offs = size_t(y0i) * size_t(imageWidth);
+    renderers[i]->setBuffers(outBufRGBW + offs, outBufZ + offs,
+                             imageWidth, y1i - y0i);
+    renderers[i]->setEnvMapOffset(float(imageWidth) * -0.5f,
+                                  float(imageHeight) * -0.5f + float(y0i),
+                                  float(imageHeight));
+  }
+}
+
+const DDSTexture * Renderer::loadTexture(const std::string *texturePath,
+                                         bool isDiffuse)
+{
+  if (!texturePath || texturePath->empty() || !ba2File)
+    return (DDSTexture *) 0;
+  DDSTexture  *t = (DDSTexture *) 0;
+  textureSetMutex.lock();
+  try
+  {
+    std::map< std::string, DDSTexture * >::iterator i =
+        textureSet.find(*texturePath);
+    if (i == textureSet.end())
+    {
+      try
+      {
+        ba2File->extractFile(fileBuf, *texturePath);
+        t = new DDSTexture(&(fileBuf.front()), fileBuf.size());
+      }
+      catch (std::runtime_error& e)
+      {
+        std::fprintf(stderr, "Warning: failed to load texture '%s': %s\n",
+                     texturePath->c_str(), e.what());
+        t = (DDSTexture *) 0;
+        if (isDiffuse && !whiteTexture.empty() && *texturePath != whiteTexture)
+        {
+          ba2File->extractFile(fileBuf, whiteTexture);
+          t = new DDSTexture(&(fileBuf.front()), fileBuf.size());
+        }
+      }
+      i = textureSet.insert(std::pair< std::string, DDSTexture * >(
+                                *texturePath, t)).first;
+    }
+    t = i->second;
+  }
+  catch (...)
+  {
+    textureSetMutex.unlock();
+    if (t)
+      delete t;
+    return (DDSTexture *) 0;
+  }
+  textureSetMutex.unlock();
+  return t;
+}
+
+void Renderer::threadFunction(Renderer *p, size_t n)
+{
+  p->threadErrMsg[n].clear();
+  try
+  {
+    NIFFile::NIFVertexTransform vt(p->viewTransform);
+    vt.offsY -= float(p->viewOffsetY[n]);
+    bool    haveWater = false;
+    for (size_t i = 0; i < p->meshData.size(); i++)
+    {
+      if (p->meshData[i].flags & 0x05)          // ignore if hidden or effect
+        continue;
+      if (p->meshData[i].flags & 0x02)
+        haveWater = true;
+      *(p->renderers[n]) = p->meshData[i];
+      const DDSTexture  *textures[10];
+      for (size_t j = 10; j-- > 0; )
+      {
+        textures[j] = (DDSTexture *) 0;
+        const std::string *texturePath = (std::string *) 0;
+        if (j < p->meshData[i].texturePathCnt && ((1 << int(j)) & 0x037B))
+          texturePath = p->meshData[i].texturePaths[j];
+        if (!texturePath || texturePath->empty())
+        {
+          if (j == 4 && (textures[6] || textures[8]))
+            texturePath = &(p->defaultEnvMap);
+          else if (j == 1 && (p->meshData[i].flags & 0x02))
+            texturePath = &(p->waterTexture);
+          else if (j == 0)
+            texturePath = &(p->whiteTexture);
+          else
+            continue;
+        }
+        textures[j] = p->loadTexture(texturePath, (j == 0));
+      }
+      p->renderers[n]->drawTriShape(p->modelTransform, vt,
+                                    p->lightX, p->lightY, p->lightZ,
+                                    textures, 10);
+    }
+    if (haveWater)
+    {
+      const DDSTexture  *envMap = p->loadTexture(&(p->defaultEnvMap), false);
+      p->renderers[n]->renderWater(vt, p->waterColor,
+                                   p->lightX, p->lightY, p->lightZ,
+                                   envMap, p->waterEnvMapLevel);
+    }
+  }
+  catch (std::exception& e)
+  {
+    p->threadErrMsg[n] = e.what();
+    if (p->threadErrMsg[n].empty())
+      p->threadErrMsg[n] = "unknown error in render thread";
+  }
+}
+
+void Renderer::renderModel()
+{
+  std::vector< std::thread * >  threads(renderers.size(), (std::thread *) 0);
+  try
+  {
+    for (size_t i = 0; i < threads.size(); i++)
+      threads[i] = new std::thread(threadFunction, this, i);
+    for (size_t i = 0; i < threads.size(); i++)
+    {
+      if (threads[i])
+      {
+        threads[i]->join();
+        delete threads[i];
+        threads[i] = (std::thread *) 0;
+      }
+      if (!threadErrMsg[i].empty())
+        throw errorMessage("%s", threadErrMsg[i].c_str());
+    }
+  }
+  catch (...)
+  {
+    for (size_t i = 0; i < threads.size(); i++)
+    {
+      if (threads[i])
+      {
+        threads[i]->join();
+        delete threads[i];
+      }
+    }
+    throw;
+  }
+}
+
 static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                              const BA2File& ba2File,
                              int imageWidth, int imageHeight)
 {
-  std::map< const std::string *, DDSTexture * > textureSet;
-  std::string defaultEnvMap;
-  std::string waterTexture("textures/water/defaultwater.dds");
-  std::string whiteTexture;
-  if (nifFile.getVersion() < 0x80U)
-    whiteTexture = "textures/white.dds";
-  else
-    whiteTexture = "textures/effects/rainscene/test_flat_white.dds";
 #ifdef HAVE_SDL2
   int     screenWidth = imageWidth;
   int     screenHeight = imageHeight;
@@ -407,8 +651,21 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     }
   }
 #endif
+
   try
   {
+    size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
+    std::vector< unsigned int > outBufRGBW(imageDataSize, 0U);
+    std::vector< float >  outBufZ(imageDataSize, 16777216.0f);
+    Renderer  renderer(&(outBufRGBW.front()), &(outBufZ.front()),
+                       imageWidth, imageHeight, (nifFile.getVersion() >= 0x90));
+    renderer.ba2File = &ba2File;
+    nifFile.getMesh(renderer.meshData);
+    renderer.waterTexture = "textures/water/defaultwater.dds";
+    if (nifFile.getVersion() < 0x80U)
+      renderer.whiteTexture = "textures/white.dds";
+    else
+      renderer.whiteTexture = "textures/effects/rainscene/test_flat_white.dds";
 #ifdef HAVE_SDL2
     if (!outFileName)
     {
@@ -431,12 +688,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       SDL_SetSurfaceBlendMode(sdlScreen, SDL_BLENDMODE_NONE);
     }
 #endif
-    size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
-    std::vector< unsigned int > outBufRGBW(imageDataSize, 0U);
-    std::vector< float >  outBufZ(imageDataSize, 16777216.0f);
-    std::vector< unsigned char >  fileBuf;
-    std::vector< NIFFile::NIFTriShape > meshData;
-    nifFile.getMesh(meshData);
+
     float   modelRotationX = 0.0f;
     float   modelRotationY = 0.0f;
     float   modelRotationZ = 0.0f;
@@ -449,31 +701,34 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     unsigned int  debugMode = 0;
     while (true)
     {
-      Plot3D_TriShape plot3d(&(outBufRGBW.front()), &(outBufZ.front()),
-                             imageWidth, imageHeight,
-                             (nifFile.getVersion() >= 0x90));
-      plot3d.setDebugMode(debugMode, 0);
-      NIFFile::NIFVertexTransform
-          modelTransform(1.0f, modelRotationX, modelRotationY, modelRotationZ,
-                         0.0f, 0.0f, 0.0f);
-      NIFFile::NIFVertexTransform
-          viewTransform(1.0f,
-                        degreesToRadians(viewRotations[viewRotation * 3]),
-                        degreesToRadians(viewRotations[viewRotation * 3 + 1]),
-                        degreesToRadians(viewRotations[viewRotation * 3 + 2]),
-                        0.0f, 0.0f, 0.0f);
+      renderer.modelTransform =
+          NIFFile::NIFVertexTransform(
+              1.0f, modelRotationX, modelRotationY, modelRotationZ,
+              0.0f, 0.0f, 0.0f);
+      renderer.viewTransform =
+          NIFFile::NIFVertexTransform(
+              1.0f,
+              degreesToRadians(viewRotations[viewRotation * 3]),
+              degreesToRadians(viewRotations[viewRotation * 3 + 1]),
+              degreesToRadians(viewRotations[viewRotation * 3 + 2]),
+              0.0f, 0.0f, 0.0f);
       NIFFile::NIFVertexTransform
           lightTransform(1.0f, lightRotationX, lightRotationY, 0.0f,
                          0.0f, 0.0f, 0.0f);
-      bool    haveWater = false;
+      renderer.lightX = lightTransform.rotateXZ;
+      renderer.lightY = lightTransform.rotateYZ;
+      renderer.lightZ = lightTransform.rotateZZ;
+      renderer.waterEnvMapLevel = 0.5f;
+      renderer.waterColor = 0xC0804000U;
       {
-        NIFFile::NIFVertexTransform t(modelTransform);
-        t *= viewTransform;
+        NIFFile::NIFVertexTransform t(renderer.modelTransform);
+        t *= renderer.viewTransform;
         NIFFile::NIFBounds  b;
-        for (size_t i = 0; i < meshData.size(); i++)
+        for (size_t i = 0; i < renderer.meshData.size(); i++)
         {
-          if (!(meshData[i].flags & 0x05))      // ignore if hidden or effect
-            meshData[i].calculateBounds(b, &t);
+          // ignore if hidden or effect
+          if (!(renderer.meshData[i].flags & 0x05))
+            renderer.meshData[i].calculateBounds(b, &t);
         }
         float   xScale = float(imageWidth) * 0.9375f;
         if (b.xMax > b.xMin)
@@ -481,97 +736,28 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         float   yScale = float(imageHeight) * 0.9375f;
         if (b.yMax > b.yMin)
           yScale = yScale / (b.yMax - b.yMin);
-        viewTransform.scale = (xScale < yScale ? xScale : yScale)
-                              * float(std::pow(2.0f, float(viewScale) * 0.25f));
-        viewTransform.offsX =
-            (float(imageWidth) - ((b.xMin + b.xMax) * viewTransform.scale))
-            * 0.5f;
-        viewTransform.offsY =
-            (float(imageHeight) - ((b.yMin + b.yMax) * viewTransform.scale))
-            * 0.5f;
-        viewTransform.offsZ = 1.0f - (b.zMin * viewTransform.scale);
+        renderer.viewTransform.scale =
+            (xScale < yScale ? xScale : yScale)
+            * float(std::pow(2.0f, float(viewScale) * 0.25f));
+        renderer.viewTransform.offsX =
+            0.5f * (float(imageWidth)
+                    - ((b.xMin + b.xMax) * renderer.viewTransform.scale));
+        renderer.viewTransform.offsY =
+            0.5f * (float(imageHeight)
+                    - ((b.yMin + b.yMax) * renderer.viewTransform.scale));
+        renderer.viewTransform.offsZ =
+            1.0f - (b.zMin * renderer.viewTransform.scale);
       }
-      defaultEnvMap =
+      renderer.defaultEnvMap =
           std::string(cubeMapPaths[envMapNum * 3
                                    + int(nifFile.getVersion() >= 0x80)
                                    + int(nifFile.getVersion() >= 0x90)]);
-      for (size_t i = 0; i < meshData.size(); i++)
-      {
-        if (meshData[i].flags & 0x05)           // ignore if hidden or effect
-          continue;
-        if (meshData[i].flags & 0x02)
-          haveWater = true;
-        plot3d = meshData[i];
-        const DDSTexture  *textures[10];
-        for (size_t j = 10; j-- > 0; )
-        {
-          textures[j] = (DDSTexture *) 0;
-          const std::string *texturePath = (std::string *) 0;
-          if (j < meshData[i].texturePathCnt && ((1 << int(j)) & 0x037B))
-            texturePath = meshData[i].texturePaths[j];
-          if (!texturePath || texturePath->empty())
-          {
-            if (j == 4 && (textures[6] || textures[8]))
-              texturePath = &defaultEnvMap;
-            else if (j == 1 && (meshData[i].flags & 0x02))
-              texturePath = &waterTexture;
-            else if (j == 0)
-              texturePath = &whiteTexture;
-            else
-              continue;
-          }
-          std::map< const std::string *, DDSTexture * >::iterator k =
-              textureSet.find(texturePath);
-          if (k == textureSet.end())
-          {
-            DDSTexture  *texture = (DDSTexture *) 0;
-            try
-            {
-              ba2File.extractFile(fileBuf, *texturePath);
-              texture = new DDSTexture(&(fileBuf.front()), fileBuf.size());
-            }
-            catch (std::runtime_error& e)
-            {
-              std::fprintf(stderr, "Warning: failed to load texture '%s': %s\n",
-                           texturePath->c_str(), e.what());
-            }
-            if (j == 0 && !texture)
-            {
-              ba2File.extractFile(fileBuf, whiteTexture);
-              texture = new DDSTexture(&(fileBuf.front()), fileBuf.size());
-            }
-            k = textureSet.insert(
-                    std::pair< const std::string *, DDSTexture * >(
-                        texturePath, texture)).first;
-          }
-          textures[j] = k->second;
-        }
-        plot3d.drawTriShape(modelTransform, viewTransform,
-                            lightTransform.rotateXZ, lightTransform.rotateYZ,
-                            lightTransform.rotateZZ, textures, 10);
-      }
-      if (haveWater)
-      {
-        const DDSTexture  *envMap = (DDSTexture *) 0;
-        if (!defaultEnvMap.empty())
-        {
-          std::map< const std::string *, DDSTexture * >::iterator k =
-              textureSet.find(&defaultEnvMap);
-          if (k == textureSet.end())
-          {
-            ba2File.extractFile(fileBuf, defaultEnvMap);
-            DDSTexture  *texture =
-                new DDSTexture(&(fileBuf.front()), fileBuf.size());
-            k = textureSet.insert(
-                    std::pair< const std::string *, DDSTexture * >(
-                        &defaultEnvMap, texture)).first;
-          }
-          envMap = k->second;
-        }
-        plot3d.renderWater(viewTransform, 0xC0804000U,
-                           lightTransform.rotateXZ, lightTransform.rotateYZ,
-                           lightTransform.rotateZZ, envMap, 0.5f);
-      }
+      renderer.setBuffers(&(outBufRGBW.front()), &(outBufZ.front()),
+                          imageWidth, imageHeight);
+      for (size_t i = 0; i < renderer.renderers.size(); i++)
+        renderer.renderers[i]->setDebugMode(debugMode, 0);
+      renderer.renderModel();
+
 #ifdef HAVE_SDL2
       if (!outFileName)
       {
@@ -676,7 +862,6 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
               case SDLK_F2:
               case SDLK_F3:
               case SDLK_F4:
-                textureSet.erase(&defaultEnvMap);
                 envMapNum = int(event.key.keysym.sym - SDLK_F1);
                 break;
               case SDLK_a:
@@ -751,11 +936,6 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
         }
       }
     }
-    for (std::map< const std::string *, DDSTexture * >::iterator
-             i = textureSet.begin(); i != textureSet.end(); i++)
-    {
-      delete i->second;
-    }
 #ifdef HAVE_SDL2
     if (!outFileName)
     {
@@ -767,11 +947,6 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
   }
   catch (...)
   {
-    for (std::map< const std::string *, DDSTexture * >::iterator
-             i = textureSet.begin(); i != textureSet.end(); i++)
-    {
-      delete i->second;
-    }
 #ifdef HAVE_SDL2
     if (!outFileName)
     {
