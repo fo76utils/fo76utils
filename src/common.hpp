@@ -22,7 +22,7 @@ std::runtime_error errorMessage(const char *fmt, ...);
 #else
 #  define BRANCH_EXPECT(x, y)   (x)
 #endif
-#if defined(__GNUC__) && defined(_WIN64)
+#if 0 && defined(__GNUC__) && defined(_WIN64)
 #  define SYSV_ABI  __attribute__ ((__sysv_abi__))
 #else
 #  define SYSV_ABI
