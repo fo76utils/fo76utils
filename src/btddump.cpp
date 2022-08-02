@@ -2,18 +2,18 @@
 #include "common.hpp"
 #include "filebuf.hpp"
 #include "btdfile.hpp"
+#include "fp32vec4.hpp"
 
-static void calculateNormal(float& normalX, float& normalY, float& normalZ,
-                            float dx, float dy, float dz1, float dz2)
+// from terrmesh.cpp
+
+static inline FloatVector4 calculateNormal(FloatVector4 v1, FloatVector4 v2)
 {
-  // from terrmesh.cpp
-  float   tmp1 = 1.0f + (dz1 * dz1);
-  float   tmp2 = 1.0f + (dz2 * dz2);
-  float   tmp3 = float(std::sqrt(tmp2 / tmp1));
-  float   dz = (dz1 * tmp3 + dz2) / (tmp3 + 1.0f);
-  normalZ += 0.5f;
-  normalX -= (dz * dx);
-  normalY -= (dz * dy);
+  // cross product of v1 and v2
+  FloatVector4  tmp((v1[1] * v2[2]) - (v1[2] * v2[1]),
+                    (v1[2] * v2[0]) - (v1[0] * v2[2]),
+                    (v1[0] * v2[1]) - (v1[1] * v2[0]), 0.0f);
+  tmp.normalizeFast();
+  return tmp;
 }
 
 void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
@@ -28,8 +28,7 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
   std::vector< unsigned short > cellBuf(size_t(16384 >> (l + l)), 0);
   float   zMin = btdFile.getMinHeight();
   float   zScale = (btdFile.getMaxHeight() - zMin) / 65535.0f;
-  float   normalScale1 = float(cellResolution) * (1.0f / 4096.0f);
-  float   normalScale2 = float(cellResolution) * (0.7071068f / 4096.0f);
+  float   xyScale = 4096.0f / float(cellResolution);
   for (int y = 0; y < h; y++)
   {
     if (!y || !((y + (cellResolution >> 1)) & (cellResolution - 1)))
@@ -68,15 +67,11 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
         z[i] = float(int(buf[size_t(yc) * size_t(w) + size_t(xc)]))
                * zScale + zMin;
       }
-      float   normalX = 0.0f;
-      float   normalY = 0.0f;
-      float   normalZ = 0.0f;
-      calculateNormal(normalX, normalY, normalZ, 1.0f, 0.0f,
-                      (z[4] - z[3]) * normalScale1,     // -W
-                      (z[5] - z[4]) * normalScale1);    // +E
-      calculateNormal(normalX, normalY, normalZ, 0.0f, 1.0f,
-                      (z[4] - z[7]) * normalScale1,     // -S
-                      (z[1] - z[4]) * normalScale1);    // +N
+      FloatVector4  v_n(0.0f, xyScale, z[1] - z[4], 0.0f);
+      FloatVector4  v_w(-xyScale, 0.0f, z[3] - z[4], 0.0f);
+      FloatVector4  v_s(0.0f, -xyScale, z[7] - z[4], 0.0f);
+      FloatVector4  v_e(xyScale, 0.0f, z[5] - z[4], 0.0f);
+      FloatVector4  normal(0.0f, 0.0f, 0.0f, 0.0f);
       if ((x ^ y) & 1)
       {
         //    0 1 2
@@ -85,22 +80,33 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
         //  0 +-+-+
         //    |/|\|
         //  1 +-+-+
-        calculateNormal(normalX, normalY, normalZ, -0.7071068f, 0.7071068f,
-                        (z[4] - z[8]) * normalScale2,   // -SE
-                        (z[0] - z[4]) * normalScale2);  // +NW
-        calculateNormal(normalX, normalY, normalZ, 0.7071068f, 0.7071068f,
-                        (z[4] - z[6]) * normalScale2,   // -SW
-                        (z[2] - z[4]) * normalScale2);  // +NE
+        FloatVector4  v_nw(-xyScale, xyScale, z[0] - z[4], 0.0f);
+        FloatVector4  v_sw(-xyScale, -xyScale, z[6] - z[4], 0.0f);
+        FloatVector4  v_se(xyScale, -xyScale, z[8] - z[4], 0.0f);
+        FloatVector4  v_ne(xyScale, xyScale, z[2] - z[4], 0.0f);
+        normal = calculateNormal(v_e, v_ne);
+        normal += calculateNormal(v_ne, v_n);
+        normal += calculateNormal(v_n, v_nw);
+        normal += calculateNormal(v_nw, v_w);
+        normal += calculateNormal(v_w, v_sw);
+        normal += calculateNormal(v_sw, v_s);
+        normal += calculateNormal(v_s, v_se);
+        normal += calculateNormal(v_se, v_e);
       }
-      float   tmp =
-          (normalX * normalX) + (normalY * normalY) + (normalZ * normalZ);
-      tmp = 1.0f / float(std::sqrt(tmp));
-      int     r = roundFloat(normalX * tmp * 127.5f + 127.5f);
-      int     g = roundFloat(normalY * tmp * 127.5f + 127.5f);
-      int     b = roundFloat(normalZ * tmp * 127.5f + 127.5f);
-      outFile.writeByte((unsigned char) (b > 0 ? (b < 255 ? b : 255) : 0));
-      outFile.writeByte((unsigned char) (g > 0 ? (g < 255 ? g : 255) : 0));
-      outFile.writeByte((unsigned char) (r > 0 ? (r < 255 ? r : 255) : 0));
+      else
+      {
+        normal = calculateNormal(v_e, v_n);
+        normal += calculateNormal(v_n, v_w);
+        normal += calculateNormal(v_w, v_s);
+        normal += calculateNormal(v_s, v_e);
+      }
+      normal.normalize();
+      normal += 1.0f;
+      normal *= 127.5f;
+      unsigned int  c = (unsigned int) normal;
+      outFile.writeByte((unsigned char) ((c >> 16) & 0xFFU));   // B
+      outFile.writeByte((unsigned char) ((c >> 8) & 0xFFU));    // G
+      outFile.writeByte((unsigned char) (c & 0xFFU));           // R
     }
   }
 }
