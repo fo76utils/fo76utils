@@ -125,10 +125,12 @@ size_t Plot3D_TriShape::transformVertexData(
       v.normal *= (1.0f / 127.5f);
       v.normal -= 1.0f;
       v.normal = mt.rotateXYZ(v.normal);
-      v.bitangent = vt.rotateXYZ(FloatVector4(v.normal[2], v.normal[1],
-                                              -(v.normal[0]), 0.0f));
-      v.tangent = vt.rotateXYZ(FloatVector4(v.normal[0], v.normal[2],
-                                            -(v.normal[1]), 0.0f));
+      tmp = FloatVector4(v.normal[2], 0.0f, -(v.normal[0]), 0.0f);
+      tmp.normalizeFast();
+      v.bitangent = vt.rotateXYZ(tmp);
+      tmp = FloatVector4(0.0f, v.normal[2], -(v.normal[1]), 0.0f);
+      tmp.normalizeFast();
+      v.tangent = vt.rotateXYZ(tmp);
       v.normal = vt.rotateXYZ(v.normal);
     }
     else
