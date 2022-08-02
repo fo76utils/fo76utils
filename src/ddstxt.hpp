@@ -18,38 +18,38 @@ class DDSTexture
   unsigned int  *textureData[20];
   size_t        textureDataSize;        // size of textureDataBuf / textureCnt
   unsigned int  *textureDataBuf;
-  static size_t decodeBlock_BC1(unsigned int *dst, const unsigned char *src,
-                                unsigned int w);
-  static size_t decodeBlock_BC2(unsigned int *dst, const unsigned char *src,
-                                unsigned int w);
-  static size_t decodeBlock_BC3(unsigned int *dst, const unsigned char *src,
-                                unsigned int w);
-  static size_t decodeBlock_BC4(unsigned int *dst, const unsigned char *src,
-                                unsigned int w);
-  static size_t decodeBlock_BC4S(unsigned int *dst, const unsigned char *src,
-                                 unsigned int w);
-  static size_t decodeBlock_BC5(unsigned int *dst, const unsigned char *src,
-                                unsigned int w);
-  static size_t decodeBlock_BC5S(unsigned int *dst, const unsigned char *src,
-                                 unsigned int w);
-  static size_t decodeLine_RGB(unsigned int *dst, const unsigned char *src,
-                               unsigned int w);
-  static size_t decodeLine_BGR(unsigned int *dst, const unsigned char *src,
-                               unsigned int w);
-  static size_t decodeLine_RGB32(unsigned int *dst, const unsigned char *src,
-                                 unsigned int w);
-  static size_t decodeLine_BGR32(unsigned int *dst, const unsigned char *src,
-                                 unsigned int w);
-  static size_t decodeLine_RGBA(unsigned int *dst, const unsigned char *src,
-                                unsigned int w);
-  static size_t decodeLine_BGRA(unsigned int *dst, const unsigned char *src,
-                                unsigned int w);
-  static size_t decodeLine_R8G8(unsigned int *dst, const unsigned char *src,
-                                unsigned int w);
+  static SYSV_ABI size_t decodeBlock_BC1(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeBlock_BC2(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeBlock_BC3(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeBlock_BC4(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeBlock_BC4S(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeBlock_BC5(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeBlock_BC5S(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeLine_RGB(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeLine_BGR(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeLine_RGB32(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeLine_BGR32(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeLine_RGBA(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeLine_BGRA(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
+  static SYSV_ABI size_t decodeLine_R8G8(
+      unsigned int *dst, const unsigned char *src, unsigned int w);
   void loadTextureData(const unsigned char *srcPtr, int n, size_t blockSize,
-                       size_t (*decodeFunction)(unsigned int *,
-                                                const unsigned char *,
-                                                unsigned int));
+                       SYSV_ABI size_t (*decodeFunction)(unsigned int *,
+                                                         const unsigned char *,
+                                                         unsigned int));
   void loadTexture(FileBuffer& buf, int mipOffset);
  public:
   DDSTexture(const char *fileName, int mipOffset = 0);
@@ -114,27 +114,28 @@ class DDSTexture
     return textureData[mipLevel][y * (xMask + 1) + x];
   }
   // bilinear filtering
-  FloatVector4 getPixelB(float x, float y, int mipLevel) const;
+  SYSV_ABI FloatVector4 getPixelB(float x, float y, int mipLevel) const;
   // trilinear filtering
-  FloatVector4 getPixelT(float x, float y, float mipLevel) const;
+  SYSV_ABI FloatVector4 getPixelT(float x, float y, float mipLevel) const;
   // bilinear filtering with mirrored texture coordinates
-  FloatVector4 getPixelBM(float x, float y, int mipLevel) const;
+  SYSV_ABI FloatVector4 getPixelBM(float x, float y, int mipLevel) const;
   // trilinear filtering with mirrored texture coordinates
-  FloatVector4 getPixelTM(float x, float y, float mipLevel) const;
+  SYSV_ABI FloatVector4 getPixelTM(float x, float y, float mipLevel) const;
   // bilinear filtering with clamped texture coordinates
-  FloatVector4 getPixelBC(float x, float y, int mipLevel) const;
+  SYSV_ABI FloatVector4 getPixelBC(float x, float y, int mipLevel) const;
   // trilinear filtering with clamped texture coordinates
-  FloatVector4 getPixelTC(float x, float y, float mipLevel) const;
+  SYSV_ABI FloatVector4 getPixelTC(float x, float y, float mipLevel) const;
   // cube map with bilinear filtering, faces are expected to be
   // in Fallout 4 order (right, left, front, back, bottom, top)
   // x = -1.0 to 1.0: left to right
   // y = -1.0 to 1.0: back to front
   // z = -1.0 to 1.0: bottom to top
-  FloatVector4 cubeMap(float x, float y, float z, float mipLevel) const;
+  SYSV_ABI FloatVector4 cubeMap(float x, float y, float z,
+                                float mipLevel) const;
 };
 
-unsigned int downsample2xFilter(const unsigned int *buf,
-                                int imageWidth, int imageHeight, int x, int y);
+SYSV_ABI unsigned int downsample2xFilter(
+    const unsigned int *buf, int imageWidth, int imageHeight, int x, int y);
 
 #endif
 

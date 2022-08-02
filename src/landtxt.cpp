@@ -121,7 +121,7 @@ inline FloatVector4 LandscapeTexture::getTES4VertexColor(
   return c0;
 }
 
-FloatVector4 LandscapeTexture::renderPixelFO76I_NoNormals(
+SYSV_ABI FloatVector4 LandscapeTexture::renderPixelFO76I_NoNormals(
     const LandscapeTexture& p, FloatVector4& n,
     int x, int y, int txtX, int txtY)
 {
@@ -156,7 +156,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76I_NoNormals(
   return FloatVector4(c);
 }
 
-FloatVector4 LandscapeTexture::renderPixelFO76I(
+SYSV_ABI FloatVector4 LandscapeTexture::renderPixelFO76I(
     const LandscapeTexture& p, FloatVector4& n,
     int x, int y, int txtX, int txtY)
 {
@@ -195,7 +195,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76I(
   return FloatVector4(c);
 }
 
-FloatVector4 LandscapeTexture::renderPixelFO76F(
+SYSV_ABI FloatVector4 LandscapeTexture::renderPixelFO76F(
     const LandscapeTexture& p, FloatVector4& n,
     int x, int y, int txtX, int txtY)
 {
@@ -236,7 +236,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76F(
   return c;
 }
 
-FloatVector4 LandscapeTexture::renderPixelFO76I_GCVR(
+SYSV_ABI FloatVector4 LandscapeTexture::renderPixelFO76I_GCVR(
     const LandscapeTexture& p, FloatVector4& n,
     int x, int y, int txtX, int txtY)
 {
@@ -295,7 +295,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76I_GCVR(
   return c;
 }
 
-FloatVector4 LandscapeTexture::renderPixelFO76F_GCVR(
+SYSV_ABI FloatVector4 LandscapeTexture::renderPixelFO76F_GCVR(
     const LandscapeTexture& p, FloatVector4& n,
     int x, int y, int txtX, int txtY)
 {
@@ -358,7 +358,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76F_GCVR(
   return c;
 }
 
-FloatVector4 LandscapeTexture::renderPixelTES4I_NoNormals(
+SYSV_ABI FloatVector4 LandscapeTexture::renderPixelTES4I_NoNormals(
     const LandscapeTexture& p, FloatVector4& n,
     int x, int y, int txtX, int txtY)
 {
@@ -392,7 +392,7 @@ FloatVector4 LandscapeTexture::renderPixelTES4I_NoNormals(
   return c;
 }
 
-FloatVector4 LandscapeTexture::renderPixelTES4I(
+SYSV_ABI FloatVector4 LandscapeTexture::renderPixelTES4I(
     const LandscapeTexture& p, FloatVector4& n,
     int x, int y, int txtX, int txtY)
 {
@@ -434,7 +434,7 @@ FloatVector4 LandscapeTexture::renderPixelTES4I(
   return c;
 }
 
-FloatVector4 LandscapeTexture::renderPixelTES4F(
+SYSV_ABI FloatVector4 LandscapeTexture::renderPixelTES4F(
     const LandscapeTexture& p, FloatVector4& n,
     int x, int y, int txtX, int txtY)
 {

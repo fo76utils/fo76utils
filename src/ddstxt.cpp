@@ -131,8 +131,8 @@ static inline unsigned int decodeBC1Colors(unsigned int *c,
   return bc;
 }
 
-size_t DDSTexture::decodeBlock_BC1(unsigned int *dst, const unsigned char *src,
-                                   unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeBlock_BC1(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  c[4];
   unsigned int  bc = decodeBC1Colors(c, src, 0xFF000000U);
@@ -144,8 +144,8 @@ size_t DDSTexture::decodeBlock_BC1(unsigned int *dst, const unsigned char *src,
   return 8;
 }
 
-size_t DDSTexture::decodeBlock_BC2(unsigned int *dst, const unsigned char *src,
-                                   unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeBlock_BC2(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  c[4];
   unsigned int  bc = decodeBC1Colors(c, src + 8);
@@ -165,8 +165,8 @@ size_t DDSTexture::decodeBlock_BC2(unsigned int *dst, const unsigned char *src,
   return 16;
 }
 
-size_t DDSTexture::decodeBlock_BC3(unsigned int *dst, const unsigned char *src,
-                                   unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeBlock_BC3(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  c[4];
   unsigned int  a[8];
@@ -181,8 +181,8 @@ size_t DDSTexture::decodeBlock_BC3(unsigned int *dst, const unsigned char *src,
   return 16;
 }
 
-size_t DDSTexture::decodeBlock_BC4(unsigned int *dst, const unsigned char *src,
-                                   unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeBlock_BC4(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  a[8];
   unsigned long long  ba = decodeBC3Alpha(a, src);
@@ -194,8 +194,8 @@ size_t DDSTexture::decodeBlock_BC4(unsigned int *dst, const unsigned char *src,
   return 8;
 }
 
-size_t DDSTexture::decodeBlock_BC4S(unsigned int *dst, const unsigned char *src,
-                                    unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeBlock_BC4S(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  a[8];
   unsigned long long  ba = decodeBC3Alpha(a, src, true);
@@ -207,8 +207,8 @@ size_t DDSTexture::decodeBlock_BC4S(unsigned int *dst, const unsigned char *src,
   return 8;
 }
 
-size_t DDSTexture::decodeBlock_BC5(unsigned int *dst, const unsigned char *src,
-                                   unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeBlock_BC5(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  a1[8];
   unsigned int  a2[8];
@@ -224,8 +224,8 @@ size_t DDSTexture::decodeBlock_BC5(unsigned int *dst, const unsigned char *src,
   return 16;
 }
 
-size_t DDSTexture::decodeBlock_BC5S(unsigned int *dst, const unsigned char *src,
-                                    unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeBlock_BC5S(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  a1[8];
   unsigned int  a2[8];
@@ -247,8 +247,8 @@ static inline unsigned int bgraToRGBA(unsigned int c)
           | ((c << 16) & 0x00FF0000U) | ((c >> 16) & 0x000000FFU));
 }
 
-size_t DDSTexture::decodeLine_RGB(unsigned int *dst, const unsigned char *src,
-                                  unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeLine_RGB(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  x = 0;
   for ( ; (x + 1U) < w; x++, dst++, src = src + 3)
@@ -263,8 +263,8 @@ size_t DDSTexture::decodeLine_RGB(unsigned int *dst, const unsigned char *src,
   return (size_t(w) * 3);
 }
 
-size_t DDSTexture::decodeLine_BGR(unsigned int *dst, const unsigned char *src,
-                                  unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeLine_BGR(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  x = 0;
   for ( ; (x + 1U) < w; x++, dst++, src = src + 3)
@@ -279,40 +279,40 @@ size_t DDSTexture::decodeLine_BGR(unsigned int *dst, const unsigned char *src,
   return (size_t(w) * 3);
 }
 
-size_t DDSTexture::decodeLine_RGB32(unsigned int *dst,
-                                    const unsigned char *src, unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeLine_RGB32(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
     *dst = 0xFF000000U | FileBuffer::readUInt32Fast(src);
   return (size_t(w) << 2);
 }
 
-size_t DDSTexture::decodeLine_BGR32(unsigned int *dst,
-                                    const unsigned char *src, unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeLine_BGR32(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
     *dst = bgraToRGBA(0xFF000000U | FileBuffer::readUInt32Fast(src));
   return (size_t(w) << 2);
 }
 
-size_t DDSTexture::decodeLine_RGBA(unsigned int *dst, const unsigned char *src,
-                                   unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeLine_RGBA(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
     *dst = FileBuffer::readUInt32Fast(src);
   return (size_t(w) << 2);
 }
 
-size_t DDSTexture::decodeLine_BGRA(unsigned int *dst, const unsigned char *src,
-                                   unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeLine_BGRA(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
     *dst = bgraToRGBA(FileBuffer::readUInt32Fast(src));
   return (size_t(w) << 2);
 }
 
-size_t DDSTexture::decodeLine_R8G8(unsigned int *dst,
-                                   const unsigned char *src, unsigned int w)
+SYSV_ABI size_t DDSTexture::decodeLine_R8G8(
+    unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  x = 0;
   for ( ; (x + 4U) <= w; x = x + 4U, dst = dst + 4, src = src + 8)
@@ -329,8 +329,8 @@ size_t DDSTexture::decodeLine_R8G8(unsigned int *dst,
 
 void DDSTexture::loadTextureData(
     const unsigned char *srcPtr, int n, size_t blockSize,
-    size_t (*decodeFunction)(unsigned int *,
-                             const unsigned char *, unsigned int))
+    SYSV_ABI size_t (*decodeFunction)(unsigned int *,
+                                      const unsigned char *, unsigned int))
 {
   size_t  dataOffs = size_t(n) * textureDataSize;
   for (int i = 0; i < 20; i++)
@@ -429,8 +429,8 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     throw errorMessage("unsupported texture file format");
   unsigned int  dataOffs = 128;
   size_t  blockSize = 8;
-  size_t  (*decodeFunction)(unsigned int *, const unsigned char *,
-                            unsigned int) = &decodeBlock_BC1;
+  SYSV_ABI size_t (*decodeFunction)(unsigned int *, const unsigned char *,
+                                    unsigned int) = &decodeBlock_BC1;
   unsigned int  formatFlags = buf.readUInt32();
   unsigned int  fourCC = buf.readUInt32();
   if (!(formatFlags & 0x04))            // DDPF_FOURCC
@@ -642,7 +642,8 @@ DDSTexture::~DDSTexture()
     delete[] textureDataBuf;
 }
 
-FloatVector4 DDSTexture::getPixelB(float x, float y, int mipLevel) const
+SYSV_ABI FloatVector4 DDSTexture::getPixelB(
+    float x, float y, int mipLevel) const
 {
   fixNegativeMipLevel(x, y, mipLevel);
   int     x0, y0;
@@ -654,7 +655,8 @@ FloatVector4 DDSTexture::getPixelB(float x, float y, int mipLevel) const
                                getPixelN(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
-FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
+SYSV_ABI FloatVector4 DDSTexture::getPixelT(
+    float x, float y, float mipLevel) const
 {
   int     m0 = int(float(std::floor(mipLevel)));
   float   mf = mipLevel - float(m0);
@@ -684,7 +686,8 @@ FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
   return c0;
 }
 
-FloatVector4 DDSTexture::getPixelBM(float x, float y, int mipLevel) const
+SYSV_ABI FloatVector4 DDSTexture::getPixelBM(
+    float x, float y, int mipLevel) const
 {
   fixNegativeMipLevel(x, y, mipLevel);
   int     x0, y0;
@@ -696,7 +699,8 @@ FloatVector4 DDSTexture::getPixelBM(float x, float y, int mipLevel) const
                                getPixelM(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
-FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
+SYSV_ABI FloatVector4 DDSTexture::getPixelTM(
+    float x, float y, float mipLevel) const
 {
   int     m0 = int(float(std::floor(mipLevel)));
   float   mf = mipLevel - float(m0);
@@ -726,7 +730,8 @@ FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
   return c0;
 }
 
-FloatVector4 DDSTexture::getPixelBC(float x, float y, int mipLevel) const
+SYSV_ABI FloatVector4 DDSTexture::getPixelBC(
+    float x, float y, int mipLevel) const
 {
   fixNegativeMipLevel(x, y, mipLevel);
   int     x0, y0;
@@ -738,7 +743,8 @@ FloatVector4 DDSTexture::getPixelBC(float x, float y, int mipLevel) const
                                getPixelC(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
-FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
+SYSV_ABI FloatVector4 DDSTexture::getPixelTC(
+    float x, float y, float mipLevel) const
 {
   int     m0 = int(float(std::floor(mipLevel)));
   float   mf = mipLevel - float(m0);
@@ -768,8 +774,8 @@ FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
   return c0;
 }
 
-FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
-                                 float mipLevel) const
+SYSV_ABI FloatVector4 DDSTexture::cubeMap(
+    float x, float y, float z, float mipLevel) const
 {
   float   xm = float(std::fabs(x));
   float   ym = float(std::fabs(y));
@@ -908,8 +914,8 @@ const int Downsample2xTable::filterTable[27] =
   5,  0,  16,  1,  10,  3,  -3,  5,   1
 };
 
-unsigned int downsample2xFilter(const unsigned int *buf,
-                                int imageWidth, int imageHeight, int x, int y)
+SYSV_ABI unsigned int downsample2xFilter(
+    const unsigned int *buf, int imageWidth, int imageHeight, int x, int y)
 {
   static Downsample2xTable  t;
   const int   *p = t.filterTable;
