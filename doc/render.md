@@ -38,7 +38,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 * **-mlod INT**: Set level of detail for models, 0 (default and best) to 4.
 * **-vis BOOL**: Render only objects visible from distance.
 * **-ndis BOOL**: If zero, also render initially disabled objects.
-* **-hqm STRING**: Add high quality model path name pattern. Meshes that match the pattern are always rendered at the highest level of detail, with normal and cube mapping enabled. Using **meshes** as the pattern matches all models.
+* **-hqm STRING**: Add high quality model path name pattern. Meshes that match the pattern are always rendered at the highest level of detail, with normal mapping and reflections enabled. Using **meshes** as the pattern matches all models.
 * **-xm STRING**: Add excluded model path name pattern. **-xm meshes** disables all solid objects. Use **-xm babylon** to disable Nuclear Winter objects in Fallout 76.
 
 ### View options
@@ -50,7 +50,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 ### Lighting options
 
 * **-light SCALE RX RY**: Set light level and X, Y rotation (0, 0 = top, see [figure](light.png)).
-* **-lpoly A5 A4 A3 A2 A1 A0**: Use the polynomial **x<sup>5</sup> \* A5 + x<sup>4</sup> \* A4 + x<sup>3</sup> \* A3 + x<sup>2</sup> \* A2 + x \* A1 + A0** to convert the dot product **x** of the light vector and the surface normal to a multiplier to be applied to RGB values. **x** is 1.0, -1.0, or 0.0 if the normal is facing directly towards or away from, or is perpendicular to the light source, respectively. The result is multiplied by the light level from **-light**, and limited to the range of 0 to 3.996. [This figure](lpoly.png) shows the default polynomial, and a few examples.
+* **-lpoly A5 A4 A3 A2 A1 A0**: Use the polynomial **x<sup>5</sup> \* A5 + x<sup>4</sup> \* A4 + x<sup>3</sup> \* A3 + x<sup>2</sup> \* A2 + x \* A1 + A0** to convert the dot product **x** of the light vector and the surface normal to a multiplier to be applied to RGB values. **x** is 1.0, -1.0, or 0.0 if the normal is facing directly towards or away from, or is perpendicular to the light source, respectively. The result is multiplied by the light level from **-light**, and limited to the range of 0 to 4.0. [This figure](lpoly.png) shows the default polynomial, and a few examples.
 
 For testing view and light settings, it is recommended to use faster low quality rendering, with no downsampling, low landscape texture resolution, no high quality models, and if necessary, disabling all meshes.
 
