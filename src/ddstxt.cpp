@@ -131,7 +131,7 @@ static inline unsigned int decodeBC1Colors(unsigned int *c,
   return bc;
 }
 
-SYSV_ABI size_t DDSTexture::decodeBlock_BC1(
+size_t DDSTexture::decodeBlock_BC1(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  c[4];
@@ -144,7 +144,7 @@ SYSV_ABI size_t DDSTexture::decodeBlock_BC1(
   return 8;
 }
 
-SYSV_ABI size_t DDSTexture::decodeBlock_BC2(
+size_t DDSTexture::decodeBlock_BC2(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  c[4];
@@ -165,7 +165,7 @@ SYSV_ABI size_t DDSTexture::decodeBlock_BC2(
   return 16;
 }
 
-SYSV_ABI size_t DDSTexture::decodeBlock_BC3(
+size_t DDSTexture::decodeBlock_BC3(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  c[4];
@@ -181,7 +181,7 @@ SYSV_ABI size_t DDSTexture::decodeBlock_BC3(
   return 16;
 }
 
-SYSV_ABI size_t DDSTexture::decodeBlock_BC4(
+size_t DDSTexture::decodeBlock_BC4(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  a[8];
@@ -194,7 +194,7 @@ SYSV_ABI size_t DDSTexture::decodeBlock_BC4(
   return 8;
 }
 
-SYSV_ABI size_t DDSTexture::decodeBlock_BC4S(
+size_t DDSTexture::decodeBlock_BC4S(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  a[8];
@@ -207,7 +207,7 @@ SYSV_ABI size_t DDSTexture::decodeBlock_BC4S(
   return 8;
 }
 
-SYSV_ABI size_t DDSTexture::decodeBlock_BC5(
+size_t DDSTexture::decodeBlock_BC5(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  a1[8];
@@ -224,7 +224,7 @@ SYSV_ABI size_t DDSTexture::decodeBlock_BC5(
   return 16;
 }
 
-SYSV_ABI size_t DDSTexture::decodeBlock_BC5S(
+size_t DDSTexture::decodeBlock_BC5S(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  a1[8];
@@ -247,7 +247,7 @@ static inline unsigned int bgraToRGBA(unsigned int c)
           | ((c << 16) & 0x00FF0000U) | ((c >> 16) & 0x000000FFU));
 }
 
-SYSV_ABI size_t DDSTexture::decodeLine_RGB(
+size_t DDSTexture::decodeLine_RGB(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  x = 0;
@@ -263,7 +263,7 @@ SYSV_ABI size_t DDSTexture::decodeLine_RGB(
   return (size_t(w) * 3);
 }
 
-SYSV_ABI size_t DDSTexture::decodeLine_BGR(
+size_t DDSTexture::decodeLine_BGR(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  x = 0;
@@ -279,7 +279,7 @@ SYSV_ABI size_t DDSTexture::decodeLine_BGR(
   return (size_t(w) * 3);
 }
 
-SYSV_ABI size_t DDSTexture::decodeLine_RGB32(
+size_t DDSTexture::decodeLine_RGB32(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
@@ -287,7 +287,7 @@ SYSV_ABI size_t DDSTexture::decodeLine_RGB32(
   return (size_t(w) << 2);
 }
 
-SYSV_ABI size_t DDSTexture::decodeLine_BGR32(
+size_t DDSTexture::decodeLine_BGR32(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
@@ -295,7 +295,7 @@ SYSV_ABI size_t DDSTexture::decodeLine_BGR32(
   return (size_t(w) << 2);
 }
 
-SYSV_ABI size_t DDSTexture::decodeLine_RGBA(
+size_t DDSTexture::decodeLine_RGBA(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
@@ -303,7 +303,7 @@ SYSV_ABI size_t DDSTexture::decodeLine_RGBA(
   return (size_t(w) << 2);
 }
 
-SYSV_ABI size_t DDSTexture::decodeLine_BGRA(
+size_t DDSTexture::decodeLine_BGRA(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
@@ -311,7 +311,7 @@ SYSV_ABI size_t DDSTexture::decodeLine_BGRA(
   return (size_t(w) << 2);
 }
 
-SYSV_ABI size_t DDSTexture::decodeLine_R8G8(
+size_t DDSTexture::decodeLine_R8G8(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  x = 0;
@@ -329,8 +329,8 @@ SYSV_ABI size_t DDSTexture::decodeLine_R8G8(
 
 void DDSTexture::loadTextureData(
     const unsigned char *srcPtr, int n, size_t blockSize,
-    SYSV_ABI size_t (*decodeFunction)(unsigned int *,
-                                      const unsigned char *, unsigned int))
+    size_t (*decodeFunction)(unsigned int *,
+                             const unsigned char *, unsigned int))
 {
   size_t  dataOffs = size_t(n) * textureDataSize;
   for (int i = 0; i < 20; i++)
@@ -429,8 +429,8 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     throw errorMessage("unsupported texture file format");
   unsigned int  dataOffs = 128;
   size_t  blockSize = 8;
-  SYSV_ABI size_t (*decodeFunction)(unsigned int *, const unsigned char *,
-                                    unsigned int) = &decodeBlock_BC1;
+  size_t  (*decodeFunction)(unsigned int *, const unsigned char *,
+                            unsigned int) = &decodeBlock_BC1;
   unsigned int  formatFlags = buf.readUInt32();
   unsigned int  fourCC = buf.readUInt32();
   if (!(formatFlags & 0x04))            // DDPF_FOURCC
@@ -642,8 +642,7 @@ DDSTexture::~DDSTexture()
     delete[] textureDataBuf;
 }
 
-SYSV_ABI FloatVector4 DDSTexture::getPixelB(
-    float x, float y, int mipLevel) const
+FloatVector4 DDSTexture::getPixelB(float x, float y, int mipLevel) const
 {
   fixNegativeMipLevel(x, y, mipLevel);
   int     x0, y0;
@@ -655,8 +654,7 @@ SYSV_ABI FloatVector4 DDSTexture::getPixelB(
                                getPixelN(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
-SYSV_ABI FloatVector4 DDSTexture::getPixelT(
-    float x, float y, float mipLevel) const
+FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
 {
   int     m0 = int(float(std::floor(mipLevel)));
   float   mf = mipLevel - float(m0);
@@ -686,8 +684,7 @@ SYSV_ABI FloatVector4 DDSTexture::getPixelT(
   return c0;
 }
 
-SYSV_ABI FloatVector4 DDSTexture::getPixelBM(
-    float x, float y, int mipLevel) const
+FloatVector4 DDSTexture::getPixelBM(float x, float y, int mipLevel) const
 {
   fixNegativeMipLevel(x, y, mipLevel);
   int     x0, y0;
@@ -699,8 +696,7 @@ SYSV_ABI FloatVector4 DDSTexture::getPixelBM(
                                getPixelM(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
-SYSV_ABI FloatVector4 DDSTexture::getPixelTM(
-    float x, float y, float mipLevel) const
+FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
 {
   int     m0 = int(float(std::floor(mipLevel)));
   float   mf = mipLevel - float(m0);
@@ -730,8 +726,7 @@ SYSV_ABI FloatVector4 DDSTexture::getPixelTM(
   return c0;
 }
 
-SYSV_ABI FloatVector4 DDSTexture::getPixelBC(
-    float x, float y, int mipLevel) const
+FloatVector4 DDSTexture::getPixelBC(float x, float y, int mipLevel) const
 {
   fixNegativeMipLevel(x, y, mipLevel);
   int     x0, y0;
@@ -743,8 +738,7 @@ SYSV_ABI FloatVector4 DDSTexture::getPixelBC(
                                getPixelC(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
-SYSV_ABI FloatVector4 DDSTexture::getPixelTC(
-    float x, float y, float mipLevel) const
+FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
 {
   int     m0 = int(float(std::floor(mipLevel)));
   float   mf = mipLevel - float(m0);
@@ -774,8 +768,8 @@ SYSV_ABI FloatVector4 DDSTexture::getPixelTC(
   return c0;
 }
 
-SYSV_ABI FloatVector4 DDSTexture::cubeMap(
-    float x, float y, float z, float mipLevel) const
+FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
+                                 float mipLevel) const
 {
   float   xm = float(std::fabs(x));
   float   ym = float(std::fabs(y));
@@ -914,10 +908,10 @@ const int Downsample2xTable::filterTable[27] =
   5,  0,  16,  1,  10,  3,  -3,  5,   1
 };
 
-SYSV_ABI unsigned int downsample2xFilter(
-    const unsigned int *buf, int imageWidth, int imageHeight, int x, int y)
+unsigned int downsample2xFilter(const unsigned int *buf,
+                                int imageWidth, int imageHeight, int x, int y)
 {
-  static Downsample2xTable  t;
+  static const Downsample2xTable  t;
   const int   *p = t.filterTable;
   FloatVector4  c(0U);
   if (BRANCH_EXPECT((x >= 5 && x < (imageWidth - 5) &&

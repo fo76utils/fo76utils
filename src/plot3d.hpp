@@ -325,10 +325,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     FloatVector4  rotateY;
     FloatVector4  rotateZ;
     float   scale;
-    SYSV_ABI VertexTransform(const NIFFile::NIFVertexTransform& vt);
-    SYSV_ABI FloatVector4 transformXYZ(FloatVector4 v) const;
-    SYSV_ABI FloatVector4 rotateXYZ(FloatVector4 v) const;
-    SYSV_ABI VertexTransform& operator*=(const VertexTransform& r);
+    VertexTransform(const NIFFile::NIFVertexTransform& vt);
+    FloatVector4 transformXYZ(FloatVector4 v) const;
+    FloatVector4 rotateXYZ(FloatVector4 v) const;
+    VertexTransform& operator*=(const VertexTransform& r);
   };
   struct Triangle
   {
@@ -367,7 +367,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   bool    invNormals;
   bool    gammaCorrectEnabled;
   unsigned int  debugMode;
-  SYSV_ABI void (*drawPixelFunction)(
+  void (*drawPixelFunction)(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   std::vector< Vertex > vertexBuf;
   std::vector< Triangle > triangleBuf;
@@ -382,32 +382,32 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       const Vertex& v, int x, int y, float smoothness = 1.0f,
       float *specPtr = (float *) 0) const;
   // fill with water
-  static SYSV_ABI void drawPixel_Water(
+  static void drawPixel_Water(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // alphaFlag is set to true if the pixel is visible (alpha >= threshold)
   inline FloatVector4 getDiffuseColor(
       float txtU, float txtV, const Vertex& z, bool& alphaFlag) const;
-  static SYSV_ABI void drawPixel_Debug(
+  static void drawPixel_Debug(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // calculate RGB multiplier from normal and light direction
-  SYSV_ABI float calculateLighting(FloatVector4 normal) const;
+  float calculateLighting(FloatVector4 normal) const;
   // diffuse texture with trilinear filtering
-  static SYSV_ABI void drawPixel_Diffuse(
+  static void drawPixel_Diffuse(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // diffuse + normal map with trilinear filtering
-  static SYSV_ABI void drawPixel_Normal(
+  static void drawPixel_Normal(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // diffuse + normal and environment map with trilinear filtering
-  static SYSV_ABI void drawPixel_NormalEnv(
+  static void drawPixel_NormalEnv(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // diffuse + normal and environment map/mask with trilinear filtering
-  static SYSV_ABI void drawPixel_NormalEnvM(
+  static void drawPixel_NormalEnvM(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // diffuse + normal and environment + specular map with trilinear filtering
-  static SYSV_ABI void drawPixel_NormalEnvS(
+  static void drawPixel_NormalEnvS(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // diffuse + normal and reflection map with trilinear filtering
-  static SYSV_ABI void drawPixel_NormalRefl(
+  static void drawPixel_NormalRefl(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   static inline FloatVector4 interpolateVectors(
       FloatVector4 v0, FloatVector4 v1, FloatVector4 v2,

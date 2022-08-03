@@ -15,7 +15,7 @@ const float Plot3D_TriShape::defaultLightingPolynomial[6] =
   0.672235f, 0.997428f, 0.009355f, -0.771812f, 0.108711f, 0.369682f
 };
 
-SYSV_ABI Plot3D_TriShape::VertexTransform::VertexTransform(
+Plot3D_TriShape::VertexTransform::VertexTransform(
     const NIFFile::NIFVertexTransform& vt)
   : rotateX(vt.rotateXX, vt.rotateXY, vt.rotateXZ, vt.offsX),
     rotateY(vt.rotateYX, vt.rotateYY, vt.rotateYZ, vt.offsY),
@@ -24,7 +24,7 @@ SYSV_ABI Plot3D_TriShape::VertexTransform::VertexTransform(
 {
 }
 
-SYSV_ABI FloatVector4 Plot3D_TriShape::VertexTransform::transformXYZ(
+FloatVector4 Plot3D_TriShape::VertexTransform::transformXYZ(
     FloatVector4 v) const
 {
   FloatVector4  tmp(v);
@@ -34,8 +34,7 @@ SYSV_ABI FloatVector4 Plot3D_TriShape::VertexTransform::transformXYZ(
                       tmp.dotProduct(rotateZ), 0.0f);
 }
 
-SYSV_ABI FloatVector4 Plot3D_TriShape::VertexTransform::rotateXYZ(
-    FloatVector4 v) const
+FloatVector4 Plot3D_TriShape::VertexTransform::rotateXYZ(FloatVector4 v) const
 {
   FloatVector4  tmp(v);
   tmp.setElement(3, 0.0f);
@@ -43,8 +42,8 @@ SYSV_ABI FloatVector4 Plot3D_TriShape::VertexTransform::rotateXYZ(
                       tmp.dotProduct(rotateZ), 0.0f);
 }
 
-SYSV_ABI Plot3D_TriShape::VertexTransform&
-    Plot3D_TriShape::VertexTransform::operator*=(const VertexTransform& r)
+Plot3D_TriShape::VertexTransform& Plot3D_TriShape::VertexTransform::operator*=(
+    const VertexTransform& r)
 {
   FloatVector4  offsXYZ(rotateX[3], rotateY[3], rotateZ[3], 0.0f);
   offsXYZ = r.transformXYZ(offsXYZ);
@@ -272,7 +271,7 @@ inline FloatVector4 Plot3D_TriShape::environmentMap(
   return e;
 }
 
-SYSV_ABI void Plot3D_TriShape::drawPixel_Water(
+void Plot3D_TriShape::drawPixel_Water(
     Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
@@ -322,7 +321,7 @@ inline FloatVector4 Plot3D_TriShape::getDiffuseColor(
   return c;
 }
 
-SYSV_ABI void Plot3D_TriShape::drawPixel_Debug(
+void Plot3D_TriShape::drawPixel_Debug(
     Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
@@ -364,14 +363,14 @@ SYSV_ABI void Plot3D_TriShape::drawPixel_Debug(
   p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
 }
 
-SYSV_ABI float Plot3D_TriShape::calculateLighting(FloatVector4 normal) const
+float Plot3D_TriShape::calculateLighting(FloatVector4 normal) const
 {
   FloatVector4  tmp(normal);
   tmp.normalize(invNormals);
   return getLightLevel(tmp.dotProduct(lightVector));
 }
 
-SYSV_ABI void Plot3D_TriShape::drawPixel_Diffuse(
+void Plot3D_TriShape::drawPixel_Diffuse(
     Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
@@ -384,7 +383,7 @@ SYSV_ABI void Plot3D_TriShape::drawPixel_Diffuse(
   p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
 }
 
-SYSV_ABI void Plot3D_TriShape::drawPixel_Normal(
+void Plot3D_TriShape::drawPixel_Normal(
     Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
@@ -398,7 +397,7 @@ SYSV_ABI void Plot3D_TriShape::drawPixel_Normal(
   p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
 }
 
-SYSV_ABI void Plot3D_TriShape::drawPixel_NormalEnv(
+void Plot3D_TriShape::drawPixel_NormalEnv(
     Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
@@ -425,7 +424,7 @@ SYSV_ABI void Plot3D_TriShape::drawPixel_NormalEnv(
   p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
 }
 
-SYSV_ABI void Plot3D_TriShape::drawPixel_NormalEnvM(
+void Plot3D_TriShape::drawPixel_NormalEnvM(
     Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
@@ -453,7 +452,7 @@ SYSV_ABI void Plot3D_TriShape::drawPixel_NormalEnvM(
   p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
 }
 
-SYSV_ABI void Plot3D_TriShape::drawPixel_NormalEnvS(
+void Plot3D_TriShape::drawPixel_NormalEnvS(
     Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
@@ -482,7 +481,7 @@ SYSV_ABI void Plot3D_TriShape::drawPixel_NormalEnvS(
   p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
 }
 
-SYSV_ABI void Plot3D_TriShape::drawPixel_NormalRefl(
+void Plot3D_TriShape::drawPixel_NormalRefl(
     Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);

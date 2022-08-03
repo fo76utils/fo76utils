@@ -16,7 +16,7 @@ class LandscapeTexture
   const unsigned char *ltexData16;
   const unsigned char *vclrData16;
   const unsigned char *gcvrData;
-  SYSV_ABI FloatVector4 (*renderPixelFunction)(
+  FloatVector4 (*renderPixelFunction)(
       const LandscapeTexture& p, FloatVector4& n,
       int x, int y, int txtX, int txtY);
   const DDSTexture * const  *landTextures;
@@ -39,28 +39,28 @@ class LandscapeTexture
   inline FloatVector4 getTES4VertexColor(size_t offs) const;
   inline FloatVector4 getFO76VertexColor(int x, int y, int renderScale) const;
   inline FloatVector4 getTES4VertexColor(int x, int y, int renderScale) const;
-  static SYSV_ABI FloatVector4 renderPixelFO76I_NoNormals(
+  static FloatVector4 renderPixelFO76I_NoNormals(
       const LandscapeTexture& p, FloatVector4& n,
       int x, int y, int txtX, int txtY);
-  static SYSV_ABI FloatVector4 renderPixelFO76I(
+  static FloatVector4 renderPixelFO76I(
       const LandscapeTexture& p, FloatVector4& n,
       int x, int y, int txtX, int txtY);
-  static SYSV_ABI FloatVector4 renderPixelFO76F(
+  static FloatVector4 renderPixelFO76F(
       const LandscapeTexture& p, FloatVector4& n,
       int x, int y, int txtX, int txtY);
-  static SYSV_ABI FloatVector4 renderPixelFO76I_GCVR(
+  static FloatVector4 renderPixelFO76I_GCVR(
       const LandscapeTexture& p, FloatVector4& n,
       int x, int y, int txtX, int txtY);
-  static SYSV_ABI FloatVector4 renderPixelFO76F_GCVR(
+  static FloatVector4 renderPixelFO76F_GCVR(
       const LandscapeTexture& p, FloatVector4& n,
       int x, int y, int txtX, int txtY);
-  static SYSV_ABI FloatVector4 renderPixelTES4I_NoNormals(
+  static FloatVector4 renderPixelTES4I_NoNormals(
       const LandscapeTexture& p, FloatVector4& n,
       int x, int y, int txtX, int txtY);
-  static SYSV_ABI FloatVector4 renderPixelTES4I(
+  static FloatVector4 renderPixelTES4I(
       const LandscapeTexture& p, FloatVector4& n,
       int x, int y, int txtX, int txtY);
-  static SYSV_ABI FloatVector4 renderPixelTES4F(
+  static FloatVector4 renderPixelTES4F(
       const LandscapeTexture& p, FloatVector4& n,
       int x, int y, int txtX, int txtY);
   void setRenderPixelFunction();
