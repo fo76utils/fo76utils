@@ -68,53 +68,45 @@ struct FloatVector4
   }
   inline float dotProduct(const FloatVector4& r) const
   {
-    float   tmp __attribute__ ((__vector_size__ (16))) = v;
-    float   tmp2 __attribute__ ((__vector_size__ (16))) = r.v;
-    __asm__ ("vdpps $0xf1, %0, %1, %0" : "+x" (tmp) : "x" (tmp2));
+    float   tmp __attribute__ ((__vector_size__ (16)));
+    __asm__ ("vdpps $0xf1, %1, %2, %0" : "=x" (tmp) : "x" (v), "x" (r.v));
     return tmp[0];
   }
   inline void squareRoot()
   {
-    float   tmp __attribute__ ((__vector_size__ (16))) = v;
-    float   tmp2 __attribute__ ((__vector_size__ (16)));
-    __asm__ ("vxorps %1, %1, %1\n\t"
-             "vmaxps %0, %1, %0\n\t"
-             "vsqrtps %0, %0" : "+x" (tmp), "=x" (tmp2));
-    v = tmp;
+    float   tmp __attribute__ ((__vector_size__ (16))) =
+    {
+      0.0f, 0.0f, 0.0f, 0.0f
+    };
+    __asm__ ("vmaxps %0, %1, %1\n\t"
+             "vsqrtps %1, %0" : "+x" (v), "+x" (tmp));
   }
   inline void normalize(bool invFlag = false)
   {
+    static const float  invMultTable[2] = { -0.5f, 0.5f };
     float   tmp = dotProduct(*this);
-    if (__builtin_expect(long(tmp > 0.0f), 1L))
-    {
-      float   tmp2;
-      __asm__ ("vrsqrtss %1, %1, %0" : "=x" (tmp2) : "x" (tmp));
-      v *= ((tmp * tmp2 * tmp2 - 3.0f) * (tmp2 * (!invFlag ? -0.5f : 0.5f)));
-    }
+    float   tmp2 =
+        1.0f / (float(0x0000040000000000LL) * float(0x0000040000000000LL));
+    __asm__ ("vmaxss %0, %1, %0\n\t"
+             "vrsqrtss %0, %0, %0" : "+x" (tmp2) : "x" (tmp));
+    v *= ((tmp * tmp2 * tmp2 - 3.0f) * (tmp2 * invMultTable[int(invFlag)]));
   }
   inline void normalizeFast()
   {
     float   tmp = dotProduct(*this);
-    if (__builtin_expect(long(tmp > 0.0f), 1L))
-    {
-      float   tmp2;
-      __asm__ ("vrsqrtss %1, %1, %0" : "=x" (tmp2) : "x" (tmp));
-      v *= tmp2;
-    }
+    float   tmp2 =
+        1.0f / (float(0x0000040000000000LL) * float(0x0000040000000000LL));
+    __asm__ ("vmaxss %0, %1, %0\n\t"
+             "vrsqrtss %0, %0, %0" : "+x" (tmp2) : "x" (tmp));
+    v *= tmp2;
   }
   inline void minValues(const FloatVector4& r)
   {
-    float   tmp __attribute__ ((__vector_size__ (16))) = v;
-    float   tmp2 __attribute__ ((__vector_size__ (16))) = r.v;
-    __asm__ ("vminps %0, %1, %0" : "+x" (tmp) : "x" (tmp2));
-    v = tmp;
+    __asm__ ("vminps %0, %1, %0" : "+x" (v) : "x" (r.v));
   }
   inline void maxValues(const FloatVector4& r)
   {
-    float   tmp __attribute__ ((__vector_size__ (16))) = v;
-    float   tmp2 __attribute__ ((__vector_size__ (16))) = r.v;
-    __asm__ ("vmaxps %0, %1, %0" : "+x" (tmp) : "x" (tmp2));
-    v = tmp;
+    __asm__ ("vmaxps %0, %1, %0" : "+x" (v) : "x" (r.v));
   }
   inline operator unsigned int() const
   {
