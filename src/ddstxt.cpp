@@ -684,6 +684,82 @@ FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
   return c0;
 }
 
+static inline unsigned int getPixelN_2(
+    const unsigned int *textureData1, const unsigned int *textureData2,
+    int x, int y, unsigned int xMask, unsigned int yMask)
+{
+  unsigned int  offs =
+      ((unsigned int) y & yMask) * (xMask + 1U) + ((unsigned int) x & xMask);
+  return ((textureData1[offs] & 0xFFFFU)
+          | ((textureData2[offs] & 0xFFFFU) << 16));
+}
+
+FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
+                                     const DDSTexture *t) const
+{
+  if (BRANCH_EXPECT(!t, false))
+    return getPixelT(x, y, mipLevel);
+  int     m0 = int(float(std::floor(mipLevel)));
+  float   mf = mipLevel - float(m0);
+  fixNegativeMipLevel(x, y, m0);
+  const unsigned int * const  *t1 = &(textureData[m0]);
+  const unsigned int * const  *t2 = &(t->textureData[m0]);
+  unsigned int  w = xSizeMip0;
+  unsigned int  h = ySizeMip0;
+  if (BRANCH_EXPECT(!(t->xSizeMip0 == w && t->ySizeMip0 == h), false))
+  {
+    if ((t->xSizeMip0 << 1) == w && (t->ySizeMip0 << 1) == h && m0 > 0)
+    {
+      t2--;
+    }
+    else if (t->xSizeMip0 == (w << 1) && t->ySizeMip0 == (h << 1))
+    {
+      t2++;
+    }
+    else
+    {
+      FloatVector4  tmp1(getPixelT(x, y, float(m0) + mf));
+      float   xScale = float(int(t->xSizeMip0)) / float(int(w));
+      float   yScale = float(int(t->ySizeMip0)) / float(int(h));
+      FloatVector4  tmp2(t->getPixelT(x * xScale, y * yScale, float(m0) + mf));
+      tmp1.setElement(2, tmp2[0]);
+      tmp1.setElement(3, tmp2[1]);
+      return tmp1;
+    }
+  }
+  unsigned int  xMask = (w - 1U) >> (unsigned char) m0;
+  unsigned int  yMask = (h - 1U) >> (unsigned char) m0;
+  if (BRANCH_EXPECT(!(xMask | yMask), false))
+    return FloatVector4((t1[0][0] & 0xFFFFU) | ((t2[0][0] & 0xFFFFU) << 16));
+  int     x0, y0;
+  float   xf, yf;
+  convertTexCoord(x0, y0, xf, yf, x, y);
+  FloatVector4  c0(blendFP32Vec4Bilinear(
+                       getPixelN_2(*t1, *t2, x0, y0, xMask, yMask),
+                       getPixelN_2(*t1, *t2, x0 + 1, y0, xMask, yMask),
+                       getPixelN_2(*t1, *t2, x0, y0 + 1, xMask, yMask),
+                       getPixelN_2(*t1, *t2, x0 + 1, y0 + 1, xMask, yMask),
+                       xf, yf));
+  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
+  {
+    convertTexCoord(x0, y0, xf, yf, x * 0.5f, y * 0.5f);
+    t1++;
+    t2++;
+    xMask = xMask >> 1;
+    yMask = yMask >> 1;
+    FloatVector4  c1(blendFP32Vec4Bilinear(
+                         getPixelN_2(*t1, *t2, x0, y0, xMask, yMask),
+                         getPixelN_2(*t1, *t2, x0 + 1, y0, xMask, yMask),
+                         getPixelN_2(*t1, *t2, x0, y0 + 1, xMask, yMask),
+                         getPixelN_2(*t1, *t2, x0 + 1, y0 + 1, xMask, yMask),
+                         xf, yf));
+    c0 *= (1.0f - mf);
+    c1 *= mf;
+    c0 += c1;
+  }
+  return c0;
+}
+
 FloatVector4 DDSTexture::getPixelBM(float x, float y, int mipLevel) const
 {
   fixNegativeMipLevel(x, y, mipLevel);

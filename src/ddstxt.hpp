@@ -83,17 +83,19 @@ class DDSTexture
   // no interpolation, returns color in RGBA format (LSB = red, MSB = alpha)
   inline unsigned int getPixelN(int x, int y, int mipLevel) const
   {
-    int     xMask = int((xSizeMip0 - 1) >> mipLevel);
-    int     yMask = int((ySizeMip0 - 1) >> mipLevel);
-    return textureData[mipLevel][(y & yMask) * (xMask + 1) + (x & xMask)];
+    unsigned int  xMask = (xSizeMip0 - 1U) >> (unsigned char) mipLevel;
+    unsigned int  yMask = (ySizeMip0 - 1U) >> (unsigned char) mipLevel;
+    return textureData[mipLevel][((unsigned int) y & yMask) * (xMask + 1U)
+                                 + ((unsigned int) x & xMask)];
   }
   inline unsigned int getPixelN(int x, int y, int mipLevel, int n) const
   {
-    int     xMask = int((xSizeMip0 - 1) >> mipLevel);
-    int     yMask = int((ySizeMip0 - 1) >> mipLevel);
+    unsigned int  xMask = (xSizeMip0 - 1U) >> (unsigned char) mipLevel;
+    unsigned int  yMask = (ySizeMip0 - 1U) >> (unsigned char) mipLevel;
     const unsigned int  *p =
         textureData[mipLevel] + (textureDataSize * size_t(n));
-    return p[(y & yMask) * (xMask + 1) + (x & xMask)];
+    return p[((unsigned int) y & yMask) * (xMask + 1U)
+             + ((unsigned int) x & xMask)];
   }
   // getPixelN() with mirrored instead of wrapped texture coordinates
   inline unsigned int getPixelM(int x, int y, int mipLevel) const
@@ -117,6 +119,10 @@ class DDSTexture
   FloatVector4 getPixelB(float x, float y, int mipLevel) const;
   // trilinear filtering
   FloatVector4 getPixelT(float x, float y, float mipLevel) const;
+  // trilinear filtering with the blue and alpha channels taken from the
+  // red and green channels of 't'
+  FloatVector4 getPixelT_2(float x, float y, float mipLevel,
+                           const DDSTexture *t) const;
   // bilinear filtering with mirrored texture coordinates
   FloatVector4 getPixelBM(float x, float y, int mipLevel) const;
   // trilinear filtering with mirrored texture coordinates
