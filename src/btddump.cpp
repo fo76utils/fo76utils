@@ -27,8 +27,8 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
   std::vector< unsigned short > buf((size_t(w) * size_t(h)) << 1, 0);
   std::vector< unsigned short > cellBuf(size_t(16384 >> (l + l)), 0);
   float   zMin = btdFile.getMinHeight();
-  float   zScale = (btdFile.getMaxHeight() - zMin) / 65535.0f;
   float   xyScale = 4096.0f / float(cellResolution);
+  float   xyScale2 = xyScale * 65535.0f / (btdFile.getMaxHeight() - zMin);
   for (int y = 0; y < h; y++)
   {
     if (!y || !((y + (cellResolution >> 1)) & (cellResolution - 1)))
@@ -52,10 +52,13 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
         }
       }
     }
+    FloatVector4  prvNormalSE(0.0f, 0.0f, 0.0f, 0.0f);
+    FloatVector4  prvNormalNE(0.0f, 0.0f, 0.0f, 0.0f);
     for (int x = 0; x < w; x++)
     {
-      static const int  xOffsTable[9] = { -1, 0, 1, -1, 0, 1, -1, 0, 1 };
-      static const int  yOffsTable[9] = { -1, -1, -1, 0, 0, 0, 1, 1, 1 };
+      // 0, N, S, E, NW, SW, SE, NE, W
+      static const int  xOffsTable[9] = { 0, 0, 0, 1, -1, -1, 1, 1, -1 };
+      static const int  yOffsTable[9] = { 0, -1, 1, 0, -1, 1, 1, -1, 0 };
       float   z[9];
       for (int i = 0; i < 9; i++)
       {
@@ -64,13 +67,11 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
         xc = (xc > 0 ? (xc < (w - 1) ? xc : (w - 1)) : 0);
         yc = (yc > 0 ? (yc < (h - 1) ? yc : (h - 1)) : 0);
         yc = yc & ((cellResolution << 1) - 1);
-        z[i] = float(int(buf[size_t(yc) * size_t(w) + size_t(xc)]))
-               * zScale + zMin;
+        z[i] = float(int(buf[size_t(yc) * size_t(w) + size_t(xc)]));
       }
-      FloatVector4  v_n(0.0f, xyScale, z[1] - z[4], 0.0f);
-      FloatVector4  v_w(-xyScale, 0.0f, z[3] - z[4], 0.0f);
-      FloatVector4  v_s(0.0f, -xyScale, z[7] - z[4], 0.0f);
-      FloatVector4  v_e(xyScale, 0.0f, z[5] - z[4], 0.0f);
+      FloatVector4  v_n(0.0f, xyScale2, z[1] - z[0], 0.0f);
+      FloatVector4  v_s(0.0f, -xyScale2, z[2] - z[0], 0.0f);
+      FloatVector4  v_e(xyScale2, 0.0f, z[3] - z[0], 0.0f);
       FloatVector4  normal(0.0f, 0.0f, 0.0f, 0.0f);
       if ((x ^ y) & 1)
       {
@@ -80,25 +81,41 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
         //  0 +-+-+
         //    |/|\|
         //  1 +-+-+
-        FloatVector4  v_nw(-xyScale, xyScale, z[0] - z[4], 0.0f);
-        FloatVector4  v_sw(-xyScale, -xyScale, z[6] - z[4], 0.0f);
-        FloatVector4  v_se(xyScale, -xyScale, z[8] - z[4], 0.0f);
-        FloatVector4  v_ne(xyScale, xyScale, z[2] - z[4], 0.0f);
-        normal = calculateNormal(v_e, v_ne);
-        normal += calculateNormal(v_ne, v_n);
+        FloatVector4  v_nw(-xyScale2, xyScale2, z[4] - z[0], 0.0f);
+        FloatVector4  v_sw(-xyScale2, -xyScale2, z[5] - z[0], 0.0f);
+        FloatVector4  v_se(xyScale2, -xyScale2, z[6] - z[0], 0.0f);
+        FloatVector4  v_ne(xyScale2, xyScale2, z[7] - z[0], 0.0f);
+        normal = calculateNormal(v_ne, v_n);
         normal += calculateNormal(v_n, v_nw);
-        normal += calculateNormal(v_nw, v_w);
-        normal += calculateNormal(v_w, v_sw);
+        if (!x)
+        {
+          FloatVector4  v_w(-xyScale2, 0.0f, z[8] - z[0], 0.0f);
+          prvNormalNE = calculateNormal(v_nw, v_w);
+          prvNormalSE = calculateNormal(v_w, v_sw);
+        }
+        normal += prvNormalNE;
+        normal += prvNormalSE;
         normal += calculateNormal(v_sw, v_s);
         normal += calculateNormal(v_s, v_se);
-        normal += calculateNormal(v_se, v_e);
+        prvNormalSE = calculateNormal(v_se, v_e);
+        normal += prvNormalSE;
+        prvNormalNE = calculateNormal(v_e, v_ne);
+        normal += prvNormalNE;
       }
       else
       {
-        normal = calculateNormal(v_e, v_n);
-        normal += calculateNormal(v_n, v_w);
-        normal += calculateNormal(v_w, v_s);
-        normal += calculateNormal(v_s, v_e);
+        if (!x)
+        {
+          FloatVector4  v_w(-xyScale2, 0.0f, z[8] - z[0], 0.0f);
+          prvNormalNE = calculateNormal(v_n, v_w);
+          prvNormalSE = calculateNormal(v_w, v_s);
+        }
+        normal = prvNormalNE;
+        normal += prvNormalSE;
+        prvNormalSE = calculateNormal(v_s, v_e);
+        normal += prvNormalSE;
+        prvNormalNE = calculateNormal(v_e, v_n);
+        normal += prvNormalNE;
       }
       normal.normalize();
       normal += 1.0f;
