@@ -461,21 +461,21 @@ void Plot3D_TriShape::drawPixel_NormalEnvS(
   if (BRANCH_EXPECT(!alphaFlag, false))
     return;
   p.bufZ[offs] = z.xyz[2];
-  FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
+  FloatVector4  n(p.textureN->getPixelT_2(txtU, txtV, p.mipLevel + p.mipOffsetN,
+                                          p.textureS));
   c *= p.normalMap(z, n);
-  FloatVector4  s(p.textureS->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetS));
   float   smoothness =
-      float(int(p.specularSmoothness)) * s[1] * (1.0f / (255.0f * 255.0f));
+      float(int(p.specularSmoothness)) * n[3] * (1.0f / (255.0f * 255.0f));
+  float   specLevel = n[2];
   float   specular = 0.0f;
   FloatVector4  e(p.environmentMap(z, x, y, smoothness, &specular));
-  float   specLevel = s[0];
   e *= (p.reflectionLevel * specLevel);
   c += e;
   specular *= (p.specularLevel * specLevel);
   if (specular > 0.0f)
   {
     FloatVector4  tmp(p.specularColorFloat);
-    tmp *= specular;
+    tmp *= (specular * (smoothness * 2.0f));
     c += tmp;
   }
   p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
@@ -490,22 +490,26 @@ void Plot3D_TriShape::drawPixel_NormalRefl(
   if (BRANCH_EXPECT(!alphaFlag, false))
     return;
   p.bufZ[offs] = z.xyz[2];
-  FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
+  FloatVector4  n(p.textureN->getPixelT_2(txtU, txtV, p.mipLevel + p.mipOffsetN,
+                                          p.textureS));
   FloatVector4  r(p.textureR->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetR));
-  FloatVector4  s(127.5f, 255.0f, 0.0f, 0.0f);
-  if (BRANCH_EXPECT(p.textureS, true))
-    s = p.textureS->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetS);
   r *= (1.0f / 255.0f);
   FloatVector4  tmp(r[1], r[1], r[1], r[1]);
   tmp.maxValues(r);
   tmp.maxValues(FloatVector4(r[2], r[2], r[2], r[2]));
   float   m = 1.0f - tmp[0];
   c *= (p.normalMap(z, n) * m);
-  float   smoothness =
-      float(int(p.specularSmoothness)) * s[0] * (1.0f / (255.0f * 255.0f));
+  float   smoothness = n[2];
+  float   specLevel = n[3];
+  if (BRANCH_EXPECT(!p.textureS, false))
+  {
+    smoothness = 127.5f;
+    specLevel = 255.0f;
+  }
+  smoothness = smoothness * float(int(p.specularSmoothness))
+               * (1.0f / (255.0f * 255.0f));
   float   specular = 0.0f;
   FloatVector4  e(p.environmentMap(z, x, y, smoothness, &specular));
-  float   specLevel = s[1];
   e *= (p.reflectionLevel * specLevel);
   e *= r;
   c += e;
@@ -947,17 +951,12 @@ void Plot3D_TriShape::drawTriShape(
       {
         textureR = textures[8];
         mipOffsetR = calculateMipOffset(textureR, textureD);
-        if (textures[9])
-        {
-          textureS = textures[9];
-          mipOffsetS = calculateMipOffset(textureS, textureD);
-        }
+        textureS = textures[9];
         drawPixelFunction = &drawPixel_NormalRefl;
       }
       else if (textureCnt >= 7 && textures[6])  // Fallout 4
       {
         textureS = textures[6];
-        mipOffsetS = calculateMipOffset(textureS, textureD);
         drawPixelFunction = &drawPixel_NormalEnvS;
       }
       else if (textureCnt >= 6 && textures[5])  // Skyrim with environment mask
