@@ -872,11 +872,12 @@ static float calculateMipOffset(const DDSTexture *t1, const DDSTexture *t2)
 {
   int     a1 = t1->getWidth() * t1->getHeight();
   int     a2 = t2->getWidth() * t2->getHeight();
-  if (a1 == a2)
-    return 0.0f;
   if (a1 < a2)
-    return (a1 <= (a2 >> 3) ? -2.0f : (a1 <= (a2 >> 1) ? -1.0f : 0.0f));
-  return (a2 <= (a1 >> 3) ? 2.0f : (a2 <= (a1 >> 1) ? 1.0f : 0.0f));
+  {
+    return (a1 <= (a2 >> 5) ? (a1 <= (a2 >> 7) ? -4.0f : -3.0f)
+                              : (a1 <= (a2 >> 3) ? -2.0f : -1.0f));
+  }
+  return (a2 == a1 ? 0.0f : (a2 > (a1 >> 3) ? 1.0f : 2.0f));
 }
 
 void Plot3D_TriShape::drawTriShape(
