@@ -35,6 +35,8 @@ class LandscapeTexture
   static inline FloatVector4 rotateNormalFO76(FloatVector4 n);
   static inline FloatVector4 blendColors(FloatVector4 c0, FloatVector4 c1,
                                          float f);
+  static inline FloatVector4 colorToNormal(FloatVector4 c);
+  static inline FloatVector4 normalToColor(FloatVector4 n);
   inline FloatVector4 getFO76VertexColor(size_t offs) const;
   inline FloatVector4 getTES4VertexColor(size_t offs) const;
   inline FloatVector4 getFO76VertexColor(int x, int y, int renderScale) const;
