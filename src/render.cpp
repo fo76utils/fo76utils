@@ -1325,8 +1325,8 @@ void Renderer::materialSwap(
     if (!(*(t.materialPath) == i->second[j].materialPath))
       continue;
     const BGSMFile& bgsmFile = i->second[j].bgsmFile;
-    // decal, two sided, tree
-    t.flags = (t.flags & 0x07) | ((bgsmFile.flags & 0x1C) << 1);
+    // add decal, two sided, and tree flags from new material
+    t.flags = (t.flags & 0xC7) | ((bgsmFile.flags & 0x1C) << 1);
     t.flags = t.flags | ((t.flags & 0x02) << 3);
     t.gradientMapV = bgsmFile.gradientMapV;
     t.envMapScale = bgsmFile.envMapScale;
