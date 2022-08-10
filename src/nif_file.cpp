@@ -751,7 +751,9 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   t.vertexData = &(b.vertexData.front());
   t.triangleData = &(b.triangleData.front());
   t.vertexTransform = b.vertexTransform;
-  t.flags = (unsigned char) (b.flags & 0x01);   // hidden
+  // hidden, has vertex colors
+  t.flags =
+      (unsigned char) ((b.flags & 0x01) | ((b.vertexFmtDesc >> 43) & 0x40));
   if (b.nameID >= 0)
     t.name = stringTable[b.nameID]->c_str();
   for (size_t i = parentBlocks.size(); i-- > size_t(noRootNodeTransform); )

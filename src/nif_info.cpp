@@ -193,14 +193,15 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "  Triangle count: %u\n", meshData[i].triangleCnt);
     if (meshData[i].flags)
     {
-      static const char *flagNames[6] =
+      static const char *flagNames[7] =
       {
-        "hidden", "is water", "is effect", "decal", "two sided", "tree"
+        "hidden", "is water", "is effect", "decal", "two sided", "tree",
+        "has vertex colors"
       };
       std::fprintf(f, "  Flags: ");
       unsigned char m = 0x01;
       unsigned char mPrv = 0x01;
-      for (int j = 0; j < 6; j++, m = m << 1, mPrv = (mPrv << 1) | 1)
+      for (int j = 0; j < 7; j++, m = m << 1, mPrv = (mPrv << 1) | 1)
       {
         if ((meshData[i].flags & mPrv) > m)
           std::fprintf(f, ", ");
