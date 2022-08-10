@@ -12,7 +12,7 @@
 
 const float Plot3D_TriShape::defaultLightingPolynomial[6] =
 {
-  0.672235f, 0.997428f, 0.009355f, -0.771812f, 0.108711f, 0.369682f
+  0.67223534f, 0.98738089f, 0.04499563f, -0.71294709f, 0.06848274f, 0.31271845f
 };
 
 Plot3D_TriShape::VertexTransform::VertexTransform(
@@ -251,15 +251,25 @@ inline FloatVector4 Plot3D_TriShape::environmentMap(
   if (specPtr && specularLevel > 0.0f)
   {
     *specPtr = 0.0f;
-    // calculate specular reflection
-    float   s = viewVector.dotProduct(lightVector);
-    if (s > 0.0f && v.normal.dotProduct(lightVector) > 0.0f)
+    if (v.normal.dotProduct(lightVector) > 0.0f)
     {
-      if (s >= 1.0f)
-        s = 1.0f;
-      else
-        s = float(std::pow(s, float(std::pow(2.0f, 9.0f * (1.0f - r)))));
-      *specPtr = s;
+      // calculate specular reflection
+      float   s = viewVector.dotProduct(lightVector);
+      if (s > -0.5f)
+      {
+        if (BRANCH_EXPECT((s >= 1.0f), false))
+        {
+          *specPtr = 1.0f;
+        }
+        else
+        {
+          float   g = FloatVector4::exp2Fast(9.0f * (1.0f - r));
+          // approximates g * log(s) / 2, more accurately if s is closer to 1
+          s = g * (s - 1.0f) / (s + 1.0f);
+          if (s > -7.0f)
+            *specPtr = FloatVector4::exp2Fast(s * 2.8853901f);  // 2 / log(2)
+        }
+      }
     }
   }
   // inverse rotation by view matrix
@@ -700,7 +710,7 @@ void Plot3D_TriShape::drawTriangles()
         if ((uvArea2 * float(1 << ((-mipLevel_i) << 1))) > xyArea2)
         {
           // calculate base 4 logarithm of texel area / pixel area
-          mipLevel = float(std::log2(float(std::fabs(r2xArea * uvArea2))))
+          mipLevel = FloatVector4::log2Fast(float(std::fabs(r2xArea * uvArea2)))
                      * 0.5f;
           mipLevel_i = roundFloat(mipLevel);
           if (float(std::fabs(mipLevel - float(mipLevel_i))) < 0.0625f)
@@ -872,12 +882,14 @@ static float calculateMipOffset(const DDSTexture *t1, const DDSTexture *t2)
 {
   int     a1 = t1->getWidth() * t1->getHeight();
   int     a2 = t2->getWidth() * t2->getHeight();
-  if (a1 < a2)
+  int     m = FloatVector4::log2Int(a1) - FloatVector4::log2Int(a2);
+  if (m < 0)
   {
-    return (a1 <= (a2 >> 5) ? (a1 <= (a2 >> 7) ? -4.0f : -3.0f)
-                              : (a1 <= (a2 >> 3) ? -2.0f : -1.0f));
+    m = (1 - m) >> 1;
+    return float(m < 4 ? -m : -4);
   }
-  return (a2 == a1 ? 0.0f : (a2 > (a1 >> 3) ? 1.0f : 2.0f));
+  m = (m + 1) >> 1;
+  return float(m < 2 ? m : 2);
 }
 
 void Plot3D_TriShape::drawTriShape(
