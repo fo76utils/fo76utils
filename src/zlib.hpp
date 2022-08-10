@@ -10,7 +10,6 @@ class ZLibDecompressor
   const unsigned char *inPtr;
   const unsigned char *inBufEnd;
   unsigned long long  sr;
-  unsigned int  srBitCnt;
   unsigned int  tableBuf[1312];         // 320 * 3 + 32 + 32 + 288
   // huffTable[N] (0 <= N <= 255):
   //     fast decode table for code lengths <= 8, contains length | (C << 8),
@@ -50,9 +49,13 @@ class ZLibDecompressor
   inline void srLoad();
   inline void srReset()
   {
-    inPtr = inPtr - (srBitCnt >> 3);
-    sr = 0;
-    srBitCnt = 0;
+    unsigned long long  tmp = sr;
+    while (tmp >= 0x0100ULL)
+    {
+      tmp = tmp >> 8;
+      inPtr--;
+    }
+    sr = 1;
   }
   // read bits packed in Deflate order (LSB first - LSB first)
   // nBits must be in the range 1 to 16
@@ -70,8 +73,7 @@ class ZLibDecompressor
   ZLibDecompressor(const unsigned char *inBuf, size_t compressedSize)
     : inPtr(inBuf),
       inBufEnd(inBuf + compressedSize),
-      sr(0),
-      srBitCnt(0)
+      sr(1)
   {
   }
  public:

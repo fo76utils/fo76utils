@@ -1,6 +1,7 @@
 
 #include "common.hpp"
 #include "zlib.hpp"
+#include "fp32vec4.hpp"
 
 unsigned int ZLibDecompressor::readU32LE()
 {
@@ -32,25 +33,26 @@ unsigned int ZLibDecompressor::readU32BE()
 
 inline void ZLibDecompressor::srLoad()
 {
-  if (BRANCH_EXPECT(srBitCnt < 16, false))
+  if (BRANCH_EXPECT(sr < 0x00010000ULL, false))
   {
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+    int     bitCnt = FloatVector4::log2Int(int(sr)) + 127;
     if (BRANCH_EXPECT((inPtr + 6) <= inBufEnd, true))
     {
       // inPtr - 2 is always valid because of the 2 bytes long zlib header
       const unsigned long long  *p =
           reinterpret_cast< const unsigned long long * >(inPtr - 2);
-      sr = sr | ((*p & ~0xFFFFULL) >> (16U - srBitCnt));
+      sr = (*p >> 1) | (1ULL << 63);
+      sr = sr >> (unsigned int) (142 - bitCnt);
       inPtr = inPtr + 6;
-      srBitCnt = srBitCnt + 48;
     }
     else if (BRANCH_EXPECT((inPtr + 2) <= inBufEnd, true))
     {
-      const unsigned short  *p =
-          reinterpret_cast< const unsigned short * >(inPtr);
-      sr = sr | ((unsigned long long) *p << srBitCnt);
+      const unsigned int  *p =
+          reinterpret_cast< const unsigned int * >(inPtr - 2);
+      sr = (unsigned long long) *p | (1ULL << 32);
+      sr = sr >> (unsigned int) (143 - bitCnt);
       inPtr = inPtr + 2;
-      srBitCnt = srBitCnt + 16;
     }
     else
     {
@@ -59,12 +61,15 @@ inline void ZLibDecompressor::srLoad()
 #else
     if (BRANCH_EXPECT((inPtr + 2) > inBufEnd, false))
       throw errorMessage("end of ZLib compressed data");
+    unsigned int  srBitCnt = (unsigned int) FloatVector4::log2Int(int(sr));
+    sr &= ~(1ULL << srBitCnt);
     do
     {
       sr = sr | ((unsigned long long) *(inPtr++) << srBitCnt);
       srBitCnt = srBitCnt + 8;
     }
-    while (srBitCnt <= 56 && inPtr < inBufEnd);
+    while (srBitCnt < 56 && inPtr < inBufEnd);
+    sr |= (1ULL << srBitCnt);
 #endif
   }
 }
@@ -74,7 +79,6 @@ inline unsigned int ZLibDecompressor::readBitsRR(unsigned char nBits)
   srLoad();
   unsigned int  w = (unsigned int) sr & ((1U << nBits) - 1U);
   sr = sr >> nBits;
-  srBitCnt = srBitCnt - nBits;
   return w;
 }
 
@@ -343,7 +347,6 @@ inline unsigned int ZLibDecompressor::huffmanDecode(
   if (BRANCH_EXPECT(nBits < 9, true))
   {
     sr = sr >> nBits;
-    srBitCnt = srBitCnt - nBits;
     return b;
   }
   if (nBits > 16)
@@ -351,14 +354,12 @@ inline unsigned int ZLibDecompressor::huffmanDecode(
     throw errorMessage("invalid Huffman code in ZLib compressed data");
   }
   sr = sr >> 8;
-  srBitCnt = srBitCnt - 8;
   const unsigned int  *t = huffTable + (256 + 8 - 1);
   do
   {
     t++;
     b = (b << 1) | ((unsigned int) sr & 1U);
     sr = sr >> 1;
-    srBitCnt--;
   }
   while (b >= *t);
   b = b + t[32];
