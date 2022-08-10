@@ -11,7 +11,7 @@ struct FloatVector4
     float   tmp __attribute__ ((__vector_size__ (16)));
     __asm__ ("vmovd %1, %0\n\t"
              "vpmovzxbd %0, %0\n\t"
-             "vcvtdq2ps %0, %0" : "=x" (tmp) : "r" (c));
+             "vcvtdq2ps %0, %0" : "=x" (tmp) : "rm" (c));
     v = tmp;
   }
   FloatVector4(float v0, float v1, float v2, float v3)
@@ -69,7 +69,7 @@ struct FloatVector4
   inline float dotProduct(const FloatVector4& r) const
   {
     float   tmp __attribute__ ((__vector_size__ (16)));
-    __asm__ ("vdpps $0xf1, %1, %2, %0" : "=x" (tmp) : "x" (v), "x" (r.v));
+    __asm__ ("vdpps $0xf1, %1, %2, %0" : "=x" (tmp) : "xm" (r.v), "x" (v));
     return tmp[0];
   }
   inline void squareRoot()
@@ -80,6 +80,63 @@ struct FloatVector4
     };
     __asm__ ("vmaxps %0, %1, %1\n\t"
              "vsqrtps %1, %0" : "+x" (v), "+x" (tmp));
+  }
+  static inline float squareRootFast(float x)
+  {
+    float   tmp1, tmp2;
+    const float tmp3 =
+        1.0f / (float(0x0000040000000000LL) * float(0x0000040000000000LL));
+    __asm__ (
+        "vmaxss %2, %3, %1\n\t"
+        "vrsqrtss %1, %1, %0\n\t"
+        "vmulss %1, %0, %0" : "=x" (tmp1), "=x" (tmp2) : "xm" (tmp3), "x" (x));
+    return tmp1;
+  }
+  static inline float log2Fast(float x)
+  {
+    union
+    {
+      float   f;
+      unsigned int  n;
+    }
+    tmp;
+    tmp.f = x;
+    unsigned int  n = tmp.n;
+    float   e = float(int(n >> 23));
+    tmp.n = (n & 0x007FFFFFU) | 0x3F800000U;
+    float   m = tmp.f;
+    float   m2 = m * m;
+    FloatVector4  tmp2(m, m2, m * m2, m2 * m2);
+    FloatVector4  tmp3(4.05608897f, -2.10465275f, 0.63728021f, -0.08021013f);
+    return (tmp2.dotProduct(tmp3) + e - (127.0f + 2.50847106f));
+  }
+  static inline int log2Int(int x)
+  {
+    union
+    {
+      float   f;
+      unsigned int  n;
+    }
+    tmp;
+    tmp.f = float(x);
+    return (int(tmp.n >> 23) - 127);
+  }
+  static inline float exp2Fast(float x)
+  {
+    union
+    {
+      float   f;
+      unsigned int  n;
+    }
+    tmp;
+    int     e = int(std::floor(x));
+    float   m = x - float(e);
+    tmp.n = (unsigned int) (e + 127) << 23;
+    float   m2 = m * m;
+    FloatVector4  tmp2(1.0f, m, m2, m * m2);
+    FloatVector4  tmp3(1.00000000f, 0.34671664f, 0.05924474f, 0.00825060f);
+    m = tmp2.dotProduct(tmp3);
+    return (m * m * tmp.f);
   }
   inline void normalize(bool invFlag = false)
   {
@@ -94,19 +151,19 @@ struct FloatVector4
   inline void normalizeFast()
   {
     float   tmp = dotProduct(*this);
-    float   tmp2 =
+    const float tmp2 =
         1.0f / (float(0x0000040000000000LL) * float(0x0000040000000000LL));
-    __asm__ ("vmaxss %0, %1, %0\n\t"
-             "vrsqrtss %0, %0, %0" : "+x" (tmp2) : "x" (tmp));
-    v *= tmp2;
+    __asm__ ("vmaxss %1, %0, %0\n\t"
+             "vrsqrtss %0, %0, %0" : "+x" (tmp) : "xm" (tmp2));
+    v *= tmp;
   }
   inline void minValues(const FloatVector4& r)
   {
-    __asm__ ("vminps %0, %1, %0" : "+x" (v) : "x" (r.v));
+    __asm__ ("vminps %1, %0, %0" : "+x" (v) : "xm" (r.v));
   }
   inline void maxValues(const FloatVector4& r)
   {
-    __asm__ ("vmaxps %0, %1, %0" : "+x" (v) : "x" (r.v));
+    __asm__ ("vmaxps %1, %0, %0" : "+x" (v) : "xm" (r.v));
   }
   inline operator unsigned int() const
   {
@@ -217,6 +274,30 @@ struct FloatVector4
     v[1] = (v[1] > 0.0f ? float(std::sqrt(v[1])) : 0.0f);
     v[2] = (v[2] > 0.0f ? float(std::sqrt(v[2])) : 0.0f);
     v[3] = (v[3] > 0.0f ? float(std::sqrt(v[3])) : 0.0f);
+  }
+  static inline float squareRootFast(float x)
+  {
+    if (x > 0.0f)
+      return float(std::sqrt(x));
+    return 0.0f;
+  }
+  static inline float log2Fast(float x)
+  {
+    return float(std::log2(x));
+  }
+  static inline int log2Int(int x)
+  {
+    unsigned int  n = (unsigned int) x;
+    int     r = int(bool(n & 0xFFFF0000U)) << 4;
+    r = r | (int(bool(n & (0xFF00U << r))) << 3);
+    r = r | (int(bool(n & (0xF0U << r))) << 2);
+    r = r | (int(bool(n & (0x0CU << r))) << 1);
+    r = r | int(bool(n & (0x02U << r)));
+    return r;
+  }
+  static inline float exp2Fast(float x)
+  {
+    return float(std::exp2(x));
   }
   inline void normalize(bool invFlag = false)
   {
