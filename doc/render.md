@@ -51,6 +51,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 
 * **-light SCALE RX RY**: Set light level and X, Y rotation (0, 0 = top, see [figure](light.png)).
 * **-lpoly A5 A4 A3 A2 A1 A0**: Use the polynomial **x<sup>5</sup> \* A5 + x<sup>4</sup> \* A4 + x<sup>3</sup> \* A3 + x<sup>2</sup> \* A2 + x \* A1 + A0** to convert the dot product **x** of the light vector and the surface normal to a multiplier to be applied to RGB values. **x** is 1.0, -1.0, or 0.0 if the normal is facing directly towards or away from, or is perpendicular to the light source, respectively. The result is multiplied by the light level from **-light**, and limited to the range of 0 to 4.0. [This figure](lpoly.png) shows the default polynomial, and a few examples.
+* **-lcurv X0 Y0 X1 Y1 X2 Y2 X3 Y3 X4 Y4 X5 Y5**: Calculate the coefficients for **-lpoly** so that the curve fits the specified set of 6 points.
 
 For testing view and light settings, it is recommended to use faster low quality rendering, with no downsampling, low landscape texture resolution, no high quality models, and if necessary, disabling all meshes.
 
