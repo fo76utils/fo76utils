@@ -123,20 +123,18 @@ struct FloatVector4
   }
   static inline float exp2Fast(float x)
   {
-    union
-    {
-      float   f;
-      unsigned int  n;
-    }
-    tmp;
     int     e = int(std::floor(x));
     float   m = x - float(e);
-    tmp.n = (unsigned int) (e + 127) << 23;
     float   m2 = m * m;
+    e = e << 23;
+    float   tmp;
+    __asm__ ("vmovd %1, %0" : "=x" (tmp) : "r" (e));
     FloatVector4  tmp2(1.0f, m, m2, m * m2);
     FloatVector4  tmp3(1.00000000f, 0.34671664f, 0.05924474f, 0.00825060f);
     m = tmp2.dotProduct(tmp3);
-    return (m * m * tmp.f);
+    m = m * m;
+    __asm__ ("vpaddd %1, %0, %0" : "+x" (m) : "x" (tmp));
+    return m;
   }
   inline void normalize(bool invFlag = false)
   {
