@@ -119,24 +119,22 @@ static void solveEquationSystem(double *m, int w, int h)
 }
 
 static double interpolateFunction(const double *f, int n, int k, double *m,
-                                  double x, double x0, double x1)
+                                  double x)
 {
-  x = (x > 0.0 ? (x < double(n) ? x : double(n)) : 0.0);
   int     n0 = int(std::floor(x - double(k >> 1)));
   n0 = (n0 > 0 ? n0 : 0);
   int     n1 = n0 + k;
   n1 = (n1 < n ? n1 : n);
   n0 = n1 - k;
+  x = x - double(n0);
   for (int i = 0; i <= k; i++)
   {
     m[i * (k + 2)] = 1.0;
-    double  xTmp = (double(n0 + i) / double(n)) * (x1 - x0) + x0;
     for (int j = 1; j <= k; j++)
-      m[i * (k + 2) + j] = m[i * (k + 2) + (j - 1)] * xTmp;
+      m[i * (k + 2) + j] = m[i * (k + 2) + (j - 1)] * double(i);
     m[i * (k + 2) + (k + 1)] = f[n0 + i];
   }
   solveEquationSystem(m, k + 2, k + 1);
-  x = (x / double(n)) * (x1 - x0) + x0;
   double  y = 0.0;
   for (int i = k; i >= 0; i--)
     y = y * x + m[i * (k + 2) + (k + 1)];
@@ -201,7 +199,7 @@ static void findPolynomial(double *a, int k, const double *f, int n,
       continue;
     maxIterations--;
     for (int i = 0; i <= k; i++)
-      y[i] = interpolateFunction(f, n, k, &(m.front()), p[i], x0, x1);
+      y[i] = interpolateFunction(f, n, k, &(m.front()), p[i]);
     for (int i = 0; i <= k; i++)
     {
       m[i * (k + 2)] = 1.0;
