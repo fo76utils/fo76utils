@@ -1837,6 +1837,85 @@ void Renderer::renderWater(unsigned int formID)
   }
 }
 
+static void solveEquationSystem(double *m, int w, int h)
+{
+  // Gaussian elimination
+  for (int i = 0; i < h; i++)
+  {
+    double  a = m[i * w + i];
+    int     l = i;
+    for (int j = i + 1; j < h; j++)
+    {
+      if (std::fabs(m[j * w + i]) > std::fabs(a))
+      {
+        a = m[j * w + i];
+        l = j;
+      }
+    }
+    if (l != i)
+    {
+      for (int j = 0; j < w; j++)
+      {
+        double  tmp = m[i * w + j];
+        m[i * w + j] = m[l * w + j];
+        m[l * w + j] = tmp;
+      }
+    }
+    for (int j = 0; j < w; j++)
+      m[i * w + j] = m[i * w + j] / a;
+    m[i * w + i] = 1.0;
+    for (int j = i + 1; j < h; j++)
+    {
+      a = m[j * w + i];
+      for (int k = 0; k < w; k++)
+        m[j * w + k] = m[j * w + k] - (m[i * w + k] * a);
+      m[j * w + i] = 0.0;
+    }
+  }
+  for (int i = h; --i >= 0; )
+  {
+    for (int j = i - 1; j >= 0; j--)
+    {
+      double  a = m[j * w + i];
+      for (int k = 0; k < w; k++)
+        m[j * w + k] = m[j * w + k] - (m[i * w + k] * a);
+      m[j * w + i] = 0.0;
+    }
+  }
+}
+
+static int calculatePolynomial(float *a,
+                               const char * const *argv, int argc, int i)
+{
+  if ((i + 12) > argc)
+    throw errorMessage("missing argument for %s", argv[i - 1]);
+  double  m[42];
+  for (int j = 0; j <= 5; j++, i = i + 2)
+  {
+    m[j * 7] = 1.0;
+    m[j * 7 + 1] =
+        parseFloat(argv[i], "invalid lighting curve X position", -1.0, 1.0);
+    for (int k = 0; k < j; k++)
+    {
+      if (std::fabs(m[k * 7 + 1] - m[j * 7 + 1]) < 0.001)
+        throw errorMessage("invalid lighting curve X position");
+    }
+    for (int k = 2; k <= 5; k++)
+      m[j * 7 + k] = m[j * 7 + (k - 1)] * m[j * 7 + 1];
+    m[j * 7 + 6] =
+        parseFloat(argv[i + 1], "invalid lighting curve Y position", -4.0, 8.0);
+  }
+  solveEquationSystem(m, 7, 6);
+  std::printf("Lighting polynomial:");
+  for (int j = 5; j >= 0; j--)
+  {
+    a[j] = float(m[j * 7 + 6]);
+    std::printf(" %.6f", m[j * 7 + 6]);
+  }
+  std::fputc('\n', stdout);
+  return i;
+}
+
 static const char *usageStrings[] =
 {
   "Usage: render INFILE.ESM[,...] OUTFILE.DDS W H ARCHIVEPATH [OPTIONS...]",
@@ -1874,6 +1953,8 @@ static const char *usageStrings[] =
   "    -zrange MIN MAX     limit view Z range to MIN <= Z < MAX",
   "    -light SCALE RX RY  set light level and X, Y rotation (0, 0 = top)",
   "    -lpoly A5 A4 A3 A2 A1 A0    set lighting polynomial, -1 <= x <= 1",
+  "    -lcurv X0 Y0 X1 Y1 X2 Y2 X3 Y3 X4 Y4 X5 Y5",
+  "                        set lighting polynomial from a set of points",
   "",
   "    -mlod INT           set level of detail for models, 0 (best) to 4",
   "    -vis BOOL           render only objects visible from distance",
@@ -2224,6 +2305,10 @@ int main(int argc, char **argv)
               float(parseFloat(argv[i], "invalid lighting polynomial",
                                -16.0, 16.0));
         }
+      }
+      else if (std::strcmp(argv[i], "-lcurv") == 0)
+      {
+        i = calculatePolynomial(lightingPolynomial, argv, argc, i + 1);
       }
       else if (std::strcmp(argv[i], "-mlod") == 0)
       {
