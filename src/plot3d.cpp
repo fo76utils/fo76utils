@@ -12,7 +12,7 @@
 
 const float Plot3D_TriShape::defaultLightingPolynomial[6] =
 {
-  0.67223534f, 0.98738089f, 0.04499563f, -0.71294709f, 0.06848274f, 0.31271845f
+  0.67223534f, 0.98737308f, 0.04499248f, -0.71293136f, 0.06848673f, 0.31271107f
 };
 
 Plot3D_TriShape::VertexTransform::VertexTransform(
@@ -199,8 +199,8 @@ inline float Plot3D_TriShape::getLightLevel(float d) const
   FloatVector4  tmp(lightingPolynomial[2], lightingPolynomial[3],
                     lightingPolynomial[4], lightingPolynomial[5]);
   float   d2 = d * d;
-  FloatVector4  tmp2(d2, d2, d2, d2);
-  tmp2 *= FloatVector4(1.0f, d, d2, d2 * d);
+  float   d3 = d * d2;
+  FloatVector4  tmp2(d2, d3, d2 * d2, d2 * d3);
   float   y = d * lightingPolynomial[1] + lightingPolynomial[0];
   y += tmp2.dotProduct(tmp);
   return (y > 0.0f ? (y < 4.0f ? y : 4.0f) : 0.0f);
@@ -251,23 +251,22 @@ inline FloatVector4 Plot3D_TriShape::environmentMap(
   if (specPtr && specularLevel > 0.0f)
   {
     *specPtr = 0.0f;
-    if (v.normal.dotProduct(lightVector) > 0.0f)
+    float   l = v.normal.dotProduct(lightVector);
+    if (l > -0.125f)
     {
       // calculate specular reflection
       float   s = viewVector.dotProduct(lightVector);
       if (s > -0.5f)
       {
-        if (BRANCH_EXPECT((s >= 1.0f), false))
+        s = (s < 1.0f ? s : 1.0f);
+        float   g = FloatVector4::exp2Fast(9.0f * (1.0f - r));
+        // approximates g * log(s) / 2, more accurately if s is closer to 1
+        s = g * (s - 1.0f) / (s + 1.0f);
+        if (s > -7.0f)
         {
-          *specPtr = 1.0f;
-        }
-        else
-        {
-          float   g = FloatVector4::exp2Fast(9.0f * (1.0f - r));
-          // approximates g * log(s) / 2, more accurately if s is closer to 1
-          s = g * (s - 1.0f) / (s + 1.0f);
-          if (s > -7.0f)
-            *specPtr = FloatVector4::exp2Fast(s * 2.8853901f);  // 2 / log(2)
+          *specPtr = FloatVector4::exp2Fast(s * 2.8853901f);  // 2 / log(2)
+          if (BRANCH_EXPECT((l < 0.0f), false))
+            *specPtr = *specPtr * (l * 8.0f + 1.0f);
         }
       }
     }
