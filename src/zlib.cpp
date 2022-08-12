@@ -35,15 +35,15 @@ inline void ZLibDecompressor::srLoad()
 {
   if (BRANCH_EXPECT(sr < 0x00010000ULL, false))
   {
+    unsigned int  bitCnt = (unsigned int) FloatVector4::log2Int(int(sr));
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
-    int     bitCnt = FloatVector4::log2Int(int(sr)) + 127;
     if (BRANCH_EXPECT((inPtr + 6) <= inBufEnd, true))
     {
       // inPtr - 2 is always valid because of the 2 bytes long zlib header
       const unsigned long long  *p =
           reinterpret_cast< const unsigned long long * >(inPtr - 2);
       sr = (*p >> 1) | (1ULL << 63);
-      sr = sr >> (unsigned int) (142 - bitCnt);
+      sr = sr >> (15U - bitCnt);
       inPtr = inPtr + 6;
     }
     else if (BRANCH_EXPECT((inPtr + 2) <= inBufEnd, true))
@@ -51,7 +51,7 @@ inline void ZLibDecompressor::srLoad()
       const unsigned int  *p =
           reinterpret_cast< const unsigned int * >(inPtr - 2);
       sr = (unsigned long long) *p | (1ULL << 32);
-      sr = sr >> (unsigned int) (143 - bitCnt);
+      sr = sr >> (16U - bitCnt);
       inPtr = inPtr + 2;
     }
     else
@@ -61,15 +61,14 @@ inline void ZLibDecompressor::srLoad()
 #else
     if (BRANCH_EXPECT((inPtr + 2) > inBufEnd, false))
       throw errorMessage("end of ZLib compressed data");
-    unsigned int  srBitCnt = (unsigned int) FloatVector4::log2Int(int(sr));
-    sr &= ~(1ULL << srBitCnt);
+    sr &= ~(1ULL << bitCnt);
     do
     {
-      sr = sr | ((unsigned long long) *(inPtr++) << srBitCnt);
-      srBitCnt = srBitCnt + 8;
+      sr = sr | ((unsigned long long) *(inPtr++) << bitCnt);
+      bitCnt = bitCnt + 8;
     }
-    while (srBitCnt < 56 && inPtr < inBufEnd);
-    sr |= (1ULL << srBitCnt);
+    while (bitCnt < 56 && inPtr < inBufEnd);
+    sr |= (1ULL << bitCnt);
 #endif
   }
 }

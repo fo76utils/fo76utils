@@ -112,14 +112,9 @@ struct FloatVector4
   }
   static inline int log2Int(int x)
   {
-    union
-    {
-      float   f;
-      unsigned int  n;
-    }
-    tmp;
-    tmp.f = float(x);
-    return (int(tmp.n >> 23) - 127);
+    int     tmp = x;            // return 0 if x == 0
+    __asm__ ("bsr %0, %0" : "+r" (tmp) : : "cc");
+    return tmp;
   }
   static inline float exp2Fast(float x)
   {
