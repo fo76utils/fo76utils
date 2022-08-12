@@ -1151,11 +1151,31 @@ unsigned int Renderer::loadMaterialSwap(unsigned int formID)
   return 0U;
 }
 
+struct ThreadSortObject
+{
+  unsigned long long  tileMask;
+  size_t  triangleCnt;
+  ThreadSortObject()
+    : tileMask(0ULL),
+      triangleCnt(0)
+  {
+  }
+  inline bool operator<(const ThreadSortObject& r) const
+  {
+    return (triangleCnt > r.triangleCnt);       // reverse sort
+  }
+  inline ThreadSortObject& operator+=(const ThreadSortObject& r)
+  {
+    tileMask |= r.tileMask;
+    triangleCnt += r.triangleCnt;
+    return (*this);
+  }
+};
+
 void Renderer::renderObjectList()
 {
   clear(0x30);
-  std::vector< size_t > threadTriangleCnt(64, 0);
-  std::vector< unsigned long long > threadTileMask(64, 0ULL);
+  std::vector< ThreadSortObject > threadSortBuf(64);
   if (landData)
   {
     for (size_t i = 0; i < renderThreads.size(); i++)
@@ -1169,8 +1189,8 @@ void Renderer::renderObjectList()
   {
     for (size_t k = 0; k < 64; k++)
     {
-      threadTriangleCnt[k] = 0;
-      threadTileMask[k] = 1ULL << (unsigned int) k;
+      threadSortBuf[k].tileMask = 1ULL << (unsigned int) k;
+      threadSortBuf[k].triangleCnt = 0;
     }
     const RenderObject& o = objectList[i];
     unsigned int  modelIDMask = modelBatchCnt - 1U;
@@ -1243,48 +1263,35 @@ void Renderer::renderObjectList()
           triangleCnt = triangleCnt - 8;
         triangleCnt = triangleCnt * triangleCnt * 2U;
       }
-      threadTriangleCnt[p.tileIndex & 63] += triangleCnt;
+      threadSortBuf[p.tileIndex & 63].triangleCnt += triangleCnt;
       j++;
     }
-    size_t  threadsUsed = 64;
-    while (threadsUsed > 1)
+    // sort in descending order by triangle count
+    std::sort(threadSortBuf.begin(), threadSortBuf.end());
+    for (size_t k = size_t(threadCnt); k < threadSortBuf.size(); k++)
     {
-      // merge the areas with the lowest triangle counts
-      // until there are not more left than the number of threads
-      size_t  minCnt1 = 0x7FFFFFFF;
-      size_t  minCnt2 = 0x7FFFFFFF;
-      size_t  minCntThread1 = 0;
-      size_t  minCntThread2 = 1;
-      for (size_t k = 0; k < threadsUsed && minCnt2 > 0; k++)
-      {
-        if (threadTriangleCnt[k] < minCnt1)
-        {
-          minCnt2 = minCnt1;
-          minCntThread2 = minCntThread1;
-          minCnt1 = threadTriangleCnt[k];
-          minCntThread1 = k;
-        }
-        else if (threadTriangleCnt[k] < minCnt2)
-        {
-          minCnt2 = threadTriangleCnt[k];
-          minCntThread2 = k;
-        }
-      }
-      if (int(threadsUsed) <= threadCnt && minCnt1 > 0)
+      if (threadSortBuf[k].triangleCnt < 1)
         break;
-      threadTriangleCnt[minCntThread1] += threadTriangleCnt[minCntThread2];
-      threadTileMask[minCntThread1] |= threadTileMask[minCntThread2];
-      threadsUsed--;
-      threadTriangleCnt[minCntThread2] = threadTriangleCnt[threadsUsed];
-      threadTileMask[minCntThread2] = threadTileMask[threadsUsed];
+      // find the thread with the lowest triangle count
+      size_t  n = 0;
+      for (size_t l = 1; l < size_t(threadCnt); l++)
+      {
+        if (threadSortBuf[l].triangleCnt < threadSortBuf[n].triangleCnt)
+          n = l;
+      }
+      // add the remaining area with the highest triangle count
+      threadSortBuf[n] += threadSortBuf[k];
     }
+    size_t  threadsUsed = size_t(threadCnt);
+    while (threadsUsed > 1 && threadSortBuf[threadsUsed - 1].triangleCnt < 1)
+      threadsUsed--;
     for (size_t k = 1; k < threadsUsed; k++)
     {
       renderThreads[k].t = new std::thread(threadFunction, this, k, i, j,
-                                           threadTileMask[k]);
+                                           threadSortBuf[k].tileMask);
     }
-    if (threadTriangleCnt[0] > 0)
-      renderThread(0, i, j, threadTileMask[0]);
+    if (threadSortBuf[0].triangleCnt > 0)
+      renderThread(0, i, j, threadSortBuf[0].tileMask);
     for (size_t k = 1; k < threadsUsed; k++)
       renderThreads[k].join();
     for (size_t k = 1; k < threadsUsed; k++)
