@@ -31,7 +31,7 @@ unsigned int ZLibDecompressor::readU32BE()
   return w;
 }
 
-inline void ZLibDecompressor::srLoad()
+inline void ZLibDecompressor::srLoad(unsigned long long& sr)
 {
   if (BRANCH_EXPECT(sr < 0x00010000ULL, false))
   {
@@ -42,8 +42,7 @@ inline void ZLibDecompressor::srLoad()
       // inPtr - 2 is always valid because of the 2 bytes long zlib header
       const unsigned long long  *p =
           reinterpret_cast< const unsigned long long * >(inPtr - 2);
-      sr = (*p >> 1) | (1ULL << 63);
-      sr = sr >> (15U - bitCnt);
+      sr = (*p >> (16U - bitCnt)) | (1ULL << (bitCnt + 48U));
       inPtr = inPtr + 6;
     }
     else if (BRANCH_EXPECT((inPtr + 2) <= inBufEnd, true))
@@ -73,10 +72,23 @@ inline void ZLibDecompressor::srLoad()
   }
 }
 
-inline unsigned int ZLibDecompressor::readBitsRR(unsigned char nBits)
+inline void ZLibDecompressor::srReset(unsigned long long& sr)
 {
-  srLoad();
-  unsigned int  w = (unsigned int) sr & ((1U << nBits) - 1U);
+  unsigned long long  tmp = sr;
+  while (tmp >= 0x0100ULL)
+  {
+    tmp = tmp >> 8;
+    inPtr--;
+  }
+  sr = 1;
+}
+
+inline unsigned int ZLibDecompressor::readBitsRR(
+    unsigned long long& sr, unsigned char nBits, unsigned int prefix)
+{
+  srLoad(sr);
+  unsigned int  w =
+      ((unsigned int) sr & ((1U << nBits) - 1U)) | (prefix << nBits);
   sr = sr >> nBits;
   return w;
 }
@@ -193,7 +205,8 @@ size_t ZLibDecompressor::decompressLZ4(unsigned char *buf,
   return uncompressedSize;
 }
 
-void ZLibDecompressor::huffmanInit(bool useFixedEncoding)
+unsigned long long ZLibDecompressor::huffmanInit(
+    unsigned long long sr, bool useFixedEncoding)
 {
   unsigned int  *huffTableL = getHuffTable(2);  // literals and length codes
   unsigned int  *huffTableD = getHuffTable(1);  // distance codes
@@ -209,22 +222,22 @@ void ZLibDecompressor::huffmanInit(bool useFixedEncoding)
     for (size_t i = 0; i < 32; i++)
       lenTbl[i] = 5;
     huffmanBuildDecodeTable(huffTableD, lenTbl, 32);
-    return;
+    return sr;
   }
 
   // dynamic Huffman code
   unsigned int  *huffTableC = getHuffTable(0);  // code length codes
   unsigned char *lenTbl = reinterpret_cast< unsigned char * >(huffTableC);
-  size_t  hLit = readBitsRR(5) + 257;
-  size_t  hDist = readBitsRR(5) + 1;
-  size_t  hCLen = readBitsRR(4) + 4;
+  size_t  hLit = readBitsRR(sr, 5) + 257;
+  size_t  hDist = readBitsRR(sr, 5) + 1;
+  size_t  hCLen = readBitsRR(sr, 4) + 4;
   for (size_t i = 0; i < 19; i++)
     lenTbl[i] = 0;
   for (size_t i = 0; i < hCLen; i++)
   {
     size_t  j = (i < 3 ? (i + 16) : ((i & 1) == 0 ?
                                      ((i >> 1) + 6) : (((19 - i) >> 1) & 7)));
-    lenTbl[j] = (unsigned char) readBitsRR(3);
+    lenTbl[j] = (unsigned char) readBitsRR(sr, 3);
   }
   huffmanBuildDecodeTable(huffTableC, lenTbl, 19);
   unsigned char rleCode = 0;
@@ -241,7 +254,7 @@ void ZLibDecompressor::huffmanInit(bool useFixedEncoding)
         rleLen--;
         continue;
       }
-      unsigned char c = (unsigned char) huffmanDecode(huffTableC);
+      unsigned char c = (unsigned char) huffmanDecode(sr, huffTableC);
       if (c < 16)
       {
         lenTbl[i] = c;
@@ -250,20 +263,21 @@ void ZLibDecompressor::huffmanInit(bool useFixedEncoding)
       else if (c == 16)
       {
         lenTbl[i] = rleCode;
-        rleLen = (unsigned char) readBitsRR(2) + 2;
+        rleLen = (unsigned char) readBitsRR(sr, 2) + 2;
       }
       else
       {
         lenTbl[i] = 0;
         rleCode = 0;
         if (c == 17)
-          rleLen = (unsigned char) readBitsRR(3) + 2;
+          rleLen = (unsigned char) readBitsRR(sr, 3) + 2;
         else
-          rleLen = (unsigned char) readBitsRR(7) + 10;
+          rleLen = (unsigned char) readBitsRR(sr, 7) + 10;
       }
     }
     huffmanBuildDecodeTable((!t ? huffTableL : huffTableD), lenTbl, n);
   }
+  return sr;
 }
 
 void ZLibDecompressor::huffmanBuildDecodeTable(
@@ -337,9 +351,9 @@ void ZLibDecompressor::huffmanBuildDecodeTable(
 // huffTable[N+288] = base index in huffTable for code length N+1
 
 inline unsigned int ZLibDecompressor::huffmanDecode(
-    const unsigned int *huffTable)
+    unsigned long long& sr, const unsigned int *huffTable)
 {
-  srLoad();
+  srLoad(sr);
   unsigned int  b = huffTable[sr & 0xFF];
   unsigned char nBits = (unsigned char) (b & 0xFF);
   b = b >> 8;
@@ -370,13 +384,15 @@ inline unsigned int ZLibDecompressor::huffmanDecode(
 }
 
 unsigned char * ZLibDecompressor::decompressZLibBlock(
-    unsigned char *wp, unsigned char *buf, unsigned char *bufEnd,
+    unsigned long long& srRef, unsigned char *wp,
+    unsigned char *buf, unsigned char *bufEnd,
     unsigned int& a1, unsigned int& a2)
 {
   unsigned int  *huffTableL = getHuffTable(2);  // literals and length codes
   unsigned int  *huffTableD = getHuffTable(1);  // distance codes
   unsigned int  s1 = a1;
   unsigned int  s2 = a2;
+  unsigned long long  sr = srRef;
   while (true)
   {
     if (BRANCH_EXPECT(s2 & 0x80000000U, false))
@@ -385,7 +401,7 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
       s1 = s1 % 65521U;
       s2 = s2 % 65521U;
     }
-    unsigned int  c = huffmanDecode(huffTableL);
+    unsigned int  c = huffmanDecode(sr, huffTableL);
     if (c < 256)                    // literal byte
     {
       if (wp >= bufEnd)
@@ -412,19 +428,21 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
       }
       else
       {
-        unsigned char nBits = (unsigned char) ((lzLen - 7) >> 2);
-        lzLen = ((((lzLen - 7) & 3) | 4) << nBits) + readBitsRR(nBits) + 3;
+        lzLen = lzLen - 7;
+        unsigned char nBits = (unsigned char) (lzLen >> 2);
+        lzLen = readBitsRR(sr, nBits, (unsigned int) ((lzLen & 3) | 4)) + 3;
       }
     }
-    size_t  offs = huffmanDecode(huffTableD);
+    size_t  offs = huffmanDecode(sr, huffTableD);
     if (offs >= 4)
     {
       if (offs >= 30)
       {
         throw errorMessage("invalid or corrupt ZLib compressed data");
       }
-      unsigned char nBits = (unsigned char) ((offs - 2) >> 1);
-      offs = ((((offs - 2) & 1) | 2) << nBits) | readBitsRR(nBits);
+      offs = offs - 2;
+      unsigned char nBits = (unsigned char) (offs >> 1);
+      offs = readBitsRR(sr, nBits, (unsigned int) ((offs & 1) | 2));
     }
     offs++;
     if (offs > size_t(wp - buf))
@@ -437,22 +455,34 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
       throw errorMessage("uncompressed ZLib data larger than output buffer");
     }
     // copy LZ77 sequence
-    s1 = s1 + *rp;
-    s2 = s2 + s1;
-    *(wp++) = *(rp++);
-    s1 = s1 + *rp;
-    s2 = s2 + s1;
-    *(wp++) = *(rp++);
-    s1 = s1 + *rp;
-    s2 = s2 + s1;
-    *(wp++) = *(rp++);
-    while (lzLen-- > 3)
+    do
+    {
+      s1 = s1 + *rp;
+      s2 = s2 + s1;
+      *(wp++) = *(rp++);
+      s1 = s1 + *rp;
+      s2 = s2 + s1;
+      *(wp++) = *(rp++);
+      s1 = s1 + *rp;
+      s2 = s2 + s1;
+      *(wp++) = *(rp++);
+      lzLen = lzLen - 3;
+    }
+    while (BRANCH_EXPECT(lzLen >= 3, false));
+    if (BRANCH_EXPECT(lzLen == 2, false))
+    {
+      s1 = s1 + *rp;
+      s2 = s2 + s1;
+      *(wp++) = *(rp++);
+    }
+    if (BRANCH_EXPECT(lzLen >= 1, false))
     {
       s1 = s1 + *rp;
       s2 = s2 + s1;
       *(wp++) = *(rp++);
     }
   }
+  srRef = sr;
   a1 = s1;
   a2 = s2;
   return wp;
@@ -465,13 +495,14 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
   unsigned char *bufEnd = buf + uncompressedSize;
   unsigned int  s1 = 1;                 // Adler-32 checksum
   unsigned int  s2 = 0;
+  unsigned long long  sr = 1;
   while (true)
   {
     // read Deflate block header
-    unsigned char bhdr = (unsigned char) readBitsRR(3);
+    unsigned char bhdr = (unsigned char) readBitsRR(sr, 3);
     if (!(bhdr & 6))                    // no compression
     {
-      srReset();
+      srReset(sr);
       size_t  len = readU16LE();
       if ((len ^ readU16LE()) != 0xFFFF)
       {
@@ -500,8 +531,8 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
     }
     else                                // compressed block
     {
-      huffmanInit(!(bhdr & 4));
-      wp = decompressZLibBlock(wp, buf, bufEnd, s1, s2);
+      sr = huffmanInit(sr, !(bhdr & 4));
+      wp = decompressZLibBlock(sr, wp, buf, bufEnd, s1, s2);
     }
     s1 = s1 % 65521U;
     s2 = s2 % 65521U;
@@ -511,7 +542,7 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
       break;
     }
   }
-  srReset();
+  srReset(sr);
   // verify Adler-32 checksum
   if (readU32BE() != ((s2 << 16) | s1))
   {

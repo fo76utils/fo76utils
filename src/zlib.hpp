@@ -9,7 +9,6 @@ class ZLibDecompressor
  protected:
   const unsigned char *inPtr;
   const unsigned char *inBufEnd;
-  unsigned long long  sr;
   unsigned int  tableBuf[1312];         // 320 * 3 + 32 + 32 + 288
   // huffTable[N] (0 <= N <= 255):
   //     fast decode table for code lengths <= 8, contains length | (C << 8),
@@ -46,34 +45,27 @@ class ZLibDecompressor
   unsigned long long readU64LE();
   unsigned short readU16BE();
   unsigned int readU32BE();
-  inline void srLoad();
-  inline void srReset()
-  {
-    unsigned long long  tmp = sr;
-    while (tmp >= 0x0100ULL)
-    {
-      tmp = tmp >> 8;
-      inPtr--;
-    }
-    sr = 1;
-  }
+  inline void srLoad(unsigned long long& sr);
+  inline void srReset(unsigned long long& sr);
   // read bits packed in Deflate order (LSB first - LSB first)
   // nBits must be in the range 1 to 16
-  inline unsigned int readBitsRR(unsigned char nBits);
+  inline unsigned int readBitsRR(unsigned long long& sr, unsigned char nBits,
+                                 unsigned int prefix = 0U);
   size_t decompressLZ4(unsigned char *buf, size_t uncompressedSize);
-  void huffmanInit(bool useFixedEncoding);
+  unsigned long long huffmanInit(unsigned long long sr, bool useFixedEncoding);
   // lenTbl[c] = length of symbol 'c' (0: not used)
   static void huffmanBuildDecodeTable(
       unsigned int *huffTable, const unsigned char *lenTbl, size_t lenTblSize);
-  inline unsigned int huffmanDecode(const unsigned int *huffTable);
-  unsigned char *decompressZLibBlock(unsigned char *wp,
+  inline unsigned int huffmanDecode(unsigned long long& sr,
+                                    const unsigned int *huffTable);
+  unsigned char *decompressZLibBlock(unsigned long long& srRef,
+                                     unsigned char *wp,
                                      unsigned char *buf, unsigned char *bufEnd,
                                      unsigned int& a1, unsigned int& a2);
   size_t decompressZLib(unsigned char *buf, size_t uncompressedSize);
   ZLibDecompressor(const unsigned char *inBuf, size_t compressedSize)
     : inPtr(inBuf),
-      inBufEnd(inBuf + compressedSize),
-      sr(1)
+      inBufEnd(inBuf + compressedSize)
   {
   }
  public:
