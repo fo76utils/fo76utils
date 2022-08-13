@@ -918,18 +918,18 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName,
   if (i != textureCache.end())
   {
     CachedTexture *cachedTexture = &(i->second);
-    if (cachedTexture->prv)
-      cachedTexture->prv->nxt = cachedTexture->nxt;
-    else
-      firstTexture = cachedTexture->nxt;
     if (cachedTexture->nxt)
+    {
+      if (cachedTexture->prv)
+        cachedTexture->prv->nxt = cachedTexture->nxt;
+      else
+        firstTexture = cachedTexture->nxt;
       cachedTexture->nxt->prv = cachedTexture->prv;
-    else
-      lastTexture = cachedTexture->prv;
-    lastTexture->nxt = cachedTexture;
-    cachedTexture->prv = lastTexture;
-    cachedTexture->nxt = (CachedTexture *) 0;
-    lastTexture = cachedTexture;
+      lastTexture->nxt = cachedTexture;
+      cachedTexture->prv = lastTexture;
+      cachedTexture->nxt = (CachedTexture *) 0;
+      lastTexture = cachedTexture;
+    }
     textureCacheMutex.unlock();
     cachedTexture->textureLoadMutex->lock();
     const DDSTexture  *t = cachedTexture->texture;
