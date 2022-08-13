@@ -888,6 +888,7 @@ void Renderer::clear(unsigned int flags)
     {
       if (i->second.texture)
         delete i->second.texture;
+      delete i->second.textureLoadMutex;
     }
     textureCache.clear();
   }
@@ -905,7 +906,9 @@ size_t Renderer::getTextureDataSize(const DDSTexture *t)
   return dataSize;
 }
 
-const DDSTexture * Renderer::loadTexture(const std::string& fileName, int m)
+const DDSTexture * Renderer::loadTexture(const std::string& fileName,
+                                         std::vector< unsigned char >& fileBuf,
+                                         int m)
 {
   if (fileName.find("/temp_ground") != std::string::npos)
     return (DDSTexture *) 0;
@@ -914,57 +917,81 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName, int m)
       textureCache.find(fileName);
   if (i != textureCache.end())
   {
-    if (i->second.prv)
-      i->second.prv->nxt = i->second.nxt;
+    CachedTexture *cachedTexture = &(i->second);
+    if (cachedTexture->prv)
+      cachedTexture->prv->nxt = cachedTexture->nxt;
     else
-      firstTexture = i->second.nxt;
-    if (i->second.nxt)
-      i->second.nxt->prv = i->second.prv;
+      firstTexture = cachedTexture->nxt;
+    if (cachedTexture->nxt)
+      cachedTexture->nxt->prv = cachedTexture->prv;
     else
-      lastTexture = i->second.prv;
+      lastTexture = cachedTexture->prv;
+    lastTexture->nxt = cachedTexture;
+    cachedTexture->prv = lastTexture;
+    cachedTexture->nxt = (CachedTexture *) 0;
+    lastTexture = cachedTexture;
+    textureCacheMutex.unlock();
+    cachedTexture->textureLoadMutex->lock();
+    const DDSTexture  *t = cachedTexture->texture;
+    cachedTexture->textureLoadMutex->unlock();
+    return t;
   }
-  else
+
+  CachedTexture *cachedTexture = (CachedTexture *) 0;
+  std::mutex  *textureLoadMutex = new std::mutex();
+  try
   {
-    DDSTexture  *t = (DDSTexture *) 0;
-    try
     {
-      if (m < 0)
-        m = (fileName.find("/cubemaps/") == std::string::npos ? textureMip : 0);
-      try
-      {
-        m = ba2File.extractTexture(fileBuf, fileName, m);
-        t = new DDSTexture(&(fileBuf.front()), fileBuf.size(), m);
-      }
-      catch (std::runtime_error&)
-      {
-      }
       CachedTexture tmp;
-      tmp.texture = t;
+      tmp.texture = (DDSTexture *) 0;
       tmp.i = textureCache.end();
       tmp.prv = (CachedTexture *) 0;
       tmp.nxt = (CachedTexture *) 0;
+      tmp.textureLoadMutex = textureLoadMutex;
       i = textureCache.insert(std::pair< std::string, CachedTexture >(
                                   fileName, tmp)).first;
-      i->second.i = i;
-      textureDataSize = textureDataSize + getTextureDataSize(t);
     }
-    catch (...)
-    {
-      textureCacheMutex.unlock();
-      if (t)
-        delete t;
-      throw;
-    }
+    textureLoadMutex = (std::mutex *) 0;
+    cachedTexture = &(i->second);
+    cachedTexture->i = i;
+    if (lastTexture)
+      lastTexture->nxt = cachedTexture;
+    else
+      firstTexture = cachedTexture;
+    cachedTexture->prv = lastTexture;
+    cachedTexture->nxt = (CachedTexture *) 0;
+    lastTexture = cachedTexture;
   }
-  if (lastTexture)
-    lastTexture->nxt = &(i->second);
-  else
-    firstTexture = &(i->second);
-  i->second.prv = lastTexture;
-  i->second.nxt = (CachedTexture *) 0;
-  lastTexture = &(i->second);
-  const DDSTexture  *t = i->second.texture;
+  catch (...)
+  {
+    textureCacheMutex.unlock();
+    delete textureLoadMutex;
+    throw;
+  }
+
+  DDSTexture  *t = (DDSTexture *) 0;
+  cachedTexture->textureLoadMutex->lock();
   textureCacheMutex.unlock();
+  try
+  {
+    if (m < 0)
+      m = (fileName.find("/cubemaps/") == std::string::npos ? textureMip : 0);
+    m = ba2File.extractTexture(fileBuf, fileName, m);
+    t = new DDSTexture(&(fileBuf.front()), fileBuf.size(), m);
+    cachedTexture->texture = t;
+    textureCacheMutex.lock();
+    textureDataSize = textureDataSize + getTextureDataSize(t);
+    textureCacheMutex.unlock();
+  }
+  catch (std::runtime_error&)
+  {
+  }
+  catch (...)
+  {
+    cachedTexture->textureLoadMutex->unlock();
+    throw;
+  }
+  cachedTexture->textureLoadMutex->unlock();
   return t;
 }
 
@@ -975,6 +1002,7 @@ void Renderer::shrinkTextureCache()
     size_t  dataSize = getTextureDataSize(firstTexture->texture);
     if (firstTexture->texture)
       delete firstTexture->texture;
+    delete firstTexture->textureLoadMutex;
     std::map< std::string, CachedTexture >::iterator  i = firstTexture->i;
     if (firstTexture->nxt)
       firstTexture->nxt->prv = (CachedTexture *) 0;
@@ -1129,6 +1157,7 @@ unsigned int Renderer::loadMaterialSwap(unsigned int formID)
           }
           try
           {
+            std::vector< unsigned char >& fileBuf(renderThreads[0].fileBuf);
             ba2File.extractFile(fileBuf, stringBuf);
             FileBuffer  tmp(&(fileBuf.front()), fileBuf.size());
             m.bgsmFile.loadBGSMFile(m.texturePaths, tmp);
@@ -1396,7 +1425,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (t.renderer->flags & 0x02)
       {
         if (!defaultWaterTexture.empty())
-          textures[1] = loadTexture(defaultWaterTexture);
+          textures[1] = loadTexture(defaultWaterTexture, t.fileBuf);
       }
       else
       {
@@ -1428,7 +1457,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           else if (k == 4 && (textures[6] || textures[8]))
             texturePath = &defaultEnvMap;
           if (texturePath && !texturePath->empty())
-            textures[k] = loadTexture(*texturePath);
+            textures[k] = loadTexture(*texturePath, t.fileBuf);
         }
       }
       t.renderer->drawTriShape(
@@ -1499,7 +1528,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     textures[0] = (DDSTexture *) 0;
     textures[1] = (DDSTexture *) 0;
     if (!defaultWaterTexture.empty())
-      textures[1] = loadTexture(defaultWaterTexture);
+      textures[1] = loadTexture(defaultWaterTexture, t.fileBuf);
     *(t.renderer) = tmp;
     t.renderer->drawTriShape(
         p.modelTransform, viewTransform, lightX, lightY, lightZ, textures, 2);
@@ -1779,13 +1808,19 @@ void Renderer::loadTerrain(const char *btdFileName,
   landTextures.resize(landData->getTextureCount(), (DDSTexture *) 0);
   if (cellTextureResolution > landData->getCellResolution())
     landTexturesN.resize(landData->getTextureCount(), (DDSTexture *) 0);
+  std::vector< unsigned char >& fileBuf(renderThreads[0].fileBuf);
   int     mipLevelD = textureMip + int(landTextureMip);
   for (size_t i = 0; i < landTextures.size(); i++)
   {
     if (!enableTextures)
-      landTextures[i] = loadTexture(whiteTexturePath);
+    {
+      landTextures[i] = loadTexture(whiteTexturePath, fileBuf);
+    }
     else if (!landData->getTextureDiffuse(i).empty())
-      landTextures[i] = loadTexture(landData->getTextureDiffuse(i), mipLevelD);
+    {
+      landTextures[i] = loadTexture(landData->getTextureDiffuse(i), fileBuf,
+                                    mipLevelD);
+    }
     if (i < landTexturesN.size())
     {
       long    fileSizeD = ba2File.getFileSize(landData->getTextureDiffuse(i));
@@ -1793,7 +1828,8 @@ void Renderer::loadTerrain(const char *btdFileName,
       int     mipLevelN = mipLevelD + calculateLandTxtMip(fileSizeN)
                           - calculateLandTxtMip(fileSizeD);
       mipLevelN = (mipLevelN > 0 ? (mipLevelN < 15 ? mipLevelN : 15) : 0);
-      landTexturesN[i] = loadTexture(landData->getTextureNormal(i), mipLevelN);
+      landTexturesN[i] = loadTexture(landData->getTextureNormal(i), fileBuf,
+                                     mipLevelN);
     }
   }
 }
@@ -1837,7 +1873,7 @@ void Renderer::renderWater(unsigned int formID)
   {
     const DDSTexture  *envMap = (DDSTexture *) 0;
     if (!defaultEnvMap.empty())
-      envMap = loadTexture(defaultEnvMap);
+      envMap = loadTexture(defaultEnvMap, renderThreads[0].fileBuf);
     renderThreads[0].renderer->renderWater(
         viewTransform, waterColor, lightX, lightY, lightZ,
         envMap, waterReflectionLevel);

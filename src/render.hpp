@@ -73,6 +73,7 @@ class Renderer
     std::map< std::string, CachedTexture >::iterator  i;
     CachedTexture *prv;
     CachedTexture *nxt;
+    std::mutex    *textureLoadMutex;
   };
   struct ModelData
   {
@@ -101,6 +102,7 @@ class Renderer
     Plot3D_TriShape *renderer;
     // objects not rendered due to incorrect bounds
     std::vector< unsigned int > objectsRemaining;
+    std::vector< unsigned char >  fileBuf;
     RenderThread();
     ~RenderThread();
     void join();
@@ -151,7 +153,6 @@ class Renderer
   std::map< unsigned int, std::vector< MaterialSwap > > materialSwaps;
   std::vector< RenderThread > renderThreads;
   std::string stringBuf;
-  std::vector< unsigned char >  fileBuf;
   unsigned int  waterColor;
   float   waterReflectionLevel;
   int     zRangeMax;
@@ -189,7 +190,9 @@ class Renderer
   void clear(unsigned int flags);
   static size_t getTextureDataSize(const DDSTexture *t);
   // returns NULL on failure
-  const DDSTexture *loadTexture(const std::string& fileName, int m = -1);
+  const DDSTexture *loadTexture(const std::string& fileName,
+                                std::vector< unsigned char >& fileBuf,
+                                int m = -1);
   void shrinkTextureCache();
   bool isExcludedModel(const std::string& modelPath) const;
   bool isHighQualityModel(const std::string& modelPath) const;
