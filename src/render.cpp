@@ -1395,6 +1395,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     NIFFile::NIFVertexTransform vt(p.modelTransform);
     vt *= viewTransform;
     size_t  n = p.model.o->modelID & (modelBatchCnt - 1U);
+    t.sortBuf.clear();
+    t.sortBuf.reserve(nifFiles[n].meshData.size());
     for (size_t j = 0; j < nifFiles[n].meshData.size(); j++)
     {
       if (nifFiles[n].meshData[j].flags & 0x05) // hidden or effect
@@ -1410,7 +1412,17 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         continue;
       if (m & ~tileMask)
         return false;
-      *(t.renderer) = nifFiles[n].meshData[j];
+      RenderThread::TriShapeSortObject  tmp;
+      tmp.ts = &(nifFiles[n].meshData.front()) + j;
+      tmp.z = b.zMin;
+      t.sortBuf.push_back(tmp);
+    }
+    if (t.sortBuf.size() < 1)
+      return true;
+    std::stable_sort(t.sortBuf.begin(), t.sortBuf.end());
+    for (size_t j = 0; j < t.sortBuf.size(); j++)
+    {
+      *(t.renderer) = *(t.sortBuf[j].ts);
       if (p.flags & 0x80)
         t.renderer->gradientMapV = (unsigned char) (p.flags >> 8);
       const std::string *texturePaths[10];

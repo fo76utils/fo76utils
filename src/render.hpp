@@ -96,6 +96,15 @@ class Renderer
   };
   struct RenderThread
   {
+    struct TriShapeSortObject
+    {
+      NIFFile::NIFTriShape  *ts;
+      float   z;
+      inline bool operator<(const TriShapeSortObject& r) const
+      {
+        return (z < r.z);
+      }
+    };
     std::thread *t;
     std::string errMsg;
     TerrainMesh *terrainMesh;
@@ -103,6 +112,7 @@ class Renderer
     // objects not rendered due to incorrect bounds
     std::vector< unsigned int > objectsRemaining;
     std::vector< unsigned char >  fileBuf;
+    std::vector< TriShapeSortObject > sortBuf;
     RenderThread();
     ~RenderThread();
     void join();
