@@ -41,59 +41,41 @@ static inline void convertTexCoord(int& x0, int& y0, float& xf, float& yf,
   yf = y - float(y0);
 }
 
-static inline FloatVector4 blendFP32Vec4Bilinear(
-    unsigned int c0, unsigned int c1, unsigned int c2, unsigned int c3,
-    float xf, float yf)
-{
-  float   f3 = xf * yf;
-  float   f2 = yf - f3;
-  float   f1 = xf - f3;
-  float   f0 = 1.0f - (xf + f2);
-  FloatVector4  c0_f(c0);
-  FloatVector4  c1_f(c1);
-  FloatVector4  c2_f(c2);
-  FloatVector4  c3_f(c3);
-  c0_f *= f0;
-  c1_f *= f1;
-  c2_f *= f2;
-  c3_f *= f3;
-  c0_f += c1_f;
-  c0_f += c2_f;
-  c0_f += c3_f;
-  return c0_f;
-}
-
-static inline unsigned long long decodeBC3Alpha(unsigned int *a,
+static inline unsigned long long decodeBC3Alpha(unsigned long long& a,
                                                 const unsigned char *src,
                                                 bool isSigned = false)
 {
-  a[0] = src[0] ^ (!isSigned ? 0U : 0x80U);
-  a[1] = src[1] ^ (!isSigned ? 0U : 0x80U);
-  if (a[0] > a[1])
+  unsigned int  a0 = src[0] ^ (!isSigned ? 0U : 0x80U);
+  unsigned int  a1 = src[1] ^ (!isSigned ? 0U : 0x80U);
+  FloatVector4  a0_f((float) int(a0));
+  FloatVector4  a1_f((float) int(a1));
+  a1_f -= a0_f;
+  if (a0 > a1)
   {
-    int     n = int((a[0] << 18) + 0x00020000U);
-    int     d = (int(a[1]) - int(a[0])) * 37449;
-    for (unsigned int i = 2; i < 8; i++)
-    {
-      n = n + d;
-      a[i] = (unsigned int) n >> 18;
-    }
+    FloatVector4  m(0.0f, 1.0f, 1.0f / 7.0f, 2.0f / 7.0f);
+    a = (unsigned int) (a0_f + (a1_f * m));
+    m = FloatVector4(3.0f / 7.0f, 4.0f / 7.0f, 5.0f / 7.0f, 6.0f / 7.0f);
+    a = a | ((unsigned long long) ((unsigned int) (a0_f + (a1_f * m))) << 32);
   }
   else
   {
-    int     n = int((a[0] << 20) + 0x00080000U);
-    int     d = (int(a[1]) - int(a[0])) * 209715;
-    for (unsigned int i = 2; i < 6; i++)
-    {
-      n = n + d;
-      a[i] = (unsigned int) n >> 20;
-    }
-    a[6] = 0;
-    a[7] = 255;
+    a = a0 | (a1 << 8) | 0xFF00000000000000ULL;
+    FloatVector4  m(0.2f, 0.4f, 0.6f, 0.8f);
+    a = a | ((unsigned long long) ((unsigned int) (a0_f + (a1_f * m))) << 16);
   }
   unsigned long long  ba = FileBuffer::readUInt16Fast(src + 2);
   ba = ba | ((unsigned long long) FileBuffer::readUInt32Fast(src + 4) << 16);
   return ba;
+}
+
+static inline unsigned int decodeAlphaChannel(const unsigned long long& a,
+                                              unsigned long long ba)
+{
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  return reinterpret_cast< const unsigned char * >(&a)[ba & 7];
+#else
+  return ((unsigned int) (a >> (unsigned char) ((ba & 7) << 3)) & 0xFFU);
+#endif
 }
 
 static inline unsigned int decodeBC1Colors(unsigned int *c,
@@ -102,29 +84,22 @@ static inline unsigned int decodeBC1Colors(unsigned int *c,
 {
   unsigned int  c0 = FileBuffer::readUInt16Fast(src);
   unsigned int  c1 = FileBuffer::readUInt16Fast(src + 2);
-  unsigned int  rb0 =
-      ((((c0 & 0x001F) << 16) | ((c0 & 0xF800) >> 11)) * 2106U) + 0x007F007FU;
-  unsigned int  g0 = ((c0 & 0x07E0) * (1036U << 3)) + 0x00008500U;
-  c[0] = (((rb0 & 0xFF00FF00U) | (g0 & 0x00FF0000U)) >> 8) | a;
-  unsigned int  rb1 =
-      ((((c1 & 0x001F) << 16) | ((c1 & 0xF800) >> 11)) * 2106U) + 0x007F007FU;
-  unsigned int  g1 = ((c1 & 0x07E0) * (1036U << 3)) + 0x00008500U;
-  c[1] = (((rb1 & 0xFF00FF00U) | (g1 & 0x00FF0000U)) >> 8) | a;
+  FloatVector4  c0_f(((c0 & 0x001FU) << 16) | ((c0 & 0x07E0U) << 3)
+                     | ((c0 & 0xF800U) >> 11) | a);
+  FloatVector4  c1_f(((c1 & 0x001FU) << 16) | ((c1 & 0x07E0U) << 3)
+                     | ((c1 & 0xF800U) >> 11) | a);
+  c0_f *= FloatVector4(255.0f / 31.0f, 255.0f / 63.0f, 255.0f / 31.0f, 1.0f);
+  c1_f *= FloatVector4(255.0f / 31.0f, 255.0f / 63.0f, 255.0f / 31.0f, 1.0f);
+  c[0] = (unsigned int) c0_f;
+  c[1] = (unsigned int) c1_f;
   if (BRANCH_EXPECT(c0 > c1, true))
   {
-    unsigned long long  c0l = rgba32ToRBGA64(c[0]);
-    unsigned long long  c1l = rgba32ToRBGA64(c[1]);
-    unsigned long long  tmp0 = (c0l + c0l + c1l) * 85U;
-    unsigned long long  tmp1 = (c0l + c1l + c1l) * 85U;
-    tmp0 = tmp0 + ((tmp0 & 0xFF00FF00FF00FF00ULL) >> 8) + 0x0080008000800080ULL;
-    tmp1 = tmp1 + ((tmp1 & 0xFF00FF00FF00FF00ULL) >> 8) + 0x0080008000800080ULL;
-    c[2] = rbga64ToRGBA32(tmp0 >> 8);
-    c[3] = rbga64ToRGBA32(tmp1 >> 8);
+    c[2] = (unsigned int) ((c0_f + c0_f + c1_f) * FloatVector4(1.0f / 3.0f));
+    c[3] = (unsigned int) ((c0_f + c1_f + c1_f) * FloatVector4(1.0f / 3.0f));
   }
   else
   {
-    c[2] = ((c[0] >> 1) & 0x7F7F7F7FU) + ((c[1] >> 1) & 0x7F7F7F7FU)
-           + ((c[0] | c[1]) & 0x01010101U);
+    c[2] = (unsigned int) ((c0_f + c1_f) * FloatVector4(0.5f));
     c[3] = c[2] & ~a;
   }
   unsigned int  bc = FileBuffer::readUInt32Fast(src + 4);
@@ -169,12 +144,12 @@ size_t DDSTexture::decodeBlock_BC3(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  c[4];
-  unsigned int  a[8];
+  unsigned long long  a;
   unsigned long long  ba = decodeBC3Alpha(a, src);
   unsigned int  bc = decodeBC1Colors(c, src + 8);
   for (unsigned int i = 0; i < 16; i++)
   {
-    dst[(i >> 2) * w + (i & 3)] = c[bc & 3] | (a[ba & 7] << 24);
+    dst[(i >> 2) * w + (i & 3)] = c[bc & 3] | (decodeAlphaChannel(a, ba) << 24);
     ba = ba >> 3;
     bc = bc >> 2;
   }
@@ -184,11 +159,12 @@ size_t DDSTexture::decodeBlock_BC3(
 size_t DDSTexture::decodeBlock_BC4(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned int  a[8];
+  unsigned long long  a;
   unsigned long long  ba = decodeBC3Alpha(a, src);
   for (unsigned int i = 0; i < 16; i++)
   {
-    dst[(i >> 2) * w + (i & 3)] = (a[ba & 7] * 0x00010101U) | 0xFF000000U;
+    dst[(i >> 2) * w + (i & 3)] =
+        (decodeAlphaChannel(a, ba) * 0x00010101U) | 0xFF000000U;
     ba = ba >> 3;
   }
   return 8;
@@ -197,11 +173,12 @@ size_t DDSTexture::decodeBlock_BC4(
 size_t DDSTexture::decodeBlock_BC4S(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned int  a[8];
+  unsigned long long  a;
   unsigned long long  ba = decodeBC3Alpha(a, src, true);
   for (unsigned int i = 0; i < 16; i++)
   {
-    dst[(i >> 2) * w + (i & 3)] = (a[ba & 7] * 0x00010101U) | 0xFF000000U;
+    dst[(i >> 2) * w + (i & 3)] =
+        (decodeAlphaChannel(a, ba) * 0x00010101U) | 0xFF000000U;
     ba = ba >> 3;
   }
   return 8;
@@ -210,14 +187,15 @@ size_t DDSTexture::decodeBlock_BC4S(
 size_t DDSTexture::decodeBlock_BC5(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned int  a1[8];
-  unsigned int  a2[8];
+  unsigned long long  a1;
+  unsigned long long  a2;
   unsigned long long  ba1 = decodeBC3Alpha(a1, src);
   unsigned long long  ba2 = decodeBC3Alpha(a2, src + 8);
   for (unsigned int i = 0; i < 16; i++)
   {
     dst[(i >> 2) * w + (i & 3)] =
-        a1[ba1 & 7] | (a2[ba2 & 7] << 8) | 0xFF000000U;
+        decodeAlphaChannel(a1, ba1) | (decodeAlphaChannel(a2, ba2) << 8)
+        | 0xFF000000U;
     ba1 = ba1 >> 3;
     ba2 = ba2 >> 3;
   }
@@ -227,14 +205,15 @@ size_t DDSTexture::decodeBlock_BC5(
 size_t DDSTexture::decodeBlock_BC5S(
     unsigned int *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned int  a1[8];
-  unsigned int  a2[8];
+  unsigned long long  a1;
+  unsigned long long  a2;
   unsigned long long  ba1 = decodeBC3Alpha(a1, src, true);
   unsigned long long  ba2 = decodeBC3Alpha(a2, src + 8, true);
   for (unsigned int i = 0; i < 16; i++)
   {
     dst[(i >> 2) * w + (i & 3)] =
-        a1[ba1 & 7] | (a2[ba2 & 7] << 8) | 0xFF000000U;
+        decodeAlphaChannel(a1, ba1) | (decodeAlphaChannel(a2, ba2) << 8)
+        | 0xFF000000U;
     ba1 = ba1 >> 3;
     ba2 = ba2 >> 3;
   }
@@ -648,10 +627,10 @@ FloatVector4 DDSTexture::getPixelB(float x, float y, int mipLevel) const
   int     x0, y0;
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, x, y);
-  return blendFP32Vec4Bilinear(getPixelN(x0, y0, mipLevel),
-                               getPixelN(x0 + 1, y0, mipLevel),
-                               getPixelN(x0, y0 + 1, mipLevel),
-                               getPixelN(x0 + 1, y0 + 1, mipLevel), xf, yf);
+  return FloatVector4(getPixelN(x0, y0, mipLevel),
+                      getPixelN(x0 + 1, y0, mipLevel),
+                      getPixelN(x0, y0 + 1, mipLevel),
+                      getPixelN(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
 FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
@@ -664,19 +643,17 @@ FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
   int     x0, y0;
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, x, y);
-  FloatVector4  c0(blendFP32Vec4Bilinear(
-                       getPixelN(x0, y0, m0),
-                       getPixelN(x0 + 1, y0, m0),
-                       getPixelN(x0, y0 + 1, m0),
-                       getPixelN(x0 + 1, y0 + 1, m0), xf, yf));
+  FloatVector4  c0(getPixelN(x0, y0, m0),
+                   getPixelN(x0 + 1, y0, m0),
+                   getPixelN(x0, y0 + 1, m0),
+                   getPixelN(x0 + 1, y0 + 1, m0), xf, yf);
   if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
   {
     convertTexCoord(x0, y0, xf, yf, x * 0.5f, y * 0.5f);
-    FloatVector4  c1(blendFP32Vec4Bilinear(
-                         getPixelN(x0, y0, m0 + 1),
-                         getPixelN(x0 + 1, y0, m0 + 1),
-                         getPixelN(x0, y0 + 1, m0 + 1),
-                         getPixelN(x0 + 1, y0 + 1, m0 + 1), xf, yf));
+    FloatVector4  c1(getPixelN(x0, y0, m0 + 1),
+                     getPixelN(x0 + 1, y0, m0 + 1),
+                     getPixelN(x0, y0 + 1, m0 + 1),
+                     getPixelN(x0 + 1, y0 + 1, m0 + 1), xf, yf);
     c0 *= (1.0f - mf);
     c1 *= mf;
     c0 += c1;
@@ -722,8 +699,8 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
       float   xScale = float(int(t->xSizeMip0)) / float(int(w));
       float   yScale = float(int(t->ySizeMip0)) / float(int(h));
       FloatVector4  tmp2(t->getPixelT(x * xScale, y * yScale, float(m0) + mf));
-      tmp1.setElement(2, tmp2[0]);
-      tmp1.setElement(3, tmp2[1]);
+      tmp1[2] = tmp2[0];
+      tmp1[3] = tmp2[1];
       return tmp1;
     }
   }
@@ -734,12 +711,10 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
   int     x0, y0;
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, x, y);
-  FloatVector4  c0(blendFP32Vec4Bilinear(
-                       getPixelN_2(*t1, *t2, x0, y0, xMask, yMask),
-                       getPixelN_2(*t1, *t2, x0 + 1, y0, xMask, yMask),
-                       getPixelN_2(*t1, *t2, x0, y0 + 1, xMask, yMask),
-                       getPixelN_2(*t1, *t2, x0 + 1, y0 + 1, xMask, yMask),
-                       xf, yf));
+  FloatVector4  c0(getPixelN_2(*t1, *t2, x0, y0, xMask, yMask),
+                   getPixelN_2(*t1, *t2, x0 + 1, y0, xMask, yMask),
+                   getPixelN_2(*t1, *t2, x0, y0 + 1, xMask, yMask),
+                   getPixelN_2(*t1, *t2, x0 + 1, y0 + 1, xMask, yMask), xf, yf);
   if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
   {
     convertTexCoord(x0, y0, xf, yf, x * 0.5f, y * 0.5f);
@@ -747,12 +722,11 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
     t2++;
     xMask = xMask >> 1;
     yMask = yMask >> 1;
-    FloatVector4  c1(blendFP32Vec4Bilinear(
-                         getPixelN_2(*t1, *t2, x0, y0, xMask, yMask),
-                         getPixelN_2(*t1, *t2, x0 + 1, y0, xMask, yMask),
-                         getPixelN_2(*t1, *t2, x0, y0 + 1, xMask, yMask),
-                         getPixelN_2(*t1, *t2, x0 + 1, y0 + 1, xMask, yMask),
-                         xf, yf));
+    FloatVector4  c1(getPixelN_2(*t1, *t2, x0, y0, xMask, yMask),
+                     getPixelN_2(*t1, *t2, x0 + 1, y0, xMask, yMask),
+                     getPixelN_2(*t1, *t2, x0, y0 + 1, xMask, yMask),
+                     getPixelN_2(*t1, *t2, x0 + 1, y0 + 1, xMask, yMask),
+                     xf, yf);
     c0 *= (1.0f - mf);
     c1 *= mf;
     c0 += c1;
@@ -766,10 +740,10 @@ FloatVector4 DDSTexture::getPixelBM(float x, float y, int mipLevel) const
   int     x0, y0;
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, x, y);
-  return blendFP32Vec4Bilinear(getPixelM(x0, y0, mipLevel),
-                               getPixelM(x0 + 1, y0, mipLevel),
-                               getPixelM(x0, y0 + 1, mipLevel),
-                               getPixelM(x0 + 1, y0 + 1, mipLevel), xf, yf);
+  return FloatVector4(getPixelM(x0, y0, mipLevel),
+                      getPixelM(x0 + 1, y0, mipLevel),
+                      getPixelM(x0, y0 + 1, mipLevel),
+                      getPixelM(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
 FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
@@ -782,19 +756,17 @@ FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
   int     x0, y0;
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, x, y);
-  FloatVector4  c0(blendFP32Vec4Bilinear(
-                       getPixelM(x0, y0, m0),
-                       getPixelM(x0 + 1, y0, m0),
-                       getPixelM(x0, y0 + 1, m0),
-                       getPixelM(x0 + 1, y0 + 1, m0), xf, yf));
+  FloatVector4  c0(getPixelM(x0, y0, m0),
+                   getPixelM(x0 + 1, y0, m0),
+                   getPixelM(x0, y0 + 1, m0),
+                   getPixelM(x0 + 1, y0 + 1, m0), xf, yf);
   if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
   {
     convertTexCoord(x0, y0, xf, yf, x * 0.5f, y * 0.5f);
-    FloatVector4  c1(blendFP32Vec4Bilinear(
-                         getPixelM(x0, y0, m0 + 1),
-                         getPixelM(x0 + 1, y0, m0 + 1),
-                         getPixelM(x0, y0 + 1, m0 + 1),
-                         getPixelM(x0 + 1, y0 + 1, m0 + 1), xf, yf));
+    FloatVector4  c1(getPixelM(x0, y0, m0 + 1),
+                     getPixelM(x0 + 1, y0, m0 + 1),
+                     getPixelM(x0, y0 + 1, m0 + 1),
+                     getPixelM(x0 + 1, y0 + 1, m0 + 1), xf, yf);
     c0 *= (1.0f - mf);
     c1 *= mf;
     c0 += c1;
@@ -808,10 +780,10 @@ FloatVector4 DDSTexture::getPixelBC(float x, float y, int mipLevel) const
   int     x0, y0;
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, x, y);
-  return blendFP32Vec4Bilinear(getPixelC(x0, y0, mipLevel),
-                               getPixelC(x0 + 1, y0, mipLevel),
-                               getPixelC(x0, y0 + 1, mipLevel),
-                               getPixelC(x0 + 1, y0 + 1, mipLevel), xf, yf);
+  return FloatVector4(getPixelC(x0, y0, mipLevel),
+                      getPixelC(x0 + 1, y0, mipLevel),
+                      getPixelC(x0, y0 + 1, mipLevel),
+                      getPixelC(x0 + 1, y0 + 1, mipLevel), xf, yf);
 }
 
 FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
@@ -824,19 +796,17 @@ FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
   int     x0, y0;
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, x, y);
-  FloatVector4  c0(blendFP32Vec4Bilinear(
-                       getPixelC(x0, y0, m0),
-                       getPixelC(x0 + 1, y0, m0),
-                       getPixelC(x0, y0 + 1, m0),
-                       getPixelC(x0 + 1, y0 + 1, m0), xf, yf));
+  FloatVector4  c0(getPixelC(x0, y0, m0),
+                   getPixelC(x0 + 1, y0, m0),
+                   getPixelC(x0, y0 + 1, m0),
+                   getPixelC(x0 + 1, y0 + 1, m0), xf, yf);
   if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
   {
     convertTexCoord(x0, y0, xf, yf, x * 0.5f, y * 0.5f);
-    FloatVector4  c1(blendFP32Vec4Bilinear(
-                         getPixelC(x0, y0, m0 + 1),
-                         getPixelC(x0 + 1, y0, m0 + 1),
-                         getPixelC(x0, y0 + 1, m0 + 1),
-                         getPixelC(x0 + 1, y0 + 1, m0 + 1), xf, yf));
+    FloatVector4  c1(getPixelC(x0, y0, m0 + 1),
+                     getPixelC(x0 + 1, y0, m0 + 1),
+                     getPixelC(x0, y0 + 1, m0 + 1),
+                     getPixelC(x0 + 1, y0 + 1, m0 + 1), xf, yf);
     c0 *= (1.0f - mf);
     c1 *= mf;
     c0 += c1;
@@ -901,11 +871,10 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
   float   xf, yf;
   convertTexCoord(x0, y0, xf, yf, txtX, txtY);
   const unsigned int  *p = textureData[m0] + n;
-  FloatVector4  c0(blendFP32Vec4Bilinear(
-                       p[(y0 & h) * (w + 1) + (x0 & w)],
-                       p[(y0 & h) * (w + 1) + ((x0 + 1) & w)],
-                       p[((y0 + 1) & h) * (w + 1) + (x0 & w)],
-                       p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)], xf, yf));
+  FloatVector4  c0(p[(y0 & h) * (w + 1) + (x0 & w)],
+                   p[(y0 & h) * (w + 1) + ((x0 + 1) & w)],
+                   p[((y0 + 1) & h) * (w + 1) + (x0 & w)],
+                   p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)], xf, yf);
   if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
   {
     w = w >> 1;
@@ -914,11 +883,10 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
     txtY = (1.0f - y) * (float(h) * 0.5f);
     convertTexCoord(x0, y0, xf, yf, txtX, txtY);
     p = textureData[m0 + 1] + n;
-    FloatVector4  c1(blendFP32Vec4Bilinear(
-                         p[(y0 & h) * (w + 1) + (x0 & w)],
-                         p[(y0 & h) * (w + 1) + ((x0 + 1) & w)],
-                         p[((y0 + 1) & h) * (w + 1) + (x0 & w)],
-                         p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)], xf, yf));
+    FloatVector4  c1(p[(y0 & h) * (w + 1) + (x0 & w)],
+                     p[(y0 & h) * (w + 1) + ((x0 + 1) & w)],
+                     p[((y0 + 1) & h) * (w + 1) + (x0 & w)],
+                     p[((y0 + 1) & h) * (w + 1) + ((x0 + 1) & w)], xf, yf);
     c0 *= (1.0f - mf);
     c1 *= mf;
     c0 += c1;
@@ -989,7 +957,7 @@ unsigned int downsample2xFilter(const unsigned int *buf,
 {
   static const Downsample2xTable  t;
   const int   *p = t.filterTable;
-  FloatVector4  c(0U);
+  FloatVector4  c(0.0f);
   if (BRANCH_EXPECT((x >= 5 && x < (imageWidth - 5) &&
                      y >= 5 && y < (imageHeight - 5)), true))
   {
@@ -1000,7 +968,7 @@ unsigned int downsample2xFilter(const unsigned int *buf,
       int     yOffs = *(p++);
       for (int j = 0; j < 4; j++, p = p + 2)
       {
-        FloatVector4  tmp(0U);
+        FloatVector4  tmp(0.0f);
         int     xOffs = p[0];
         t.getPixelFast(tmp, buf, imageWidth, xOffs, yOffs);
         t.getPixelFast(tmp, buf, imageWidth, yOffs, -xOffs);
@@ -1019,7 +987,7 @@ unsigned int downsample2xFilter(const unsigned int *buf,
       int     yOffs = *(p++);
       for (int j = 0; j < 4; j++, p = p + 2)
       {
-        FloatVector4  tmp(0U);
+        FloatVector4  tmp(0.0f);
         int     xOffs = p[0];
         t.getPixel(tmp, buf, imageWidth, imageHeight, x + xOffs, y + yOffs);
         t.getPixel(tmp, buf, imageWidth, imageHeight, x + yOffs, y - xOffs);
@@ -1031,7 +999,6 @@ unsigned int downsample2xFilter(const unsigned int *buf,
     }
   }
   c *= (1.0f / 1024.0f);
-  c.squareRoot();
-  return (unsigned int) c;
+  return (unsigned int) c.squareRootFast();
 }
 

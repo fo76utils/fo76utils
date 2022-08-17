@@ -37,8 +37,8 @@ class LandscapeTexture
                                          float f);
   static inline FloatVector4 colorToNormal(FloatVector4 c);
   static inline FloatVector4 normalToColor(FloatVector4 n);
-  inline FloatVector4 getFO76VertexColor(size_t offs) const;
-  inline FloatVector4 getTES4VertexColor(size_t offs) const;
+  inline unsigned int getFO76VertexColor(size_t offs) const;
+  inline unsigned int getTES4VertexColor(size_t offs) const;
   inline FloatVector4 getFO76VertexColor(int x, int y, int renderScale) const;
   inline FloatVector4 getTES4VertexColor(int x, int y, int renderScale) const;
   static FloatVector4 renderPixelFO76I_NoNormals(

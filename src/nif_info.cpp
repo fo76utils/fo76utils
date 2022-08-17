@@ -535,7 +535,7 @@ void Renderer::threadFunction(Renderer *p, size_t n)
   try
   {
     NIFFile::NIFVertexTransform vt(p->viewTransform);
-    vt.offsY -= float(p->viewOffsetY[n]);
+    vt.offsY = vt.offsY - float(p->viewOffsetY[n]);
     bool    haveWater = false;
     for (size_t i = 0; i < p->meshData.size(); i++)
     {
@@ -732,22 +732,19 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
             renderer.meshData[i].calculateBounds(b, &t);
         }
         float   xScale = float(imageWidth) * 0.9375f;
-        if (b.xMax > b.xMin)
-          xScale = xScale / (b.xMax - b.xMin);
+        if (b.xMax() > b.xMin())
+          xScale = xScale / (b.xMax() - b.xMin());
         float   yScale = float(imageHeight) * 0.9375f;
-        if (b.yMax > b.yMin)
-          yScale = yScale / (b.yMax - b.yMin);
-        renderer.viewTransform.scale =
-            (xScale < yScale ? xScale : yScale)
-            * float(std::pow(2.0f, float(viewScale) * 0.25f));
+        if (b.yMax() > b.yMin())
+          yScale = yScale / (b.yMax() - b.yMin());
+        float   scale = (xScale < yScale ? xScale : yScale)
+                        * float(std::pow(2.0f, float(viewScale) * 0.25f));
+        renderer.viewTransform.scale = scale;
         renderer.viewTransform.offsX =
-            0.5f * (float(imageWidth)
-                    - ((b.xMin + b.xMax) * renderer.viewTransform.scale));
+            0.5f * (float(imageWidth) - ((b.xMin() + b.xMax()) * scale));
         renderer.viewTransform.offsY =
-            0.5f * (float(imageHeight)
-                    - ((b.yMin + b.yMax) * renderer.viewTransform.scale));
-        renderer.viewTransform.offsZ =
-            1.0f - (b.zMin * renderer.viewTransform.scale);
+            0.5f * (float(imageHeight) - ((b.yMin() + b.yMax()) * scale));
+        renderer.viewTransform.offsZ = 1.0f - (b.zMin() * scale);
       }
       renderer.defaultEnvMap =
           std::string(cubeMapPaths[envMapNum * 3

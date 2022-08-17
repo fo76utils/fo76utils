@@ -30,25 +30,25 @@ inline FloatVector4 LandscapeTexture::colorToNormal(FloatVector4 c)
 inline FloatVector4 LandscapeTexture::normalToColor(FloatVector4 n)
 {
   FloatVector4  tmp(n);
-  tmp.normalizeFast();
+  tmp.normalize3Fast();
   tmp += 1.0f;
   tmp *= 127.5f;
   return tmp;
 }
 
-inline FloatVector4 LandscapeTexture::getFO76VertexColor(size_t offs) const
+inline unsigned int LandscapeTexture::getFO76VertexColor(size_t offs) const
 {
   unsigned int  c = FileBuffer::readUInt16Fast(vclrData16 + (offs << 1));
   c = ((c >> 10) & 0x1FU) | ((c << 3) & 0x1F00U) | ((c & 0x1FU) << 16);
-  return FloatVector4(c);
+  return c;
 }
 
-inline FloatVector4 LandscapeTexture::getTES4VertexColor(size_t offs) const
+inline unsigned int LandscapeTexture::getTES4VertexColor(size_t offs) const
 {
   unsigned int  b = vclrData24[offs * 3];
   unsigned int  g = vclrData24[offs * 3 + 1];
   unsigned int  r = vclrData24[offs * 3 + 2];
-  return FloatVector4(r | (g << 8) | (b << 16));
+  return (r | (g << 8) | (b << 16));
 }
 
 inline FloatVector4 LandscapeTexture::getFO76VertexColor(
@@ -76,24 +76,11 @@ inline FloatVector4 LandscapeTexture::getFO76VertexColor(
     offs1++;
     offs3++;
   }
-  float   f3 = float(xf * yf);
-  float   f1 = float(xf << 8) - f3;
-  float   f2 = float(yf << 8) - f3;
-  float   f0 = 65536.0f - (f1 + f2 + f3);
-  FloatVector4  c0(getFO76VertexColor(offs0));
-  FloatVector4  c1(getFO76VertexColor(offs1));
-  FloatVector4  c2(getFO76VertexColor(offs2));
-  FloatVector4  c3(getFO76VertexColor(offs3));
-  c0 *= f0;
-  c1 *= f1;
-  c2 *= f2;
-  c3 *= f3;
-  c0 += c1;
-  c0 += c2;
-  c0 += c3;
-  c0 *= (1.0f / (15.5f * 65536.0f));
-  c0.squareRoot();
-  return c0;
+  FloatVector4  c0(getFO76VertexColor(offs0), getFO76VertexColor(offs1),
+                   getFO76VertexColor(offs2), getFO76VertexColor(offs3),
+                   float(xf) * (1.0f / 256.0f), float(yf) * (1.0f / 256.0f));
+  c0 *= (1.0f / 15.5f);
+  return c0.squareRoot();
 }
 
 inline FloatVector4 LandscapeTexture::getTES4VertexColor(
@@ -119,22 +106,10 @@ inline FloatVector4 LandscapeTexture::getTES4VertexColor(
     offs1++;
     offs3++;
   }
-  float   f3 = float(xf * yf);
-  float   f1 = float(xf << 8) - f3;
-  float   f2 = float(yf << 8) - f3;
-  float   f0 = 65536.0f - (f1 + f2 + f3);
-  FloatVector4  c0(getTES4VertexColor(offs0));
-  FloatVector4  c1(getTES4VertexColor(offs1));
-  FloatVector4  c2(getTES4VertexColor(offs2));
-  FloatVector4  c3(getTES4VertexColor(offs3));
-  c0 *= f0;
-  c1 *= f1;
-  c2 *= f2;
-  c3 *= f3;
-  c0 += c1;
-  c0 += c2;
-  c0 += c3;
-  c0 *= (1.0f / (255.0f * 65536.0f));
+  FloatVector4  c0(getTES4VertexColor(offs0), getTES4VertexColor(offs1),
+                   getTES4VertexColor(offs2), getTES4VertexColor(offs3),
+                   float(xf) * (1.0f / 256.0f), float(yf) * (1.0f / 256.0f));
+  c0 *= (1.0f / 255.0f);
   return c0;
 }
 
@@ -665,23 +640,23 @@ void LandscapeTexture::renderTexture(unsigned char *outBuf, int renderScale,
     for (int x = x0; x < x1; x++, outBuf = outBuf + 3)
     {
       int     xc = (x > 0 ? x : 0) >> renderScale;
-      FloatVector4  n(0.0f, 0.0f, 0.0f, 0.0f);
+      FloatVector4  n(0.0f);
       FloatVector4  c(renderPixel(n, xc, yc, x, y));
       int     xf = x & m;
       if (xf)
       {
-        FloatVector4  nTmp(0.0f, 0.0f, 0.0f, 0.0f);
+        FloatVector4  nTmp(0.0f);
         FloatVector4  cTmp(renderPixel(nTmp, xc + 1, yc, x, y));
         n = blendColors(n, nTmp, float(xf) * renderScale_f);
         c = blendColors(c, cTmp, float(xf) * renderScale_f);
       }
       if (yf)
       {
-        FloatVector4  n2(0.0f, 0.0f, 0.0f, 0.0f);
+        FloatVector4  n2(0.0f);
         FloatVector4  c2(renderPixel(n2, xc, yc + 1, x, y));
         if (xf)
         {
-          FloatVector4  nTmp(0.0f, 0.0f, 0.0f, 0.0f);
+          FloatVector4  nTmp(0.0f);
           FloatVector4  cTmp(renderPixel(nTmp, xc + 1, yc + 1, x, y));
           n2 = blendColors(n2, nTmp, float(xf) * renderScale_f);
           c2 = blendColors(c2, cTmp, float(xf) * renderScale_f);
@@ -689,7 +664,7 @@ void LandscapeTexture::renderTexture(unsigned char *outBuf, int renderScale,
         n = blendColors(n, n2, float(yf) * renderScale_f);
         c = blendColors(c, c2, float(yf) * renderScale_f);
       }
-      FloatVector4  vColor(1.0f, 1.0f, 1.0f, 1.0f);
+      FloatVector4  vColor(1.0f);
       if (vclrData16)
         vColor = getFO76VertexColor(x, y, renderScale);
       else if (vclrData24)

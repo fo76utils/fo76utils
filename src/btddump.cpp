@@ -12,8 +12,7 @@ static inline FloatVector4 calculateNormal(FloatVector4 v1, FloatVector4 v2)
   FloatVector4  tmp((v1[1] * v2[2]) - (v1[2] * v2[1]),
                     (v1[2] * v2[0]) - (v1[0] * v2[2]),
                     (v1[0] * v2[1]) - (v1[1] * v2[0]), 0.0f);
-  tmp.normalizeFast();
-  return tmp;
+  return tmp.normalize3Fast();
 }
 
 void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
@@ -52,8 +51,8 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
         }
       }
     }
-    FloatVector4  prvNormalSE(0.0f, 0.0f, 0.0f, 0.0f);
-    FloatVector4  prvNormalNE(0.0f, 0.0f, 0.0f, 0.0f);
+    FloatVector4  prvNormalSE(0.0f);
+    FloatVector4  prvNormalNE(0.0f);
     for (int x = 0; x < w; x++)
     {
       // 0, N, S, E, NW, SW, SE, NE, W
@@ -72,7 +71,7 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
       FloatVector4  v_n(0.0f, xyScale2, z[1] - z[0], 0.0f);
       FloatVector4  v_s(0.0f, -xyScale2, z[2] - z[0], 0.0f);
       FloatVector4  v_e(xyScale2, 0.0f, z[3] - z[0], 0.0f);
-      FloatVector4  normal(0.0f, 0.0f, 0.0f, 0.0f);
+      FloatVector4  normal(0.0f);
       if ((x ^ y) & 1)
       {
         //    0 1 2

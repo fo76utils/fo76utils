@@ -10,8 +10,7 @@ static inline FloatVector4 calculateNormal(FloatVector4 v1, FloatVector4 v2)
   FloatVector4  tmp((v1[1] * v2[2]) - (v1[2] * v2[1]),
                     (v1[2] * v2[0]) - (v1[0] * v2[2]),
                     (v1[0] * v2[1]) - (v1[1] * v2[0]), 0.0f);
-  tmp.normalizeFast();
-  return tmp;
+  return tmp.normalize3Fast();
 }
 
 TerrainMesh::TerrainMesh()
@@ -88,7 +87,7 @@ void TerrainMesh::createMesh(
       FloatVector4  v_w(-xyScale, 0.0f, z[3] - z[4], 0.0f);
       FloatVector4  v_s(0.0f, -xyScale, z[7] - z[4], 0.0f);
       FloatVector4  v_e(xyScale, 0.0f, z[5] - z[4], 0.0f);
-      FloatVector4  normal(0.0f, 0.0f, 0.0f, 0.0f);
+      FloatVector4  normal(0.0f);
       if ((x ^ y) & 1)
       {
         //    0 1 2
@@ -119,9 +118,9 @@ void TerrainMesh::createMesh(
       }
       normal.normalize();
       FloatVector4  bitangent(normal[2], 0.0f, -(normal[0]), 0.0f);
-      bitangent.normalizeFast();
+      bitangent.normalize3Fast();
       FloatVector4  tangent(0.0f, -(normal[2]), normal[1], 0.0f);
-      tangent.normalizeFast();
+      tangent.normalize3Fast();
       bitangent += 1.0f;
       bitangent *= 127.5f;
       tangent += 1.0f;
