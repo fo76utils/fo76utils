@@ -9,9 +9,9 @@
 
 NIFFile::NIFVertexTransform::NIFVertexTransform()
   : offsX(0.0f), offsY(0.0f), offsZ(0.0f),
-    rotateXX(1.0f), rotateXY(0.0f), rotateXZ(0.0f),
-    rotateYX(0.0f), rotateYY(1.0f), rotateYZ(0.0f),
-    rotateZX(0.0f), rotateZY(0.0f), rotateZZ(1.0f),
+    rotateXX(1.0f), rotateYX(0.0f), rotateZX(0.0f),
+    rotateXY(0.0f), rotateYY(1.0f), rotateZY(0.0f),
+    rotateXZ(0.0f), rotateYZ(0.0f), rotateZZ(1.0f),
     scale(1.0f)
 {
 }
@@ -74,47 +74,86 @@ NIFFile::NIFVertexTransform& NIFFile::NIFVertexTransform::operator*=(
     const NIFVertexTransform& r)
 {
   r.transformXYZ(offsX, offsY, offsZ);
-  float   r_xx = rotateXX;
-  float   r_xy = rotateXY;
-  float   r_xz = rotateXZ;
-  float   r_yx = rotateYX;
-  float   r_yy = rotateYY;
-  float   r_yz = rotateYZ;
-  float   r_zx = rotateZX;
-  float   r_zy = rotateZY;
-  float   r_zz = rotateZZ;
-  rotateXX = (r_xx * r.rotateXX) + (r_yx * r.rotateXY) + (r_zx * r.rotateXZ);
-  rotateXY = (r_xy * r.rotateXX) + (r_yy * r.rotateXY) + (r_zy * r.rotateXZ);
-  rotateXZ = (r_xz * r.rotateXX) + (r_yz * r.rotateXY) + (r_zz * r.rotateXZ);
-  rotateYX = (r_xx * r.rotateYX) + (r_yx * r.rotateYY) + (r_zx * r.rotateYZ);
-  rotateYY = (r_xy * r.rotateYX) + (r_yy * r.rotateYY) + (r_zy * r.rotateYZ);
-  rotateYZ = (r_xz * r.rotateYX) + (r_yz * r.rotateYY) + (r_zz * r.rotateYZ);
-  rotateZX = (r_xx * r.rotateZX) + (r_yx * r.rotateZY) + (r_zx * r.rotateZZ);
-  rotateZY = (r_xy * r.rotateZX) + (r_yy * r.rotateZY) + (r_zy * r.rotateZZ);
-  rotateZZ = (r_xz * r.rotateZX) + (r_yz * r.rotateZY) + (r_zz * r.rotateZZ);
+  FloatVector4  r_x(r.rotateXX, r.rotateYX, r.rotateZX, r.rotateXY);
+  FloatVector4  r_y(r.rotateXY, r.rotateYY, r.rotateZY, r.rotateXZ);
+  FloatVector4  r_z(r.rotateXZ, r.rotateYZ, r.rotateZZ, r.scale);
+  FloatVector4  tmp((FloatVector4(rotateXX) * r_x)
+                    + (FloatVector4(rotateYX) * r_y)
+                    + (FloatVector4(rotateZX) * r_z));
+  rotateXX = tmp[0];
+  rotateYX = tmp[1];
+  rotateZX = tmp[2];
+  tmp = (FloatVector4(rotateXY) * r_x) + (FloatVector4(rotateYY) * r_y)
+        + (FloatVector4(rotateZY) * r_z);
+  rotateXY = tmp[0];
+  rotateYY = tmp[1];
+  rotateZY = tmp[2];
+  tmp = (FloatVector4(rotateXZ) * r_x) + (FloatVector4(rotateYZ) * r_y)
+        + (FloatVector4(rotateZZ) * r_z);
+  rotateXZ = tmp[0];
+  rotateYZ = tmp[1];
+  rotateZZ = tmp[2];
   scale = scale * r.scale;
   return (*this);
 }
 
+FloatVector4 NIFFile::NIFVertexTransform::rotateXYZ(FloatVector4 v) const
+{
+  FloatVector4  tmpX(rotateXX, rotateYX, rotateZX, rotateXY);
+  tmpX *= v[0];
+  FloatVector4  tmpY(rotateXY, rotateYY, rotateZY, rotateXZ);
+  tmpY *= v[1];
+  FloatVector4  tmpZ(rotateXZ, rotateYZ, rotateZZ, scale);
+  tmpZ *= v[2];
+  tmpX = tmpX + tmpY + tmpZ;
+  tmpX[3] = 0.0f;
+  return tmpX;
+}
+
+FloatVector4 NIFFile::NIFVertexTransform::transformXYZ(FloatVector4 v) const
+{
+  FloatVector4  tmpX(rotateXX, rotateYX, rotateZX, rotateXY);
+  tmpX *= v[0];
+  FloatVector4  tmpY(rotateXY, rotateYY, rotateZY, rotateXZ);
+  tmpY *= v[1];
+  FloatVector4  tmpZ(rotateXZ, rotateYZ, rotateZZ, scale);
+  tmpZ *= v[2];
+  tmpX = tmpX + tmpY + tmpZ;
+  tmpX *= scale;
+  tmpX += FloatVector4(offsX, offsY, offsZ, rotateXX);
+  tmpX[3] = 0.0f;
+  return tmpX;
+}
+
 void NIFFile::NIFVertexTransform::rotateXYZ(float& x, float& y, float& z) const
 {
-  float   tmpX = (x * rotateXX) + (y * rotateXY) + (z * rotateXZ);
-  float   tmpY = (x * rotateYX) + (y * rotateYY) + (z * rotateYZ);
-  float   tmpZ = (x * rotateZX) + (y * rotateZY) + (z * rotateZZ);
-  x = tmpX;
-  y = tmpY;
-  z = tmpZ;
+  FloatVector4  tmpX(rotateXX, rotateYX, rotateZX, rotateXY);
+  tmpX *= x;
+  FloatVector4  tmpY(rotateXY, rotateYY, rotateZY, rotateXZ);
+  tmpY *= y;
+  FloatVector4  tmpZ(rotateXZ, rotateYZ, rotateZZ, scale);
+  tmpZ *= z;
+  tmpX = tmpX + tmpY + tmpZ;
+  x = tmpX[0];
+  y = tmpX[1];
+  z = tmpX[2];
 }
 
 void NIFFile::NIFVertexTransform::transformXYZ(
     float& x, float& y, float& z) const
 {
-  float   tmpX = (x * rotateXX) + (y * rotateXY) + (z * rotateXZ);
-  float   tmpY = (x * rotateYX) + (y * rotateYY) + (z * rotateYZ);
-  float   tmpZ = (x * rotateZX) + (y * rotateZY) + (z * rotateZZ);
-  x = tmpX * scale + offsX;
-  y = tmpY * scale + offsY;
-  z = tmpZ * scale + offsZ;
+  FloatVector4  tmpX(rotateXX, rotateYX, rotateZX, rotateXY);
+  tmpX *= x;
+  FloatVector4  tmpY(rotateXY, rotateYY, rotateZY, rotateXZ);
+  tmpY *= y;
+  FloatVector4  tmpZ(rotateXZ, rotateYZ, rotateZZ, scale);
+  tmpZ *= z;
+  tmpX = tmpX + tmpY + tmpZ;
+  tmpX *= scale;
+  tmpX += FloatVector4(offsX, offsY, offsZ, rotateXX);
+  x = tmpX[0];
+  y = tmpX[1];
+  z = tmpX[2];
 }
 
 void NIFFile::NIFTriShape::calculateBounds(NIFBounds& b,
@@ -123,31 +162,21 @@ void NIFFile::NIFTriShape::calculateBounds(NIFBounds& b,
   NIFVertexTransform  t(vertexTransform);
   if (vt)
     t *= *vt;
-  FloatVector4  rotateX(t.rotateXX, t.rotateXY, t.rotateXZ, 0.0f);
-  FloatVector4  rotateY(t.rotateYX, t.rotateYY, t.rotateYZ, 0.0f);
-  FloatVector4  rotateZ(t.rotateZX, t.rotateZY, t.rotateZZ, 0.0f);
+  FloatVector4  rotateX(t.rotateXX, t.rotateYX, t.rotateZX, t.rotateXY);
+  FloatVector4  rotateY(t.rotateXY, t.rotateYY, t.rotateZY, t.rotateXZ);
+  FloatVector4  rotateZ(t.rotateXZ, t.rotateYZ, t.rotateZZ, t.scale);
+  FloatVector4  offsXYZ(t.offsX, t.offsY, t.offsZ, t.rotateXX);
   rotateX *= t.scale;
-  rotateX.setElement(3, t.offsX);
   rotateY *= t.scale;
-  rotateY.setElement(3, t.offsY);
   rotateZ *= t.scale;
-  rotateZ.setElement(3, t.offsZ);
-  FloatVector4  boundsMin(b.xMin, b.yMin, b.zMin, b.xMax);
-  FloatVector4  boundsMax(b.xMax, b.yMax, b.zMax, 0.0f);
+  NIFBounds bTmp(b);
   for (size_t i = 0; i < vertexCnt; i++)
   {
-    FloatVector4  v(vertexData[i].x, vertexData[i].y, vertexData[i].z, 1.0f);
-    FloatVector4  tmp(v.dotProduct(rotateX), v.dotProduct(rotateY),
-                      v.dotProduct(rotateZ), 0.0f);
-    boundsMin.minValues(tmp);
-    boundsMax.maxValues(tmp);
+    bTmp += ((FloatVector4(vertexData[i].x) * rotateX)
+             + (FloatVector4(vertexData[i].y) * rotateY)
+             + (FloatVector4(vertexData[i].z) * rotateZ) + offsXYZ);
   }
-  b.xMin = boundsMin[0];
-  b.yMin = boundsMin[1];
-  b.zMin = boundsMin[2];
-  b.xMax = boundsMax[0];
-  b.yMax = boundsMax[1];
-  b.zMax = boundsMax[2];
+  b = bTmp;
 }
 
 NIFFile::NIFBlock::NIFBlock(int blockType)

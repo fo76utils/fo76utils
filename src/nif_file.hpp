@@ -5,6 +5,7 @@
 #include "common.hpp"
 #include "filebuf.hpp"
 #include "ba2file.hpp"
+#include "fp32vec4.hpp"
 
 class NIFFile : public FileBuffer
 {
@@ -62,52 +63,71 @@ class NIFFile : public FileBuffer
   struct NIFVertexTransform
   {
     float   offsX, offsY, offsZ;
-    float   rotateXX, rotateXY, rotateXZ;
-    float   rotateYX, rotateYY, rotateYZ;
-    float   rotateZX, rotateZY, rotateZZ;
+    float   rotateXX, rotateYX, rotateZX;
+    float   rotateXY, rotateYY, rotateZY;
+    float   rotateXZ, rotateYZ, rotateZZ;
     float   scale;
     NIFVertexTransform();
     NIFVertexTransform(float xyzScale, float rx, float ry, float rz,
                        float offsetX, float offsetY, float offsetZ);
     void readFromBuffer(FileBuffer& buf);
     NIFVertexTransform& operator*=(const NIFVertexTransform& r);
+    FloatVector4 rotateXYZ(FloatVector4 v) const;
+    FloatVector4 transformXYZ(FloatVector4 v) const;
     void rotateXYZ(float& x, float& y, float& z) const;
     void transformXYZ(float& x, float& y, float& z) const;
   };
   struct NIFBounds
   {
-    float   xMin;
-    float   yMin;
-    float   zMin;
-    float   xMax;
-    float   yMax;
-    float   zMax;
+    FloatVector4  boundsMin;
+    FloatVector4  boundsMax;
     NIFBounds()
+      : boundsMin(1073741824.0f, 1073741824.0f, 1073741824.0f, 1073741824.0f),
+        boundsMax(-1073741824.0f, -1073741824.0f, -1073741824.0f,
+                  -1073741824.0f)
     {
-      xMin = float(0x40000000);
-      yMin = xMin;
-      zMin = xMin;
-      xMax = -xMin;
-      yMax = xMax;
-      zMax = xMax;
+    }
+    NIFBounds(FloatVector4 v)
+      : boundsMin(v),
+        boundsMax(v)
+    {
     }
     inline NIFBounds& operator+=(const NIFVertex& v)
     {
-      xMin = (v.x < xMin ? v.x : xMin);
-      yMin = (v.y < yMin ? v.y : yMin);
-      zMin = (v.z < zMin ? v.z : zMin);
-      xMax = (v.x > xMax ? v.x : xMax);
-      yMax = (v.y > yMax ? v.y : yMax);
-      zMax = (v.z > zMax ? v.z : zMax);
+      FloatVector4  tmp(v.x, v.y, v.z, 0.0f);
+      boundsMin.minValues(tmp);
+      boundsMax.maxValues(tmp);
       return (*this);
     }
-    inline bool operator<(const NIFBounds& r) const
+    inline NIFBounds& operator+=(FloatVector4 v)
     {
-      return (xMax < r.xMin || yMax < r.yMin || zMax < r.zMin);
+      boundsMin.minValues(v);
+      boundsMax.maxValues(v);
+      return (*this);
     }
-    inline bool operator>(const NIFBounds& r) const
+    inline float xMin() const
     {
-      return (xMin > r.xMax || yMin > r.yMax || zMin > r.zMax);
+      return boundsMin[0];
+    }
+    inline float yMin() const
+    {
+      return boundsMin[1];
+    }
+    inline float zMin() const
+    {
+      return boundsMin[2];
+    }
+    inline float xMax() const
+    {
+      return boundsMax[0];
+    }
+    inline float yMax() const
+    {
+      return boundsMax[1];
+    }
+    inline float zMax() const
+    {
+      return boundsMax[2];
     }
   };
   struct NIFTriShape
@@ -123,6 +143,7 @@ class NIFFile : public FileBuffer
     // bit 3: is decal
     // bit 4: two sided (disables culling)
     // bit 5: tree (disables vertex alpha)
+    // bit 6: has vertex colors
     unsigned char flags;
     unsigned char gradientMapV;
     unsigned char envMapScale;          // 128 = 1.0
@@ -150,13 +171,13 @@ class NIFFile : public FileBuffer
     float   textureScaleV;
     const char  *name;
     NIFTriShape()
-      : vertexCnt(0), triangleCnt(0), vertexData((NIFVertex *) 0),
-        triangleData((NIFTriangle *) 0), flags(0x00), gradientMapV(128),
-        envMapScale(128), alphaThreshold(0), specularColor(0xFFFFFFFFU),
-        specularScale(0), specularSmoothness(128), texturePathCnt(0),
-        texturePaths((std::string **) 0), materialPath((std::string *) 0),
-        textureOffsetU(0.0f), textureOffsetV(0.0f),
-        textureScaleU(1.0f), textureScaleV(1.0f), name("")
+      : vertexCnt(0), triangleCnt(0),
+        vertexData((NIFVertex *) 0), triangleData((NIFTriangle *) 0),
+        flags(0x00), gradientMapV(128), envMapScale(128), alphaThreshold(0),
+        specularColor(0xFFFFFFFFU), specularScale(0), specularSmoothness(128),
+        texturePathCnt(0), texturePaths((std::string **) 0),
+        materialPath((std::string *) 0), textureOffsetU(0.0f),
+        textureOffsetV(0.0f), textureScaleU(1.0f), textureScaleV(1.0f), name("")
     {
     }
     void calculateBounds(NIFBounds& b, const NIFVertexTransform *vt = 0) const;
