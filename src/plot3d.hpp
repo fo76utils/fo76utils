@@ -295,11 +295,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     FloatVector4  normal;
     FloatVector4  vertexColor;
     Vertex()
-      : xyz(0.0f, 0.0f, 0.0f, 0.0f),
-        bitangent(0.0f, 0.0f, 0.0f, 0.0f),
-        tangent(0.0f, 0.0f, 0.0f, 0.0f),
-        normal(0.0f, 0.0f, 0.0f, 0.0f),
-        vertexColor(1.0f, 1.0f, 1.0f, 1.0f)
+      : xyz(0.0f),
+        bitangent(0.0f),
+        tangent(0.0f),
+        normal(0.0f),
+        vertexColor(1.0f)
     {
     }
     Vertex(const NIFFile::NIFVertex& r)
@@ -313,22 +313,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       bitangent -= 1.0f;
       tangent -= 1.0f;
       normal -= 1.0f;
-      bitangent.setElement(3, r.getU());
-      tangent.setElement(3, r.getV());
-      normal.setElement(3, 0.0f);
+      bitangent[3] = r.getU();
+      tangent[3] = r.getV();
+      normal[3] = 0.0f;
       vertexColor *= (1.0f / 255.0f);
     }
-  };
-  struct VertexTransform
-  {
-    FloatVector4  rotateX;              // rotateX,Y,Z[3] = X,Y,Z offset
-    FloatVector4  rotateY;
-    FloatVector4  rotateZ;
-    float   scale;
-    VertexTransform(const NIFFile::NIFVertexTransform& vt);
-    FloatVector4 transformXYZ(FloatVector4 v) const;
-    FloatVector4 rotateXYZ(FloatVector4 v) const;
-    VertexTransform& operator*=(const VertexTransform& r);
   };
   struct Triangle
   {
@@ -376,21 +365,20 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                              const NIFFile::NIFVertexTransform& viewTransform);
   // d = dot product from normals and light vector
   inline float getLightLevel(float d) const;
-  // returns light level
-  inline float normalMap(Vertex& v, FloatVector4 n) const;
+  // returns normal
+  inline FloatVector4 normalMap(Vertex& v, FloatVector4 n) const;
   inline FloatVector4 environmentMap(
-      const Vertex& v, int x, int y, float smoothness = 1.0f,
-      float *specPtr = (float *) 0) const;
+      const Vertex& v, int x, int y, float& specular,
+      float smoothness = 1.0f, float nDotL = 0.0f) const;
   // fill with water
   static void drawPixel_Water(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // alphaFlag is set to true if the pixel is visible (alpha >= threshold)
   inline FloatVector4 getDiffuseColor(
-      float txtU, float txtV, const Vertex& z, bool& alphaFlag) const;
+      float txtU, float txtV, const Vertex& z, bool& alphaFlag,
+      bool enableGamma = false) const;
   static void drawPixel_Debug(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
-  // calculate RGB multiplier from normal and light direction
-  float calculateLighting(FloatVector4 normal) const;
   // diffuse texture with trilinear filtering
   static void drawPixel_Diffuse(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
