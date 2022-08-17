@@ -44,10 +44,13 @@ static void renderCubeMap(const BA2File& ba2File,
     if (!sdlScreen)
       throw errorMessage("error setting SDL video mode");
     SDL_SetSurfaceBlendMode(sdlScreen, SDL_BLENDMODE_NONE);
-    NIFFile::NIFVertexTransform
-        viewTransform(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    NIFFile::NIFVertexTransform viewTransform;
+    int     viewScale = 0;
+    bool    enableGamma = false;
     while (true)
     {
+      float   y0 =
+          float(imageHeight) * float(std::pow(2.0f, float(viewScale) * 0.25f));
       SDL_LockSurface(sdlScreen);
       for (int yc = 0; yc < imageHeight; yc++)
       {
@@ -56,10 +59,16 @@ static void renderCubeMap(const BA2File& ba2File,
         for (int xc = 0; xc < imageWidth; xc++, dstPtr++)
         {
           float   x = float(xc - (imageWidth >> 1));
-          float   y = float(imageHeight);
+          float   y = y0;
           float   z = float((imageHeight >> 1) - yc);
           viewTransform.rotateXYZ(x, y, z);
-          *dstPtr = (unsigned int) texture.cubeMap(x, y, z, mipLevel);
+          FloatVector4  c(texture.cubeMap(x, y, z, mipLevel));
+          if (enableGamma)
+          {
+            c *= 255.0f;
+            c.squareRootFast();
+          }
+          *dstPtr = (unsigned int) c;
         }
       }
       SDL_UnlockSurface(sdlScreen);
@@ -132,15 +141,18 @@ static void renderCubeMap(const BA2File& ba2File,
                 rotateFlag = true;
                 break;
               case SDLK_HOME:
-                viewTransform.rotateXX = 1.0f;
-                viewTransform.rotateXY = 0.0f;
-                viewTransform.rotateXZ = 0.0f;
-                viewTransform.rotateYX = 0.0f;
-                viewTransform.rotateYY = 1.0f;
-                viewTransform.rotateYZ = 0.0f;
-                viewTransform.rotateZX = 0.0f;
-                viewTransform.rotateZY = 0.0f;
-                viewTransform.rotateZZ = 1.0f;
+                viewTransform = NIFFile::NIFVertexTransform();
+                viewScale = 0;
+                break;
+              case SDLK_INSERT:
+                viewScale += int(viewScale < 16);
+                break;
+              case SDLK_DELETE:
+                viewScale -= int(viewScale > -16);
+                break;
+              case SDLK_PAGEUP:
+              case SDLK_PAGEDOWN:
+                enableGamma = (event.key.keysym.sym == SDLK_PAGEUP);
                 break;
               case SDLK_ESCAPE:
                 quitFlag = true;
@@ -155,24 +167,22 @@ static void renderCubeMap(const BA2File& ba2File,
                      0.0f, 0.0f, 0.0f);
               vt *= viewTransform;
               // normalize
-              float   tmp = vt.rotateXX * vt.rotateXX;
-              tmp += (vt.rotateXY * vt.rotateXY);
-              tmp += (vt.rotateXZ * vt.rotateXZ);
-              tmp += (vt.rotateYX * vt.rotateYX);
-              tmp += (vt.rotateYY * vt.rotateYY);
-              tmp += (vt.rotateYZ * vt.rotateYZ);
-              tmp += (vt.rotateZX * vt.rotateZX);
-              tmp += (vt.rotateZY * vt.rotateZY);
+              FloatVector4  v(vt.rotateXX, vt.rotateYX,
+                              vt.rotateZX, vt.rotateXY);
+              float   tmp = v.dotProduct(v);
+              v = FloatVector4(vt.rotateYY, vt.rotateZY,
+                               vt.rotateXZ, vt.rotateYZ);
+              tmp += v.dotProduct(v);
               tmp += (vt.rotateZZ * vt.rotateZZ);
               tmp = float(std::sqrt(3.0f / tmp));
               vt.rotateXX *= tmp;
-              vt.rotateXY *= tmp;
-              vt.rotateXZ *= tmp;
               vt.rotateYX *= tmp;
-              vt.rotateYY *= tmp;
-              vt.rotateYZ *= tmp;
               vt.rotateZX *= tmp;
+              vt.rotateXY *= tmp;
+              vt.rotateYY *= tmp;
               vt.rotateZY *= tmp;
+              vt.rotateXZ *= tmp;
+              vt.rotateYZ *= tmp;
               vt.rotateZZ *= tmp;
               viewTransform = vt;
             }

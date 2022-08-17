@@ -14,7 +14,9 @@ View a Fallout 4 or 76 cube map from archive files.
 * **A**, **D**: Turn left or right.
 * **W**, **S**: Look up or down.
 * **Q**, **E**: Roll left or right.
+* **Insert**, **Delete**: Zoom in or out.
 * **Home**: Reset view direction.
+* **Page Up**, **Page Down**: Enable or disable gamma correction by 2.0.
 * **0** to **9**: Set mip level.
 * **+**, **-**: Increase or decrease mip level by 0.125.
 * **Esc**: Quit program.
