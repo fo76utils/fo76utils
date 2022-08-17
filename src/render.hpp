@@ -200,9 +200,10 @@ class Renderer
   void clear(unsigned int flags);
   static size_t getTextureDataSize(const DDSTexture *t);
   // returns NULL on failure
+  // *waitFlag is set to true if the texture is locked by another thread
   const DDSTexture *loadTexture(const std::string& fileName,
                                 std::vector< unsigned char >& fileBuf,
-                                int m = -1);
+                                int m = -1, bool *waitFlag = (bool *) 0);
   void shrinkTextureCache();
   bool isExcludedModel(const std::string& modelPath) const;
   bool isHighQualityModel(const std::string& modelPath) const;

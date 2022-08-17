@@ -193,12 +193,8 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
                      p.model.o->obndZ0 : p.model.o->obndZ1) - 2;
     int     z1 =
         z0 + std::abs(int(p.model.o->obndZ1) - int(p.model.o->obndZ0)) + 4;
-    modelBounds.xMin = float(x0);
-    modelBounds.yMin = float(y0);
-    modelBounds.zMin = float(z0);
-    modelBounds.xMax = float(x1);
-    modelBounds.yMax = float(y1);
-    modelBounds.zMax = float(z1);
+    modelBounds.boundsMin = FloatVector4(float(x0), float(y0), float(z0), 0.0f);
+    modelBounds.boundsMax = FloatVector4(float(x1), float(y1), float(z1), 0.0f);
     vt = p.modelTransform;
     vt *= viewTransform;
   }
@@ -215,10 +211,12 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
     int     y0 = (p.model.t.y0 < p.model.t.y1 ? p.model.t.y0 : p.model.t.y1);
     int     x1 = x0 + std::abs(int(p.model.t.x1) - int(p.model.t.x0));
     int     y1 = y0 + std::abs(int(p.model.t.y1) - int(p.model.t.y0));
-    modelBounds.xMin = float(x0) * xyScale + xOffset;
-    modelBounds.yMin = float(y1) * -xyScale + yOffset;
-    modelBounds.xMax = float(x1) * xyScale + xOffset;
-    modelBounds.yMax = float(y0) * -xyScale + yOffset;
+    modelBounds.boundsMin =
+        FloatVector4(float(x0) * xyScale + xOffset,
+                     float(y1) * -xyScale + yOffset, 0.0f, 0.0f);
+    modelBounds.boundsMax =
+        FloatVector4(float(x1) * xyScale + xOffset,
+                     float(y0) * -xyScale + yOffset, 0.0f, 0.0f);
     int     w = landData->getImageWidth();
     int     h = landData->getImageHeight();
     x0 = (x0 > 0 ? (x0 < (w - 1) ? x0 : (w - 1)) : 0);
@@ -237,8 +235,8 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
         z1 = (z > z1 ? z : z1);
       }
     }
-    modelBounds.zMin = float(int(z0)) * zScale + zOffset;
-    modelBounds.zMax = float(int(z1)) * zScale + zOffset;
+    modelBounds.boundsMin[2] = float(int(z0)) * zScale + zOffset;
+    modelBounds.boundsMax[2] = float(int(z1)) * zScale + zOffset;
     vt = viewTransform;
   }
   else if (p.flags & 4)
@@ -247,12 +245,8 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
     int     x1 = x0 + std::abs(int(p.model.t.x1) - int(p.model.t.x0));
     int     y0 = int(p.model.t.y0 < p.model.t.y1 ? p.model.t.y0 : p.model.t.y1);
     int     y1 = y0 + std::abs(int(p.model.t.y1) - int(p.model.t.y0));
-    modelBounds.xMin = float(x0);
-    modelBounds.yMin = float(y0);
-    modelBounds.zMin = 0.0f;
-    modelBounds.xMax = float(x1);
-    modelBounds.yMax = float(y1);
-    modelBounds.zMax = 0.0f;
+    modelBounds.boundsMin = FloatVector4(float(x0), float(y0), 0.0f, 0.0f);
+    modelBounds.boundsMax = FloatVector4(float(x1), float(y1), 0.0f, 0.0f);
     vt = p.modelTransform;
     vt *= viewTransform;
   }
@@ -261,36 +255,29 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
     return -1;
   }
   NIFFile::NIFBounds  screenBounds;
-  NIFFile::NIFVertex  v;
   for (int i = 0; i < 8; i++)
   {
-    v.x = (!(i & 1) ? modelBounds.xMin : modelBounds.xMax);
-    v.y = (!(i & 2) ? modelBounds.yMin : modelBounds.yMax);
-    v.z = (!(i & 4) ? modelBounds.zMin : modelBounds.zMax);
-    vt.transformXYZ(v.x, v.y, v.z);
+    FloatVector4  v((!(i & 1) ? modelBounds.xMin() : modelBounds.xMax()),
+                    (!(i & 2) ? modelBounds.yMin() : modelBounds.yMax()),
+                    (!(i & 4) ? modelBounds.zMin() : modelBounds.zMax()), 0.0f);
+    v = vt.transformXYZ(v);
     screenBounds += v;
   }
-  v.x = screenBounds.xMin;
-  v.y = screenBounds.yMin;
-  v.z = screenBounds.zMin;
-  worldBounds += v;
-  v.x = screenBounds.xMax;
-  v.y = screenBounds.yMax;
-  v.z = screenBounds.zMax;
-  worldBounds += v;
-  int     xMin = roundFloat(screenBounds.xMin - 2.0f);
-  int     yMin = roundFloat(screenBounds.yMin - 2.0f);
-  int     zMin = roundFloat(screenBounds.zMin - 2.0f);
-  int     xMax = roundFloat(screenBounds.xMax + 2.0f);
-  int     yMax = roundFloat(screenBounds.yMax + 2.0f);
-  int     zMax = roundFloat(screenBounds.zMax + 2.0f);
+  worldBounds += screenBounds.boundsMin;
+  worldBounds += screenBounds.boundsMax;
+  int     xMin = roundFloat(screenBounds.xMin() - 2.0f);
+  int     yMin = roundFloat(screenBounds.yMin() - 2.0f);
+  int     zMin = roundFloat(screenBounds.zMin() - 2.0f);
+  int     xMax = roundFloat(screenBounds.xMax() + 2.0f);
+  int     yMax = roundFloat(screenBounds.yMax() + 2.0f);
+  int     zMax = roundFloat(screenBounds.zMax() + 2.0f);
   if (xMin >= width || xMax < 0 || yMin >= height || yMax < 0 ||
       zMin >= zRangeMax || zMax < 0)
   {
     return -1;
   }
   p.tileIndex = calculateTileIndex(calculateTileMask(xMin, yMin, xMax, yMax));
-  p.z = roundFloat(screenBounds.zMin * 64.0f);
+  p.z = roundFloat(screenBounds.zMin() * 64.0f);
   return p.tileIndex;
 }
 
@@ -908,7 +895,7 @@ size_t Renderer::getTextureDataSize(const DDSTexture *t)
 
 const DDSTexture * Renderer::loadTexture(const std::string& fileName,
                                          std::vector< unsigned char >& fileBuf,
-                                         int m)
+                                         int m, bool *waitFlag)
 {
   if (fileName.find("/temp_ground") != std::string::npos)
     return (DDSTexture *) 0;
@@ -931,7 +918,10 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName,
       lastTexture = cachedTexture;
     }
     textureCacheMutex.unlock();
-    cachedTexture->textureLoadMutex->lock();
+    if (!waitFlag)
+      cachedTexture->textureLoadMutex->lock();
+    else if ((*waitFlag = !cachedTexture->textureLoadMutex->try_lock()) == true)
+      return (DDSTexture *) 0;
     const DDSTexture  *t = cachedTexture->texture;
     cachedTexture->textureLoadMutex->unlock();
     return t;
@@ -1406,15 +1396,15 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       NIFFile::NIFBounds  b;
       nifFiles[n].meshData[j].calculateBounds(b, &vt);
       unsigned long long  m =
-          calculateTileMask(roundFloat(b.xMin), roundFloat(b.yMin),
-                            roundFloat(b.xMax), roundFloat(b.yMax));
+          calculateTileMask(roundFloat(b.xMin()), roundFloat(b.yMin()),
+                            roundFloat(b.xMax()), roundFloat(b.yMax()));
       if (!m)
         continue;
       if (m & ~tileMask)
         return false;
       RenderThread::TriShapeSortObject  tmp;
       tmp.ts = &(nifFiles[n].meshData.front()) + j;
-      tmp.z = b.zMin;
+      tmp.z = b.zMin();
       t.sortBuf.push_back(tmp);
     }
     if (t.sortBuf.size() < 1)
@@ -1459,17 +1449,24 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         }
         bool    isHDModel = bool(p.flags & 0x40);
         unsigned int  txtSetMask = (!isHDModel ? 0x0009U : 0x037BU);
-        for (size_t k = size_t(!isHDModel ? 4 : 10); k-- > 0; )
+        for (size_t k = 0; txtSetMask; k++)
         {
-          if (!((1U << (unsigned char) k) & txtSetMask))
+          size_t  l = k - (k < 10 ? 0 : 10);
+          if (!(txtSetMask & (1U << (unsigned char) l)))
             continue;
-          const std::string *texturePath = (std::string *) 0;
-          if (texturePaths[k] && !texturePaths[k]->empty())
-            texturePath = texturePaths[k];
-          else if (k == 4 && (textures[6] || textures[8]))
-            texturePath = &defaultEnvMap;
-          if (texturePath && !texturePath->empty())
-            textures[k] = loadTexture(*texturePath, t.fileBuf);
+          bool    waitFlag = false;
+          if (texturePaths[l] && !texturePaths[l]->empty())
+          {
+            textures[l] = loadTexture(*(texturePaths[l]), t.fileBuf, -1,
+                                      (k < 10 ? &waitFlag : (bool *) 0));
+          }
+          if (!waitFlag)
+            txtSetMask &= ~(1U << (unsigned char) l);
+        }
+        if (!textures[4] && (textures[6] || textures[8]) &&
+            !defaultEnvMap.empty())
+        {
+          textures[4] = loadTexture(defaultEnvMap, t.fileBuf);
         }
       }
       t.renderer->drawTriShape(
@@ -2532,13 +2529,13 @@ int main(int argc, char **argv)
     if (verboseMode)
     {
       const NIFFile::NIFBounds& b = renderer.getBounds();
-      if (b.xMax > b.xMin)
+      if (b.xMax() > b.xMin())
       {
         float   scale = (!enableDownscale ? 1.0f : 0.5f);
         std::fprintf(stderr,
                      "Bounds: %6.0f, %6.0f, %6.0f to %6.0f, %6.0f, %6.0f\n",
-                     b.xMin * scale, b.yMin * scale, b.zMin * scale,
-                     b.xMax * scale, b.yMax * scale, b.zMax * scale);
+                     b.xMin() * scale, b.yMin() * scale, b.zMin() * scale,
+                     b.xMax() * scale, b.yMax() * scale, b.zMax() * scale);
       }
     }
 
