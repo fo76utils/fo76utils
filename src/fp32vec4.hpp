@@ -20,6 +20,22 @@ struct FloatVector4
     : v { x, x, x, x }
   {
   }
+  inline FloatVector4(const unsigned int *p)
+  {
+    float   tmp __attribute__ ((__vector_size__ (16)));
+    __asm__ ("vpmovzxbd %1, %0" : "=x" (tmp) : "m" (*p));
+    __asm__ ("vcvtdq2ps %1, %0" : "=x" (v) : "x" (tmp));
+  }
+  // the first two elements are taken from p1, and the third and fourth from p2
+  inline FloatVector4(const unsigned int *p1, const unsigned int *p2)
+  {
+    float   tmp1 __attribute__ ((__vector_size__ (16)));
+    float   tmp2 __attribute__ ((__vector_size__ (16)));
+    __asm__ ("vpmovzxbd %1, %0" : "=x" (tmp1) : "m" (*p1));
+    __asm__ ("vpmovzxbd %1, %0" : "=x" (tmp2) : "m" (*p2));
+    __asm__ ("vshufps $0x44, %1, %0, %0" : "+x" (tmp1) : "x" (tmp2));
+    __asm__ ("vcvtdq2ps %1, %0" : "=x" (v) : "x" (tmp1));
+  }
   inline FloatVector4(float v0, float v1, float v2, float v3)
     : v { v0, v1, v2, v3 }
   {
@@ -246,7 +262,7 @@ struct FloatVector4
     float   tmp __attribute__ ((__vector_size__ (16))) = v;
     unsigned int  c;
     __asm__ ("vcvtps2dq %0, %0" : "+x" (tmp));
-    __asm__ ("vpackusdw %0, %0, %0" : "+x" (tmp));
+    __asm__ ("vpackssdw %0, %0, %0" : "+x" (tmp));
     __asm__ ("vpackuswb %0, %0, %0" : "+x" (tmp));
     __asm__ ("vmovd %1, %0" : "=r" (c) : "x" (tmp));
     return c;
@@ -266,6 +282,23 @@ struct FloatVector4
     v[1] = x;
     v[2] = x;
     v[3] = x;
+  }
+  inline FloatVector4(const unsigned int *p)
+  {
+    unsigned int  c = *p;
+    v[0] = float(int(c & 0xFF));
+    v[1] = float(int((c >> 8) & 0xFF));
+    v[2] = float(int((c >> 16) & 0xFF));
+    v[3] = float(int((c >> 24) & 0xFF));
+  }
+  inline FloatVector4(const unsigned int *p1, const unsigned int *p2)
+  {
+    unsigned int  c1 = *p1;
+    unsigned int  c2 = *p2;
+    v[0] = float(int(c1 & 0xFF));
+    v[1] = float(int((c1 >> 8) & 0xFF));
+    v[2] = float(int(c2 & 0xFF));
+    v[3] = float(int((c2 >> 8) & 0xFF));
   }
   inline FloatVector4(float v0, float v1, float v2, float v3)
   {
@@ -474,8 +507,8 @@ struct FloatVector4
   }
 #endif
   inline FloatVector4(unsigned int c0, unsigned int c1,
-                      unsigned int c2, unsigned int c3, float xf, float yf,
-                      bool gammaExpand = false)
+                      unsigned int c2, unsigned int c3,
+                      float xf, float yf, bool gammaExpand = false)
   {
     // bilinear filtering
     FloatVector4  v0(c0);
@@ -484,27 +517,69 @@ struct FloatVector4
     FloatVector4  v3(c3);
     if (gammaExpand)
     {
-      v0 *= v0;
-      v0 *= (1.0f / 255.0f);
-      v1 *= v1;
-      v1 *= (1.0f / 255.0f);
-      v2 *= v2;
-      v2 *= (1.0f / 255.0f);
-      v3 *= v3;
-      v3 *= (1.0f / 255.0f);
+      FloatVector4  tmp(1.0f / 255.0f);
+      v0 = v0 * v0 * tmp;
+      v1 = v1 * v1 * tmp;
+      v2 = v2 * v2 * tmp;
+      v3 = v3 * v3 * tmp;
     }
-    float   f3 = xf * yf;
-    float   f2 = yf - f3;
-    float   f1 = xf - f3;
-    float   f0 = 1.0f - (xf + f2);
-    v0 *= f0;
-    v1 *= f1;
-    v2 *= f2;
-    v3 *= f3;
+    v1 -= v0;
+    v3 -= v2;
+    v1 *= xf;
+    v3 *= xf;
     v0 += v1;
-    v0 += v2;
-    v0 += v3;
-    *this = v0;
+    v2 = (v2 + v3 - v0) * FloatVector4(yf);
+    *this = v0 + v2;
+  }
+  inline FloatVector4(const unsigned int *p0, const unsigned int *p1,
+                      const unsigned int *p2, const unsigned int *p3,
+                      float xf, float yf, bool gammaExpand = false)
+  {
+    FloatVector4  v0(p0);
+    FloatVector4  v1(p1);
+    FloatVector4  v2(p2);
+    FloatVector4  v3(p3);
+    if (gammaExpand)
+    {
+      FloatVector4  tmp(1.0f / 255.0f);
+      v0 = v0 * v0 * tmp;
+      v1 = v1 * v1 * tmp;
+      v2 = v2 * v2 * tmp;
+      v3 = v3 * v3 * tmp;
+    }
+    v1 -= v0;
+    v3 -= v2;
+    v1 *= xf;
+    v3 *= xf;
+    v0 += v1;
+    v2 = (v2 + v3 - v0) * FloatVector4(yf);
+    *this = v0 + v2;
+  }
+  inline FloatVector4(const unsigned int *p1_0, const unsigned int *p2_0,
+                      const unsigned int *p1_1, const unsigned int *p2_1,
+                      const unsigned int *p1_2, const unsigned int *p2_2,
+                      const unsigned int *p1_3, const unsigned int *p2_3,
+                      float xf, float yf, bool gammaExpand = false)
+  {
+    FloatVector4  v0(p1_0, p2_0);
+    FloatVector4  v1(p1_1, p2_1);
+    FloatVector4  v2(p1_2, p2_2);
+    FloatVector4  v3(p1_3, p2_3);
+    if (gammaExpand)
+    {
+      FloatVector4  tmp(1.0f / 255.0f);
+      v0 = v0 * v0 * tmp;
+      v1 = v1 * v1 * tmp;
+      v2 = v2 * v2 * tmp;
+      v3 = v3 * v3 * tmp;
+    }
+    v1 -= v0;
+    v3 -= v2;
+    v1 *= xf;
+    v3 *= xf;
+    v0 += v1;
+    v2 = (v2 + v3 - v0) * FloatVector4(yf);
+    *this = v0 + v2;
   }
 };
 
