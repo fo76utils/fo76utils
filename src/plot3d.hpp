@@ -329,7 +329,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     }
   };
   static const float  defaultLightingPolynomial[6];
-  unsigned int  *bufRGBW;
+  unsigned int  *bufRGBA;
   float   *bufZ;
   int     width;
   int     height;
@@ -339,44 +339,59 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   const DDSTexture  *textureE;          // environment map
   const DDSTexture  *textureS;          // TES5 _em.dds, FO4 _s.dds, FO76 _l.dds
   const DDSTexture  *textureR;          // Fallout 76 reflection map
+  const DDSTexture  *textureGlow;       // glow map
   float   mipOffsetN;
   float   mipOffsetS;
   float   mipOffsetR;
+  float   mipOffsetG;                   // for the glow map
   float   mipLevel;
   float   alphaThresholdFloat;
-  int     mipLevelMin;
+  bool    invNormals;
+  bool    gammaCorrectEnabled;
+  float   viewScale;
   FloatVector4  lightVector;
+  FloatVector4  lightingPolynomial3_0;
+  FloatVector4  lightingPolynomial5_4;
   FloatVector4  envMapOffs;
   FloatVector4  viewTransformInvX;
   FloatVector4  viewTransformInvY;
   FloatVector4  viewTransformInvZ;
-  FloatVector4  specularColorFloat;
+  FloatVector4  specularColorFloat;     // water color for drawWater()
   float   reflectionLevel;
   float   specularLevel;
-  bool    invNormals;
-  bool    gammaCorrectEnabled;
   unsigned int  debugMode;
   void (*drawPixelFunction)(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   std::vector< Vertex > vertexBuf;
   std::vector< Triangle > triangleBuf;
-  float   lightingPolynomial[6];
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                              const NIFFile::NIFVertexTransform& viewTransform);
   // d = dot product from normals and light vector
   inline float getLightLevel(float d) const;
   // returns normal
   inline FloatVector4 normalMap(Vertex& v, FloatVector4 n) const;
+  // returns reflected view vector
+  inline FloatVector4 calculateReflection(const Vertex& v, int x, int y) const;
   inline FloatVector4 environmentMap(
-      const Vertex& v, int x, int y, float& specular,
-      float smoothness = 1.0f, float nDotL = 0.0f) const;
-  // fill with water
+      FloatVector4 reflectedView, float smoothness = 1.0f) const;
+  inline float specularPhong(FloatVector4 reflectedView, float smoothness,
+                             float nDotL, bool isNormalized = false) const;
+  inline float specularGGX(FloatVector4 reflectedView, float smoothness,
+                           float nDotL, float nDotV) const;
+  static inline float fresnelGamma2(float nDotV);
+  // fill with water (first and second pass)
   static void drawPixel_Water(
+      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+  static void drawPixel_Water_2(
+      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+  // with gamma correction
+  static void drawPixel_Water_2G(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // alphaFlag is set to true if the pixel is visible (alpha >= threshold)
   inline FloatVector4 getDiffuseColor(
       float txtU, float txtV, const Vertex& z, bool& alphaFlag,
       bool enableGamma = false) const;
+  inline FloatVector4 glowMap(FloatVector4 c, float txtU, float txtV) const;
   static void drawPixel_Debug(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // diffuse texture with trilinear filtering
@@ -400,25 +415,20 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   static inline FloatVector4 interpolateVectors(
       FloatVector4 v0, FloatVector4 v1, FloatVector4 v2,
       float w0, float w1, float w2);
-  inline void drawPixel(
-      int x, int y, float txtScaleU, float txtScaleV, Vertex& v,
-      const Vertex& v0, const Vertex& v1, const Vertex& v2,
-      float w0, float w1, float w2);
+  inline void drawPixel(int x, int y, Vertex& v,
+                        const Vertex& v0, const Vertex& v1, const Vertex& v2,
+                        float w0, float w1, float w2);
   void drawLine(Vertex& v, const Vertex& v0, const Vertex& v1);
   void drawTriangles();
  public:
-  // The alpha channel is 255 for solid geometry, 0 for air, and 1 to 254
-  // for water. In the case of water, the pixel format changes to R5G6B5X8Y8,
-  // from LSB to MSB, representing the color of the terrain under the water,
-  // and the X and Y normals of the water surface (mapped to the range of
-  // 2 to 254).
-  Plot3D_TriShape(unsigned int *outBufRGBW, float *outBufZ,
+  // alpha = 255 - sqrt(waterDepth*16) after first pass water rendering
+  Plot3D_TriShape(unsigned int *outBufRGBA, float *outBufZ,
                   int imageWidth, int imageHeight, bool enableGamma = false);
   virtual ~Plot3D_TriShape();
-  inline void setBuffers(unsigned int *outBufRGBW, float *outBufZ,
+  inline void setBuffers(unsigned int *outBufRGBA, float *outBufZ,
                          int imageWidth, int imageHeight)
   {
-    bufRGBW = outBufRGBW;
+    bufRGBA = outBufRGBA;
     bufZ = outBufZ;
     width = imageWidth;
     height = imageHeight;
@@ -437,20 +447,26 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   static void getDefaultLightingFunction(float *a);
   // textures[0] = diffuse
   // textures[1] = normal
+  // textures[2] = glow map
   // textures[3] = gradient map
   // textures[4] = environment map
-  // textures[6] = environment mask
+  // textures[5] = Skyrim environment mask
+  // textures[6] = Fallout 4 specular map
+  // textures[7] = wrinkles (unused)
   // textures[8] = Fallout 76 reflection map
+  // textures[9] = Fallout 76 lighting map
   void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,
                     const NIFFile::NIFVertexTransform& viewTransform,
                     float lightX, float lightY, float lightZ,
                     const DDSTexture * const *textures, size_t textureCnt);
-  // convert all water surfaces after draw operations are completed
-  void renderWater(const NIFFile::NIFVertexTransform& viewTransform,
-                   unsigned int waterColor,     // 0xAABBGGRR format
-                   float lightX, float lightY, float lightZ,
-                   const DDSTexture *envMap = (DDSTexture *) 0,
-                   float envMapLevel = 1.0f);
+  // drawWater() should be called to render water meshes in a second pass.
+  // waterColor is in 0xAABBGGRR format, the alpha channel contains the depth
+  // beyond which the water has maximum opacity, as alpha = 256 - sqrt(depth*8).
+  void drawWater(const NIFFile::NIFVertexTransform& modelTransform,
+                 const NIFFile::NIFVertexTransform& viewTransform,
+                 float lightX, float lightY, float lightZ,
+                 const DDSTexture * const *textures, size_t textureCnt,
+                 unsigned int waterColor, float envMapLevel = 1.0f);
   // n = 0: default mode
   // n = 1: render c as a solid color (0x00RRGGBB)
   // n = 2: Z * 16 (blue = LSB, red = MSB)

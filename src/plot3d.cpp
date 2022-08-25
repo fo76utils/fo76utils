@@ -148,13 +148,10 @@ size_t Plot3D_TriShape::transformVertexData(
 
 inline float Plot3D_TriShape::getLightLevel(float d) const
 {
-  FloatVector4  tmp(lightingPolynomial[2], lightingPolynomial[3],
-                    lightingPolynomial[4], lightingPolynomial[5]);
   float   d2 = d * d;
-  float   d3 = d * d2;
-  FloatVector4  tmp2(d2, d3, d2 * d2, d2 * d3);
-  float   y = d * lightingPolynomial[1] + lightingPolynomial[0];
-  y += tmp2.dotProduct(tmp);
+  FloatVector4  tmp(d * d2, d2, d, 1.0f);
+  float   y = tmp.dotProduct(lightingPolynomial3_0)
+              + (tmp * FloatVector4(d2)).dotProduct2(lightingPolynomial5_4);
   return (y > 0.0f ? (y < 4.0f ? y : 4.0f) : 0.0f);
 }
 
@@ -185,75 +182,180 @@ inline FloatVector4 Plot3D_TriShape::normalMap(Vertex& v, FloatVector4 n) const
   return tmpN;
 }
 
-inline FloatVector4 Plot3D_TriShape::environmentMap(
-    const Vertex& v, int x, int y, float& specular,
-    float smoothness, float nDotL) const
+inline FloatVector4 Plot3D_TriShape::calculateReflection(
+    const Vertex& v, int x, int y) const
 {
-  float   r = 1.0f - smoothness;        // roughness
-  r = (r > 0.0f ? r : 0.0f);
-  float   m = r * float(textureE->getMaxMipLevel());
   // view vector
   FloatVector4  viewVector(float(x), float(y), 0.0f, 0.0f);
   viewVector += envMapOffs;
-  // reflect
-  FloatVector4  tmp2(v.normal);
-  float   tmp = viewVector.dotProduct3(tmp2) * 2.0f;
-  tmp2 *= tmp;
-  viewVector -= tmp2;
-  viewVector.normalize();
-  if (specularLevel > 0.0f)
-  {
-    specular = 0.0f;
-    if (nDotL > -0.125f)
-    {
-      // calculate specular reflection
-      float   s = viewVector.dotProduct3(lightVector);
-      if (s > -0.5f)
-      {
-        s = (s < 1.0f ? s : 1.0f);
-        float   g = FloatVector4::exp2Fast(9.0f * (1.0f - r));
-        // approximates g * log(s) / 2, more accurately if s is closer to 1
-        s = g * (s - 1.0f) / (s + 1.0f);
-        if (s > -7.0f)
-        {
-          specular = FloatVector4::exp2Fast(s * 2.8853901f);  // 2 / log(2)
-          if (BRANCH_EXPECT((nDotL < 0.0f), false))
-            specular = specular * (nDotL * 8.0f + 1.0f);
-        }
-      }
-    }
-  }
+  // reflect (I - 2.0 * dot(N, I) * N)
+  viewVector -= (FloatVector4(2.0f * viewVector.dotProduct3(v.normal))
+                 * v.normal);
+  return viewVector.normalize();
+}
+
+inline FloatVector4 Plot3D_TriShape::environmentMap(
+    FloatVector4 reflectedView, float smoothness) const
+{
   // inverse rotation by view matrix
-  tmp2 = (FloatVector4(viewVector[0]) * viewTransformInvX)
-         + (FloatVector4(viewVector[1]) * viewTransformInvY)
-         + (FloatVector4(viewVector[2]) * viewTransformInvZ);
-  FloatVector4  e(textureE->cubeMap(tmp2[0], tmp2[1], tmp2[2], m));
+  FloatVector4  v((FloatVector4(reflectedView[0]) * viewTransformInvX)
+                  + (FloatVector4(reflectedView[1]) * viewTransformInvY)
+                  + (FloatVector4(reflectedView[2]) * viewTransformInvZ));
+  float   r = 1.0f - smoothness;        // roughness
+  float   m = (r > 0.0f ? r : 0.0f) * float(textureE->getMaxMipLevel());
+  FloatVector4  e(textureE->cubeMap(v[0], v[1], v[2], m));
   e *= (1.0f / 255.0f);
   return e;
+}
+
+inline float Plot3D_TriShape::specularPhong(
+    FloatVector4 reflectedView, float smoothness,
+    float nDotL, bool isNormalized) const
+{
+  if (!(specularLevel > 0.0f && nDotL > -0.125f))
+    return 0.0f;
+  float   s = reflectedView.dotProduct3(lightVector);
+  if (!(s > -0.5f))
+    return 0.0f;
+  s = (s < 1.0f ? s : 1.0f);
+  float   g = FloatVector4::exp2Fast(9.0f * smoothness);
+  // approximates g * log(s) / 2, more accurately if s is closer to 1
+  s = g * (s - 1.0f) / (s + 1.0f);
+  if (!(s > -7.5f))
+    return 0.0f;
+  s = FloatVector4::exp2Fast(s * 2.8853901f);   // 2 / log(2)
+  if (BRANCH_EXPECT((nDotL < 0.0f), false))
+    s = s * (nDotL * 8.0f + 1.0f);
+  if (isNormalized)
+    s = s * FloatVector4::squareRootFast(g + 0.4375f) * 0.20822077f;
+  return s;
+}
+
+inline float Plot3D_TriShape::specularGGX(
+    FloatVector4 reflectedView, float smoothness,
+    float nDotL, float nDotV) const
+{
+  if (!(specularLevel > 0.0f && nDotL > 0.0f))
+    return 0.0f;
+  // h2 = 2.0 * squared dot product with halfway vector
+  float   h2 = reflectedView.dotProduct3(lightVector) + 1.0f;
+  float   r = 0.96875f - (smoothness * 0.9375f);
+  float   a = r * r;
+  float   a2 = a * a;
+  float   d = h2 * (a2 - 1.0f) + 2.0f;
+  float   s = a2 / (d * d);
+  float   k = (r + 1.0f) * (r + 1.0f) * 0.125f;
+  s *= (nDotL / (nDotL * (1.0f - k) + k));
+#if 1
+  s *= (nDotV / (nDotV * (1.0f - k) + k));
+#else
+  (void) nDotV;
+#endif
+  return s;
+}
+
+inline float Plot3D_TriShape::fresnelGamma2(float nDotV)
+{
+  FloatVector4  a3_0(-18.90442774f, 13.42739638f, -5.32806707f, 1.00000000f);
+  FloatVector4  a5_4(-4.10377539f, 13.90887383f, 0.0f, 0.0f);
+  float   d2 = nDotV * nDotV;
+  FloatVector4  tmp(nDotV * d2, d2, nDotV, 1.0f);
+  return (tmp.dotProduct(a3_0) + (tmp * FloatVector4(d2)).dotProduct2(a5_4));
 }
 
 void Plot3D_TriShape::drawPixel_Water(
     Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
 {
+  (void) txtU;
+  (void) txtV;
+  size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
+  // first pass: only write depth and alpha
+  float   d = float(int(~(p.bufRGBA[offs] >> 24) & 0xFFU));
+  d = (d * d) + ((p.bufZ[offs] - z.xyz[2]) * (16.0f / p.viewScale));
+  d = FloatVector4::squareRootFast(d < 65025.0f ? d : 65025.0f);
+  p.bufZ[offs] = z.xyz[2] * 1.00000025f + 0.00000025f;
+  // alpha channel = 255 - sqrt(waterDepth*16)
+  p.bufRGBA[offs] = (p.bufRGBA[offs] & 0x00FFFFFFU)
+                    | ((unsigned int) (255 - roundFloat(d)) << 24);
+}
+
+void Plot3D_TriShape::drawPixel_Water_2(
+    Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
+{
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
   p.bufZ[offs] = z.xyz[2];
-  unsigned int  c = p.bufRGBW[offs];
-  if (BRANCH_EXPECT(!((c + 0x01000000U) & 0xFE000000U), true))
-  {
-    // convert from R8G8B8 to R5G6B5 with dithering
-    c = c & 0x00FEFEFEU;
-    c = c + ((unsigned int) ((x & 1) | (((x ^ y) & 1) << 1)) * 0x00020102U);
-    c = c - ((c >> 7) & 0x00020202U);
-    c = ((c >> 3) & 0x001FU) | ((c >> 5) & 0x07E0U) | ((c >> 8) & 0xF800U);
-  }
-  c = c & 0xFFFFU;
   if (BRANCH_EXPECT(p.textureN, true))
     (void) p.normalMap(z, p.textureN->getPixelT(txtU, txtV, p.mipLevel));
   else
     z.normal.normalize(p.invNormals);
-  c = c | ((unsigned int) (roundFloat(z.normal[0] * 126.0f) + 128) << 16);
-  c = c | ((unsigned int) (roundFloat(z.normal[1] * 126.0f) + 128) << 24);
-  p.bufRGBW[offs] = c;
+  FloatVector4  c(p.bufRGBA[offs]);
+  FloatVector4  n(z.normal);
+  FloatVector4  reflectedView(p.calculateReflection(z, x, y));
+  FloatVector4  e(0.0f);
+  float   f = 0.0f;
+  float   nDotL = n.dotProduct3(p.lightVector);
+  float   a = 255.0f - c[3];
+  a = (a * a) * p.specularColorFloat[3];
+  c *= (1.0f / 255.0f);
+  if (a > -3.0f && a < 0.0f)
+    a = FloatVector4::exp2Fast(a - 1.0f);
+  else
+    a = (a < -2.0f ? 0.0625f : 0.5f);
+  if (p.textureE)
+  {
+    e = p.environmentMap(reflectedView, 1.0f);
+    float   nDotV = float(std::fabs(z.normal[2]));
+    nDotV = (nDotV < 1.0f ? nDotV : 1.0f);
+    // f0 = pow(0.0203, 2.0 / 2.2)
+    f = fresnelGamma2(nDotV) * (1.0f - 0.029f) + 0.029f;
+    f = FloatVector4::squareRootFast(f);
+    float   specular = p.specularPhong(reflectedView, 0.875f, nDotL, true);
+    e = (e + FloatVector4(specular)) * FloatVector4(f * p.reflectionLevel);
+  }
+  float   l = p.getLightLevel(nDotL);
+  c = (c * FloatVector4(a))
+      + (p.specularColorFloat * FloatVector4(l * (1.0f - a)));
+  c = c * FloatVector4(1.0f - (f * 0.5f)) + e;
+  p.bufRGBA[offs] = (unsigned int) (c * FloatVector4(255.0f)) | 0xFF000000U;
+}
+
+void Plot3D_TriShape::drawPixel_Water_2G(
+    Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z)
+{
+  size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
+  p.bufZ[offs] = z.xyz[2];
+  if (BRANCH_EXPECT(p.textureN, true))
+    (void) p.normalMap(z, p.textureN->getPixelT(txtU, txtV, p.mipLevel));
+  else
+    z.normal.normalize(p.invNormals);
+  FloatVector4  c(p.bufRGBA[offs]);
+  FloatVector4  n(z.normal);
+  FloatVector4  reflectedView(p.calculateReflection(z, x, y));
+  FloatVector4  e(0.0f);
+  float   f = 0.0f;
+  float   nDotL = n.dotProduct3(p.lightVector);
+  float   a = 255.0f - c[3];
+  a = (a * a) * p.specularColorFloat[3];
+  c *= (1.0f / 255.0f);
+  if (a > -3.0f && a < 0.0f)
+    a = FloatVector4::exp2Fast(a - 1.0f);
+  else
+    a = (a < -2.0f ? 0.0625f : 0.5f);
+  if (p.textureE)
+  {
+    e = p.environmentMap(reflectedView, 1.0f);
+    float   nDotV = float(std::fabs(z.normal[2]));
+    nDotV = (nDotV < 1.0f ? nDotV : 1.0f);
+    // f0 = pow(0.0203, 2.0 / 2.2)
+    f = fresnelGamma2(nDotV) * (1.0f - 0.029f) + 0.029f;
+    float   specular = p.specularGGX(reflectedView, 0.875f, nDotL, nDotV);
+    e = (e * e + FloatVector4(specular)) * FloatVector4(f * p.reflectionLevel);
+  }
+  float   l = p.getLightLevel(nDotL);
+  c = (c * c * FloatVector4(a))
+      + (p.specularColorFloat * FloatVector4(l * l * (1.0f - a)));
+  c = (c * FloatVector4(1.0f - f) + e).squareRootFast();
+  p.bufRGBA[offs] = (unsigned int) (c * FloatVector4(255.0f)) | 0xFF000000U;
 }
 
 inline FloatVector4 Plot3D_TriShape::getDiffuseColor(
@@ -268,10 +370,9 @@ inline FloatVector4 Plot3D_TriShape::getDiffuseColor(
     return c;
   if (BRANCH_EXPECT(textureG, false))
   {
-    float   u = c[1] * float(textureG->getWidth() - 1) * (1.0f / 255.0f);
-    float   v = (float(int(gradientMapV) - 255) * (1.0f / 255.0f) + vColor[0])
-                * float(textureG->getHeight() - 1);
-    c = textureG->getPixelB(u, v, 0);
+    float   u = c[1] * (1.0f / 255.0f);
+    float   v = float(int(gradientMapV) - 255) * (1.0f / 255.0f) + vColor[0];
+    c = textureG->getPixelBM(u, v, 0);
     if (enableGamma)
     {
       c *= c;
@@ -289,6 +390,21 @@ inline FloatVector4 Plot3D_TriShape::getDiffuseColor(
   }
   c[3] = a;
   return c;
+}
+
+inline FloatVector4 Plot3D_TriShape::glowMap(
+    FloatVector4 c, float txtU, float txtV) const
+{
+  if (BRANCH_EXPECT(!textureGlow, true))
+    return c;
+  FloatVector4  g(textureGlow->getPixelT(txtU, txtV, mipLevel + mipOffsetG));
+  g *= getLightLevel(1.0f);
+  if (gammaCorrectEnabled)
+  {
+    g *= g;
+    g *= (1.0f / 255.0f);
+  }
+  return (c + g);
 }
 
 void Plot3D_TriShape::drawPixel_Debug(
@@ -317,20 +433,24 @@ void Plot3D_TriShape::drawPixel_Debug(
       tmp = tmp | (unsigned int) c;
     if (p.debugMode != 4)
       tmp = (tmp & 0xFF00FF00U) | ((tmp & 0xFFU) << 16) | ((tmp >> 16) & 0xFFU);
-    p.bufRGBW[offs] = tmp;
+    p.bufRGBA[offs] = tmp;
     return;
   }
   FloatVector4  n(127.5f, 127.5f, 0.0f, 0.0f);
   if (p.textureN)
     n = p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN);
-  c *= p.getLightLevel(p.normalMap(z, n).dotProduct3(p.lightVector));
+  (void) p.normalMap(z, n);
   if (p.debugMode == 3)
   {
     c = z.normal;
     c *= FloatVector4(127.5f, -127.5f, -127.5f, 0.0f);
     c += FloatVector4(127.5f, 127.5f, 127.5f, 0.0f);
   }
-  p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
+  else
+  {
+    c *= p.getLightLevel(z.normal.dotProduct3(p.lightVector));
+  }
+  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_Diffuse(
@@ -344,7 +464,8 @@ void Plot3D_TriShape::drawPixel_Diffuse(
   p.bufZ[offs] = z.xyz[2];
   z.normal.normalize(p.invNormals);
   c *= p.getLightLevel(z.normal.dotProduct3(p.lightVector));
-  p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
+  c = p.glowMap(c, txtU, txtV);
+  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_Normal(
@@ -358,7 +479,8 @@ void Plot3D_TriShape::drawPixel_Normal(
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
   c *= p.getLightLevel(p.normalMap(z, n).dotProduct3(p.lightVector));
-  p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
+  c = p.glowMap(c, txtU, txtV);
+  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_NormalEnv(
@@ -372,21 +494,17 @@ void Plot3D_TriShape::drawPixel_NormalEnv(
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
   float   nDotL = p.normalMap(z, n).dotProduct3(p.lightVector);
-  c *= p.getLightLevel(nDotL);
+  c = p.glowMap(c * FloatVector4(p.getLightLevel(nDotL)), txtU, txtV);
   float   smoothness = float(int(p.specularSmoothness)) * (1.0f / 255.0f);
-  float   specular = 0.0f;
-  FloatVector4  e(p.environmentMap(z, x, y, specular, smoothness, nDotL));
+  FloatVector4  reflectedView(p.calculateReflection(z, x, y));
+  FloatVector4  e(p.environmentMap(reflectedView, smoothness));
+  float   specular = p.specularPhong(reflectedView, smoothness, nDotL, false);
   float   specLevel = n[3];
   e *= (p.reflectionLevel * specLevel);
   c += e;
-  specular *= (p.specularLevel * specLevel);
-  if (specular > 0.0f)
-  {
-    FloatVector4  tmp(p.specularColorFloat);
-    tmp *= specular;
-    c += tmp;
-  }
-  p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
+  c += (p.specularColorFloat
+        * FloatVector4(specular * p.specularLevel * specLevel));
+  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_NormalEnvM(
@@ -400,22 +518,18 @@ void Plot3D_TriShape::drawPixel_NormalEnvM(
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
   float   nDotL = p.normalMap(z, n).dotProduct3(p.lightVector);
-  c *= p.getLightLevel(nDotL);
+  c = p.glowMap(c * FloatVector4(p.getLightLevel(nDotL)), txtU, txtV);
   FloatVector4  m(p.textureS->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetS));
   float   smoothness = float(int(p.specularSmoothness)) * (1.0f / 255.0f);
-  float   specular = 0.0f;
-  FloatVector4  e(p.environmentMap(z, x, y, specular, smoothness, nDotL));
+  FloatVector4  reflectedView(p.calculateReflection(z, x, y));
+  FloatVector4  e(p.environmentMap(reflectedView, smoothness));
+  float   specular = p.specularPhong(reflectedView, smoothness, nDotL, false);
   float   specLevel = m[0];
   e *= (p.reflectionLevel * specLevel);
   c += e;
-  specular *= (p.specularLevel * specLevel);
-  if (specular > 0.0f)
-  {
-    FloatVector4  tmp(p.specularColorFloat);
-    tmp *= specular;
-    c += tmp;
-  }
-  p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
+  c += (p.specularColorFloat
+        * FloatVector4(specular * p.specularLevel * specLevel));
+  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_NormalEnvS(
@@ -430,22 +544,18 @@ void Plot3D_TriShape::drawPixel_NormalEnvS(
   FloatVector4  n(p.textureN->getPixelT_2(txtU, txtV, p.mipLevel + p.mipOffsetN,
                                           p.textureS));
   float   nDotL = p.normalMap(z, n).dotProduct3(p.lightVector);
-  c *= p.getLightLevel(nDotL);
+  c = p.glowMap(c * FloatVector4(p.getLightLevel(nDotL)), txtU, txtV);
   float   smoothness =
       float(int(p.specularSmoothness)) * n[3] * (1.0f / (255.0f * 255.0f));
   float   specLevel = n[2];
-  float   specular = 0.0f;
-  FloatVector4  e(p.environmentMap(z, x, y, specular, smoothness, nDotL));
+  FloatVector4  reflectedView(p.calculateReflection(z, x, y));
+  FloatVector4  e(p.environmentMap(reflectedView, smoothness));
+  float   specular = p.specularPhong(reflectedView, smoothness, nDotL, true);
   e *= (p.reflectionLevel * specLevel);
   c += e;
-  specular *= (p.specularLevel * specLevel);
-  if (specular > 0.0f)
-  {
-    FloatVector4  tmp(p.specularColorFloat);
-    tmp *= (specular * (smoothness * 2.0f));
-    c += tmp;
-  }
-  p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
+  c += (p.specularColorFloat
+        * FloatVector4(specular * p.specularLevel * specLevel));
+  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_NormalRefl(
@@ -462,13 +572,10 @@ void Plot3D_TriShape::drawPixel_NormalRefl(
   FloatVector4  r(p.textureR->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetR));
   r *= (1.0f / 255.0f);
   r *= r;
-  FloatVector4  tmp(r[1]);
-  tmp.maxValues(r);
-  tmp.maxValues(FloatVector4(r[2]));
-  float   m = 1.0f - tmp[0];
+  r.maxValues(FloatVector4(0.025f));
   float   nDotL = p.normalMap(z, n).dotProduct3(p.lightVector);
   float   l = p.getLightLevel(nDotL);
-  c *= (l * l * m);
+  c *= (l * l);
   float   smoothness = n[2];
   float   specLevel = n[3];
   if (BRANCH_EXPECT(!p.textureS, false))
@@ -478,25 +585,20 @@ void Plot3D_TriShape::drawPixel_NormalRefl(
   }
   smoothness = smoothness * float(int(p.specularSmoothness))
                * (1.0f / (255.0f * 255.0f));
-  float   specular = 0.0f;
-  FloatVector4  e(p.environmentMap(z, x, y, specular, smoothness, nDotL));
-  e *= (p.reflectionLevel * specLevel);
-  e *= r;
-  c += e;
-  specular *= (p.specularLevel * specLevel);
-  if (specular > 0.0f)
-  {
-    specular *= (smoothness * smoothness * (m + 1.0f));
-    tmp = p.specularColorFloat;
-    r *= (1.0f - m);
-    tmp *= m;
-    tmp += r;
-    tmp *= specular;
-    c += tmp;
-  }
+  FloatVector4  reflectedView(p.calculateReflection(z, x, y));
+  FloatVector4  e(p.environmentMap(reflectedView, smoothness));
+  float   nDotV = float(std::fabs(z.normal[2]));
+  nDotV = (nDotV < 1.0f ? nDotV : 1.0f);
+  float   specular = p.specularGGX(reflectedView, smoothness, nDotL, nDotV);
+  e = (e * e * FloatVector4(p.reflectionLevel))
+      + (p.specularColorFloat * FloatVector4(specular * p.specularLevel));
+  FloatVector4  f(r + ((FloatVector4(smoothness).maxValues(r) - r)
+                       * FloatVector4(fresnelGamma2(nDotV))));
+  e *= specLevel;
+  c = p.glowMap(c + ((e - c) * f), txtU, txtV);
   c *= 255.0f;
   c.squareRootFast();
-  p.bufRGBW[offs] = (unsigned int) c | 0xFF000000U;
+  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
 }
 
 inline FloatVector4 Plot3D_TriShape::interpolateVectors(
@@ -515,7 +617,7 @@ inline FloatVector4 Plot3D_TriShape::interpolateVectors(
 }
 
 inline void Plot3D_TriShape::drawPixel(
-    int x, int y, float txtScaleU, float txtScaleV, Vertex& v,
+    int x, int y, Vertex& v,
     const Vertex& v0, const Vertex& v1, const Vertex& v2,
     float w0, float w1, float w2)
 {
@@ -526,15 +628,13 @@ inline void Plot3D_TriShape::drawPixel(
   }
   v.bitangent =
       interpolateVectors(v0.bitangent, v1.bitangent, v2.bitangent, w0, w1, w2);
-  float   txtU = v.bitangent[3] * txtScaleU;
   v.tangent =
       interpolateVectors(v0.tangent, v1.tangent, v2.tangent, w0, w1, w2);
-  float   txtV = v.tangent[3] * txtScaleV;
   v.normal = interpolateVectors(v0.normal, v1.normal, v2.normal, w0, w1, w2);
   v.vertexColor =
       interpolateVectors(v0.vertexColor, v1.vertexColor, v2.vertexColor,
                          w0, w1, w2);
-  drawPixelFunction(*this, x, y, txtU, txtV, v);
+  drawPixelFunction(*this, x, y, v.bitangent[3], v.tangent[3], v);
 }
 
 void Plot3D_TriShape::drawLine(Vertex& v, const Vertex& v0, const Vertex& v1)
@@ -557,7 +657,7 @@ void Plot3D_TriShape::drawLine(Vertex& v, const Vertex& v0, const Vertex& v1)
         {
           float   w0 = float(1.0 - w1);
           v.xyz[2] = (v0.xyz[2] * w0) + (v1.xyz[2] * float(w1));
-          drawPixel(x, y, 0.0f, 0.0f, v, v0, v1, v0, w0, float(w1), 0.0f);
+          drawPixel(x, y, v, v0, v1, v0, w0, float(w1), 0.0f);
         }
       }
       if (y == y1)
@@ -582,7 +682,7 @@ void Plot3D_TriShape::drawLine(Vertex& v, const Vertex& v0, const Vertex& v1)
         {
           float   w0 = float(1.0 - w1);
           v.xyz[2] = (v0.xyz[2] * w0) + (v1.xyz[2] * float(w1));
-          drawPixel(x, y, 0.0f, 0.0f, v, v0, v1, v0, w0, float(w1), 0.0f);
+          drawPixel(x, y, v, v0, v1, v0, w0, float(w1), 0.0f);
         }
       }
       if (x == x1)
@@ -594,7 +694,7 @@ void Plot3D_TriShape::drawLine(Vertex& v, const Vertex& v0, const Vertex& v1)
            float(std::fabs(v0.xyz[1] - float(y))) < (1.0f / 1024.0f))
   {
     v.xyz[2] = v0.xyz[2];
-    drawPixel(x, y, 0.0f, 0.0f, v, v0, v0, v0, 1.0f, 0.0f, 0.0f);
+    drawPixel(x, y, v, v0, v0, v0, 1.0f, 0.0f, 0.0f);
   }
 }
 
@@ -651,8 +751,6 @@ void Plot3D_TriShape::drawTriangles()
     double  x2 = double(v2->xyz[0]);
     double  y2 = double(v2->xyz[1]);
     double  r2xArea = 1.0 / (((x1 - x0) * (y2 - y0)) - ((x2 - x0) * (y1 - y0)));
-    float   txtScaleU = 0.0f;
-    float   txtScaleV = 0.0f;
     if (BRANCH_EXPECT(textureD, true))
     {
       float   txtU1d = v1->bitangent[3] - v0->bitangent[3];
@@ -662,25 +760,17 @@ void Plot3D_TriShape::drawTriangles()
       float   uvArea2 = float(std::fabs((txtU1d * txtV2d) - (txtU2d * txtV1d)));
       if (xyArea2 > uvArea2)
       {
-        float   txtW = float(textureD->getWidth());
-        float   txtH = float(textureD->getHeight());
-        uvArea2 *= (txtW * txtH);
-        int     mipLevel_i = mipLevelMin;
-        mipLevel = float(mipLevel_i);
-        if ((uvArea2 * float(1 << ((-mipLevel_i) << 1))) > xyArea2)
+        uvArea2 *= (float(textureD->getWidth()) * float(textureD->getHeight()));
+        mipLevel = -6.0f;
+        if (BRANCH_EXPECT(((uvArea2 * 4096.0f) > xyArea2), true))
         {
           // calculate base 4 logarithm of texel area / pixel area
           mipLevel = FloatVector4::log2Fast(float(std::fabs(r2xArea * uvArea2)))
                      * 0.5f;
-          mipLevel_i = roundFloat(mipLevel);
+          int     mipLevel_i = roundFloat(mipLevel);
           if (float(std::fabs(mipLevel - float(mipLevel_i))) < 0.0625f)
             mipLevel = float(mipLevel_i);
-          mipLevel_i = int(float(std::floor(mipLevel)));
         }
-        float   txtScale =
-            float(262144 >> (mipLevel_i + 2)) * (1.0f / 65536.0f);
-        txtScaleU = txtW * txtScale;
-        txtScaleV = txtH * txtScale;
       }
     }
     double  dy2 = 1.0 / (y2 - y0);
@@ -713,8 +803,7 @@ void Plot3D_TriShape::drawTriangles()
           float   z = (v0->xyz[2] * float(w0)) + (v1->xyz[2] * float(w1))
                       + (v2->xyz[2] * float(w2));
           v.xyz[2] = z;
-          drawPixel(x, y, txtScaleU, txtScaleV,
-                    v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
+          drawPixel(x, y, v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
           w1 -= a1;
           w2 -= a2;
           w0 = 1.0 - (w1 + w2);
@@ -742,8 +831,7 @@ void Plot3D_TriShape::drawTriangles()
           float   z = (v0->xyz[2] * float(w0)) + (v1->xyz[2] * float(w1))
                       + (v2->xyz[2] * float(w2));
           v.xyz[2] = z;
-          drawPixel(x, y, txtScaleU, txtScaleV,
-                    v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
+          drawPixel(x, y, v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
           w1 += a1;
           w2 += a2;
           w0 = 1.0 - (w1 + w2);
@@ -756,9 +844,9 @@ void Plot3D_TriShape::drawTriangles()
 }
 
 Plot3D_TriShape::Plot3D_TriShape(
-    unsigned int *outBufRGBW, float *outBufZ, int imageWidth, int imageHeight,
+    unsigned int *outBufRGBA, float *outBufZ, int imageWidth, int imageHeight,
     bool enableGamma)
-  : bufRGBW(outBufRGBW),
+  : bufRGBA(outBufRGBA),
     bufZ(outBufZ),
     width(imageWidth),
     height(imageHeight),
@@ -768,13 +856,19 @@ Plot3D_TriShape::Plot3D_TriShape(
     textureE((DDSTexture *) 0),
     textureS((DDSTexture *) 0),
     textureR((DDSTexture *) 0),
-    mipOffsetN(1.0f),
-    mipOffsetS(1.0f),
-    mipOffsetR(1.0f),
+    textureGlow((DDSTexture *) 0),
+    mipOffsetN(0.0f),
+    mipOffsetS(0.0f),
+    mipOffsetR(0.0f),
+    mipOffsetG(0.0f),
     mipLevel(15.0f),
     alphaThresholdFloat(0.0f),
-    mipLevelMin(0),
+    invNormals(false),
+    gammaCorrectEnabled(enableGamma),
+    viewScale(1.0f),
     lightVector(0.0f, 0.0f, 1.0f, 0.0f),
+    lightingPolynomial3_0(0.0f),
+    lightingPolynomial5_4(0.0f),
     envMapOffs(float(imageWidth) * -0.5f, float(imageHeight) * -0.5f,
                float(imageHeight), 0.0f),
     viewTransformInvX(1.0f, 0.0f, 0.0f, 0.0f),
@@ -783,8 +877,6 @@ Plot3D_TriShape::Plot3D_TriShape(
     specularColorFloat(1.0f),
     reflectionLevel(0.0f),
     specularLevel(0.0f),
-    invNormals(false),
-    gammaCorrectEnabled(enableGamma),
     debugMode(0U),
     drawPixelFunction(&drawPixel_Water)
 {
@@ -822,14 +914,18 @@ Plot3D_TriShape& Plot3D_TriShape::operator=(const NIFFile::NIFTriShape& t)
 
 void Plot3D_TriShape::setLightingFunction(const float *a)
 {
-  for (int i = 0; i < 6; i++)
-    lightingPolynomial[i] = a[i];
+  lightingPolynomial3_0 = FloatVector4(a[3], a[2], a[1], a[0]);
+  lightingPolynomial5_4 = FloatVector4(a[5], a[4], 0.0f, 0.0f);
 }
 
 void Plot3D_TriShape::getLightingFunction(float *a) const
 {
-  for (int i = 0; i < 6; i++)
-    a[i] = lightingPolynomial[i];
+  a[0] = lightingPolynomial3_0[3];
+  a[1] = lightingPolynomial3_0[2];
+  a[2] = lightingPolynomial3_0[1];
+  a[3] = lightingPolynomial3_0[0];
+  a[4] = lightingPolynomial5_4[1];
+  a[5] = lightingPolynomial5_4[0];
 }
 
 void Plot3D_TriShape::getDefaultLightingFunction(float *a)
@@ -846,7 +942,7 @@ static float calculateMipOffset(const DDSTexture *t1, const DDSTexture *t2)
   if (m < 0)
   {
     m = (1 - m) >> 1;
-    return float(m < 4 ? -m : -4);
+    return float(m < 6 ? -m : -6);
   }
   m = (m + 1) >> 1;
   return float(m < 2 ? m : 2);
@@ -872,11 +968,14 @@ void Plot3D_TriShape::drawTriShape(
   textureE = (DDSTexture *) 0;
   textureS = (DDSTexture *) 0;
   textureR = (DDSTexture *) 0;
+  textureGlow = (DDSTexture *) 0;
   mipOffsetN = 0.0f;
   mipOffsetS = 0.0f;
   mipOffsetR = 0.0f;
+  mipOffsetG = 0.0f;
   mipLevel = 15.0f;
   alphaThresholdFloat = float(int(alphaThreshold)) * 0.999999f;
+  viewScale = viewTransform.scale;
   viewTransformInvX =
       FloatVector4(viewTransform.rotateXX, viewTransform.rotateXY,
                    viewTransform.rotateXZ, 0.0f);
@@ -894,20 +993,19 @@ void Plot3D_TriShape::drawTriShape(
     textureD = textures[0];
   if (textureCnt >= 4)
     textureG = textures[3];
+  if (textureCnt >= 3 && BRANCH_EXPECT(textures[2], false) && (flags & 0x80))
+  {
+    textureGlow = textures[2];
+    mipOffsetG = calculateMipOffset(textureGlow, textureD);
+  }
   if (textureCnt >= 2)
     textureN = textures[1];
   if (isWater)
   {
-    if (!textureN)
-      textureN = textureD;
-    else
-      textureD = textureN;
     drawPixelFunction = &drawPixel_Water;
   }
-  else if (!(textureN && (textureD->getWidth() * textureN->getHeight())
-                         == (textureD->getHeight() * textureN->getWidth())))
+  else if (!textureN)
   {
-    textureN = (DDSTexture *) 0;
     drawPixelFunction = &drawPixel_Diffuse;
   }
   else
@@ -919,8 +1017,7 @@ void Plot3D_TriShape::drawTriShape(
     }
     else
     {
-      // 1.0 with the default polynomial
-      reflectionLevel = getLightLevel(1.0f) * 0.7284025f;
+      reflectionLevel = getLightLevel(1.0f);
       textureE = textures[4];
       if (textureCnt >= 10 && textures[8])      // Fallout 76
       {
@@ -934,44 +1031,58 @@ void Plot3D_TriShape::drawTriShape(
       {
         textureS = textures[6];
         drawPixelFunction = &drawPixel_NormalEnvS;
+        reflectionLevel = reflectionLevel * 0.625f;
       }
       else if (textureCnt >= 6 && textures[5])  // Skyrim with environment mask
       {
         textureS = textures[5];
         mipOffsetS = calculateMipOffset(textureS, textureD);
         drawPixelFunction = &drawPixel_NormalEnvM;
+        reflectionLevel = reflectionLevel * 0.625f;
       }
       else
       {
         drawPixelFunction = &drawPixel_NormalEnv;
+        reflectionLevel = reflectionLevel * 0.625f;
       }
       reflectionLevel = reflectionLevel * (1.0f / 128.0f);
       specularLevel = reflectionLevel * float(int(specularScale));
       reflectionLevel = reflectionLevel * float(int(envMapScale));
     }
   }
-  float   tmp = 0.0f;
-  tmp = (mipOffsetN > tmp ? mipOffsetN : tmp);
-  tmp = (mipOffsetS > tmp ? mipOffsetS : tmp);
-  tmp = (mipOffsetR > tmp ? mipOffsetR : tmp);
-  mipLevelMin = roundFloat(-tmp);
   if (BRANCH_EXPECT(debugMode, false))
     drawPixelFunction = &drawPixel_Debug;
   drawTriangles();
 }
 
-void Plot3D_TriShape::renderWater(
+void Plot3D_TriShape::drawWater(
+    const NIFFile::NIFVertexTransform& modelTransform,
     const NIFFile::NIFVertexTransform& viewTransform,
-    unsigned int waterColor, float lightX, float lightY, float lightZ,
-    const DDSTexture *envMap, float envMapLevel)
+    float lightX, float lightY, float lightZ,
+    const DDSTexture * const *textures, size_t textureCnt,
+    unsigned int waterColor, float envMapLevel)
 {
-  viewTransform.rotateXYZ(lightX, lightY, lightZ);
-  textureE = envMap;
-  envMapLevel = envMapLevel * lightingPolynomial[0] * 255.0f;
-  if (gammaCorrectEnabled)
-    envMapLevel = envMapLevel * envMapLevel;
+  if (!(flags & 0x02) || debugMode)
+    return;
   lightVector = FloatVector4(lightX, lightY, lightZ, 0.0f);
-  lightVector.normalize();
+  size_t  triangleCntRendered =
+      transformVertexData(modelTransform, viewTransform);
+  if (!triangleCntRendered)
+    return;
+  textureD = (DDSTexture *) 0;
+  textureG = (DDSTexture *) 0;
+  textureN = (DDSTexture *) 0;
+  textureE = (DDSTexture *) 0;
+  textureS = (DDSTexture *) 0;
+  textureR = (DDSTexture *) 0;
+  textureGlow = (DDSTexture *) 0;
+  mipOffsetN = 0.0f;
+  mipOffsetS = 0.0f;
+  mipOffsetR = 0.0f;
+  mipOffsetG = 0.0f;
+  mipLevel = 15.0f;
+  alphaThresholdFloat = float(int(alphaThreshold)) * 0.999999f;
+  viewScale = viewTransform.scale;
   viewTransformInvX =
       FloatVector4(viewTransform.rotateXX, viewTransform.rotateXY,
                    viewTransform.rotateXZ, 0.0f);
@@ -981,73 +1092,31 @@ void Plot3D_TriShape::renderWater(
   viewTransformInvZ =
       FloatVector4(viewTransform.rotateZX, viewTransform.rotateZY,
                    viewTransform.rotateZZ, 0.0f);
-  specularColorFloat = FloatVector4(1.0f);
-  specularLevel = 1.0f;
-  invNormals = false;
-  specularColor = 0xFFFFFFFFU;
-  specularScale = 128;
-  specularSmoothness = 255;
-  Vertex  z;
-  FloatVector4  waterColorFloat(waterColor);
-  float   waterAlpha = waterColorFloat[3] * (1.0f / 256.0f);
-  waterColorFloat *= waterAlpha;
-  waterAlpha = 1.0f - waterAlpha;
-  unsigned int  *p = bufRGBW;
-  for (int y = 0; y < height; y++)
+  specularColorFloat = FloatVector4(waterColor);
+  float   a = 256.0f - specularColorFloat[3];
+  specularColorFloat *= (1.0f / 255.0f);
+  if (gammaCorrectEnabled)
+    specularColorFloat *= specularColorFloat;
+  specularColorFloat[3] = -1.5f / (a * a);      // = -3.0 / (maxDepth * 16.0)
+  reflectionLevel = 0.0f;
+  specularLevel = 0.0f;
+  if (textureCnt >= 2 && textures[1])
+    textureD = textures[1];
+  else if (textureCnt >= 1)
+    textureD = textures[0];
+  textureN = textureD;
+  if (!gammaCorrectEnabled)
+    drawPixelFunction = &drawPixel_Water_2;
+  else
+    drawPixelFunction = &drawPixel_Water_2G;
+  if (textureCnt >= 5 && textures[4])
   {
-    for (int x = 0; x < width; x++, p++)
-    {
-      unsigned int  c = *p;
-      if (!((c + 0x01000000U) & 0xFE000000U))
-        continue;
-      z.normal = FloatVector4((c >> 16) & 0xFFFFU);
-      z.normal += FloatVector4(-128.0f, -128.0f, 0.0f, 0.0f);
-      z.normal *= (1.0f / 126.0f);
-      float   normalXY2 = z.normal.dotProduct2(z.normal);
-      float   normalZSqr = 1.0f - normalXY2;
-      if (BRANCH_EXPECT((normalZSqr > 0.0f), true))
-      {
-        z.normal[2] = -(float(std::sqrt(normalZSqr)));
-      }
-      else
-      {
-        z.normal.normalize();
-        normalXY2 = 1.0f;
-      }
-      FloatVector4  v(((c & 0x001FU) << 3) | ((c & 0x07E0U) << 5)
-                      | ((c & 0xF800U) << 8));
-      FloatVector4  tmp(waterColorFloat);
-      float   nDotL = z.normal.dotProduct3(lightVector);
-      tmp *= getLightLevel(nDotL);
-      v *= waterAlpha;
-      v += tmp;
-      if (!gammaCorrectEnabled)
-      {
-        if (envMap)
-        {
-          float   s = 0.0f;
-          FloatVector4  e(environmentMap(z, x, y, s, 1.0f, nDotL));
-          e += s;
-          e *= (envMapLevel * (normalXY2 * 0.75f + 0.25f));
-          v += e;
-        }
-      }
-      else
-      {
-        v *= v;
-        if (envMap)
-        {
-          float   s = 0.0f;
-          FloatVector4  e(environmentMap(z, x, y, s, 1.0f, nDotL));
-          s *= 4.0f;
-          e += s;
-          e *= (envMapLevel * (normalXY2 * normalXY2 * 0.9375f + 0.0625f));
-          v += e;
-        }
-        v.squareRootFast();
-      }
-      *p = (unsigned int) v | 0xFF000000U;
-    }
+    textureE = textures[4];
+    reflectionLevel = envMapLevel * getLightLevel(1.0f);
+    if (gammaCorrectEnabled)
+      reflectionLevel = reflectionLevel * reflectionLevel;
+    specularLevel = reflectionLevel;
   }
+  drawTriangles();
 }
 
