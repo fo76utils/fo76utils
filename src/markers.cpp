@@ -4,98 +4,83 @@
 #include "esmfile.hpp"
 #include "ddstxt.hpp"
 #include "nif_file.hpp"
+#include "fp32vec4.hpp"
 
 static void createIcon256(std::vector< unsigned char >& buf, unsigned int c)
 {
-  static const unsigned char  alphaTable[16] =
-  {
-      8,  10,  13,  16,  20,  25,  32,  40,
-     51,  64,  80, 101, 128, 161, 202, 255
-  };
   buf.clear();
-  buf.resize(256 * 256 + 148, 0);
-  buf[0] = 0x44;                // 'D'
-  buf[1] = 0x44;                // 'D'
-  buf[2] = 0x53;                // 'S'
-  buf[3] = 0x20;                // ' '
-  buf[4] = 124;                 // size of DDS_HEADER
-  buf[8] = 0x07;                // DDSD_CAPS, DDSD_HEIGHT, DDSD_WIDTH
-  buf[9] = 0x10;                // DDSD_PIXELFORMAT
-  buf[10] = 0x0A;               // DDSD_MIPMAPCOUNT, DDSD_LINEARSIZE
-  buf[13] = 1;                  // height / 256
-  buf[17] = 1;                  // width / 256
-  buf[22] = 1;                  // linear size / 65536
-  buf[28] = 1;                  // mipmap count
-  buf[76] = 32;                 // size of DDS_PIXELFORMAT
-  buf[80] = 0x04;               // DDPF_FOURCC
-  buf[84] = 0x44;               // 'D'
-  buf[85] = 0x58;               // 'X'
-  buf[86] = 0x31;               // '1'
-  buf[87] = 0x30;               // '0'
-  buf[108] = 0x08;              // DDSCAPS_COMPLEX
-  buf[109] = 0x10;              // DDSCAPS_TEXTURE
-  buf[110] = 0x40;              // DDSCAPS_MIPMAP
-  buf[128] = 0x4D;              // DXGI_FORMAT_BC3_UNORM
-  buf[132] = 3;                 // D3D10_RESOURCE_DIMENSION_TEXTURE2D
-  unsigned int  r = (c >> 16) & 0xFF;
-  unsigned int  g = (c >> 8) & 0xFF;
-  unsigned int  b = c & 0xFF;
-  unsigned int  c0 = 0;
-  if (((r * 299) + (g * 587) + (b * 114)) < 127500)
-    c0 = 0xFFFF;
-  r = (r * 31 + 127) / 255;
-  g = (g * 63 + 127) / 255;
-  b = (b * 31 + 127) / 255;
-  unsigned int  c1 = (r << 11) | (g << 5) | b;
+  buf.resize(256 * 256 * 4 + 128, 0);
+  buf[0] = 0x44;        // 'D'
+  buf[1] = 0x44;        // 'D'
+  buf[2] = 0x53;        // 'S'
+  buf[3] = 0x20;        // ' '
+  buf[4] = 124;         // size of DDS_HEADER
+  buf[8] = 0x0F;        // DDSD_CAPS, DDSD_HEIGHT, DDSD_WIDTH, DDSD_PITCH
+  buf[9] = 0x10;        // DDSD_PIXELFORMAT
+  buf[13] = 1;          // height / 256
+  buf[17] = 1;          // width / 256
+  buf[21] = 4;          // pitch / 256
+  buf[76] = 32;         // size of DDS_PIXELFORMAT
+  buf[80] = 0x41;       // DDPF_ALPHAPIXELS, DDPF_RGB
+  buf[88] = 32;         // bit count
+  buf[92] = 0xFF;       // red mask byte 0
+  buf[97] = 0xFF;       // green mask byte 1
+  buf[102] = 0xFF;      // blue mask byte 2
+  buf[107] = 0xFF;      // alpha mask byte 3
+  buf[109] = 0x10;      // DDSCAPS_TEXTURE
+  FloatVector4  c0(0.0f, 0.0f, 0.0f, 255.0f);
+  FloatVector4  c1(((c & 0xFFU) << 16) | (c & 0xFF00U) | ((c >> 16) & 0xFFU)
+                   | 0xFF000000U);
+  if (c1.dotProduct3(FloatVector4(0.299f, 0.587f, 0.114f, 0.0f)) < 127.5f)
+    c0 = FloatVector4(255.0f);
   unsigned char t = (unsigned char) ((c >> 24) & 0xFF);
   if (t < 0x10 || t >= 0xD0)
     t = 0x4F;
   t = t - 0x10;
-  for (size_t i = 0; i < 4096; i++)
+  float   a0 = FloatVector4::exp2Fast(float(int(t & 0x0F) - 15) / 3.0f);
+  for (int i = 0; i < 65536; i++)
   {
-    unsigned long long  ba = alphaTable[t & 0x0F];
-    unsigned long long  bc = (c1 << 16) | c0;
-    for (unsigned char j = 0; j < 16; j++)
+    float   x = float(i & 255) - 127.5f;
+    float   y = float(i >> 8) - 127.5f;
+    float   d;
+    if ((t & 0xC0) == 0x00)                     // circle
+      d = float(std::sqrt((x * x) + (y * y)));
+    else if ((t & 0xC0) == 0x40)                // square
+      d = float(std::fabs(x) > std::fabs(y) ? std::fabs(x) : std::fabs(y));
+    else
+      d = float(std::fabs(x) + std::fabs(y));   // diamond
+    FloatVector4  cTmp(c1);
+    switch (t & 0x30)
     {
-      int     x = int(((i & 0x3F) << 2) | (j & 3)) - 128;
-      int     y = int(((i >> 6) << 2) | (j >> 2)) - 128;
-      int     d = std::abs(x) + std::abs(y);    // diamond
-      if ((t & 0xC0) == 0x00)                   // circle
-        d = int(std::sqrt(double((x * x) + (y * y))) + 0.5);
-      else if ((t & 0xC0) == 0x40)              // square
-        d = (std::abs(x) > std::abs(y) ? std::abs(x) : std::abs(y));
-      unsigned char aTmp = (d < 128 ? 112 : 0);
-      unsigned char cTmp = 48;
-      switch (t & 0x30)
-      {
-        case 0x00:                              // soft edges
-          aTmp = (unsigned char) (d < 16 ? 112 : (d < 128 ? (128 - d) : 0));
-          break;
-        case 0x10:                              // outline only
-          if (d < 108)
-            aTmp = (unsigned char) (d < 92 ? 0 : ((d - 92) * 7));
-          break;
-        case 0x20:                              // hard edges
-          break;
-        case 0x30:                              // filled black or white outline
-          if (d >= 92)
-            cTmp = (unsigned char) (d < 108 ? ((108 - d) * 3) : 0);
-          break;
-      }
-      aTmp = blendDithered(aTmp >> 4, (aTmp >> 4) + 1, (aTmp & 15) << 4, x, y);
-      cTmp = blendDithered(cTmp >> 4, (cTmp >> 4) + 1, (cTmp & 15) << 4, x, y);
-      aTmp = (aTmp < 1 ? 1 : (aTmp >= 7 ? 0 : (8 - aTmp)));
-      cTmp = (cTmp == 3 ? 1 : (cTmp == 2 ? 3 : (cTmp == 1 ? 2 : 0)));
-      ba = ba | ((unsigned long long) aTmp << (j * 3 + 16));
-      bc = bc | ((unsigned long long) cTmp << (j * 2 + 32));
+      case 0x00:                                // soft edges
+        cTmp[3] = (128.0f - d) * (255.0f / 112.0f);
+        break;
+      case 0x10:                                // outline only
+        if (d < 92.0f || d > 128.0f)
+          cTmp[3] = 0.0f;
+        else if (d < 108.0f)
+          cTmp[3] = (d - 92.0f) * (255.0f / 16.0f);
+        break;
+      case 0x20:                                // hard edges
+        cTmp[3] = (d > 128.0f ? 0.0f : 255.0f);
+        break;
+      case 0x30:                                // filled black or white outline
+        if (d > 128.0f)
+          cTmp[3] = 0.0f;
+        else if (d > 108.0f)
+          cTmp = c0;
+        else if (d > 92.0f)
+          cTmp += ((c0 - cTmp) * FloatVector4((d - 92.0f) * (1.0f / 16.0f)));
+        break;
     }
-    for (size_t j = 0; j < 8; j++)
-    {
-      buf[(i << 4) + j + 148] = (unsigned char) (ba & 0xFF);
-      buf[(i << 4) + j + 156] = (unsigned char) (bc & 0xFF);
-      ba = ba >> 8;
-      bc = bc >> 8;
-    }
+    cTmp[3] = (cTmp[3] > 0.0f ? (cTmp[3] < 255.0f ? cTmp[3] : 255.0f) : 0.0f);
+    cTmp[3] = cTmp[3] * a0;
+    unsigned int  n = (unsigned int) cTmp;
+    unsigned char *p = &(buf.front()) + ((i << 2) + 128);
+    p[0] = (unsigned char) (n & 0xFFU);
+    p[1] = (unsigned char) ((n >> 8) & 0xFFU);
+    p[2] = (unsigned char) ((n >> 16) & 0xFFU);
+    p[3] = (unsigned char) ((n >> 24) & 0xFFU);
   }
 }
 
@@ -578,21 +563,23 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
   float   txtH = float(m.texture->getHeight() >> mipLevelI);
   txtW = (txtW > 1.0f ? (txtW - 1.0f) : 0.0f);
   txtH = (txtH > 1.0f ? (txtH - 1.0f) : 0.0f);
+  float   txtSclX = 1.0f / (txtW > 1.0f ? txtW : 1.0f);
+  float   txtSclY = 1.0f / (txtH > 1.0f ? txtH : 1.0f);
   bool    integerMip = (m.mipLevel == float(mipLevelI));
   for (int yy = 0; true; yy++)
   {
     float   txtY = (yf + float(yy)) * mipMult;
-    int     ay = 256;
+    float   ay = 1.0f;
     if (txtY < 0.0f)
     {
-      ay = roundFloat((txtY + 1.0f) * 256.0f);
-      if (ay <= 0)
+      ay = txtY + 1.0f;
+      if (ay <= 0.0f)
         continue;
     }
     else if (txtY > txtH)
     {
-      ay = roundFloat((txtH + 1.0f - txtY) * 256.0f);
-      if (ay <= 0)
+      ay = txtH + 1.0f - txtY;
+      if (ay <= 0.0f)
         break;
     }
     if ((yi + yy) < 0 || (yi + yy) >= int(imageHeight))
@@ -606,38 +593,39 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
     for ( ; (xi + xx) < int(imageWidth); xx++, p++)
     {
       float   txtX = (xf + float(xx)) * mipMult;
-      int     ax = ay << 8;
+      float   a = ay;
       if (txtX < 0.0f)
       {
-        ax = roundFloat((txtX + 1.0f) * 256.0f);
-        if (ax <= 0)
+        if (txtX <= -1.0f)
           continue;
-        ax = ax * ay;
+        a *= (txtX + 1.0f);
       }
       else if (txtX > txtW)
       {
-        ax = roundFloat((txtW + 1.0f - txtX) * 256.0f);
-        if (ax <= 0)
+        if (txtX >= (txtW + 1.0f))
           break;
-        ax = ax * ay;
+        a *= (txtW + 1.0f - txtX);
       }
-      unsigned int  c;
+      FloatVector4  c(0.0f);
       if (integerMip)
-        c = m.texture->getPixelBC(txtX, txtY, mipLevelI);
+        c = m.texture->getPixelBC(txtX * txtSclX, txtY * txtSclY, mipLevelI);
       else
-        c = m.texture->getPixelTC(txtX, txtY, m.mipLevel);
-      unsigned int  a = c >> 24;
-      if (!a)
+        c = m.texture->getPixelTC(txtX * txtSclX, txtY * txtSclY, m.mipLevel);
+      a *= c[3];
+      if (!(a > 0.0f))
         continue;
-      a = (a * (unsigned int) ax + 32768U) >> 16;
-      unsigned int  c0 = *p;
-      unsigned int  a0 = c0 >> 24;
-      if (a0)
+      FloatVector4  c0(*p);
+      float   a0 = c0[3];
+      if (a0 > 0.0f)
       {
-        c = blendRGBA32(c0, c, int(a + 1U));
-        a = 255U - (((255U - a0) * (255U - a) + 127U) / 255U);
+        a *= (1.0f / 255.0f);
+        a0 *= (1.0f / 255.0f);
+        c = (c0 * FloatVector4(a0 * (1.0f - a)))
+            + (c * FloatVector4(1.0f - (a0 * (1.0f - a))));
+        a = (1.0f - ((1.0f - a0) * (1.0f - a))) * 255.0f;
       }
-      *p = (c & 0x00FFFFFFU) | (a << 24);
+      c[3] = a;
+      *p = (unsigned int) c;
     }
   }
 }
