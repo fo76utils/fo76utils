@@ -212,7 +212,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76F(
     unsigned char t = *p0;
     if (t >= p.landTextureCnt || !p.landTextures[t])
       continue;
-    FloatVector4  cTmp(p.landTextures[t]->getPixelT(
+    FloatVector4  cTmp(p.landTextures[t]->getPixelT_N(
                            float(txtX - txtY) * p.txtScale,
                            float(txtX + txtY) * p.txtScale, p.mipLevel));
     if (cTmp[3] < (float(int(aTmp)) * (255.5f / float(0x00038000))))
@@ -220,7 +220,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76F(
     c = cTmp;
     if (p.landTexturesN && p.landTexturesN[t])
     {
-      n = colorToNormal(p.landTexturesN[t]->getPixelT(
+      n = colorToNormal(p.landTexturesN[t]->getPixelT_N(
                             float(txtX - txtY) * p.txtScale,
                             float(txtX + txtY) * p.txtScale, p.mipLevel));
     }
@@ -315,7 +315,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76F_GCVR(
     unsigned char t = *p0;
     if (t >= p.landTextureCnt || !p.landTextures[t])
       continue;
-    FloatVector4  cTmp(p.landTextures[t]->getPixelT(
+    FloatVector4  cTmp(p.landTextures[t]->getPixelT_N(
                            float(txtX - txtY) * p.txtScale,
                            float(txtX + txtY) * p.txtScale, p.mipLevel));
     if (cTmp[3] < (float(int(aTmp)) * (255.5f / float(0x00038000))))
@@ -323,7 +323,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76F_GCVR(
     c = cTmp;
     if (p.landTexturesN && p.landTexturesN[t])
     {
-      n = colorToNormal(p.landTexturesN[t]->getPixelT(
+      n = colorToNormal(p.landTexturesN[t]->getPixelT_N(
                             float(txtX - txtY) * p.txtScale,
                             float(txtX + txtY) * p.txtScale, p.mipLevel));
     }
@@ -338,14 +338,14 @@ FloatVector4 LandscapeTexture::renderPixelFO76F_GCVR(
     unsigned char t = *p0;
     if (t >= p.landTextureCnt || !p.landTextures[t])
       continue;
-    FloatVector4  cTmp(p.landTextures[t]->getPixelT(
+    FloatVector4  cTmp(p.landTextures[t]->getPixelT_N(
                            float(txtX - txtY) * p.txtScale,
                            float(txtX + txtY) * p.txtScale, p.mipLevel));
     float   aTmp = cTmp[3] * (1.0f / 512.0f);
     c = blendColors(c, cTmp, aTmp);
     if (p.landTexturesN && p.landTexturesN[t])
     {
-      FloatVector4  nTmp(colorToNormal(p.landTexturesN[t]->getPixelT(
+      FloatVector4  nTmp(colorToNormal(p.landTexturesN[t]->getPixelT_N(
                                            float(txtX - txtY) * p.txtScale,
                                            float(txtX + txtY) * p.txtScale,
                                            p.mipLevel)));
@@ -455,13 +455,13 @@ FloatVector4 LandscapeTexture::renderPixelTES4F(
     unsigned char t = *p0;
     if (t >= p.landTextureCnt || t == prvTexture || !p.landTextures[t])
       continue;
-    FloatVector4  cTmp(p.landTextures[t]->getPixelT(float(txtX) * p.txtScale,
-                                                    float(txtY) * p.txtScale,
-                                                    p.mipLevel));
+    FloatVector4  cTmp(p.landTextures[t]->getPixelT_N(float(txtX) * p.txtScale,
+                                                      float(txtY) * p.txtScale,
+                                                      p.mipLevel));
     float   aTmp_f = float(int(aTmp)) * (1.0f / 15.0f);
     if (p.landTexturesN && p.landTexturesN[t])
     {
-      FloatVector4  nTmp(colorToNormal(p.landTexturesN[t]->getPixelT(
+      FloatVector4  nTmp(colorToNormal(p.landTexturesN[t]->getPixelT_N(
                                            float(txtX) * p.txtScale,
                                            float(txtY) * p.txtScale,
                                            p.mipLevel)));
