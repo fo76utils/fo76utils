@@ -231,6 +231,51 @@ void BA2File::loadBSAFile(FileBuffer& buf, size_t archiveFile, int archiveType)
   }
 }
 
+void BA2File::loadFile(FileBuffer& buf, size_t archiveFile,
+                       const char *fileName)
+{
+  std::string fileName2;
+  size_t  n = std::strlen(fileName);
+  fileName2.reserve(n);
+  for (size_t i = 0; i < n; i++)
+  {
+    char    c = fileName[i];
+    if (c >= 'A' && c <= 'Z')
+      c = c + ('a' - 'A');
+    else if (c == '\\')
+      c = '/';
+    if (c == '/' &&
+        fileName2.length() > 0 && fileName2[fileName2.length() - 1] == '/')
+    {
+      continue;
+    }
+    fileName2 += c;
+  }
+  if ((n = fileName2.rfind("/interface/")) != std::string::npos ||
+      (n = fileName2.rfind("/materials/")) != std::string::npos ||
+      (n = fileName2.rfind("/meshes/")) != std::string::npos ||
+      (n = fileName2.rfind("/sound/")) != std::string::npos ||
+      (n = fileName2.rfind("/strings/")) != std::string::npos ||
+      (n = fileName2.rfind("/textures/")) != std::string::npos)
+  {
+    fileName2.erase(0, n + 1);
+  }
+  while (std::strncmp(fileName2.c_str(), "./", 2) == 0)
+    fileName2.erase(0, 2);
+  while (std::strncmp(fileName2.c_str(), "../", 3) == 0)
+    fileName2.erase(0, 3);
+  if (fileName2.empty())
+    return;
+  FileDeclaration *fileDecl = addPackedFile(fileName2);
+  if (!fileDecl)
+    return;
+  fileDecl->fileData = buf.getDataPtr();
+  fileDecl->packedSize = 0;
+  fileDecl->unpackedSize = (unsigned int) buf.size();
+  fileDecl->archiveType = 0;
+  fileDecl->archiveFile = (unsigned int) archiveFile;
+}
+
 void BA2File::loadArchivesFromDir(const char *pathName)
 {
   DIR     *d = opendir(pathName);
@@ -252,18 +297,46 @@ void BA2File::loadArchivesFromDir(const char *pathName)
     while (bool(e = readdir(d)))
     {
       baseName = e->d_name;
-      if (baseName.length() < 5)
+      if (baseName.length() < 1 || baseName == "." || baseName == "..")
         continue;
       fullName = dirName;
       fullName += baseName;
+      {
+#if defined(_WIN32) || defined(_WIN64)
+        struct __stat64 st;
+        if (_stat64(fullName.c_str(), &st) == 0 &&
+            (st.st_mode & _S_IFMT) == _S_IFDIR)
+#else
+        struct stat st;
+        if (stat(fullName.c_str(), &st) == 0 &&
+            (st.st_mode & S_IFMT) == S_IFDIR)
+#endif
+        {
+          archiveNames2.insert(fullName);
+          continue;
+        }
+      }
       for (size_t i = 0; i < baseName.length(); i++)
       {
         if (baseName[i] >= 'A' && baseName[i] <= 'Z')
           baseName[i] = baseName[i] + ('a' - 'A');
       }
-      const char  *s = baseName.c_str() + (baseName.length() - 4);
-      if (!(std::strcmp(s, ".ba2") == 0 || std::strcmp(s, ".bsa") == 0))
+      size_t  n = baseName.rfind('.');
+      if (n == std::string::npos || (n + 4) > baseName.length())
         continue;
+      const char  *s = baseName.c_str() + (baseName.length() - 4);
+      if (!(FileBuffer::checkType(0x3261622E, s) ||     // ".ba2"
+            FileBuffer::checkType(0x6173622E, s) ||     // ".bsa"
+            FileBuffer::checkType(0x6D656762, s) ||     // "bgem"
+            FileBuffer::checkType(0x6D736762, s) ||     // "bgsm"
+            FileBuffer::checkType(0x6F74622E, s) ||     // ".bto"
+            FileBuffer::checkType(0x7274622E, s) ||     // ".btr"
+            FileBuffer::checkType(0x7364642E, s) ||     // ".dds"
+            FileBuffer::checkType(0x66696E2E, s) ||     // ".nif"
+            FileBuffer::checkType(0x73676E69, s)))      // "ings"
+      {
+        continue;
+      }
       if ((std::strncmp(baseName.c_str(), "oblivion", 8) == 0 ||
            std::strncmp(baseName.c_str(), "fallout", 7) == 0 ||
            std::strncmp(baseName.c_str(), "skyrim", 6) == 0 ||
@@ -357,7 +430,7 @@ void BA2File::loadArchiveFile(const char *fileName)
     else if (archiveType >= 0)
       loadBSAFile(buf, archiveFiles.size(), archiveType);
     else
-      throw errorMessage("unsupported archive file format");
+      loadFile(buf, archiveFiles.size(), fileName);
     archiveFiles.push_back(bufp);
   }
   catch (...)

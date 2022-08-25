@@ -38,6 +38,7 @@ class BA2File
   void loadBA2General(FileBuffer& buf, size_t archiveFile);
   void loadBA2Textures(FileBuffer& buf, size_t archiveFile);
   void loadBSAFile(FileBuffer& buf, size_t archiveFile, int archiveType);
+  void loadFile(FileBuffer& buf, size_t archiveFile, const char *fileName);
   void loadArchivesFromDir(const char *pathName);
   void loadArchiveFile(const char *fileName);
   unsigned int getBSAUnpackedSize(const unsigned char*& dataPtr,
