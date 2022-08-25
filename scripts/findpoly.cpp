@@ -257,6 +257,16 @@ int main(int argc, char **argv)
     argc--;
     argv++;
   }
+  else if (argc > 1 && std::strcmp(argv[1], "fresnel2") == 0)
+  {
+    funcType = 3;
+    k = 5;
+    flags = 0x0175;
+    x0 = 0.0;
+    x1 = 1.0;
+    argc--;
+    argv++;
+  }
   std::vector< double > a(size_t(k + 1));
   std::vector< double > f(size_t(n + 1));
   if (funcType == 0)
@@ -295,6 +305,21 @@ int main(int argc, char **argv)
     {
       double  x = (double(i) / double(n)) * (x1 - x0) + x0;
       f[i] = std::exp2(x / 2.0);
+    }
+  }
+  else if (funcType == 3)
+  {
+    for (int i = 0; i <= n; i++)
+    {
+      double  x = (double(i) / double(n)) * (x1 - x0) + x0;
+      double  n1 = 1.0;
+      double  n2 = 1.5;
+      // sqrt(1.0 - ((n1 / n2) * sin(acos(x)))^2)
+      double  y = std::sqrt(1.0 - ((n1 / n2) * (n1 / n2) * (1.0 - (x * x))));
+      double  r_s = ((n1 * x) - (n2 * y)) / ((n1 * x) + (n2 * y));
+      double  r_p = ((n1 * y) - (n2 * x)) / ((n1 * y) + (n2 * x));
+      double  r = (((r_s * r_s) + (r_p * r_p)) * 0.5 - 0.04) / (1.0 - 0.04);
+      f[i] = std::pow((r > 0.0 ? (r < 1.0 ? r : 1.0) : 0.0), 2.0 / 2.2);
     }
   }
   findPolynomial(&(a.front()), k, &(f.front()), n, x0, x1, flags);
