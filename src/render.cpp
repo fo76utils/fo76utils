@@ -1,6 +1,7 @@
 
 #include "common.hpp"
 #include "render.hpp"
+#include "fp32vec4.hpp"
 
 #include <algorithm>
 
@@ -403,7 +404,67 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   {
     if (debugMode == 1)
       tmp.z = int(r.formID);
+    getWaterColor(tmp, r);
     objectList.push_back(tmp);
+  }
+}
+
+void Renderer::getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r)
+{
+  p.mswpFormID = waterColor;
+  if (!useESMWaterColors || esmFile.getESMVersion() < 0x28)
+  {
+    // fixed water color, or game older than Skyrim
+    return;
+  }
+  unsigned int  waterFormID = 0U;
+  ESMFile::ESMField f(esmFile, r);
+  while (f.next())
+  {
+    if (((f == "WNAM" && r == "ACTI") || (f == "XCWT" && r == "CELL") ||
+         (f == "NAM2" && r == "WRLD")) && f.size() >= 4)
+    {
+      waterFormID = f.readUInt32Fast();
+    }
+  }
+  const ESMFile::ESMRecord  *r2;
+  if (waterFormID && bool(r2 = esmFile.getRecordPtr(waterFormID)) &&
+      *r2 == "WATR")
+  {
+    ESMFile::ESMField f2(esmFile, *r2);
+    while (f2.next())
+    {
+      if (!(f2 == "DNAM" && f2.size() >= 64))
+        continue;
+      FloatVector4  c(0.0f);
+      float   d = 0.0f;
+      if (esmFile.getESMVersion() < 0x80)       // Skyrim
+      {
+        f2.setPosition(36);
+        d = f2.readFloat();                     // fog distance (far plane)
+        (void) f2.readUInt32Fast();             // shallow color
+        c = FloatVector4(f2.readUInt32Fast());  // deep color
+      }
+      else if (esmFile.getESMVersion() < 0xC0)  // Fallout 4
+      {
+        d = f2.readFloat();                     // depth amount
+        (void) f2.readUInt32Fast();             // shallow color
+        c = FloatVector4(f2.readUInt32Fast());  // deep color
+      }
+      else                                      // Fallout 76
+      {
+        d = f2.readFloat();
+        f2.setPosition(16);
+        c[0] = f2.readFloat();
+        c[1] = f2.readFloat();
+        c[2] = f2.readFloat();
+        c.squareRoot();
+        c *= 255.0f;
+      }
+      d = (d > 0.125f ? (d < 8128.0f ? d : 8128.0f) : 0.125f);
+      c[3] = 256.0f - float(std::sqrt(d * 8.0f));
+      p.mswpFormID = (unsigned int) c;
+    }
   }
 }
 
@@ -703,6 +764,8 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
       tmp.mswpFormID = loadMaterialSwap(o->mswpFormID);
     if (refrMSWPFormID)
       tmp.mswpFormID = loadMaterialSwap(refrMSWPFormID);
+    if (type == 2)
+      getWaterColor(tmp, *r2);
     objectList.push_back(tmp);
   }
   while ((formID = r->next) != 0U && isRecursive);
@@ -834,7 +897,7 @@ void Renderer::clear(unsigned int flags)
     if (flags & 0x01)
     {
       for (size_t i = 0; i < imageDataSize; i++)
-        outBufRGBW[i] = 0U;
+        outBufRGBA[i] = 0U;
     }
     if (flags & 0x02)
     {
@@ -1351,8 +1414,8 @@ void Renderer::materialSwap(
     if (!(*(t.materialPath) == i->second[j].materialPath))
       continue;
     const BGSMFile& bgsmFile = i->second[j].bgsmFile;
-    // add decal, two sided, and tree flags from new material
-    t.flags = (t.flags & 0xC7) | ((bgsmFile.flags & 0x1C) << 1);
+    // add decal, two sided, tree, and glow map flags from new material
+    t.flags = (t.flags & 0x47) | (bgsmFile.flags & 0xB8);
     t.flags = t.flags | ((t.flags & 0x02) << 3);
     t.gradientMapV = bgsmFile.gradientMapV;
     t.envMapScale = bgsmFile.envMapScale;
@@ -1426,8 +1489,22 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       }
       if (t.renderer->flags & 0x02)
       {
-        if (!defaultWaterTexture.empty())
-          textures[1] = loadTexture(defaultWaterTexture, t.fileBuf);
+        if (!waterSecondPass)
+        {
+          t.renderer->drawTriShape(
+              p.modelTransform, viewTransform, lightX, lightY, lightZ,
+              (DDSTexture **) 0, 0);
+        }
+        else
+        {
+          if (!defaultWaterTexture.empty())
+            textures[1] = loadTexture(defaultWaterTexture, t.fileBuf);
+          if (!defaultEnvMap.empty())
+            textures[4] = loadTexture(defaultEnvMap, t.fileBuf);
+          t.renderer->drawWater(
+              p.modelTransform, viewTransform, lightX, lightY, lightZ,
+              textures, 5, p.mswpFormID, waterReflectionLevel);
+        }
       }
       else
       {
@@ -1448,7 +1525,9 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           }
         }
         bool    isHDModel = bool(p.flags & 0x40);
-        unsigned int  txtSetMask = (!isHDModel ? 0x0009U : 0x037BU);
+        unsigned int  txtSetMask =
+            (!isHDModel ? 0x0009U : 0x037BU)
+            | (((unsigned int) t.renderer->flags & 0x80U) >> 5);
         for (size_t k = 0; txtSetMask; k++)
         {
           size_t  l = k - (k < 10 ? 0 : 10);
@@ -1468,10 +1547,10 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         {
           textures[4] = loadTexture(defaultEnvMap, t.fileBuf);
         }
+        t.renderer->drawTriShape(
+            p.modelTransform, viewTransform, lightX, lightY, lightZ,
+            textures, 10);
       }
-      t.renderer->drawTriShape(
-          p.modelTransform, viewTransform, lightX, lightY, lightZ,
-          textures, 10);
     }
   }
   else if (p.flags & 0x01)              // terrain
@@ -1533,14 +1612,29 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     tmp.flags = 0x12;                   // water
     tmp.texturePathCnt = 0;
     tmp.texturePaths = (std::string **) 0;
-    const DDSTexture  *textures[2];
-    textures[0] = (DDSTexture *) 0;
-    textures[1] = (DDSTexture *) 0;
-    if (!defaultWaterTexture.empty())
-      textures[1] = loadTexture(defaultWaterTexture, t.fileBuf);
     *(t.renderer) = tmp;
-    t.renderer->drawTriShape(
-        p.modelTransform, viewTransform, lightX, lightY, lightZ, textures, 2);
+    if (!waterSecondPass)
+    {
+      t.renderer->drawTriShape(
+          p.modelTransform, viewTransform, lightX, lightY, lightZ,
+          (DDSTexture **) 0, 0);
+    }
+    else
+    {
+      const DDSTexture  *textures[5];
+      textures[0] = (DDSTexture *) 0;
+      textures[1] = (DDSTexture *) 0;
+      textures[2] = (DDSTexture *) 0;
+      textures[3] = (DDSTexture *) 0;
+      textures[4] = (DDSTexture *) 0;
+      if (!defaultWaterTexture.empty())
+        textures[1] = loadTexture(defaultWaterTexture, t.fileBuf);
+      if (!defaultEnvMap.empty())
+        textures[4] = loadTexture(defaultEnvMap, t.fileBuf);
+      t.renderer->drawWater(
+          p.modelTransform, viewTransform, lightX, lightY, lightZ, textures, 5,
+          p.mswpFormID, waterReflectionLevel);
+    }
   }
   return true;
 }
@@ -1551,6 +1645,8 @@ void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
   RenderThread& t = renderThreads[threadNum];
   if (!t.renderer)
     return;
+  t.renderer->setEnvMapOffset(float(width) * -0.5f, float(height) * -0.5f,
+                              float(height) * 2.0f);
   t.renderer->setLightingFunction(lightingPolynomial);
   unsigned long long  tileMask = 0ULL;
   for (size_t i = startPos; i < endPos; i++)
@@ -1615,8 +1711,8 @@ void Renderer::threadFunction(Renderer *p, size_t threadNum,
 
 Renderer::Renderer(int imageWidth, int imageHeight,
                    const BA2File& archiveFiles, ESMFile& masterFiles,
-                   unsigned int *bufRGBW, float *bufZ, int zMax)
-  : outBufRGBW(bufRGBW),
+                   unsigned int *bufRGBA, float *bufZ, int zMax)
+  : outBufRGBA(bufRGBA),
     outBufZ(bufZ),
     width(imageWidth),
     height(imageHeight),
@@ -1642,24 +1738,25 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     enableAllObjects(false),
     enableTextures(true),
     debugMode(0),
-    bufRGBWAllocFlag(!bufRGBW),
-    bufZAllocFlag(!bufZ),
+    bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
+    waterSecondPass(false),
     threadCnt(0),
     textureDataSize(0),
     textureCacheSize(0x40000000),
     firstTexture((CachedTexture *) 0),
     lastTexture((CachedTexture *) 0),
-    waterColor(0xC0302010U),
-    waterReflectionLevel(0.5f),
+    waterColor(0xFFFFFFFFU),
+    waterReflectionLevel(1.0f),
     zRangeMax(zMax),
-    verboseMode(true)
+    verboseMode(true),
+    useESMWaterColors(true)
 {
   size_t  imageDataSize = size_t(width) * size_t(height);
-  if (bufRGBWAllocFlag)
-    outBufRGBW = new unsigned int[imageDataSize];
-  if (bufZAllocFlag)
+  if (bufAllocFlags & 0x01)
+    outBufRGBA = new unsigned int[imageDataSize];
+  if (bufAllocFlags & 0x02)
     outBufZ = new float[imageDataSize];
-  clear((unsigned int) bufRGBWAllocFlag | ((unsigned int) bufZAllocFlag << 1));
+  clear(bufAllocFlags);
   Plot3D_TriShape::getDefaultLightingFunction(lightingPolynomial);
   renderThreads.reserve(16);
   nifFiles.resize(modelBatchCnt);
@@ -1673,30 +1770,39 @@ Renderer::Renderer(int imageWidth, int imageHeight,
 Renderer::~Renderer()
 {
   clear(0x7C);
-  if (bufZAllocFlag && outBufZ)
+  if ((bufAllocFlags & 0x02) && outBufZ)
     delete[] outBufZ;
-  if (bufRGBWAllocFlag && outBufRGBW)
-    delete[] outBufRGBW;
+  if ((bufAllocFlags & 0x01) && outBufRGBA)
+    delete[] outBufRGBA;
 }
 
-unsigned int Renderer::findParentWorld(ESMFile& esmFile, unsigned int formID)
+unsigned int Renderer::findParentWorld(unsigned int formID)
 {
   if (!formID)
     return 0xFFFFFFFFU;
   const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
   if (!(r && (*r == "WRLD" || *r == "GRUP" || *r == "CELL" || *r == "REFR")))
     return 0xFFFFFFFFU;
-  if (*r == "WRLD")
-    return formID;
-  while (!(*r == "GRUP" && r->formID == 1U))
+  if (!(*r == "WRLD"))
   {
-    if (!r->parent)
-      return 0U;
-    r = esmFile.getRecordPtr(r->parent);
-    if (!r)
-      return 0U;
+    while (!(*r == "GRUP" && r->formID == 1U))
+    {
+      if (!r->parent)
+        return 0U;
+      r = esmFile.getRecordPtr(r->parent);
+      if (!r)
+        return 0U;
+    }
+    formID = r->flags;
+    r = esmFile.getRecordPtr(formID);
   }
-  return r->flags;
+  if (r && useESMWaterColors)
+  {
+    RenderObject  tmp;
+    getWaterColor(tmp, *r);
+    waterColor = tmp.mswpFormID;
+  }
+  return formID;
 }
 
 void Renderer::clear()
@@ -1749,7 +1855,7 @@ void Renderer::setThreadCount(int n)
     if (!renderThreads[i].renderer)
     {
       renderThreads[i].renderer =
-          new Plot3D_TriShape(outBufRGBW, outBufZ, width, height,
+          new Plot3D_TriShape(outBufRGBA, outBufZ, width, height,
                               (esmFile.getESMVersion() >= 0xC0));
     }
   }
@@ -1852,6 +1958,7 @@ void Renderer::renderTerrain(unsigned int worldID)
   clear(0x38);
   findObjects(worldID, 0);
   sortObjectList();
+  waterSecondPass = false;
   renderObjectList();
 }
 
@@ -1865,6 +1972,7 @@ void Renderer::renderObjects(unsigned int formID)
   baseObjects.clear();
   findObjects(formID, 1);
   sortObjectList();
+  waterSecondPass = false;
   renderObjectList();
 }
 
@@ -1874,19 +1982,27 @@ void Renderer::renderWater(unsigned int formID)
     std::fprintf(stderr, "Rendering water\n");
   if (!formID)
     formID = getDefaultWorldID();
+  if (useESMWaterColors && waterColor == 0xFFFFFFFFU)
+    waterColor = 0xC0302010U;           // default water color
   clear(0x38);
   findObjects(formID, 2);
   sortObjectList();
-  renderObjectList();
-  if (renderThreads[0].renderer)
+  bool    savedVerboseMode = verboseMode;
+  try
   {
-    const DDSTexture  *envMap = (DDSTexture *) 0;
-    if (!defaultEnvMap.empty())
-      envMap = loadTexture(defaultEnvMap, renderThreads[0].fileBuf);
-    renderThreads[0].renderer->renderWater(
-        viewTransform, waterColor, lightX, lightY, lightZ,
-        envMap, waterReflectionLevel);
+    verboseMode = false;
+    waterSecondPass = false;
+    renderObjectList();
   }
+  catch (...)
+  {
+    verboseMode = savedVerboseMode;
+    throw;
+  }
+  verboseMode = savedVerboseMode;
+  waterSecondPass = true;
+  renderObjectList();
+  waterSecondPass = false;
 }
 
 static void solveEquationSystem(double *m, int w, int h)
@@ -2051,8 +2167,8 @@ int main(int argc, char **argv)
     float   landTextureMip = 3.0f;
     float   landTextureMult = 1.0f;
     int     modelLOD = 0;
-    unsigned int  waterColor = 0x60102030U;
-    float   waterReflectionLevel = 0.5f;
+    unsigned int  waterColor = 0x7FFFFFFFU;
+    float   waterReflectionLevel = 1.0f;
     int     zMin = 0;
     int     zMax = 16777216;
     float   viewScale = 0.0625f;
@@ -2420,7 +2536,7 @@ int main(int argc, char **argv)
           throw errorMessage("missing argument for %s", argv[i - 1]);
         waterReflectionLevel =
             float(parseFloat(argv[i], "invalid water environment map scale",
-                             0.0, 1.0));
+                             0.0, 2.0));
       }
       else
       {
@@ -2448,7 +2564,8 @@ int main(int argc, char **argv)
       formID = (!btdPath ? 0x0000003CU : 0x0025DA15U);
     for (int i = 0; i < 6; i++)
       lightingPolynomial[i] = lightingPolynomial[i] * lightLevel;
-    waterColor = (waterColor & 0x00FFFFFFU) | ((waterColor & 0x7F000000U) << 1);
+    waterColor =
+        waterColor + (waterColor & 0x7F000000U) + ((waterColor >> 30) << 24);
     if (!(waterColor & 0xFF000000U))
       waterColor = 0U;
     int     width =
@@ -2473,9 +2590,6 @@ int main(int argc, char **argv)
 
     BA2File ba2File(args[4]);
     ESMFile esmFile(args[0]);
-    unsigned int  worldID = Renderer::findParentWorld(esmFile, formID);
-    if (worldID == 0xFFFFFFFFU)
-      throw errorMessage("form ID not found in ESM, or invalid record type");
     Renderer  renderer(width, height, ba2File, esmFile,
                        (unsigned int *) 0, (float *) 0, zMax);
     if (threadCnt > 0)
@@ -2516,6 +2630,9 @@ int main(int argc, char **argv)
         renderer.addExcludeModelPattern(std::string(excludeModelPatterns[i]));
     }
 
+    unsigned int  worldID = renderer.findParentWorld(formID);
+    if (worldID == 0xFFFFFFFFU)
+      throw errorMessage("form ID not found in ESM, or invalid record type");
     if (worldID)
     {
       renderer.loadTerrain(btdPath, worldID, defTxtID,

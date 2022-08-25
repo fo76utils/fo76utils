@@ -63,7 +63,9 @@ class Renderer
       t;
     }
     model;
-    unsigned int  mswpFormID;   // material swap form ID if non-zero
+    // for solid objects: material swap form ID if non-zero
+    // for water (flags & 4 set): water color in 0xAABBGGRR format
+    unsigned int  mswpFormID;
     NIFFile::NIFVertexTransform modelTransform;
     bool operator<(const RenderObject& r) const;
   };
@@ -118,7 +120,7 @@ class Renderer
     void join();
     void clear();
   };
-  unsigned int  *outBufRGBW;
+  unsigned int  *outBufRGBA;
   float   *outBufZ;
   int     width;
   int     height;
@@ -143,8 +145,8 @@ class Renderer
   bool    enableAllObjects;
   bool    enableTextures;
   unsigned char debugMode;
-  bool    bufRGBWAllocFlag;
-  bool    bufZAllocFlag;
+  unsigned char bufAllocFlags;          // bit 0: RGBA buffer, bit 1: Z buffer
+  bool    waterSecondPass;
   int     threadCnt;
   size_t  textureDataSize;
   size_t  textureCacheSize;
@@ -167,6 +169,7 @@ class Renderer
   float   waterReflectionLevel;
   int     zRangeMax;
   bool    verboseMode;
+  bool    useESMWaterColors;
   NIFFile::NIFBounds  worldBounds;
   std::string whiteTexturePath;
   std::map< unsigned int, BaseObject >  baseObjects;
@@ -179,6 +182,7 @@ class Renderer
   unsigned int getDefaultWorldID() const;
   void addTerrainCell(const ESMFile::ESMRecord& r);
   void addWaterCell(const ESMFile::ESMRecord& r);
+  void getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r);
   // returns NULL on excluded model or invalid object
   const BaseObject *readModelProperties(RenderObject& p,
                                         const ESMFile::ESMRecord& r);
@@ -225,13 +229,13 @@ class Renderer
  public:
   Renderer(int imageWidth, int imageHeight,
            const BA2File& archiveFiles, ESMFile& masterFiles,
-           unsigned int *bufRGBW = 0, float *bufZ = 0, int zMax = 16777216);
+           unsigned int *bufRGBA = 0, float *bufZ = 0, int zMax = 16777216);
   virtual ~Renderer();
   // returns 0 if formID is not in an exterior world, 0xFFFFFFFF on error
-  static unsigned int findParentWorld(ESMFile& esmFile, unsigned int formID);
+  unsigned int findParentWorld(unsigned int formID);
   inline const unsigned int *getImageData() const
   {
-    return outBufRGBW;
+    return outBufRGBA;
   }
   inline const float *getZBufferData() const
   {
@@ -326,6 +330,7 @@ class Renderer
   // 0xAARRGGBB
   void setWaterColor(unsigned int n)
   {
+    useESMWaterColors = (n == 0xFFFFFFFFU);
     waterColor = (n & 0xFF00FF00U)
                  | ((n & 0x000000FFU) << 16) | ((n & 0x00FF0000U) >> 16);
   }
