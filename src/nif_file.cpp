@@ -793,7 +793,6 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   unsigned short  alphaFlags = 0x00EC;
   unsigned char   alphaThreshold = 0;
   unsigned char   alpha = 128;
-  bool    haveMaterial = false;
   if (b.shaderProperty >= 0)
   {
     size_t  n = size_t(b.shaderProperty);
@@ -808,8 +807,8 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       t.textureOffsetV = lsBlock.offsetV;
       t.textureScaleU = lsBlock.scaleU;
       t.textureScaleV = lsBlock.scaleV;
-      // decal, two sided, tree
-      t.flags = t.flags | (unsigned char) ((lsBlock.bgsmFlags & 0x1C) << 1);
+      // decal, two sided, tree, glow map
+      t.flags = t.flags | (unsigned char) (lsBlock.bgsmFlags & 0xB8);
       t.gradientMapV = lsBlock.bgsmGradientMapV;
       t.envMapScale = lsBlock.bgsmEnvMapScale;
       t.specularColor = lsBlock.bgsmSpecularColor;
@@ -820,12 +819,18 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       {
         alphaFlags = lsBlock.bgsmAlphaFlags;
         alphaThreshold = lsBlock.bgsmAlphaThreshold;
-        haveMaterial = true;
         if (lsBlock.bgsmTextures.size() > 0)
         {
           t.texturePathCnt = (unsigned char) lsBlock.bgsmTextures.size();
           t.texturePaths = &(lsBlock.bgsmTextures.front());
         }
+      }
+      else
+      {
+        // two sided
+        t.flags = t.flags | (unsigned char) ((lsBlock.flags >> 32) & 0x10U);
+        // glow map
+        t.flags = t.flags | (unsigned char) ((lsBlock.flags >> 31) & 0x80U);
       }
       if (lsBlock.textureSet >= 0 && !t.texturePathCnt)
         n = size_t(lsBlock.textureSet);
@@ -861,8 +866,6 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   }
   t.alphaThreshold =
       BGSMFile::calculateAlphaThreshold(alphaFlags, alphaThreshold, alpha);
-  if (t.alphaThreshold && !haveMaterial)
-    t.flags = t.flags | 0x10;           // assume two sided if threshold > 0
   if (t.texturePathCnt &&
       t.texturePaths[0]->find("/fxwater") != std::string::npos)
   {

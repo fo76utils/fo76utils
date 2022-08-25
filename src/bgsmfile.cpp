@@ -66,9 +66,9 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   // Z buffer write, Z buffer test, screen space reflections
   (void) buf.readUInt32Fast();
   // decal
-  flags = flags | ((unsigned char) bool(buf.readUInt8Fast()) << 2);
-  // two sided
   flags = flags | ((unsigned char) bool(buf.readUInt8Fast()) << 3);
+  // two sided
+  flags = flags | ((unsigned char) bool(buf.readUInt8Fast()) << 4);
   unsigned long long  texturePathMap = 0ULL;
   buf.setPosition(58);
   if (version == 2)                     // Fallout 4
@@ -78,14 +78,16 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
     // gradient map disabled / enabled
     texturePathMap = (!buf.readUInt8Fast() ?
                       0xFFFFFFFE7E244610ULL : 0xFFFFFFFE7E243610ULL);
-    flags = flags | ((unsigned char) bool(buf[buf.size() - 29]) << 4);  // tree
+    flags = flags | ((unsigned char) bool(buf[buf.size() - 29]) << 5);  // tree
+    flags = flags | ((unsigned char) bool(buf[buf.size() - 45]) << 7);  // glow
     texturePaths.resize(9);
   }
   else                                  // Fallout 76
   {
     texturePathMap = (!(buf.readUInt16Fast() & 0xFF) ?
                       0xFFFFFFEE98724E10ULL : 0xFFFFFFEE98723E10ULL);
-    flags = flags | ((unsigned char) bool(buf[buf.size() - 10]) << 4);
+    flags = flags | ((unsigned char) bool(buf[buf.size() - 10]) << 5);
+    flags = flags | ((unsigned char) bool(buf[buf.size() - 24]) << 7);
     texturePaths.resize(10);
   }
   for ( ; (texturePathMap & 15U) != 15U; texturePathMap = texturePathMap >> 4)

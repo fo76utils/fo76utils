@@ -9,7 +9,7 @@
 struct BGSMFile
 {
   unsigned char version;                // 2: Fallout 4, 20: Fallout 76
-  // 1: tile U, 2: tile V, 4: is decal, 8: two sided, 16: tree
+  // 1: tile U, 2: tile V, 8: is decal, 16: two sided, 32: tree, 128: glow map
   unsigned char flags;
   unsigned char gradientMapV;           // 255 = 1.0
   unsigned char envMapScale;            // 128 = 1.0

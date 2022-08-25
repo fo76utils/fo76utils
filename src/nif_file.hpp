@@ -144,6 +144,7 @@ class NIFFile : public FileBuffer
     // bit 4: two sided (disables culling)
     // bit 5: tree (disables vertex alpha)
     // bit 6: has vertex colors
+    // bit 7: uses glow map
     unsigned char flags;
     unsigned char gradientMapV;
     unsigned char envMapScale;          // 128 = 1.0
