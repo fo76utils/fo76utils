@@ -51,6 +51,17 @@ class DDSTexture
                                                 const unsigned char *,
                                                 unsigned int));
   void loadTexture(FileBuffer& buf, int mipOffset);
+  // X,Y coordinates are scaled to width,height - int(m)
+  inline bool convertTexCoord(
+      int& x0, int& y0, float& xf, float& yf,
+      unsigned int& xMask, unsigned int& yMask,
+      float x, float y, int mipLevel, bool m = false) const;
+  static inline FloatVector4 getPixelB(
+      const unsigned int *p, int x0, int y0,
+      float xf, float yf, unsigned int xMask, unsigned int yMask);
+  static inline FloatVector4 getPixelB_2(
+      const unsigned int *p1, const unsigned int *p2, int x0, int y0,
+      float xf, float yf, unsigned int xMask, unsigned int yMask);
  public:
   DDSTexture(const char *fileName, int mipOffset = 0);
   DDSTexture(const unsigned char *buf, size_t bufSize, int mipOffset = 0);
@@ -100,22 +111,22 @@ class DDSTexture
   // getPixelN() with mirrored instead of wrapped texture coordinates
   inline unsigned int getPixelM(int x, int y, int mipLevel) const
   {
-    int     xMaskM = int(xSizeMip0 >> mipLevel);
-    int     yMaskM = int(ySizeMip0 >> mipLevel);
-    x = (!(x & xMaskM) ? x : ~x) & (xMaskM - 1);
-    y = (!(y & yMaskM) ? y : ~y) & (yMaskM - 1);
-    return textureData[mipLevel][y * xMaskM + x];
+    int     xMask = int((xSizeMip0 - 1U) >> (unsigned char) mipLevel);
+    int     yMask = int((ySizeMip0 - 1U) >> (unsigned char) mipLevel);
+    x = (!(x & (xMask + 1)) ? x : ~x) & xMask;
+    y = (!(y & (yMask + 1)) ? y : ~y) & yMask;
+    return textureData[mipLevel][y * (xMask + 1) + x];
   }
   // getPixelN() with clamped texture coordinates
   inline unsigned int getPixelC(int x, int y, int mipLevel) const
   {
-    int     xMask = int((xSizeMip0 - 1) >> mipLevel);
-    int     yMask = int((ySizeMip0 - 1) >> mipLevel);
+    int     xMask = int((xSizeMip0 - 1U) >> (unsigned char) mipLevel);
+    int     yMask = int((ySizeMip0 - 1U) >> (unsigned char) mipLevel);
     x = (x > 0 ? (x < xMask ? x : xMask) : 0);
     y = (y > 0 ? (y < yMask ? y : yMask) : 0);
     return textureData[mipLevel][y * (xMask + 1) + x];
   }
-  // bilinear filtering
+  // bilinear filtering (getPixelB/getPixelT use normalized texture coordinates)
   FloatVector4 getPixelB(float x, float y, int mipLevel) const;
   // trilinear filtering
   FloatVector4 getPixelT(float x, float y, float mipLevel) const;
@@ -123,6 +134,8 @@ class DDSTexture
   // red and green channels of 't'
   FloatVector4 getPixelT_2(float x, float y, float mipLevel,
                            const DDSTexture *t) const;
+  // trilinear filtering without normalized texture coordinates
+  FloatVector4 getPixelT_N(float x, float y, float mipLevel) const;
   // bilinear filtering with mirrored texture coordinates
   FloatVector4 getPixelBM(float x, float y, int mipLevel) const;
   // trilinear filtering with mirrored texture coordinates
