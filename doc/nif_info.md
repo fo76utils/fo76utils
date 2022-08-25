@@ -18,12 +18,14 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **+**, **-**: Zoom in or out.
 * **Keypad 1**, **3**, **9**, **7**: Set isometric view from the SW, SE, NE, or NW (default).
 * **Keypad 2**, **6**, **8**, **4**, **5**: Set view from the S, E, N, W, or top.
-* **F1** to **F4**: Select default cube map.
+* **F1** to **F5**: Select default cube map.
 * **A**, **D**: Rotate model around the Z axis.
 * **S**, **W**: Rotate model around the X axis.
 * **Q**, **E**: Rotate model around the Y axis.
+* **K**, **L**: Decrease or increase brightness.
 * **Left**, **Right**: Rotate light vector around the X axis.
 * **Up**, **Down**: Rotate light vector around the Y axis.
+* **Insert**, **Delete**: Zoom reflected environment in or out.
 * **Page Up**: Enable downsampling (slow).
 * **Page Down**: Disable downsampling.
 * **Esc**: Quit program.
