@@ -257,6 +257,23 @@ struct FloatVector4
     __asm__ ("vmaxps %1, %0, %0" : "+x" (v) : "xm" (r.v));
     return (*this);
   }
+  // 0.0 - 255.0 sRGB -> 0.0 - 1.0 linear
+  inline FloatVector4& srgbExpand()
+  {
+    v *= (v * float(0.13945550 / 65025.0) + float(0.86054450 / 255.0));
+    v *= v;
+    return (*this);
+  }
+  // 0.0 - 1.0 linear -> 0.0 - 255.0 sRGB
+  inline FloatVector4& srgbCompress()
+  {
+    minValues(FloatVector4(1.0f));
+    maxValues(FloatVector4(1.0f / float(0x40000000)));
+    float   tmp __attribute__ ((__vector_size__ (16)));
+    __asm__ ("vrsqrtps %1, %0" : "=x" (tmp) : "x" (v));
+    v *= (float(-0.13942692 * 255.0) + (tmp * float(1.13942692 * 255.0)));
+    return (*this);
+  }
   inline operator unsigned int() const
   {
     float   tmp __attribute__ ((__vector_size__ (16))) = v;
@@ -492,6 +509,22 @@ struct FloatVector4
     v[3] = (r.v[3] > v[3] ? r.v[3] : v[3]);
     return (*this);
   }
+  inline FloatVector4& srgbExpand()
+  {
+    *this *= (*this * FloatVector4(float(0.13945550 / 65025.0))
+              + FloatVector4(float(0.86054450 / 255.0)));
+    *this *= *this;
+    return (*this);
+  }
+  inline FloatVector4& srgbCompress()
+  {
+    minValues(FloatVector4(1.0f));
+    FloatVector4  tmp(*this);
+    tmp.squareRootFast();
+    *this = (*this * FloatVector4(float(-0.13942692 * 255.0)))
+            + (tmp * FloatVector4(float(1.13942692 * 255.0)));
+    return (*this);
+  }
   inline operator unsigned int() const
   {
     int     c0 = roundFloat(v[0]);
@@ -508,78 +541,90 @@ struct FloatVector4
 #endif
   inline FloatVector4(unsigned int c0, unsigned int c1,
                       unsigned int c2, unsigned int c3,
-                      float xf, float yf, bool gammaExpand = false)
+                      float xf, float yf, bool isSRGB = false)
   {
     // bilinear filtering
     FloatVector4  v0(c0);
     FloatVector4  v1(c1);
     FloatVector4  v2(c2);
     FloatVector4  v3(c3);
-    if (gammaExpand)
+    if (isSRGB)
     {
-      FloatVector4  tmp(1.0f / 255.0f);
-      v0 = v0 * v0 * tmp;
-      v1 = v1 * v1 * tmp;
-      v2 = v2 * v2 * tmp;
-      v3 = v3 * v3 * tmp;
+      v0 *= v0;
+      v1 *= v1;
+      v2 *= v2;
+      v3 *= v3;
     }
     v1 -= v0;
     v3 -= v2;
     v1 *= xf;
     v3 *= xf;
     v0 += v1;
-    v2 = (v2 + v3 - v0) * FloatVector4(yf);
-    *this = v0 + v2;
+    v0 += ((v2 + v3 - v0) * FloatVector4(yf));
+    if (isSRGB)
+    {
+      v0 *= (v0 * FloatVector4(float(0.16916572 / (65025.0 * 65025.0)))
+             + FloatVector4(float(0.83083428 / 65025.0)));
+    }
+    *this = v0;
   }
   inline FloatVector4(const unsigned int *p0, const unsigned int *p1,
                       const unsigned int *p2, const unsigned int *p3,
-                      float xf, float yf, bool gammaExpand = false)
+                      float xf, float yf, bool isSRGB = false)
   {
     FloatVector4  v0(p0);
     FloatVector4  v1(p1);
     FloatVector4  v2(p2);
     FloatVector4  v3(p3);
-    if (gammaExpand)
+    if (isSRGB)
     {
-      FloatVector4  tmp(1.0f / 255.0f);
-      v0 = v0 * v0 * tmp;
-      v1 = v1 * v1 * tmp;
-      v2 = v2 * v2 * tmp;
-      v3 = v3 * v3 * tmp;
+      v0 *= v0;
+      v1 *= v1;
+      v2 *= v2;
+      v3 *= v3;
     }
     v1 -= v0;
     v3 -= v2;
     v1 *= xf;
     v3 *= xf;
     v0 += v1;
-    v2 = (v2 + v3 - v0) * FloatVector4(yf);
-    *this = v0 + v2;
+    v0 += ((v2 + v3 - v0) * FloatVector4(yf));
+    if (isSRGB)
+    {
+      v0 *= (v0 * FloatVector4(float(0.16916572 / (65025.0 * 65025.0)))
+             + FloatVector4(float(0.83083428 / 65025.0)));
+    }
+    *this = v0;
   }
   inline FloatVector4(const unsigned int *p1_0, const unsigned int *p2_0,
                       const unsigned int *p1_1, const unsigned int *p2_1,
                       const unsigned int *p1_2, const unsigned int *p2_2,
                       const unsigned int *p1_3, const unsigned int *p2_3,
-                      float xf, float yf, bool gammaExpand = false)
+                      float xf, float yf, bool isSRGB = false)
   {
     FloatVector4  v0(p1_0, p2_0);
     FloatVector4  v1(p1_1, p2_1);
     FloatVector4  v2(p1_2, p2_2);
     FloatVector4  v3(p1_3, p2_3);
-    if (gammaExpand)
+    if (isSRGB)
     {
-      FloatVector4  tmp(1.0f / 255.0f);
-      v0 = v0 * v0 * tmp;
-      v1 = v1 * v1 * tmp;
-      v2 = v2 * v2 * tmp;
-      v3 = v3 * v3 * tmp;
+      v0 *= v0;
+      v1 *= v1;
+      v2 *= v2;
+      v3 *= v3;
     }
     v1 -= v0;
     v3 -= v2;
     v1 *= xf;
     v3 *= xf;
     v0 += v1;
-    v2 = (v2 + v3 - v0) * FloatVector4(yf);
-    *this = v0 + v2;
+    v0 += ((v2 + v3 - v0) * FloatVector4(yf));
+    if (isSRGB)
+    {
+      v0 *= (v0 * FloatVector4(float(0.16916572 / (65025.0 * 65025.0)))
+             + FloatVector4(float(0.83083428 / 65025.0)));
+    }
+    *this = v0;
   }
 };
 
