@@ -227,7 +227,7 @@ inline float Plot3D_TriShape::specularPhong(
   if (BRANCH_EXPECT((nDotL < 0.0f), false))
     s = s * (nDotL * 8.0f + 1.0f);
   if (isNormalized)
-    s = s * FloatVector4::squareRootFast(g + 0.4375f) * 0.20822077f;
+    s = s * (g * 0.154375f + 0.095625f);        // 0.25 at smoothness = 0.0
   return s;
 }
 
@@ -308,14 +308,13 @@ void Plot3D_TriShape::drawPixel_Water_2(
     nDotV = (nDotV < 1.0f ? nDotV : 1.0f);
     // f0 = pow(0.0203, 2.0 / 2.2)
     f = fresnelGamma2(nDotV) * (1.0f - 0.029f) + 0.029f;
-    f = FloatVector4::squareRootFast(f);
     float   specular = p.specularPhong(reflectedView, 0.875f, nDotL, true);
-    e = (e + FloatVector4(specular)) * FloatVector4(f * p.reflectionLevel);
+    e = (e * e + FloatVector4(specular)) * FloatVector4(f * p.reflectionLevel);
   }
   float   l = p.getLightLevel(nDotL);
-  c = (c * FloatVector4(a))
-      + (p.specularColorFloat * FloatVector4(l * (1.0f - a)));
-  c = c * FloatVector4(1.0f - (f * 0.5f)) + e;
+  c = (c * c * FloatVector4(a))
+      + (p.specularColorFloat * FloatVector4(l * l * (1.0f - a)));
+  c = (c * FloatVector4(1.0f - f) + e).squareRootFast();
   p.bufRGBA[offs] = (unsigned int) (c * FloatVector4(255.0f)) | 0xFF000000U;
 }
 
@@ -537,24 +536,32 @@ void Plot3D_TriShape::drawPixel_NormalEnvS(
 {
   size_t  offs = size_t(y) * size_t(p.width) + size_t(x);
   bool    alphaFlag = false;
-  FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag));
+  FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, true));
   if (BRANCH_EXPECT(!alphaFlag, false))
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT_2(txtU, txtV, p.mipLevel + p.mipOffsetN,
                                           p.textureS));
+  FloatVector4  r(0.25f);
   float   nDotL = p.normalMap(z, n).dotProduct3(p.lightVector);
-  c = p.glowMap(c * FloatVector4(p.getLightLevel(nDotL)), txtU, txtV);
+  float   l = p.getLightLevel(nDotL);
+  c *= (l * l);
   float   smoothness =
       float(int(p.specularSmoothness)) * n[3] * (1.0f / (255.0f * 255.0f));
   float   specLevel = n[2];
   FloatVector4  reflectedView(p.calculateReflection(z, x, y));
   FloatVector4  e(p.environmentMap(reflectedView, smoothness));
+  float   nDotV = float(std::fabs(z.normal[2]));
+  nDotV = (nDotV < 1.0f ? nDotV : 1.0f);
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, true);
-  e *= (p.reflectionLevel * specLevel);
-  c += e;
-  c += (p.specularColorFloat
-        * FloatVector4(specular * p.specularLevel * specLevel));
+  e = (e * e * FloatVector4(p.reflectionLevel))
+      + (p.specularColorFloat * FloatVector4(specular * p.specularLevel));
+  FloatVector4  f(r + ((FloatVector4(smoothness).maxValues(r) - r)
+                       * FloatVector4(fresnelGamma2(nDotV))));
+  e *= specLevel;
+  c = p.glowMap(c + ((e - c) * f), txtU, txtV);
+  c *= 255.0f;
+  c.squareRootFast();
   p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
 }
 
@@ -1031,7 +1038,6 @@ void Plot3D_TriShape::drawTriShape(
       {
         textureS = textures[6];
         drawPixelFunction = &drawPixel_NormalEnvS;
-        reflectionLevel = reflectionLevel * 0.625f;
       }
       else if (textureCnt >= 6 && textures[5])  // Skyrim with environment mask
       {
@@ -1095,8 +1101,7 @@ void Plot3D_TriShape::drawWater(
   specularColorFloat = FloatVector4(waterColor);
   float   a = 256.0f - specularColorFloat[3];
   specularColorFloat *= (1.0f / 255.0f);
-  if (gammaCorrectEnabled)
-    specularColorFloat *= specularColorFloat;
+  specularColorFloat *= specularColorFloat;
   specularColorFloat[3] = -1.5f / (a * a);      // = -3.0 / (maxDepth * 16.0)
   reflectionLevel = 0.0f;
   specularLevel = 0.0f;
@@ -1113,8 +1118,7 @@ void Plot3D_TriShape::drawWater(
   {
     textureE = textures[4];
     reflectionLevel = envMapLevel * getLightLevel(1.0f);
-    if (gammaCorrectEnabled)
-      reflectionLevel = reflectionLevel * reflectionLevel;
+    reflectionLevel = reflectionLevel * reflectionLevel;
     specularLevel = reflectionLevel;
   }
   drawTriangles();

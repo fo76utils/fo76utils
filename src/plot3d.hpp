@@ -384,7 +384,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   static void drawPixel_Water_2(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
-  // with gamma correction
+  // with GGX
   static void drawPixel_Water_2G(
       Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
   // alphaFlag is set to true if the pixel is visible (alpha >= threshold)
