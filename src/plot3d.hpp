@@ -328,7 +328,6 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       return (z < r.z);
     }
   };
-  static const float  defaultLightingPolynomial[6];
   unsigned int  *bufRGBA;
   float   *bufZ;
   int     width;
@@ -347,11 +346,12 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   float   mipLevel;
   float   alphaThresholdFloat;
   bool    invNormals;
-  bool    gammaCorrectEnabled;
+  bool    ggxEnabled;                   // Fallout 76 mode
   float   viewScale;
   FloatVector4  lightVector;
-  FloatVector4  lightingPolynomial3_0;
-  FloatVector4  lightingPolynomial5_4;
+  FloatVector4  lightColor;             // lightColor[3] = overall RGB scale
+  FloatVector4  ambientLight;           // pre-multiplied with envColor
+  FloatVector4  envColor;
   FloatVector4  envMapOffs;
   FloatVector4  viewTransformInvX;
   FloatVector4  viewTransformInvY;
@@ -360,70 +360,64 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   float   reflectionLevel;
   float   specularLevel;
   unsigned int  debugMode;
-  void (*drawPixelFunction)(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+  // offs = frame buffer offset (y * width + x)
+  void    (*drawPixelFunction)(Plot3D_TriShape& p, size_t offs, Vertex& z);
   std::vector< Vertex > vertexBuf;
   std::vector< Triangle > triangleBuf;
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                              const NIFFile::NIFVertexTransform& viewTransform);
-  // d = dot product from normals and light vector
-  inline float getLightLevel(float d) const;
+  // c = albedo, e = environment, f0 = reflectance
+  // specLevel = specular mask if isFO76 is false, ambient occlusion if true
+  // returns sRGB color
+  inline FloatVector4 calculateLighting(
+      FloatVector4 c, FloatVector4 e, float specular, float specLevel,
+      FloatVector4 f0, float txtU, float txtV, float nDotL, float nDotV,
+      float smoothness, bool isFO76 = false) const;
+  // c0 = terrain color
+  inline FloatVector4 calculateLighting_Water(
+      FloatVector4 c0, FloatVector4 e, float specular,
+      float nDotL, float nDotV) const;
   // returns normal
   inline FloatVector4 normalMap(Vertex& v, FloatVector4 n) const;
   // returns reflected view vector
-  inline FloatVector4 calculateReflection(const Vertex& v, int x, int y) const;
+  inline FloatVector4 calculateReflection(const Vertex& v) const;
   inline FloatVector4 environmentMap(
-      FloatVector4 reflectedView, float smoothness = 1.0f) const;
+      FloatVector4 reflectedView, float smoothness, bool isSRGB) const;
   inline float specularPhong(FloatVector4 reflectedView, float smoothness,
                              float nDotL, bool isNormalized = false) const;
   inline float specularGGX(FloatVector4 reflectedView, float smoothness,
-                           float nDotL, float nDotV) const;
-  static inline float fresnelGamma2(float nDotV);
+                           float nDotL) const;
   // fill with water (first and second pass)
-  static void drawPixel_Water(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
-  static void drawPixel_Water_2(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+  static void drawPixel_Water(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  static void drawPixel_Water_2(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // with GGX
-  static void drawPixel_Water_2G(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+  static void drawPixel_Water_2G(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // alphaFlag is set to true if the pixel is visible (alpha >= threshold)
   inline FloatVector4 getDiffuseColor(
-      float txtU, float txtV, const Vertex& z, bool& alphaFlag,
-      bool enableGamma = false) const;
-  inline FloatVector4 glowMap(FloatVector4 c, float txtU, float txtV) const;
-  static void drawPixel_Debug(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+      float txtU, float txtV, const Vertex& z, bool& alphaFlag) const;
+  static void drawPixel_Debug(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // diffuse texture with trilinear filtering
-  static void drawPixel_Diffuse(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+  static void drawPixel_Diffuse(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // diffuse + normal map with trilinear filtering
-  static void drawPixel_Normal(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+  static void drawPixel_Normal(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // diffuse + normal and environment map with trilinear filtering
-  static void drawPixel_NormalEnv(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+  static void drawPixel_NormalEnv(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // diffuse + normal and environment map/mask with trilinear filtering
-  static void drawPixel_NormalEnvM(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+  static void drawPixel_NormalEnvM(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // diffuse + normal and environment + specular map with trilinear filtering
-  static void drawPixel_NormalEnvS(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
+  static void drawPixel_NormalEnvS(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // diffuse + normal and reflection map with trilinear filtering
-  static void drawPixel_NormalRefl(
-      Plot3D_TriShape& p, int x, int y, float txtU, float txtV, Vertex& z);
-  static inline FloatVector4 interpolateVectors(
-      FloatVector4 v0, FloatVector4 v1, FloatVector4 v2,
-      float w0, float w1, float w2);
+  static void drawPixel_NormalRefl(Plot3D_TriShape& p, size_t offs, Vertex& z);
   inline void drawPixel(int x, int y, Vertex& v,
                         const Vertex& v0, const Vertex& v1, const Vertex& v2,
-                        float w0, float w1, float w2);
+                        float w0f, float w1f, float w2f);
   void drawLine(Vertex& v, const Vertex& v0, const Vertex& v1);
   void drawTriangles();
  public:
-  // alpha = 255 - sqrt(waterDepth*16) after first pass water rendering
+  // alpha = 255 - sqrt(waterDepth*16) after first pass water rendering.
+  // isFO76 enables GGX specular function and sRGB cube maps.
   Plot3D_TriShape(unsigned int *outBufRGBA, float *outBufZ,
-                  int imageWidth, int imageHeight, bool enableGamma = false);
+                  int imageWidth, int imageHeight, bool isFO76 = false);
   virtual ~Plot3D_TriShape();
   inline void setBuffers(unsigned int *outBufRGBA, float *outBufZ,
                          int imageWidth, int imageHeight)
@@ -439,12 +433,21 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   {
     envMapOffs = FloatVector4(x, y, z, 0.0f);
   }
+  // c = light source (multiplies diffuse and specular, but not glow/cube maps)
+  // a = ambient light (added to diffuse light level after multiplying with c)
+  // e = environment map color and level, also multiplies ambient light
+  // s = overall RGB scale to multiply the final color with (linear color space)
+  inline void setLighting(FloatVector4 c, FloatVector4 a, FloatVector4 e,
+                          float s)
+  {
+    lightColor = c;
+    lightColor[3] = s;
+    ambientLight = a * e;
+    ambientLight[3] = 0.0f;
+    envColor = e;
+    envColor[3] = 0.0f;
+  }
   Plot3D_TriShape& operator=(const NIFFile::NIFTriShape& t);
-  // set polynomial a[0..5] for mapping dot product (-1.0 to 1.0)
-  // to RGB multiplier
-  void setLightingFunction(const float *a);
-  void getLightingFunction(float *a) const;
-  static void getDefaultLightingFunction(float *a);
   // textures[0] = diffuse
   // textures[1] = normal
   // textures[2] = glow map
@@ -477,6 +480,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   {
     debugMode = (n <= 5U ? (n != 1U ? n : (0xFF000000U | c)) : 0U);
   }
+  // Calculate ambient light from the average color of a cube map.
+  static FloatVector4 cubeMapToAmbient(const DDSTexture *e, bool isSRGB);
 };
 
 #endif
