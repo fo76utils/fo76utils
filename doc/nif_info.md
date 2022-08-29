@@ -23,7 +23,7 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **S**, **W**: Rotate model around the X axis.
 * **Q**, **E**: Rotate model around the Y axis.
 * **K**, **L**: Decrease or increase brightness.
-* **Left**, **Right**: Rotate light vector around the X axis.
+* **Left**, **Right**: Rotate light vector around the Z axis.
 * **Up**, **Down**: Rotate light vector around the Y axis.
 * **Insert**, **Delete**: Zoom reflected environment in or out.
 * **Page Up**: Enable downsampling (slow).
