@@ -742,9 +742,9 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     float   modelRotationX = 0.0f;
     float   modelRotationY = 0.0f;
     float   modelRotationZ = 0.0f;
-    // light direction: 45, -35.2644, 0 degrees
-    float   lightRotationX = float(std::atan(1.0));
-    float   lightRotationY = -(float(std::atan(std::sqrt(0.5))));
+    // light direction: 0, 54.7356, -135 degrees
+    float   lightRotationY = float(std::atan(std::sqrt(2.0)));
+    float   lightRotationZ = float(std::atan(1.0) * -3.0);
     float   lightLevel = 1.0f;
     int     viewRotation = 0;   // isometric from NW
     int     viewScale = 0;      // 1.0
@@ -765,10 +765,10 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
               degreesToRadians(viewRotations[viewRotation * 3 + 2]),
               0.0f, 0.0f, 0.0f);
       NIFFile::NIFVertexTransform
-          lightTransform(1.0f, lightRotationX, lightRotationY, 0.0f,
+          lightTransform(1.0f, 0.0f, lightRotationY, lightRotationZ,
                          0.0f, 0.0f, 0.0f);
-      renderer.lightX = lightTransform.rotateXZ;
-      renderer.lightY = lightTransform.rotateYZ;
+      renderer.lightX = lightTransform.rotateZX;
+      renderer.lightY = lightTransform.rotateZY;
       renderer.lightZ = lightTransform.rotateZZ;
       renderer.waterEnvMapLevel = 1.0f;
       renderer.waterColor = 0xC0804000U;
@@ -803,14 +803,17 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                                    + int(nifFile.getVersion() >= 0x90)]);
       renderer.setBuffers(&(outBufRGBA.front()), &(outBufZ.front()),
                           imageWidth, imageHeight, envMapScale);
-      for (size_t i = 0; i < renderer.renderers.size(); i++)
       {
-        float   tmp[6];
-        renderer.renderers[i]->getDefaultLightingFunction(tmp);
-        for (size_t j = 0; j < 6; j++)
-          tmp[j] = tmp[j] * lightLevel;
-        renderer.renderers[i]->setLightingFunction(tmp);
-        renderer.renderers[i]->setDebugMode(debugMode, 0);
+        FloatVector4  a(Plot3D_TriShape::cubeMapToAmbient(
+                            renderer.loadTexture(&(renderer.defaultEnvMap),
+                                                 false),
+                            (nifFile.getVersion() >= 0x90)));
+        for (size_t i = 0; i < renderer.renderers.size(); i++)
+        {
+          renderer.renderers[i]->setLighting(
+              FloatVector4(1.0f), a, FloatVector4(1.0f), lightLevel);
+          renderer.renderers[i]->setDebugMode(debugMode, 0);
+        }
       }
       renderer.renderModel();
 
@@ -945,13 +948,13 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                 break;
               case SDLK_l:
                 lightLevel = lightLevel * 1.18920712f;
-                lightLevel = (lightLevel < 2.0f ? lightLevel : 2.0f);
+                lightLevel = (lightLevel < 4.0f ? lightLevel : 4.0f);
                 break;
               case SDLK_LEFT:
-                lightRotationX += 0.19634954f;
+                lightRotationZ += 0.19634954f;
                 break;
               case SDLK_RIGHT:
-                lightRotationX -= 0.19634954f;
+                lightRotationZ -= 0.19634954f;
                 break;
               case SDLK_DOWN:
                 lightRotationY += 0.19634954f;
