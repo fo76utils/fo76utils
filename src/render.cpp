@@ -458,8 +458,7 @@ void Renderer::getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r)
         c[0] = f2.readFloat();
         c[1] = f2.readFloat();
         c[2] = f2.readFloat();
-        c.squareRoot();
-        c *= 255.0f;
+        c.srgbCompress();
       }
       d = (d > 0.125f ? (d < 8128.0f ? d : 8128.0f) : 0.125f);
       c[3] = 256.0f - float(std::sqrt(d * 8.0f));
@@ -1500,7 +1499,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           if (!defaultWaterTexture.empty())
             textures[1] = loadTexture(defaultWaterTexture, t.fileBuf);
           if (!defaultEnvMap.empty())
-            textures[4] = loadTexture(defaultEnvMap, t.fileBuf);
+            textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0);
           t.renderer->drawWater(
               p.modelTransform, viewTransform, lightX, lightY, lightZ,
               textures, 5, p.mswpFormID, waterReflectionLevel);
@@ -1545,7 +1544,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         if (!textures[4] && (textures[6] || textures[8]) &&
             !defaultEnvMap.empty())
         {
-          textures[4] = loadTexture(defaultEnvMap, t.fileBuf);
+          textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0);
         }
         t.renderer->drawTriShape(
             p.modelTransform, viewTransform, lightX, lightY, lightZ,
@@ -1630,7 +1629,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (!defaultWaterTexture.empty())
         textures[1] = loadTexture(defaultWaterTexture, t.fileBuf);
       if (!defaultEnvMap.empty())
-        textures[4] = loadTexture(defaultEnvMap, t.fileBuf);
+        textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0);
       t.renderer->drawWater(
           p.modelTransform, viewTransform, lightX, lightY, lightZ, textures, 5,
           p.mswpFormID, waterReflectionLevel);
@@ -1645,9 +1644,6 @@ void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
   RenderThread& t = renderThreads[threadNum];
   if (!t.renderer)
     return;
-  t.renderer->setEnvMapOffset(float(width) * -0.5f, float(height) * -0.5f,
-                              float(height) * 2.0f);
-  t.renderer->setLightingFunction(lightingPolynomial);
   unsigned long long  tileMask = 0ULL;
   for (size_t i = startPos; i < endPos; i++)
   {
@@ -1757,7 +1753,6 @@ Renderer::Renderer(int imageWidth, int imageHeight,
   if (bufAllocFlags & 0x02)
     outBufZ = new float[imageDataSize];
   clear(bufAllocFlags);
-  Plot3D_TriShape::getDefaultLightingFunction(lightingPolynomial);
   renderThreads.reserve(16);
   nifFiles.resize(modelBatchCnt);
   setThreadCount(-1);
@@ -1825,19 +1820,13 @@ void Renderer::setViewTransform(
   viewTransform = t;
 }
 
-void Renderer::setLightDirection(float rotationX, float rotationY)
+void Renderer::setLightDirection(float rotationY, float rotationZ)
 {
-  NIFFile::NIFVertexTransform t(1.0f, rotationX, rotationY, 0.0f,
+  NIFFile::NIFVertexTransform t(1.0f, 0.0f, rotationY, rotationZ,
                                 0.0f, 0.0f, 0.0f);
-  lightX = t.rotateXZ;
-  lightY = t.rotateYZ;
+  lightX = t.rotateZX;
+  lightY = t.rotateZY;
   lightZ = t.rotateZZ;
-}
-
-void Renderer::setLightingFunction(const float *a)
-{
-  for (int i = 0; i < 6; i++)
-    lightingPolynomial[i] = a[i];
 }
 
 void Renderer::setThreadCount(int n)
@@ -1897,6 +1886,40 @@ void Renderer::setDefaultEnvMap(const std::string& s)
 void Renderer::setWaterTexture(const std::string& s)
 {
   defaultWaterTexture = s;
+}
+
+void Renderer::setLighting(int lightColor, int ambientColor, int envColor,
+                           float lightLevel, float envLevel, float rgbScale)
+{
+  if (renderThreads.size() < 1)
+    return;
+  FloatVector4  c(bgraToRGBA((unsigned int) lightColor & 0x00FFFFFFU));
+  FloatVector4  a(bgraToRGBA((unsigned int) ambientColor & 0x00FFFFFFU));
+  FloatVector4  e(bgraToRGBA((unsigned int) envColor & 0x00FFFFFFU));
+  FloatVector4  l(lightLevel, envLevel, rgbScale, 0.0f);
+  l *= 255.0f;
+  l.srgbExpand();
+  c = c.srgbExpand() * FloatVector4(l[0]);
+  e = e.srgbExpand() * FloatVector4(l[1]);
+  if (ambientColor >= 0)
+  {
+    a.srgbExpand();
+  }
+  else
+  {
+    a = Plot3D_TriShape::cubeMapToAmbient(
+            loadTexture(defaultEnvMap, renderThreads[0].fileBuf, 0),
+            (esmFile.getESMVersion() >= 0xC0));
+  }
+  for (size_t i = 0; i < renderThreads.size(); i++)
+  {
+    if (renderThreads[i].renderer)
+    {
+      renderThreads[i].renderer->setLighting(c, a, e, l[2]);
+      renderThreads[i].renderer->setEnvMapOffset(
+          float(width) * -0.5f, float(height) * -0.5f, float(height) * 2.0f);
+    }
+  }
 }
 
 static int calculateLandTxtMip(long fileSize)
@@ -2005,85 +2028,6 @@ void Renderer::renderWater(unsigned int formID)
   waterSecondPass = false;
 }
 
-static void solveEquationSystem(double *m, int w, int h)
-{
-  // Gaussian elimination
-  for (int i = 0; i < h; i++)
-  {
-    double  a = m[i * w + i];
-    int     l = i;
-    for (int j = i + 1; j < h; j++)
-    {
-      if (std::fabs(m[j * w + i]) > std::fabs(a))
-      {
-        a = m[j * w + i];
-        l = j;
-      }
-    }
-    if (l != i)
-    {
-      for (int j = 0; j < w; j++)
-      {
-        double  tmp = m[i * w + j];
-        m[i * w + j] = m[l * w + j];
-        m[l * w + j] = tmp;
-      }
-    }
-    for (int j = 0; j < w; j++)
-      m[i * w + j] = m[i * w + j] / a;
-    m[i * w + i] = 1.0;
-    for (int j = i + 1; j < h; j++)
-    {
-      a = m[j * w + i];
-      for (int k = 0; k < w; k++)
-        m[j * w + k] = m[j * w + k] - (m[i * w + k] * a);
-      m[j * w + i] = 0.0;
-    }
-  }
-  for (int i = h; --i >= 0; )
-  {
-    for (int j = i - 1; j >= 0; j--)
-    {
-      double  a = m[j * w + i];
-      for (int k = 0; k < w; k++)
-        m[j * w + k] = m[j * w + k] - (m[i * w + k] * a);
-      m[j * w + i] = 0.0;
-    }
-  }
-}
-
-static int calculatePolynomial(float *a,
-                               const char * const *argv, int argc, int i)
-{
-  if ((i + 12) > argc)
-    throw errorMessage("missing argument for %s", argv[i - 1]);
-  double  m[42];
-  for (int j = 0; j <= 5; j++, i = i + 2)
-  {
-    m[j * 7] = 1.0;
-    m[j * 7 + 1] =
-        parseFloat(argv[i], "invalid lighting curve X position", -1.0, 1.0);
-    for (int k = 0; k < j; k++)
-    {
-      if (std::fabs(m[k * 7 + 1] - m[j * 7 + 1]) < 0.001)
-        throw errorMessage("invalid lighting curve X position");
-    }
-    for (int k = 2; k <= 5; k++)
-      m[j * 7 + k] = m[j * 7 + (k - 1)] * m[j * 7 + 1];
-    m[j * 7 + 6] =
-        parseFloat(argv[i + 1], "invalid lighting curve Y position", -4.0, 8.0);
-  }
-  solveEquationSystem(m, 7, 6);
-  std::printf("Lighting polynomial:");
-  for (int j = 5; j >= 0; j--)
-  {
-    a[j] = float(m[j * 7 + 6]);
-    std::printf(" %.6f", m[j * 7 + 6]);
-  }
-  std::fputc('\n', stdout);
-  return i;
-}
-
 static const char *usageStrings[] =
 {
   "Usage: render INFILE.ESM[,...] OUTFILE.DDS W H ARCHIVEPATH [OPTIONS...]",
@@ -2119,10 +2063,10 @@ static const char *usageStrings[] =
   "    -cam SCALE RX RY RZ X Y Z",
   "                        set view transform for camera position X,Y,Z",
   "    -zrange MIN MAX     limit view Z range to MIN <= Z < MAX",
-  "    -light SCALE RX RY  set light level and X, Y rotation (0, 0 = top)",
-  "    -lpoly A5 A4 A3 A2 A1 A0    set lighting polynomial, -1 <= x <= 1",
-  "    -lcurv X0 Y0 X1 Y1 X2 Y2 X3 Y3 X4 Y4 X5 Y5",
-  "                        set lighting polynomial from a set of points",
+  "    -light SCALE RY RZ  set RGB scale and Y, Z rotation (0, 0 = top)",
+  "    -lcolor LMULT LCOLOR EMULT ECOLOR ACOLOR",
+  "                        set light source, environment, and ambient light",
+  "                        colors and levels (colors in 0xRRGGBB format)",
   "",
   "    -mlod INT           set level of detail for models, 0 (best) to 4",
   "    -vis BOOL           render only objects visible from distance",
@@ -2178,15 +2122,18 @@ int main(int argc, char **argv)
     float   viewOffsX = 0.0f;
     float   viewOffsY = 0.0f;
     float   viewOffsZ = 32768.0f;
+    float   rgbScale = 1.0f;
+    float   lightRotationY = 70.5288f;
+    float   lightRotationZ = 135.0f;
+    int     lightColor = 0x00FFFFFF;
+    int     ambientColor = -1;
+    int     envColor = 0x00FFFFFF;
     float   lightLevel = 1.0f;
-    float   lightRotationX = 63.435f;
-    float   lightRotationY = 41.8103f;
-    float   lightingPolynomial[6];
+    float   envLevel = 1.0f;
     const char  *defaultEnvMap = (char *) 0;
     const char  *waterTexture = (char *) 0;
     std::vector< const char * > hdModelNamePatterns;
     std::vector< const char * > excludeModelPatterns;
-    Plot3D_TriShape::getDefaultLightingFunction(lightingPolynomial);
     float   d = float(std::atan(1.0) / 45.0);   // degrees to radians
 
     for (int i = 1; i < argc; i++)
@@ -2245,18 +2192,21 @@ int main(int argc, char **argv)
         }
         std::printf("-zrange %d %d\n", zMin, zMax);
         std::printf("-light %.1f %.4f %.4f\n",
-                    lightLevel, lightRotationX, lightRotationY);
+                    rgbScale, lightRotationY, lightRotationZ);
         {
           NIFFile::NIFVertexTransform
-              vt(1.0f, lightRotationX * d, lightRotationY * d, 0.0f,
+              vt(1.0f, 0.0f, lightRotationY * d, lightRotationZ * d,
                  0.0f, 0.0f, 0.0f);
           std::printf("    Light vector: %9.6f %9.6f %9.6f\n",
-                      vt.rotateXZ, vt.rotateYZ, vt.rotateZZ);
+                      vt.rotateZX, vt.rotateZY, vt.rotateZZ);
         }
-        std::printf("-lpoly %.6f %.6f %.6f %.6f %.6f %.6f\n",
-                    lightingPolynomial[5], lightingPolynomial[4],
-                    lightingPolynomial[3], lightingPolynomial[2],
-                    lightingPolynomial[1], lightingPolynomial[0]);
+        std::printf("-lcolor %.3f 0x%06X %.3f 0x%06X ",
+                    lightLevel, (unsigned int) lightColor,
+                    envLevel, (unsigned int) envColor);
+        if (ambientColor < 0)
+          std::printf("%d (calculated from default cube map)\n", ambientColor);
+        else
+          std::printf("0x%06X\n", (unsigned int) ambientColor);
         std::printf("-mlod %d\n", modelLOD);
         std::printf("-vis %d\n", int(distantObjectsOnly));
         std::printf("-ndis %d\n", int(noDisabledObjects));
@@ -2453,30 +2403,34 @@ int main(int argc, char **argv)
       {
         if ((i + 3) >= argc)
           throw errorMessage("missing argument for %s", argv[i]);
-        lightLevel = float(parseFloat(argv[i + 1], "invalid light level",
-                                      0.125, 4.0));
-        lightRotationX = float(parseFloat(argv[i + 2],
-                                          "invalid light X rotation",
-                                          -360.0, 360.0));
-        lightRotationY = float(parseFloat(argv[i + 3],
+        rgbScale = float(parseFloat(argv[i + 1], "invalid RGB scale",
+                                    0.125, 4.0));
+        lightRotationY = float(parseFloat(argv[i + 2],
                                           "invalid light Y rotation",
+                                          -360.0, 360.0));
+        lightRotationZ = float(parseFloat(argv[i + 3],
+                                          "invalid light Z rotation",
                                           -360.0, 360.0));
         i = i + 3;
       }
-      else if (std::strcmp(argv[i], "-lpoly") == 0)
+      else if (std::strcmp(argv[i], "-lcolor") == 0)
       {
-        for (int j = 5; j >= 0; j--)
-        {
-          if (++i >= argc)
-            throw errorMessage("missing argument for -lpoly");
-          lightingPolynomial[j] =
-              float(parseFloat(argv[i], "invalid lighting polynomial",
-                               -16.0, 16.0));
-        }
-      }
-      else if (std::strcmp(argv[i], "-lcurv") == 0)
-      {
-        i = calculatePolynomial(lightingPolynomial, argv, argc, i + 1);
+        if ((i + 5) >= argc)
+          throw errorMessage("missing argument for %s", argv[i]);
+        lightLevel = float(parseFloat(argv[i + 1], "invalid light source level",
+                                      0.125, 4.0));
+        lightColor = int(parseInteger(argv[i + 2], 0,
+                                      "invalid light source color",
+                                      0, 0x00FFFFFF));
+        envLevel = float(parseFloat(argv[i + 3],
+                                    "invalid environment light level",
+                                    0.125, 4.0));
+        envColor = int(parseInteger(argv[i + 4], 0,
+                                    "invalid environment light color",
+                                    0, 0x00FFFFFF));
+        ambientColor = int(parseInteger(argv[i + 5], 0, "invalid ambient light",
+                                        -1, 0x00FFFFFF));
+        i = i + 5;
       }
       else if (std::strcmp(argv[i], "-mlod") == 0)
       {
@@ -2562,8 +2516,6 @@ int main(int argc, char **argv)
     }
     if (!formID)
       formID = (!btdPath ? 0x0000003CU : 0x0025DA15U);
-    for (int i = 0; i < 6; i++)
-      lightingPolynomial[i] = lightingPolynomial[i] * lightLevel;
     waterColor =
         waterColor + (waterColor & 0x7F000000U) + ((waterColor >> 30) << 24);
     if (!(waterColor & 0xFF000000U))
@@ -2613,12 +2565,14 @@ int main(int argc, char **argv)
     renderer.setViewTransform(
         viewScale, viewRotationX * d, viewRotationY * d, viewRotationZ * d,
         viewOffsX, viewOffsY, viewOffsZ);
-    renderer.setLightDirection(lightRotationX * d, lightRotationY * d);
-    renderer.setLightingFunction(lightingPolynomial);
+    renderer.setLightDirection(lightRotationY * d, lightRotationZ * d);
     if (defaultEnvMap && *defaultEnvMap)
       renderer.setDefaultEnvMap(std::string(defaultEnvMap));
     if (waterColor && waterTexture && *waterTexture)
       renderer.setWaterTexture(std::string(waterTexture));
+    renderer.setLighting(lightColor, ambientColor, envColor,
+                         lightLevel, envLevel, rgbScale);
+
     for (size_t i = 0; i < hdModelNamePatterns.size(); i++)
     {
       if (hdModelNamePatterns[i] && hdModelNamePatterns[i][0])

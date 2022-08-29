@@ -130,7 +130,6 @@ class Renderer
   float   lightX;
   float   lightY;
   float   lightZ;
-  float   lightingPolynomial[6];
   int     textureMip;
   float   landTextureMip;
   float   landTxtRGBScale;
@@ -226,6 +225,10 @@ class Renderer
   static void threadFunction(Renderer *p, size_t threadNum,
                              size_t startPos, size_t endPos,
                              unsigned long long tileIndexMask);
+  static inline unsigned int bgraToRGBA(unsigned int c)
+  {
+    return ((c & 0xFF00FF00U) | ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU));
+  }
  public:
   Renderer(int imageWidth, int imageHeight,
            const BA2File& archiveFiles, ESMFile& masterFiles,
@@ -255,10 +258,7 @@ class Renderer
   void setViewTransform(float scale,
                         float rotationX, float rotationY, float rotationZ,
                         float offsetX, float offsetY, float offsetZ);
-  void setLightDirection(float rotationX, float rotationY);
-  // set polynomial a[0..5] for mapping dot product (-1.0 to 1.0)
-  // to RGB multiplier
-  void setLightingFunction(const float *a);
+  void setLightDirection(float rotationY, float rotationZ);
   // default to std::thread::hardware_concurrency() if n <= 0
   void setThreadCount(int n);
   void setTextureCacheSize(size_t n)
@@ -331,8 +331,7 @@ class Renderer
   void setWaterColor(unsigned int n)
   {
     useESMWaterColors = (n == 0xFFFFFFFFU);
-    waterColor = (n & 0xFF00FF00U)
-                 | ((n & 0x000000FFU) << 16) | ((n & 0x00FF0000U) >> 16);
+    waterColor = bgraToRGBA(n);
   }
   void setWaterEnvMapScale(float n)
   {
@@ -343,6 +342,10 @@ class Renderer
   {
     verboseMode = n;
   }
+  // colors are in 0xRRGGBB format, ambientColor < 0 takes the color from
+  // the default environment map
+  void setLighting(int lightColor, int ambientColor, int envColor,
+                   float lightLevel, float envLevel, float rgbScale);
   void loadTerrain(const char *btdFileName = (char *) 0,
                    unsigned int worldID = 0U, unsigned int defTxtID = 0U,
                    int mipLevel = 2, int xMin = -32768, int yMin = -32768,
