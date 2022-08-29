@@ -80,7 +80,7 @@ inline FloatVector4 LandscapeTexture::getFO76VertexColor(
                    getFO76VertexColor(offs2), getFO76VertexColor(offs3),
                    float(xf) * (1.0f / 256.0f), float(yf) * (1.0f / 256.0f));
   c0 *= (1.0f / 15.5f);
-  return c0.squareRoot();
+  return c0.srgbCompress();
 }
 
 inline FloatVector4 LandscapeTexture::getTES4VertexColor(
@@ -106,11 +106,9 @@ inline FloatVector4 LandscapeTexture::getTES4VertexColor(
     offs1++;
     offs3++;
   }
-  FloatVector4  c0(getTES4VertexColor(offs0), getTES4VertexColor(offs1),
-                   getTES4VertexColor(offs2), getTES4VertexColor(offs3),
-                   float(xf) * (1.0f / 256.0f), float(yf) * (1.0f / 256.0f));
-  c0 *= (1.0f / 255.0f);
-  return c0;
+  return FloatVector4(getTES4VertexColor(offs0), getTES4VertexColor(offs1),
+                      getTES4VertexColor(offs2), getTES4VertexColor(offs3),
+                      float(xf) * (1.0f / 256.0f), float(yf) * (1.0f / 256.0f));
 }
 
 FloatVector4 LandscapeTexture::renderPixelFO76I_NoNormals(
@@ -538,7 +536,7 @@ LandscapeTexture::LandscapeTexture(
     landTexturesN(landTxtsN),
     landTextureCnt(landTxtCnt),
     mipLevel(0.0f),
-    rgbScale(1.0f),
+    rgbScale(1.0f / 255.0f),
     width(vertexCntX),
     height(vertexCntY),
     txtScale(1.0f),
@@ -573,7 +571,7 @@ LandscapeTexture::LandscapeTexture(
     landTexturesN(landTxtsN),
     landTextureCnt(landTxtCnt),
     mipLevel(0.0f),
-    rgbScale(1.0f),
+    rgbScale(1.0f / 255.0f),
     width(landData.getImageWidth()),
     height(landData.getImageHeight()),
     txtScale(1.0f),
@@ -603,7 +601,7 @@ void LandscapeTexture::setMipLevel(float n)
 
 void LandscapeTexture::setRGBScale(float n)
 {
-  rgbScale = (n > 0.5f ? (n < 8.0f ? n : 8.0f) : 0.5f);
+  rgbScale = (n > 0.5f ? (n < 8.0f ? n : 8.0f) : 0.5f) / 255.0f;
 }
 
 void LandscapeTexture::setDefaultColor(unsigned int c)
@@ -664,13 +662,13 @@ void LandscapeTexture::renderTexture(unsigned char *outBuf, int renderScale,
         n = blendColors(n, n2, float(yf) * renderScale_f);
         c = blendColors(c, c2, float(yf) * renderScale_f);
       }
-      FloatVector4  vColor(1.0f);
+      FloatVector4  vColor(255.0f);
       if (vclrData16)
         vColor = getFO76VertexColor(x, y, renderScale);
       else if (vclrData24)
         vColor = getTES4VertexColor(x, y, renderScale);
-      c *= rgbScale;
       c *= vColor;
+      c *= rgbScale;
       unsigned int  cTmp = (unsigned int) c;
       outBuf[0] = (unsigned char) ((cTmp >> 16) & 0xFFU);       // B
       outBuf[1] = (unsigned char) ((cTmp >> 8) & 0xFFU);        // G

@@ -65,8 +65,8 @@ static void renderCubeMap(const BA2File& ba2File,
           FloatVector4  c(texture.cubeMap(x, y, z, mipLevel));
           if (enableGamma)
           {
-            c *= 255.0f;
-            c.squareRootFast();
+            c *= (1.0f / 255.0f);
+            c.srgbCompress();
           }
           *dstPtr = (unsigned int) c;
         }
