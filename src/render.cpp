@@ -1893,9 +1893,9 @@ void Renderer::setLighting(int lightColor, int ambientColor, int envColor,
 {
   if (renderThreads.size() < 1)
     return;
-  FloatVector4  c(bgraToRGBA((unsigned int) lightColor & 0x00FFFFFFU));
+  FloatVector4  c(bgraToRGBA((unsigned int) lightColor));
   FloatVector4  a(bgraToRGBA((unsigned int) ambientColor & 0x00FFFFFFU));
-  FloatVector4  e(bgraToRGBA((unsigned int) envColor & 0x00FFFFFFU));
+  FloatVector4  e(bgraToRGBA((unsigned int) envColor));
   FloatVector4  l(lightLevel, envLevel, rgbScale, 0.0f);
   l *= 255.0f;
   l.srgbExpand();
@@ -2421,13 +2421,13 @@ int main(int argc, char **argv)
                                       0.125, 4.0));
         lightColor = int(parseInteger(argv[i + 2], 0,
                                       "invalid light source color",
-                                      0, 0x00FFFFFF));
+                                      -1, 0x00FFFFFF)) & 0x00FFFFFF;
         envLevel = float(parseFloat(argv[i + 3],
                                     "invalid environment light level",
                                     0.125, 4.0));
         envColor = int(parseInteger(argv[i + 4], 0,
                                     "invalid environment light color",
-                                    0, 0x00FFFFFF));
+                                    -1, 0x00FFFFFF)) & 0x00FFFFFF;
         ambientColor = int(parseInteger(argv[i + 5], 0, "invalid ambient light",
                                         -1, 0x00FFFFFF));
         i = i + 5;
