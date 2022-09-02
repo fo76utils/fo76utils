@@ -66,6 +66,7 @@ class DDSTexture
   DDSTexture(const char *fileName, int mipOffset = 0);
   DDSTexture(const unsigned char *buf, size_t bufSize, int mipOffset = 0);
   DDSTexture(FileBuffer& buf, int mipOffset = 0);
+  DDSTexture(unsigned int c);           // create 1x1 texture of color c
   virtual ~DDSTexture();
   inline int getWidth() const
   {
@@ -133,7 +134,7 @@ class DDSTexture
   // trilinear filtering with the blue and alpha channels taken from the
   // red and green channels of 't'
   FloatVector4 getPixelT_2(float x, float y, float mipLevel,
-                           const DDSTexture *t) const;
+                           const DDSTexture& t) const;
   // trilinear filtering without normalized texture coordinates
   FloatVector4 getPixelT_N(float x, float y, float mipLevel) const;
   // bilinear filtering with mirrored texture coordinates

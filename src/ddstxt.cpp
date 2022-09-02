@@ -643,6 +643,24 @@ DDSTexture::DDSTexture(FileBuffer& buf, int mipOffset)
   loadTexture(buf, mipOffset);
 }
 
+DDSTexture::DDSTexture(unsigned int c)
+  : xSizeMip0(1U),
+    ySizeMip0(1U),
+    mipLevelCnt(1),
+    haveAlpha(bool(~c & 0xFF000000U)),
+    isCubeMap(false),
+    textureCnt(1),
+    textureDataSize(0),
+    textureDataBuf((unsigned int *) 0)
+{
+  if (sizeof(size_t) < sizeof(unsigned int))
+    throw std::logic_error("sizeof(size_t) < sizeof(unsigned int)");
+  unsigned char *p = reinterpret_cast< unsigned char * >(&textureDataSize);
+  for (size_t i = 0; i < (sizeof(textureData) / sizeof(unsigned int *)); i++)
+    textureData[i] = reinterpret_cast< unsigned int * >(p);
+  *(textureData[0]) = c;
+}
+
 DDSTexture::~DDSTexture()
 {
   if (textureDataBuf)
@@ -687,31 +705,29 @@ FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
 }
 
 FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
-                                     const DDSTexture *t) const
+                                     const DDSTexture& t) const
 {
-  if (BRANCH_EXPECT(!t, false))
-    return getPixelT(x, y, mipLevel);
   mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
   int     m0 = int(float(std::floor(mipLevel)));
   float   mf = mipLevel - float(m0);
   const unsigned int * const  *t1 = &(textureData[m0]);
-  const unsigned int * const  *t2 = &(t->textureData[m0]);
+  const unsigned int * const  *t2 = &(t.textureData[m0]);
   unsigned int  w = xSizeMip0;
   unsigned int  h = ySizeMip0;
-  if (BRANCH_EXPECT(!(t->xSizeMip0 == w && t->ySizeMip0 == h), false))
+  if (BRANCH_EXPECT(!(t.xSizeMip0 == w && t.ySizeMip0 == h), false))
   {
-    if ((t->xSizeMip0 << 1) == w && (t->ySizeMip0 << 1) == h && m0 > 0)
+    if ((t.xSizeMip0 << 1) == w && (t.ySizeMip0 << 1) == h && m0 > 0)
     {
       t2--;
     }
-    else if (t->xSizeMip0 == (w << 1) && t->ySizeMip0 == (h << 1))
+    else if (t.xSizeMip0 == (w << 1) && t.ySizeMip0 == (h << 1))
     {
       t2++;
     }
     else
     {
       FloatVector4  tmp1(getPixelT(x, y, mipLevel));
-      FloatVector4  tmp2(t->getPixelT(x, y, mipLevel));
+      FloatVector4  tmp2(t.getPixelT(x, y, mipLevel));
       tmp1[2] = tmp2[0];
       tmp1[3] = tmp2[1];
       return tmp1;
