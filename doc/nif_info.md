@@ -1,15 +1,15 @@
-    nif_info [OPTION] ARCHIVEPATH PATTERN...
-    nif_view -view[WIDTHxHEIGHT] ARCHIVEPATH PATTERN...
+    nif_info [OPTIONS] ARCHIVEPATH PATTERN...
 
 List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ format, or render the model to a DDS file, or display it (nif\_view on Windows).
 
 ### Options
 
+* **--**: Remaining options are file names.
 * **-q**: Print author name, file name, and file size only.
 * **-v**: Verbose mode, print block list, and vertex and triangle data.
 * **-obj**: Print model data in .obj format.
 * **-mtl**: Print material data in .mtl format.
-* **-render[WIDTHxHEIGHT] DDSFILE**: Render model to DDS file (experimental).
+* **-render[WIDTHxHEIGHT] DDSFILE**: Render model to DDS file.
 * **-view[WIDTHxHEIGHT]**: View model. Full screen mode is enabled if the specified width and height match the current screen resolution.
 
 ### Keyboard controls in view mode
@@ -22,12 +22,18 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **A**, **D**: Rotate model around the Z axis.
 * **S**, **W**: Rotate model around the X axis.
 * **Q**, **E**: Rotate model around the Y axis.
-* **K**, **L**: Decrease or increase brightness.
+* **K**, **L**: Decrease or increase overall brightness.
+* **U**, **7**: Decrease or increase light source red level.
+* **I**, **8**: Decrease or increase light source green level.
+* **O**, **9**: Decrease or increase light source blue level.
 * **Left**, **Right**: Rotate light vector around the Z axis.
 * **Up**, **Down**: Rotate light vector around the Y axis.
 * **Insert**, **Delete**: Zoom reflected environment in or out.
 * **Page Up**: Enable downsampling (slow).
 * **Page Down**: Disable downsampling.
+* **Space**, **Backspace**: Load next or previous file matching the pattern.
+* **F12** or **Print Screen**: Save screenshot.
+* **H**: Show help screen.
 * **Esc**: Quit program.
 
 ### Examples
