@@ -417,7 +417,7 @@ void Renderer::getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r)
     // fixed water color, or game older than Skyrim
     return;
   }
-  unsigned int  waterFormID = 0U;
+  unsigned int  waterFormID = r.formID;
   ESMFile::ESMField f(esmFile, r);
   while (f.next())
   {
@@ -427,9 +427,8 @@ void Renderer::getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r)
       waterFormID = f.readUInt32Fast();
     }
   }
-  const ESMFile::ESMRecord  *r2;
-  if (waterFormID && bool(r2 = esmFile.getRecordPtr(waterFormID)) &&
-      *r2 == "WATR")
+  const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(waterFormID);
+  if (r2 && *r2 == "WATR")
   {
     ESMFile::ESMField f2(esmFile, *r2);
     while (f2.next())
@@ -1768,7 +1767,7 @@ Renderer::~Renderer()
   deallocateBuffers(0x03);
 }
 
-unsigned int Renderer::findParentWorld(unsigned int formID)
+unsigned int Renderer::findParentWorld(ESMFile& esmFile, unsigned int formID)
 {
   if (!formID)
     return 0xFFFFFFFFU;
@@ -1787,12 +1786,6 @@ unsigned int Renderer::findParentWorld(unsigned int formID)
     }
     formID = r->flags;
     r = esmFile.getRecordPtr(formID);
-  }
-  if (r && useESMWaterColors)
-  {
-    RenderObject  tmp;
-    getWaterColor(tmp, *r);
-    waterColor = tmp.mswpFormID;
   }
   return formID;
 }
@@ -1953,6 +1946,17 @@ void Renderer::loadTerrain(const char *btdFileName,
   landData = new LandscapeData(&esmFile, btdFileName, &ba2File, 0x0B, worldID,
                                defTxtID, mipLevel, xMin, yMin, xMax, yMax);
   defaultWaterLevel = landData->getWaterLevel();
+  if (useESMWaterColors)
+  {
+    const ESMFile::ESMRecord  *r =
+        esmFile.getRecordPtr(landData->getWaterFormID());
+    if (r && *r == "WATR")
+    {
+      RenderObject  tmp;
+      getWaterColor(tmp, *r);
+      waterColor = tmp.mswpFormID;
+    }
+  }
   if (verboseMode)
     std::fprintf(stderr, "Loading landscape textures\n");
   landTextures.resize(landData->getTextureCount(), (DDSTexture *) 0);
@@ -2553,6 +2557,10 @@ int main(int argc, char **argv)
 
     BA2File ba2File(args[4]);
     ESMFile esmFile(args[0]);
+    unsigned int  worldID = Renderer::findParentWorld(esmFile, formID);
+    if (worldID == 0xFFFFFFFFU)
+      throw errorMessage("form ID not found in ESM, or invalid record type");
+
     Renderer  renderer(width, height, ba2File, esmFile,
                        (std::uint32_t *) 0, (float *) 0, zMax);
     if (threadCnt > 0)
@@ -2595,9 +2603,6 @@ int main(int argc, char **argv)
         renderer.addExcludeModelPattern(std::string(excludeModelPatterns[i]));
     }
 
-    unsigned int  worldID = renderer.findParentWorld(formID);
-    if (worldID == 0xFFFFFFFFU)
-      throw errorMessage("form ID not found in ESM, or invalid record type");
     if (worldID)
     {
       renderer.loadTerrain(btdPath, worldID, defTxtID,

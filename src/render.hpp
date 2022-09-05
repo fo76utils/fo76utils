@@ -235,7 +235,7 @@ class Renderer
            std::uint32_t *bufRGBA = 0, float *bufZ = 0, int zMax = 16777216);
   virtual ~Renderer();
   // returns 0 if formID is not in an exterior world, 0xFFFFFFFF on error
-  unsigned int findParentWorld(unsigned int formID);
+  static unsigned int findParentWorld(ESMFile& esmFile, unsigned int formID);
   inline const std::uint32_t *getImageData() const
   {
     return outBufRGBA;
