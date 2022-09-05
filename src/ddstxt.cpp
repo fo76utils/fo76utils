@@ -2,9 +2,11 @@
 #include "common.hpp"
 #include "ddstxt.hpp"
 
-static inline unsigned long long decodeBC3Alpha(unsigned long long& a,
-                                                const unsigned char *src,
-                                                bool isSigned = false)
+#include <thread>
+
+static inline std::uint64_t decodeBC3Alpha(std::uint64_t& a,
+                                           const unsigned char *src,
+                                           bool isSigned = false)
 {
   unsigned int  a0 = src[0] ^ (!isSigned ? 0U : 0x80U);
   unsigned int  a1 = src[1] ^ (!isSigned ? 0U : 0x80U);
@@ -14,64 +16,63 @@ static inline unsigned long long decodeBC3Alpha(unsigned long long& a,
   if (a0 > a1)
   {
     FloatVector4  m(0.0f, 1.0f, 1.0f / 7.0f, 2.0f / 7.0f);
-    a = (unsigned int) (a0_f + (a1_f * m));
+    a = (std::uint32_t) (a0_f + (a1_f * m));
     m = FloatVector4(3.0f / 7.0f, 4.0f / 7.0f, 5.0f / 7.0f, 6.0f / 7.0f);
-    a = a | ((unsigned long long) ((unsigned int) (a0_f + (a1_f * m))) << 32);
+    a = a | ((std::uint64_t) ((std::uint32_t) (a0_f + (a1_f * m))) << 32);
   }
   else
   {
     a = a0 | (a1 << 8) | 0xFF00000000000000ULL;
     FloatVector4  m(0.2f, 0.4f, 0.6f, 0.8f);
-    a = a | ((unsigned long long) ((unsigned int) (a0_f + (a1_f * m))) << 16);
+    a = a | ((std::uint64_t) ((std::uint32_t) (a0_f + (a1_f * m))) << 16);
   }
-  unsigned long long  ba = FileBuffer::readUInt16Fast(src + 2);
-  ba = ba | ((unsigned long long) FileBuffer::readUInt32Fast(src + 4) << 16);
+  std::uint64_t ba = FileBuffer::readUInt16Fast(src + 2);
+  ba = ba | ((std::uint64_t) FileBuffer::readUInt32Fast(src + 4) << 16);
   return ba;
 }
 
-static inline unsigned int decodeAlphaChannel(const unsigned long long& a,
-                                              unsigned long long ba)
+static inline std::uint32_t decodeAlphaChannel(const std::uint64_t& a,
+                                               std::uint64_t ba)
 {
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   return reinterpret_cast< const unsigned char * >(&a)[ba & 7];
 #else
-  return ((unsigned int) (a >> (unsigned char) ((ba & 7) << 3)) & 0xFFU);
+  return ((std::uint32_t) (a >> (unsigned char) ((ba & 7) << 3)) & 0xFFU);
 #endif
 }
 
-static inline unsigned int decodeBC1Colors(unsigned int *c,
-                                           const unsigned char *src,
-                                           unsigned int a = 0U)
+static inline std::uint32_t decodeBC1Colors(std::uint32_t *c,
+                                            const unsigned char *src,
+                                            std::uint32_t a = 0U)
 {
-  unsigned int  c0 = FileBuffer::readUInt16Fast(src);
-  unsigned int  c1 = FileBuffer::readUInt16Fast(src + 2);
+  std::uint32_t c0 = FileBuffer::readUInt16Fast(src);
+  std::uint32_t c1 = FileBuffer::readUInt16Fast(src + 2);
   FloatVector4  c0_f(((c0 & 0x001FU) << 16) | ((c0 & 0x07E0U) << 3)
                      | ((c0 & 0xF800U) >> 11) | a);
   FloatVector4  c1_f(((c1 & 0x001FU) << 16) | ((c1 & 0x07E0U) << 3)
                      | ((c1 & 0xF800U) >> 11) | a);
   c0_f *= FloatVector4(255.0f / 31.0f, 255.0f / 63.0f, 255.0f / 31.0f, 1.0f);
   c1_f *= FloatVector4(255.0f / 31.0f, 255.0f / 63.0f, 255.0f / 31.0f, 1.0f);
-  c[0] = (unsigned int) c0_f;
-  c[1] = (unsigned int) c1_f;
+  c[0] = (std::uint32_t) c0_f;
+  c[1] = (std::uint32_t) c1_f;
   if (BRANCH_EXPECT(c0 > c1, true))
   {
-    c[2] = (unsigned int) ((c0_f + c0_f + c1_f) * FloatVector4(1.0f / 3.0f));
-    c[3] = (unsigned int) ((c0_f + c1_f + c1_f) * FloatVector4(1.0f / 3.0f));
+    c[2] = (std::uint32_t) ((c0_f + c0_f + c1_f) * FloatVector4(1.0f / 3.0f));
+    c[3] = (std::uint32_t) ((c0_f + c1_f + c1_f) * FloatVector4(1.0f / 3.0f));
   }
   else
   {
-    c[2] = (unsigned int) ((c0_f + c1_f) * FloatVector4(0.5f));
+    c[2] = (std::uint32_t) ((c0_f + c1_f) * FloatVector4(0.5f));
     c[3] = c[2] & ~a;
   }
-  unsigned int  bc = FileBuffer::readUInt32Fast(src + 4);
-  return bc;
+  return FileBuffer::readUInt32Fast(src + 4);
 }
 
 size_t DDSTexture::decodeBlock_BC1(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned int  c[4];
-  unsigned int  bc = decodeBC1Colors(c, src, 0xFF000000U);
+  std::uint32_t c[4];
+  std::uint32_t bc = decodeBC1Colors(c, src, 0xFF000000U);
   for (unsigned int i = 0; i < 16; i++)
   {
     dst[(i >> 2) * w + (i & 3)] = c[bc & 3];
@@ -81,10 +82,10 @@ size_t DDSTexture::decodeBlock_BC1(
 }
 
 size_t DDSTexture::decodeBlock_BC2(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned int  c[4];
-  unsigned int  bc = decodeBC1Colors(c, src + 8);
+  std::uint32_t c[4];
+  std::uint32_t bc = decodeBC1Colors(c, src + 8);
   for (unsigned int i = 0; i < 4; i++)
   {
     unsigned char a = src[i << 1];
@@ -102,12 +103,12 @@ size_t DDSTexture::decodeBlock_BC2(
 }
 
 size_t DDSTexture::decodeBlock_BC3(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned int  c[4];
-  unsigned long long  a;
-  unsigned long long  ba = decodeBC3Alpha(a, src);
-  unsigned int  bc = decodeBC1Colors(c, src + 8);
+  std::uint32_t c[4];
+  std::uint64_t a;
+  std::uint64_t ba = decodeBC3Alpha(a, src);
+  std::uint32_t bc = decodeBC1Colors(c, src + 8);
   for (unsigned int i = 0; i < 16; i++)
   {
     dst[(i >> 2) * w + (i & 3)] = c[bc & 3] | (decodeAlphaChannel(a, ba) << 24);
@@ -118,10 +119,10 @@ size_t DDSTexture::decodeBlock_BC3(
 }
 
 size_t DDSTexture::decodeBlock_BC4(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned long long  a;
-  unsigned long long  ba = decodeBC3Alpha(a, src);
+  std::uint64_t a;
+  std::uint64_t ba = decodeBC3Alpha(a, src);
   for (unsigned int i = 0; i < 16; i++)
   {
     dst[(i >> 2) * w + (i & 3)] =
@@ -132,10 +133,10 @@ size_t DDSTexture::decodeBlock_BC4(
 }
 
 size_t DDSTexture::decodeBlock_BC4S(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned long long  a;
-  unsigned long long  ba = decodeBC3Alpha(a, src, true);
+  std::uint64_t a;
+  std::uint64_t ba = decodeBC3Alpha(a, src, true);
   for (unsigned int i = 0; i < 16; i++)
   {
     dst[(i >> 2) * w + (i & 3)] =
@@ -146,12 +147,12 @@ size_t DDSTexture::decodeBlock_BC4S(
 }
 
 size_t DDSTexture::decodeBlock_BC5(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned long long  a1;
-  unsigned long long  a2;
-  unsigned long long  ba1 = decodeBC3Alpha(a1, src);
-  unsigned long long  ba2 = decodeBC3Alpha(a2, src + 8);
+  std::uint64_t a1;
+  std::uint64_t a2;
+  std::uint64_t ba1 = decodeBC3Alpha(a1, src);
+  std::uint64_t ba2 = decodeBC3Alpha(a2, src + 8);
   for (unsigned int i = 0; i < 16; i++)
   {
     dst[(i >> 2) * w + (i & 3)] =
@@ -164,12 +165,12 @@ size_t DDSTexture::decodeBlock_BC5(
 }
 
 size_t DDSTexture::decodeBlock_BC5S(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
-  unsigned long long  a1;
-  unsigned long long  a2;
-  unsigned long long  ba1 = decodeBC3Alpha(a1, src, true);
-  unsigned long long  ba2 = decodeBC3Alpha(a2, src + 8, true);
+  std::uint64_t a1;
+  std::uint64_t a2;
+  std::uint64_t ba1 = decodeBC3Alpha(a1, src, true);
+  std::uint64_t ba2 = decodeBC3Alpha(a2, src + 8, true);
   for (unsigned int i = 0; i < 16; i++)
   {
     dst[(i >> 2) * w + (i & 3)] =
@@ -181,46 +182,46 @@ size_t DDSTexture::decodeBlock_BC5S(
   return 16;
 }
 
-static inline unsigned int bgraToRGBA(unsigned int c)
+static inline std::uint32_t bgraToRGBA(std::uint32_t c)
 {
   return ((c & 0xFF00FF00U)
           | ((c << 16) & 0x00FF0000U) | ((c >> 16) & 0x000000FFU));
 }
 
 size_t DDSTexture::decodeLine_RGB(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  x = 0;
   for ( ; (x + 1U) < w; x++, dst++, src = src + 3)
     *dst = 0xFF000000U | FileBuffer::readUInt32Fast(src);
   if (BRANCH_EXPECT((x < w), true))
   {
-    unsigned int  r = src[0];
-    unsigned int  g = src[1];
-    unsigned int  b = src[2];
+    std::uint32_t r = src[0];
+    std::uint32_t g = src[1];
+    std::uint32_t b = src[2];
     *dst = 0xFF000000U | r | (g << 8) | (b << 16);
   }
   return (size_t(w) * 3);
 }
 
 size_t DDSTexture::decodeLine_BGR(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  x = 0;
   for ( ; (x + 1U) < w; x++, dst++, src = src + 3)
     *dst = bgraToRGBA(0xFF000000U | FileBuffer::readUInt32Fast(src));
   if (BRANCH_EXPECT((x < w), true))
   {
-    unsigned int  b = src[0];
-    unsigned int  g = src[1];
-    unsigned int  r = src[2];
+    std::uint32_t b = src[0];
+    std::uint32_t g = src[1];
+    std::uint32_t r = src[2];
     *dst = 0xFF000000U | r | (g << 8) | (b << 16);
   }
   return (size_t(w) * 3);
 }
 
 size_t DDSTexture::decodeLine_RGB32(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
     *dst = 0xFF000000U | FileBuffer::readUInt32Fast(src);
@@ -228,7 +229,7 @@ size_t DDSTexture::decodeLine_RGB32(
 }
 
 size_t DDSTexture::decodeLine_BGR32(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
     *dst = bgraToRGBA(0xFF000000U | FileBuffer::readUInt32Fast(src));
@@ -236,7 +237,7 @@ size_t DDSTexture::decodeLine_BGR32(
 }
 
 size_t DDSTexture::decodeLine_RGBA(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
     *dst = FileBuffer::readUInt32Fast(src);
@@ -244,7 +245,7 @@ size_t DDSTexture::decodeLine_RGBA(
 }
 
 size_t DDSTexture::decodeLine_BGRA(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
   for (unsigned int x = 0; x < w; x++, dst++, src = src + 4)
     *dst = bgraToRGBA(FileBuffer::readUInt32Fast(src));
@@ -252,7 +253,7 @@ size_t DDSTexture::decodeLine_BGRA(
 }
 
 size_t DDSTexture::decodeLine_R8G8(
-    unsigned int *dst, const unsigned char *src, unsigned int w)
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
   unsigned int  x = 0;
   for ( ; (x + 4U) <= w; x = x + 4U, dst = dst + 4, src = src + 8)
@@ -269,19 +270,15 @@ size_t DDSTexture::decodeLine_R8G8(
 
 void DDSTexture::loadTextureData(
     const unsigned char *srcPtr, int n, size_t blockSize,
-    size_t (*decodeFunction)(unsigned int *,
+    size_t (*decodeFunction)(std::uint32_t *,
                              const unsigned char *, unsigned int))
 {
   size_t  dataOffs = size_t(n) * textureDataSize;
   for (int i = 0; i < 20; i++)
   {
-    unsigned int  *p = textureData[i] + dataOffs;
-    unsigned int  w = xSizeMip0 >> i;
-    unsigned int  h = ySizeMip0 >> i;
-    if (w < 1)
-      w = 1;
-    if (h < 1)
-      h = 1;
+    std::uint32_t *p = textureData[i] + dataOffs;
+    unsigned int  w = ((xSizeMip0 - 1U) >> i) + 1U;
+    unsigned int  h = ((ySizeMip0 - 1U) >> i) + 1U;
     if (i < mipLevelCnt)
     {
       if (blockSize > 16)
@@ -292,7 +289,7 @@ void DDSTexture::loadTextureData(
       }
       else if (w < 4 || h < 4)
       {
-        unsigned int  tmpBuf[16];
+        std::uint32_t tmpBuf[16];
         for (unsigned int y = 0; y < h; y = y + 4)
         {
           for (unsigned int x = 0; x < w; x = x + 4)
@@ -317,17 +314,49 @@ void DDSTexture::loadTextureData(
     }
     else
     {
+      // generate missing mipmaps
+      const std::uint32_t *p2 =
+          textureData[i - 1] + (textureDataSize * size_t(n));
+      unsigned int  xMask = (xSizeMip0 - 1U) >> (i - 1);
+      unsigned int  yMask = (ySizeMip0 - 1U) >> (i - 1);
+      size_t  w2 = size_t(xMask + 1U);
       for (unsigned int y = 0; y < h; y++)
       {
+        size_t  offsY2 = size_t((y << 1) & yMask) * w2;
+        size_t  offsY2p1 = size_t(((y << 1) + 1U) & yMask) * w2;
+#if 1
         for (unsigned int x = 0; x < w; x++)
         {
-          p[y * w + x] =
-              (unsigned int) FloatVector4(
-                  getPixelN(x << 1, y << 1, i - 1, n),
-                  getPixelN((x << 1) + 1, y << 1, i - 1, n),
-                  getPixelN(x << 1, (y << 1) + 1, i - 1, n),
-                  getPixelN((x << 1) + 1, (y << 1) + 1, i - 1, n), 0.5f, 0.5f);
+          size_t  offsX2 = (x << 1) & xMask;
+          size_t  offsX2p1 = ((x << 1) + 1U) & xMask;
+          FloatVector4  c(p2 + (offsY2 + offsX2));
+          c += FloatVector4(p2 + (offsY2 + offsX2p1));
+          c += FloatVector4(p2 + (offsY2p1 + offsX2));
+          c += FloatVector4(p2 + (offsY2p1 + offsX2p1));
+          p[y * w + x] = (std::uint32_t) (c * FloatVector4(0.25f));
         }
+#else
+        size_t  offsY2m1 = size_t(((y << 1) - 1U) & yMask) * w2;
+        for (unsigned int x = 0; x < w; x++)
+        {
+          size_t  offsX2 = (x << 1) & xMask;
+          size_t  offsX2m1 = ((x << 1) - 1U) & xMask;
+          size_t  offsX2p1 = ((x << 1) + 1U) & xMask;
+          FloatVector4  c1(p2 + (offsY2 + offsX2m1));
+          FloatVector4  c0(p2 + (offsY2 + offsX2));
+          c1 += FloatVector4(p2 + (offsY2 + offsX2p1));
+          FloatVector4  c2(p2 + (offsY2p1 + offsX2m1));
+          c1 += FloatVector4(p2 + (offsY2p1 + offsX2));
+          c2 += FloatVector4(p2 + (offsY2p1 + offsX2p1));
+          c2 += FloatVector4(p2 + (offsY2m1 + offsX2m1));
+          c1 += FloatVector4(p2 + (offsY2m1 + offsX2));
+          c2 += FloatVector4(p2 + (offsY2m1 + offsX2p1));
+          p[y * w + x] =
+              (std::uint32_t) ((c0 * FloatVector4(0.23031584f))
+                               + (c1 * FloatVector4(0.12479824f))
+                               + (c2 * FloatVector4(0.06762280f)));
+        }
+#endif
       }
     }
   }
@@ -368,7 +397,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     throw errorMessage("unsupported texture file format");
   unsigned int  dataOffs = 128;
   size_t  blockSize = 8;
-  size_t  (*decodeFunction)(unsigned int *, const unsigned char *,
+  size_t  (*decodeFunction)(std::uint32_t *, const unsigned char *,
                             unsigned int) = &decodeBlock_BC1;
   unsigned int  formatFlags = buf.readUInt32();
   unsigned int  fourCC = buf.readUInt32();
@@ -547,7 +576,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     bufSize = bufSize + (size_t(w) * h);
   }
   textureDataSize = bufSize;
-  textureDataBuf = new unsigned int[bufSize * size_t(textureCnt)];
+  textureDataBuf = new std::uint32_t[bufSize * size_t(textureCnt)];
   for (int i = 0; i < 20; i++)
     textureData[i] = textureDataBuf + dataOffsets[i];
   const unsigned char *srcPtr = buf.getDataPtr() + dataOffs;
@@ -595,7 +624,7 @@ inline bool DDSTexture::convertTexCoord(
 }
 
 inline FloatVector4 DDSTexture::getPixelB(
-    const unsigned int *p, int x0, int y0,
+    const std::uint32_t *p, int x0, int y0,
     float xf, float yf, unsigned int xMask, unsigned int yMask)
 {
   unsigned int  w = xMask + 1U;
@@ -610,7 +639,7 @@ inline FloatVector4 DDSTexture::getPixelB(
 }
 
 inline FloatVector4 DDSTexture::getPixelB_2(
-    const unsigned int *p1, const unsigned int *p2, int x0, int y0,
+    const std::uint32_t *p1, const std::uint32_t *p2, int x0, int y0,
     float xf, float yf, unsigned int xMask, unsigned int yMask)
 {
   unsigned int  w = xMask + 1U;
@@ -643,7 +672,7 @@ DDSTexture::DDSTexture(FileBuffer& buf, int mipOffset)
   loadTexture(buf, mipOffset);
 }
 
-DDSTexture::DDSTexture(unsigned int c)
+DDSTexture::DDSTexture(std::uint32_t c)
   : xSizeMip0(1U),
     ySizeMip0(1U),
     mipLevelCnt(1),
@@ -651,13 +680,11 @@ DDSTexture::DDSTexture(unsigned int c)
     isCubeMap(false),
     textureCnt(1),
     textureDataSize(0),
-    textureDataBuf((unsigned int *) 0)
+    textureDataBuf((std::uint32_t *) 0)
 {
-  if (sizeof(size_t) < sizeof(unsigned int))
-    throw std::logic_error("sizeof(size_t) < sizeof(unsigned int)");
   unsigned char *p = reinterpret_cast< unsigned char * >(&textureDataSize);
-  for (size_t i = 0; i < (sizeof(textureData) / sizeof(unsigned int *)); i++)
-    textureData[i] = reinterpret_cast< unsigned int * >(p);
+  for (size_t i = 0; i < (sizeof(textureData) / sizeof(std::uint32_t *)); i++)
+    textureData[i] = reinterpret_cast< std::uint32_t * >(p);
   *(textureData[0]) = c;
 }
 
@@ -710,8 +737,8 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
   mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
   int     m0 = int(float(std::floor(mipLevel)));
   float   mf = mipLevel - float(m0);
-  const unsigned int * const  *t1 = &(textureData[m0]);
-  const unsigned int * const  *t2 = &(t.textureData[m0]);
+  const std::uint32_t * const *t1 = &(textureData[m0]);
+  const std::uint32_t * const *t2 = &(t.textureData[m0]);
   unsigned int  w = xSizeMip0;
   unsigned int  h = ySizeMip0;
   if (BRANCH_EXPECT(!(t.xSizeMip0 == w && t.ySizeMip0 == h), false))
@@ -920,7 +947,7 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
   int     x0, y0;
   float   xf, yf;
   unsigned int  xMask, yMask;
-  const unsigned int  *p = textureData[m0] + n;
+  const std::uint32_t *p = textureData[m0] + n;
   if (BRANCH_EXPECT(!convertTexCoord(
                          x0, y0, xf, yf, xMask, yMask, x, y, m0, true), false))
   {
@@ -937,111 +964,139 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
   return c0;
 }
 
+//  0.003  0.000 -0.010  0.000  0.035  0.055  0.035  0.000 -0.010  0.000  0.003
+//  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
+// -0.010  0.000  0.031  0.000 -0.109 -0.175 -0.109  0.000  0.031  0.000 -0.010
+//  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
+//  0.035  0.000 -0.109  0.000  0.389  0.624  0.389  0.000 -0.109  0.000  0.035
+//  0.055  0.000 -0.175  0.000  0.624  1.000  0.624  0.000 -0.175  0.000  0.055
+//  0.035  0.000 -0.109  0.000  0.389  0.624  0.389  0.000 -0.109  0.000  0.035
+//  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
+// -0.010  0.000  0.031  0.000 -0.109 -0.175 -0.109  0.000  0.031  0.000 -0.010
+//  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
+//  0.003  0.000 -0.010  0.000  0.035  0.055  0.035  0.000 -0.010  0.000  0.003
+
 struct Downsample2xTable
 {
-  //   1   0  -3   0  10  16  10   0  -3   0   1
-  //   0   0   0   0   0   0   0   0   0   0   0
-  //  -3   0   9   0 -30 -48 -30   0   9   0  -3
-  //   0   0   0   0   0   0   0   0   0   0   0
-  //  10   0 -30   0 100 160 100   0 -30   0  10
-  //  16   0 -48   0 160 256 160   0 -48   0  16
-  //  10   0 -30   0 100 160 100   0 -30   0  10
-  //   0   0   0   0   0   0   0   0   0   0   0
-  //  -3   0   9   0 -30 -48 -30   0   9   0  -3
-  //   0   0   0   0   0   0   0   0   0   0   0
-  //   1   0  -3   0  10  16  10   0  -3   0   1
-  // Y offset, (X offset, multiplier) * 4
-  static const int  filterTable[27];
-  static inline void getPixelFast(FloatVector4& c, const unsigned int *buf,
+  static const float  filterTable[12];
+  static inline void getPixelFast(FloatVector4& c, const std::uint32_t *buf,
                                   int w, int x, int y)
   {
-    FloatVector4  tmp(*(buf + (y * w + x)));
+    FloatVector4  tmp(buf + (y * w + x));
     tmp *= tmp;
     c += tmp;
   }
-  static inline void getPixelFast(FloatVector4& c, const unsigned int *buf,
-                                  int w, int x, int y, int m)
-  {
-    FloatVector4  tmp(*(buf + (y * w + x)));
-    tmp *= tmp;
-    tmp *= float(m);
-    c += tmp;
-  }
-  static inline void getPixel(FloatVector4& c, const unsigned int *buf,
+  static inline void getPixel(FloatVector4& c, const std::uint32_t *buf,
                               int w, int h, int x, int y)
   {
     x = (x > 0 ? (x < (w - 1) ? x : (w - 1)) : 0);
     y = (y > 0 ? (y < (h - 1) ? y : (h - 1)) : 0);
-    FloatVector4  tmp(buf[size_t(y) * size_t(w) + size_t(x)]);
+    FloatVector4  tmp(buf + (size_t(y) * size_t(w) + size_t(x)));
     tmp *= tmp;
-    c += tmp;
-  }
-  static inline void getPixel(FloatVector4& c, const unsigned int *buf,
-                              int w, int h, int x, int y, int m)
-  {
-    x = (x > 0 ? (x < (w - 1) ? x : (w - 1)) : 0);
-    y = (y > 0 ? (y < (h - 1) ? y : (h - 1)) : 0);
-    FloatVector4  tmp(buf[size_t(y) * size_t(w) + size_t(x)]);
-    tmp *= tmp;
-    tmp *= float(m);
     c += tmp;
   }
 };
 
-const int Downsample2xTable::filterTable[27] =
+const float Downsample2xTable::filterTable[12] =
 {
-  1,  0, 160,  1, 100,  3, -30,  5,  10,
-  3,  0, -48,  1, -30,  3,   9,  5,  -3,
-  5,  0,  16,  1,  10,  3,  -3,  5,   1
+   0.6239888f,  0.3893620f, -0.1091126f,  0.0346086f,   // Y + 1, X + 0, 1, 3, 5
+  -0.1748631f, -0.1091126f,  0.0305771f, -0.0096985f,   // Y + 3, X + 0, 1, 3, 5
+   0.0554635f,  0.0346086f, -0.0096985f,  0.0030762f    // Y + 5, X + 0, 1, 3, 5
 };
 
-unsigned int downsample2xFilter(const unsigned int *buf,
-                                int imageWidth, int imageHeight, int x, int y)
+std::uint32_t downsample2xFilter(const std::uint32_t *buf,
+                                 int imageWidth, int imageHeight, int x, int y)
 {
   static const Downsample2xTable  t;
-  const int   *p = t.filterTable;
+  const float *p = t.filterTable;
   FloatVector4  c(0.0f);
   if (BRANCH_EXPECT((x >= 5 && x < (imageWidth - 5) &&
                      y >= 5 && y < (imageHeight - 5)), true))
   {
     buf = buf + (size_t(y) * size_t(imageWidth) + size_t(x));
-    t.getPixelFast(c, buf, imageWidth, 0, 0, 256);
-    for (int i = 0; i < 3; i++)
+    t.getPixelFast(c, buf, imageWidth, 0, 0);
+    for (int i = 0; i < 3; i++, p = p + 4)
     {
-      int     yOffs = *(p++);
-      for (int j = 0; j < 4; j++, p = p + 2)
+      int     yOffs = (i << 1) + 1;
+      for (int j = 0; j < 4; j++)
       {
         FloatVector4  tmp(0.0f);
-        int     xOffs = p[0];
+        int     xOffs = (j << 1) - int(bool(j));
         t.getPixelFast(tmp, buf, imageWidth, xOffs, yOffs);
         t.getPixelFast(tmp, buf, imageWidth, yOffs, -xOffs);
         t.getPixelFast(tmp, buf, imageWidth, -xOffs, -yOffs);
         t.getPixelFast(tmp, buf, imageWidth, -yOffs, xOffs);
-        tmp *= float(p[1]);
+        tmp *= p[j];
         c += tmp;
       }
     }
   }
   else
   {
-    t.getPixel(c, buf, imageWidth, imageHeight, x, y, 256);
-    for (int i = 0; i < 3; i++)
+    t.getPixel(c, buf, imageWidth, imageHeight, x, y);
+    for (int i = 0; i < 3; i++, p = p + 4)
     {
-      int     yOffs = *(p++);
-      for (int j = 0; j < 4; j++, p = p + 2)
+      int     yOffs = (i << 1) + 1;
+      for (int j = 0; j < 4; j++)
       {
         FloatVector4  tmp(0.0f);
-        int     xOffs = p[0];
+        int     xOffs = (j << 1) - int(bool(j));
         t.getPixel(tmp, buf, imageWidth, imageHeight, x + xOffs, y + yOffs);
         t.getPixel(tmp, buf, imageWidth, imageHeight, x + yOffs, y - xOffs);
         t.getPixel(tmp, buf, imageWidth, imageHeight, x - xOffs, y - yOffs);
         t.getPixel(tmp, buf, imageWidth, imageHeight, x - yOffs, y + xOffs);
-        tmp *= float(p[1]);
+        tmp *= p[j];
         c += tmp;
       }
     }
   }
-  c *= (1.0f / 1024.0f);
-  return (unsigned int) c.squareRootFast();
+  c *= (1.0f / 4.036798f);
+  return (std::uint32_t) c.squareRootFast();
+}
+
+static void downsample2xThread(std::uint32_t *outBuf,
+                               const std::uint32_t *inBuf,
+                               int w, int h, int y0, int y1, int pitch)
+{
+  std::uint32_t *p = outBuf + ((size_t(y0) >> 1) * size_t(pitch));
+  for (int y = y0; y < y1; y = y + 2, p = p + (pitch - (w >> 1)))
+  {
+    for (int x = 0; x < w; x = x + 2, p++)
+      *p = downsample2xFilter(inBuf, w, h, x, y);
+  }
+}
+
+void downsample2xFilter(std::uint32_t *outBuf, const std::uint32_t *inBuf,
+                        int imageWidth, int imageHeight, int pitch)
+{
+  std::thread *threads[32];
+  int     threadCnt = int(std::thread::hardware_concurrency());
+  threadCnt = (threadCnt > 1 ? (threadCnt < 32 ? threadCnt : 32) : 1);
+  threadCnt = (threadCnt < (imageHeight >> 1) ? threadCnt : (imageHeight >> 1));
+  int     y0 = 0;
+  for (int i = 0; i < threadCnt; i++)
+  {
+    int     y1 = ((imageHeight * (i + 1)) / threadCnt) & ~1;
+    try
+    {
+      threads[i] = new std::thread(downsample2xThread,
+                                   outBuf, inBuf, imageWidth, imageHeight,
+                                   y0, y1, pitch);
+    }
+    catch (...)
+    {
+      threads[i] = (std::thread *) 0;
+      downsample2xThread(outBuf, inBuf, imageWidth, imageHeight, y0, y1, pitch);
+    }
+    y0 = y1;
+  }
+  for (int i = 0; i < threadCnt; i++)
+  {
+    if (threads[i])
+    {
+      threads[i]->join();
+      delete threads[i];
+    }
+  }
 }
 

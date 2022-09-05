@@ -15,39 +15,39 @@ class DDSTexture
   bool          haveAlpha;
   bool          isCubeMap;              // true if textureCnt == 6
   unsigned short  textureCnt;
-  unsigned int  *textureData[20];
+  std::uint32_t *textureData[20];
   size_t        textureDataSize;        // size of textureDataBuf / textureCnt
-  unsigned int  *textureDataBuf;
+  std::uint32_t *textureDataBuf;
   static size_t decodeBlock_BC1(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC2(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC3(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC4(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC4S(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC5(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC5S(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_RGB(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_BGR(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_RGB32(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_BGR32(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_RGBA(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_BGRA(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_R8G8(
-      unsigned int *dst, const unsigned char *src, unsigned int w);
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   void loadTextureData(const unsigned char *srcPtr, int n, size_t blockSize,
-                       size_t (*decodeFunction)(unsigned int *,
+                       size_t (*decodeFunction)(std::uint32_t *,
                                                 const unsigned char *,
                                                 unsigned int));
   void loadTexture(FileBuffer& buf, int mipOffset);
@@ -57,16 +57,16 @@ class DDSTexture
       unsigned int& xMask, unsigned int& yMask,
       float x, float y, int mipLevel, bool m = false) const;
   static inline FloatVector4 getPixelB(
-      const unsigned int *p, int x0, int y0,
+      const std::uint32_t *p, int x0, int y0,
       float xf, float yf, unsigned int xMask, unsigned int yMask);
   static inline FloatVector4 getPixelB_2(
-      const unsigned int *p1, const unsigned int *p2, int x0, int y0,
+      const std::uint32_t *p1, const std::uint32_t *p2, int x0, int y0,
       float xf, float yf, unsigned int xMask, unsigned int yMask);
  public:
   DDSTexture(const char *fileName, int mipOffset = 0);
   DDSTexture(const unsigned char *buf, size_t bufSize, int mipOffset = 0);
   DDSTexture(FileBuffer& buf, int mipOffset = 0);
-  DDSTexture(unsigned int c);           // create 1x1 texture of color c
+  DDSTexture(std::uint32_t c);          // create 1x1 texture of color c
   virtual ~DDSTexture();
   inline int getWidth() const
   {
@@ -93,24 +93,24 @@ class DDSTexture
     return textureCnt;
   }
   // no interpolation, returns color in RGBA format (LSB = red, MSB = alpha)
-  inline unsigned int getPixelN(int x, int y, int mipLevel) const
+  inline std::uint32_t getPixelN(int x, int y, int mipLevel) const
   {
     unsigned int  xMask = (xSizeMip0 - 1U) >> (unsigned char) mipLevel;
     unsigned int  yMask = (ySizeMip0 - 1U) >> (unsigned char) mipLevel;
     return textureData[mipLevel][((unsigned int) y & yMask) * (xMask + 1U)
                                  + ((unsigned int) x & xMask)];
   }
-  inline unsigned int getPixelN(int x, int y, int mipLevel, int n) const
+  inline std::uint32_t getPixelN(int x, int y, int mipLevel, int n) const
   {
     unsigned int  xMask = (xSizeMip0 - 1U) >> (unsigned char) mipLevel;
     unsigned int  yMask = (ySizeMip0 - 1U) >> (unsigned char) mipLevel;
-    const unsigned int  *p =
+    const std::uint32_t *p =
         textureData[mipLevel] + (textureDataSize * size_t(n));
     return p[((unsigned int) y & yMask) * (xMask + 1U)
              + ((unsigned int) x & xMask)];
   }
   // getPixelN() with mirrored instead of wrapped texture coordinates
-  inline unsigned int getPixelM(int x, int y, int mipLevel) const
+  inline std::uint32_t getPixelM(int x, int y, int mipLevel) const
   {
     int     xMask = int((xSizeMip0 - 1U) >> (unsigned char) mipLevel);
     int     yMask = int((ySizeMip0 - 1U) >> (unsigned char) mipLevel);
@@ -119,7 +119,7 @@ class DDSTexture
     return textureData[mipLevel][y * (xMask + 1) + x];
   }
   // getPixelN() with clamped texture coordinates
-  inline unsigned int getPixelC(int x, int y, int mipLevel) const
+  inline std::uint32_t getPixelC(int x, int y, int mipLevel) const
   {
     int     xMask = int((xSizeMip0 - 1U) >> (unsigned char) mipLevel);
     int     yMask = int((ySizeMip0 - 1U) >> (unsigned char) mipLevel);
@@ -153,8 +153,13 @@ class DDSTexture
   FloatVector4 cubeMap(float x, float y, float z, float mipLevel) const;
 };
 
-unsigned int downsample2xFilter(const unsigned int *buf,
-                                int imageWidth, int imageHeight, int x, int y);
+std::uint32_t downsample2xFilter(const std::uint32_t *buf,
+                                 int imageWidth, int imageHeight, int x, int y);
+
+// imageWidth, imageHeight: dimensions of input image
+// pitch: number of elements per line in outBuf
+void downsample2xFilter(std::uint32_t *outBuf, const std::uint32_t *inBuf,
+                        int imageWidth, int imageHeight, int pitch);
 
 #endif
 
