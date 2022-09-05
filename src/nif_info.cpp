@@ -4,14 +4,12 @@
 #include "ba2file.hpp"
 #include "ddstxt.hpp"
 #include "plot3d.hpp"
+#include "sdlvideo.hpp"
 
 #include <thread>
 #include <mutex>
 #include <algorithm>
-
-#ifdef HAVE_SDL2
-#  include <SDL2/SDL.h>
-#endif
+#include <ctime>
 
 static void printAuthorName(std::FILE *f,
                             const std::vector< unsigned char >& fileBuf,
@@ -142,7 +140,7 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
       std::fprintf(f, "    Material environment map scale: %.3f\n",
                    double(int(lspBlock->bgsmEnvMapScale)) * (1.0 / 128.0));
       std::fprintf(f, "    Material specular color (0xAABBGGRR): 0x%08X\n",
-                   lspBlock->bgsmSpecularColor);
+                   (unsigned int) lspBlock->bgsmSpecularColor);
       std::fprintf(f, "    Material specular scale: %.3f\n",
                    double(int(lspBlock->bgsmSpecularScale)) * (1.0 / 128.0));
       std::fprintf(f, "    Material specular smoothness: %.3f\n",
@@ -234,7 +232,7 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
       std::fprintf(f, "    %4d: XYZ: (%f, %f, %f), normals: (%f, %f, %f), "
                    "UV: (%f, %f), color: 0x%08X\n",
                    int(j), v.x, v.y, v.z, normalX, normalY, normalZ,
-                   v.getU(), v.getV(), v.vertexColor);
+                   v.getU(), v.getV(), (unsigned int) v.vertexColor);
     }
     std::fprintf(f, "  Triangle list:\n");
     for (size_t j = 0; j < meshData[i].triangleCnt; j++)
@@ -395,24 +393,24 @@ struct Renderer
   float   lightY;
   float   lightZ;
   float   waterEnvMapLevel;
-  unsigned int  waterColor;
+  std::uint32_t waterColor;
   int     threadCnt;
   const BA2File *ba2File;
   std::vector< unsigned char >  fileBuf;
   std::string defaultEnvMap;
   std::string waterTexture;
   std::string whiteTexture;
-  Renderer(unsigned int *outBufRGBA, float *outBufZ,
+  Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
            int imageWidth, int imageHeight, bool isFO76);
   ~Renderer();
-  void setBuffers(unsigned int *outBufRGBA, float *outBufZ,
+  void setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
                   int imageWidth, int imageHeight, float envMapScale);
   const DDSTexture *loadTexture(const std::string *texturePath, bool isDiffuse);
   static void threadFunction(Renderer *p, size_t n);
   void renderModel();
 };
 
-Renderer::Renderer(unsigned int *outBufRGBA, float *outBufZ,
+Renderer::Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
                    int imageWidth, int imageHeight, bool isFO76)
 {
   lightX = 0.0f;
@@ -449,7 +447,8 @@ Renderer::Renderer(unsigned int *outBufRGBA, float *outBufZ,
     }
     throw;
   }
-  setBuffers(outBufRGBA, outBufZ, imageWidth, imageHeight, 1.0f);
+  if (outBufRGBA && outBufZ)
+    setBuffers(outBufRGBA, outBufZ, imageWidth, imageHeight, 1.0f);
 }
 
 Renderer::~Renderer()
@@ -467,7 +466,7 @@ Renderer::~Renderer()
   }
 }
 
-void Renderer::setBuffers(unsigned int *outBufRGBA, float *outBufZ,
+void Renderer::setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
                           int imageWidth, int imageHeight, float envMapScale)
 {
   float   y0 = 0.0f;
@@ -670,42 +669,21 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                              const BA2File& ba2File,
                              int imageWidth, int imageHeight)
 {
-#ifdef HAVE_SDL2
-  int     screenWidth = imageWidth;
-  int     screenHeight = imageHeight;
-  bool    enableDownscale = bool(outFileName);
-  bool    enableFullScreen = false;
-  SDL_Window  *sdlWindow = (SDL_Window *) 0;
-  SDL_Surface *sdlScreen = (SDL_Surface *) 0;
-  if (!outFileName)
-  {
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) != 0)
-      throw errorMessage("error initializing SDL");
-    SDL_DisplayMode m;
-    if (SDL_GetDesktopDisplayMode(0, &m) == 0)
-    {
-      screenWidth = m.w;
-      screenHeight = m.h;
-      if ((imageWidth > screenWidth || imageHeight > screenHeight) &&
-          !((imageWidth | imageHeight) & 1))
-      {
-        enableDownscale = true;
-      }
-      if ((imageWidth >> int(enableDownscale)) == screenWidth &&
-          (imageHeight >> int(enableDownscale)) == screenHeight)
-      {
-        enableFullScreen = true;
-      }
-      screenWidth = imageWidth >> int(enableDownscale);
-      screenHeight = imageHeight >> int(enableDownscale);
-    }
-  }
-#endif
+  float   modelRotationX = 0.0f;
+  float   modelRotationY = 0.0f;
+  float   modelRotationZ = 0.0f;
+  float   lightRotationY = 56.25f;
+  float   lightRotationZ = -135.0f;
+  float   lightLevel = 1.0f;
+  int     viewRotation = 0;     // isometric from NW
+  float   viewScale = 1.0f;
+  int     envMapNum = 0;
+  float   envMapScale = 1.0f;
+  unsigned int  debugMode = 0;
 
-  try
+  size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
+  std::vector< std::uint32_t >  outBufRGBA(imageDataSize, 0U);
   {
-    size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
-    std::vector< unsigned int > outBufRGBA(imageDataSize, 0U);
     std::vector< float >  outBufZ(imageDataSize, 16777216.0f);
     Renderer  renderer(&(outBufRGBA.front()), &(outBufZ.front()),
                        imageWidth, imageHeight, (nifFile.getVersion() >= 0x90));
@@ -716,323 +694,643 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       renderer.whiteTexture = "textures/white.dds";
     else
       renderer.whiteTexture = "textures/effects/rainscene/test_flat_white.dds";
-#ifdef HAVE_SDL2
-    if (!outFileName)
+    renderer.modelTransform =
+        NIFFile::NIFVertexTransform(
+            1.0f, degreesToRadians(modelRotationX),
+            degreesToRadians(modelRotationY),
+            degreesToRadians(modelRotationZ), 0.0f, 0.0f, 0.0f);
+    renderer.viewTransform =
+        NIFFile::NIFVertexTransform(
+            1.0f,
+            degreesToRadians(viewRotations[viewRotation * 3]),
+            degreesToRadians(viewRotations[viewRotation * 3 + 1]),
+            degreesToRadians(viewRotations[viewRotation * 3 + 2]),
+            0.0f, 0.0f, 0.0f);
+    NIFFile::NIFVertexTransform
+        lightTransform(1.0f, 0.0f, degreesToRadians(lightRotationY),
+                       degreesToRadians(lightRotationZ), 0.0f, 0.0f, 0.0f);
+    renderer.lightX = lightTransform.rotateZX;
+    renderer.lightY = lightTransform.rotateZY;
+    renderer.lightZ = lightTransform.rotateZZ;
+    renderer.waterEnvMapLevel = 1.0f;
+    renderer.waterColor = 0xC0804000U;
     {
-      sdlWindow = SDL_CreateWindow(
-#if defined(_WIN32) || defined(_WIN64)
-                      "nif_view",
-#else
-                      "nif_info",
-#endif
-                      SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                      screenWidth, screenHeight,
-                      (enableFullScreen ? SDL_WINDOW_FULLSCREEN : 0));
-      if (!sdlWindow)
-        throw errorMessage("error creating SDL window");
-      sdlScreen = SDL_CreateRGBSurface(0, screenWidth, screenHeight, 32,
-                                       0x000000FFU, 0x0000FF00U,
-                                       0x00FF0000U, 0xFF000000U);
-      if (!sdlScreen)
-        throw errorMessage("error setting SDL video mode");
-      SDL_SetSurfaceBlendMode(sdlScreen, SDL_BLENDMODE_NONE);
+      NIFFile::NIFVertexTransform t(renderer.modelTransform);
+      t *= renderer.viewTransform;
+      NIFFile::NIFBounds  b;
+      for (size_t i = 0; i < renderer.meshData.size(); i++)
+      {
+        // ignore if hidden or effect
+        if (!(renderer.meshData[i].flags & 0x05))
+          renderer.meshData[i].calculateBounds(b, &t);
+      }
+      float   xScale = float(imageWidth) * 0.96875f;
+      if (b.xMax() > b.xMin())
+        xScale = xScale / (b.xMax() - b.xMin());
+      float   yScale = float(imageHeight) * 0.96875f;
+      if (b.yMax() > b.yMin())
+        yScale = yScale / (b.yMax() - b.yMin());
+      float   scale = (xScale < yScale ? xScale : yScale) * viewScale;
+      renderer.viewTransform.scale = scale;
+      renderer.viewTransform.offsX =
+          0.5f * (float(imageWidth) - ((b.xMin() + b.xMax()) * scale));
+      renderer.viewTransform.offsY =
+          0.5f * (float(imageHeight) - ((b.yMin() + b.yMax()) * scale));
+      renderer.viewTransform.offsZ = 1.0f - (b.zMin() * scale);
     }
-#endif
+    renderer.defaultEnvMap =
+        std::string(cubeMapPaths[envMapNum * 3
+                                 + int(nifFile.getVersion() >= 0x80)
+                                 + int(nifFile.getVersion() >= 0x90)]);
+    renderer.setBuffers(&(outBufRGBA.front()), &(outBufZ.front()),
+                        imageWidth, imageHeight, envMapScale);
+    {
+      FloatVector4  a(Plot3D_TriShape::cubeMapToAmbient(
+                          renderer.loadTexture(&(renderer.defaultEnvMap),
+                                               false),
+                          (nifFile.getVersion() >= 0x90)));
+      for (size_t i = 0; i < renderer.renderers.size(); i++)
+      {
+        renderer.renderers[i]->setLighting(
+            FloatVector4(1.0f), a, FloatVector4(1.0f), lightLevel);
+        renderer.renderers[i]->setDebugMode(debugMode, 0);
+      }
+    }
+    renderer.renderModel();
+  }
 
+  int     w = (imageWidth + 1) >> 1;
+  int     h = (imageHeight + 1) >> 1;
+  imageDataSize = size_t(w) * size_t(h);
+  std::vector< std::uint32_t >  downsampleBuf(imageDataSize);
+  downsample2xFilter(&(downsampleBuf.front()), &(outBufRGBA.front()),
+                     imageWidth, imageHeight, w);
+  DDSOutputFile outFile(outFileName, w, h, DDSInputFile::pixelFormatRGB24);
+  for (size_t i = 0; i < imageDataSize; i++)
+  {
+    std::uint32_t c = downsampleBuf[i];
+    outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
+    outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
+    outFile.writeByte((unsigned char) (c & 0xFF));
+  }
+}
+
+static void updateRotation(float& rx, float& ry, float& rz,
+                           float dx, float dy, float dz,
+                           std::string& messageBuf, const char *msg)
+{
+  rx += dx;
+  ry += dy;
+  rz += dz;
+  rx = (rx < -180.0f ? (rx + 360.0f) : (rx > 180.0f ? (rx - 360.0f) : rx));
+  ry = (ry < -180.0f ? (ry + 360.0f) : (ry > 180.0f ? (ry - 360.0f) : ry));
+  rz = (rz < -180.0f ? (rz + 360.0f) : (rz > 180.0f ? (rz - 360.0f) : rz));
+  if (!msg)
+    msg = "";
+  char    buf[64];
+  std::snprintf(buf, 64, "%s %7.2f %7.2f %7.2f\n", msg, rx, ry, rz);
+  buf[63] = '\0';
+  messageBuf = buf;
+}
+
+static void updateLightColor(FloatVector4& lightColor, FloatVector4 d,
+                             std::string& messageBuf)
+{
+  lightColor *= d;
+  lightColor.maxValues(FloatVector4(0.0625f));
+  lightColor.minValues(FloatVector4(4.0f));
+  char    buf[64];
+  std::snprintf(buf, 64,
+                "Light color (linear color space): %7.4f %7.4f %7.4f\n",
+                lightColor[0], lightColor[1], lightColor[2]);
+  buf[63] = '\0';
+  messageBuf = buf;
+}
+
+static void updateValueLogScale(float& s, int d, float minVal, float maxVal,
+                                std::string& messageBuf, const char *msg)
+{
+  int     tmp = roundFloat(float(std::log2(s)) * 4.0f);
+  s = float(std::exp2(float(tmp + d) * 0.25f));
+  s = (s > minVal ? (s < maxVal ? s : maxVal) : minVal);
+  if (!msg)
+    msg = "";
+  char    buf[64];
+  std::snprintf(buf, 64, "%s: %7.4f\n", msg, s);
+  buf[63] = '\0';
+  messageBuf = buf;
+}
+
+static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName)
+{
+  size_t  n1 = nifFileName.rfind('/');
+  n1 = (n1 != std::string::npos ? (n1 + 1) : 0);
+  size_t  n2 = nifFileName.rfind('.');
+  n2 = (n2 != std::string::npos ? n2 : 0);
+  std::string fileName;
+  if (n2 > n1)
+    fileName.assign(nifFileName, n1, n2 - n1);
+  else
+    fileName = "nif_info";
+  std::time_t t = std::time((std::time_t *) 0);
+  {
+    unsigned int  s = (unsigned int) (t % (std::time_t) (24 * 60 * 60));
+    unsigned int  m = s / 60U;
+    s = s % 60U;
+    unsigned int  h = m / 60U;
+    m = m % 60U;
+    h = h % 24U;
+    char    buf[16];
+    std::sprintf(buf, "_%02u%02u%02u.dds", h, m, s);
+    fileName += buf;
+  }
+  {
+    display.blitSurface();
+    const std::uint32_t *p = display.lockScreenSurface();
+    int     w = display.getWidth() >> int(display.getIsDownsampled());
+    int     h = display.getHeight() >> int(display.getIsDownsampled());
+    DDSOutputFile f(fileName.c_str(), w, h, DDSInputFile::pixelFormatRGB24);
+    size_t  pitch = display.getPitch();
+    for (int y = 0; y < h; y++, p = p + pitch)
+    {
+      for (int x = 0; x < w; x++)
+      {
+        std::uint32_t c = p[x];
+        f.writeByte((unsigned char) ((c >> 16) & 0xFF));
+        f.writeByte((unsigned char) ((c >> 8) & 0xFF));
+        f.writeByte((unsigned char) (c & 0xFF));
+      }
+    }
+    display.unlockScreenSurface();
+  }
+  display.printString("Saved screenshot to ");
+  display.printString(fileName.c_str());
+  display.printString("\n");
+}
+
+static const char *keyboardUsageString =
+    "  \033[4m\033[38;5;228m0\033[m "
+    "to \033[4m\033[38;5;228m5\033[m                "
+    "Set debug render mode.                                          \n"
+    "  \033[4m\033[38;5;228m+\033[m, "
+    "\033[4m\033[38;5;228m-\033[m                  "
+    "Zoom in or out.                                                 \n"
+    "  \033[4m\033[38;5;228mKeypad 1, 3, 9, 7\033[m     "
+    "Set isometric view from the SW, SE, NE, or NW (default).        \n"
+    "  \033[4m\033[38;5;228mKeypad 2, 6, 8, 4, 5\033[m  "
+    "Set view from the S, E, N, W, or top.                           \n"
+    "  \033[4m\033[38;5;228mF1\033[m "
+    "to \033[4m\033[38;5;228mF5\033[m              "
+    "Select default cube map.                                        \n"
+    "  \033[4m\033[38;5;228mA\033[m, "
+    "\033[4m\033[38;5;228mD\033[m                  "
+    "Rotate model around the Z axis.                                 \n"
+    "  \033[4m\033[38;5;228mS\033[m, "
+    "\033[4m\033[38;5;228mW\033[m                  "
+    "Rotate model around the X axis.                                 \n"
+    "  \033[4m\033[38;5;228mQ\033[m, "
+    "\033[4m\033[38;5;228mE\033[m                  "
+    "Rotate model around the Y axis.                                 \n"
+    "  \033[4m\033[38;5;228mK\033[m, "
+    "\033[4m\033[38;5;228mL\033[m                  "
+    "Decrease or increase overall brightness.                        \n"
+    "  \033[4m\033[38;5;228mU\033[m, "
+    "\033[4m\033[38;5;228m7\033[m                  "
+    "Decrease or increase light source red level.                    \n"
+    "  \033[4m\033[38;5;228mI\033[m, "
+    "\033[4m\033[38;5;228m8\033[m                  "
+    "Decrease or increase light source green level.                  \n"
+    "  \033[4m\033[38;5;228mO\033[m, "
+    "\033[4m\033[38;5;228m9\033[m                  "
+    "Decrease or increase light source blue level.                   \n"
+    "  \033[4m\033[38;5;228mLeft\033[m, "
+    "\033[4m\033[38;5;228mRight\033[m           "
+    "Rotate light vector around the Z axis.                          \n"
+    "  \033[4m\033[38;5;228mUp\033[m, "
+    "\033[4m\033[38;5;228mDown\033[m              "
+    "Rotate light vector around the Y axis.                          \n"
+    "  \033[4m\033[38;5;228mInsert\033[m, "
+    "\033[4m\033[38;5;228mDelete\033[m        "
+    "Zoom reflected environment in or out.                           \n"
+    "  \033[4m\033[38;5;228mPage Up\033[m               "
+    "Enable downsampling (slow).                                     \n"
+    "  \033[4m\033[38;5;228mPage Down\033[m             "
+    "Disable downsampling.                                           \n"
+    "  \033[4m\033[38;5;228mSpace\033[m, "
+    "\033[4m\033[38;5;228mBackspace\033[m      "
+    "Load next or previous file matching the pattern.                \n"
+    "  \033[4m\033[38;5;228mF12\033[m "
+    "or \033[4m\033[38;5;228mPrint Screen\033[m   "
+    "Save screenshot.                                                \n"
+    "  \033[4m\033[38;5;228mH\033[m                     "
+    "Show help screen.                                               \n"
+    "  \033[4m\033[38;5;228mEsc\033[m                   "
+    "Quit program.                                                   \n";
+
+static void viewMeshes(const BA2File& ba2File,
+                       const std::vector< std::string >& nifFileNames,
+                       int imageWidth, int imageHeight)
+{
+  if (nifFileNames.size() < 1)
+    return;
+  std::vector< SDLDisplay::SDLEvent > eventBuf;
+  std::string messageBuf;
+  SDLDisplay  display(imageWidth, imageHeight, "nif_info", 4U, 48);
+  bool    quitFlag = false;
+  try
+  {
+    display.setDefaultTextColor(0x00, 0xC1);
+    imageWidth = display.getWidth();
+    imageHeight = display.getHeight();
     float   modelRotationX = 0.0f;
     float   modelRotationY = 0.0f;
     float   modelRotationZ = 0.0f;
-    // light direction: 0, 54.7356, -135 degrees
-    float   lightRotationY = float(std::atan(std::sqrt(2.0)));
-    float   lightRotationZ = float(std::atan(1.0) * -3.0);
+    float   lightRotationX = 0.0f;
+    float   lightRotationY = 56.25f;
+    float   lightRotationZ = -135.0f;
+    FloatVector4  lightColor(1.0f);
     float   lightLevel = 1.0f;
     int     viewRotation = 0;   // isometric from NW
-    int     viewScale = 0;      // 1.0
+    float   viewScale = 1.0f;
     int     envMapNum = 0;
     float   envMapScale = 1.0f;
     unsigned int  debugMode = 0;
-    while (true)
-    {
-      renderer.modelTransform =
-          NIFFile::NIFVertexTransform(
-              1.0f, modelRotationX, modelRotationY, modelRotationZ,
-              0.0f, 0.0f, 0.0f);
-      renderer.viewTransform =
-          NIFFile::NIFVertexTransform(
-              1.0f,
-              degreesToRadians(viewRotations[viewRotation * 3]),
-              degreesToRadians(viewRotations[viewRotation * 3 + 1]),
-              degreesToRadians(viewRotations[viewRotation * 3 + 2]),
-              0.0f, 0.0f, 0.0f);
-      NIFFile::NIFVertexTransform
-          lightTransform(1.0f, 0.0f, lightRotationY, lightRotationZ,
-                         0.0f, 0.0f, 0.0f);
-      renderer.lightX = lightTransform.rotateZX;
-      renderer.lightY = lightTransform.rotateZY;
-      renderer.lightZ = lightTransform.rotateZZ;
-      renderer.waterEnvMapLevel = 1.0f;
-      renderer.waterColor = 0xC0804000U;
-      {
-        NIFFile::NIFVertexTransform t(renderer.modelTransform);
-        t *= renderer.viewTransform;
-        NIFFile::NIFBounds  b;
-        for (size_t i = 0; i < renderer.meshData.size(); i++)
-        {
-          // ignore if hidden or effect
-          if (!(renderer.meshData[i].flags & 0x05))
-            renderer.meshData[i].calculateBounds(b, &t);
-        }
-        float   xScale = float(imageWidth) * 0.9375f;
-        if (b.xMax() > b.xMin())
-          xScale = xScale / (b.xMax() - b.xMin());
-        float   yScale = float(imageHeight) * 0.9375f;
-        if (b.yMax() > b.yMin())
-          yScale = yScale / (b.yMax() - b.yMin());
-        float   scale = (xScale < yScale ? xScale : yScale)
-                        * float(std::pow(2.0f, float(viewScale) * 0.25f));
-        renderer.viewTransform.scale = scale;
-        renderer.viewTransform.offsX =
-            0.5f * (float(imageWidth) - ((b.xMin() + b.xMax()) * scale));
-        renderer.viewTransform.offsY =
-            0.5f * (float(imageHeight) - ((b.yMin() + b.yMax()) * scale));
-        renderer.viewTransform.offsZ = 1.0f - (b.zMin() * scale);
-      }
-      renderer.defaultEnvMap =
-          std::string(cubeMapPaths[envMapNum * 3
-                                   + int(nifFile.getVersion() >= 0x80)
-                                   + int(nifFile.getVersion() >= 0x90)]);
-      renderer.setBuffers(&(outBufRGBA.front()), &(outBufZ.front()),
-                          imageWidth, imageHeight, envMapScale);
-      {
-        FloatVector4  a(Plot3D_TriShape::cubeMapToAmbient(
-                            renderer.loadTexture(&(renderer.defaultEnvMap),
-                                                 false),
-                            (nifFile.getVersion() >= 0x90)));
-        for (size_t i = 0; i < renderer.renderers.size(); i++)
-        {
-          renderer.renderers[i]->setLighting(
-              FloatVector4(1.0f), a, FloatVector4(1.0f), lightLevel);
-          renderer.renderers[i]->setDebugMode(debugMode, 0);
-        }
-      }
-      renderer.renderModel();
+    int     fileNum = 0;
 
-#ifdef HAVE_SDL2
-      if (!outFileName)
+    size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
+    std::vector< float >  outBufZ(imageDataSize);
+    std::vector< unsigned char >  fileBuf;
+    while (!quitFlag)
+    {
+      messageBuf += nifFileNames[fileNum];
+      messageBuf += '\n';
+      ba2File.extractFile(fileBuf, nifFileNames[fileNum]);
+      NIFFile   nifFile(&(fileBuf.front()), fileBuf.size(), &ba2File);
+      Renderer  renderer((std::uint32_t *) 0, (float *) 0,
+                         imageWidth, imageHeight,
+                         (nifFile.getVersion() >= 0x90));
+      renderer.ba2File = &ba2File;
+      nifFile.getMesh(renderer.meshData);
+      renderer.waterTexture = "textures/water/defaultwater.dds";
+      renderer.whiteTexture =
+          (nifFile.getVersion() < 0x80U ?
+           "textures/white.dds"
+           : "textures/effects/rainscene/test_flat_white.dds");
+
+      bool    nextFileFlag = false;
+      bool    screenshotFlag = false;
+      unsigned char redrawFlags = 3;    // bit 0: blit only, bit 1: render
+      while (!(nextFileFlag || quitFlag))
       {
-        SDL_LockSurface(sdlScreen);
-        Uint32  *dstPtr = reinterpret_cast< Uint32 * >(sdlScreen->pixels);
-        if (!enableDownscale)
+        if (!messageBuf.empty())
         {
-          unsigned int  *srcPtr = &(outBufRGBA.front());
-          for (int y = 0; y < imageHeight; y++)
-          {
-            for (int x = 0; x < imageWidth; x++, srcPtr++, dstPtr++)
-            {
-              *dstPtr = *srcPtr;
-              *srcPtr = 0U;
-              outBufZ[size_t(srcPtr - &(outBufRGBA.front()))] = 16777216.0f;
-            }
-            dstPtr = dstPtr + (int(sdlScreen->pitch >> 2) - screenWidth);
-          }
+          display.printString(messageBuf.c_str());
+          messageBuf.clear();
         }
-        else
+        if (redrawFlags & 2)
         {
-          for (int y = 0; y < imageHeight; y = y + 2)
+          renderer.modelTransform =
+              NIFFile::NIFVertexTransform(
+                  1.0f, degreesToRadians(modelRotationX),
+                  degreesToRadians(modelRotationY),
+                  degreesToRadians(modelRotationZ), 0.0f, 0.0f, 0.0f);
+          renderer.viewTransform =
+              NIFFile::NIFVertexTransform(
+                  1.0f,
+                  degreesToRadians(viewRotations[viewRotation * 3]),
+                  degreesToRadians(viewRotations[viewRotation * 3 + 1]),
+                  degreesToRadians(viewRotations[viewRotation * 3 + 2]),
+                  0.0f, 0.0f, 0.0f);
+          NIFFile::NIFVertexTransform
+              lightTransform(
+                  1.0f, degreesToRadians(lightRotationX),
+                  degreesToRadians(lightRotationY),
+                  degreesToRadians(lightRotationZ), 0.0f, 0.0f, 0.0f);
+          renderer.lightX = lightTransform.rotateZX;
+          renderer.lightY = lightTransform.rotateZY;
+          renderer.lightZ = lightTransform.rotateZZ;
+          renderer.waterEnvMapLevel = 1.0f;
+          renderer.waterColor = 0xC0804000U;
+          NIFFile::NIFVertexTransform t(renderer.modelTransform);
+          t *= renderer.viewTransform;
+          NIFFile::NIFBounds  b;
+          for (size_t i = 0; i < renderer.meshData.size(); i++)
           {
-            for (int x = 0; x < imageWidth; x = x + 2, dstPtr++)
-            {
-              *dstPtr = downsample2xFilter(&(outBufRGBA.front()),
-                                           imageWidth, imageHeight, x, y);
-            }
-            dstPtr = dstPtr + (int(sdlScreen->pitch >> 2) - screenWidth);
+            // ignore if hidden or effect
+            if (!(renderer.meshData[i].flags & 0x05))
+              renderer.meshData[i].calculateBounds(b, &t);
           }
-          std::memset(&(outBufRGBA.front()), 0,
-                      sizeof(unsigned int) * imageDataSize);
+          float   xScale = float(imageWidth) * 0.96875f;
+          if (b.xMax() > b.xMin())
+            xScale = xScale / (b.xMax() - b.xMin());
+          float   yScale = float(imageHeight) * 0.96875f;
+          if (b.yMax() > b.yMin())
+            yScale = yScale / (b.yMax() - b.yMin());
+          float   scale = (xScale < yScale ? xScale : yScale) * viewScale;
+          renderer.viewTransform.scale = scale;
+          renderer.viewTransform.offsX =
+              0.5f * (float(imageWidth) - ((b.xMin() + b.xMax()) * scale));
+          renderer.viewTransform.offsY =
+              0.5f * (float(imageHeight) - ((b.yMin() + b.yMax()) * scale));
+          renderer.viewTransform.offsZ = 1.0f - (b.zMin() * scale);
+          renderer.defaultEnvMap =
+              std::string(cubeMapPaths[envMapNum * 3
+                                       + int(nifFile.getVersion() >= 0x80)
+                                       + int(nifFile.getVersion() >= 0x90)]);
+          display.clearSurface();
           for (size_t i = 0; i < imageDataSize; i++)
             outBufZ[i] = 16777216.0f;
-        }
-        SDL_UnlockSurface(sdlScreen);
-        SDL_BlitSurface(sdlScreen, (SDL_Rect *) 0,
-                        SDL_GetWindowSurface(sdlWindow), (SDL_Rect *) 0);
-        SDL_UpdateWindowSurface(sdlWindow);
-        bool    keyPressed = false;
-        bool    quitFlag = false;
-        while (!(keyPressed || quitFlag))
-        {
-          SDL_Delay(10);
-          SDL_Event event;
-          while (SDL_PollEvent(&event))
+          std::uint32_t *outBufRGBA = display.lockDrawSurface();
+          renderer.setBuffers(outBufRGBA, &(outBufZ.front()),
+                              imageWidth, imageHeight, envMapScale);
+          FloatVector4  a(Plot3D_TriShape::cubeMapToAmbient(
+                              renderer.loadTexture(&(renderer.defaultEnvMap),
+                                                   false),
+                              (nifFile.getVersion() >= 0x90)));
+          for (size_t i = 0; i < renderer.renderers.size(); i++)
           {
-            if (event.type != SDL_KEYDOWN)
+            renderer.renderers[i]->setLighting(
+                lightColor, a, FloatVector4(1.0f), lightLevel);
+            renderer.renderers[i]->setDebugMode(debugMode, 0);
+          }
+          renderer.renderModel();
+          display.unlockDrawSurface();
+          if (screenshotFlag)
+          {
+            saveScreenshot(display, nifFileNames[fileNum]);
+            screenshotFlag = false;
+          }
+          display.drawText(0, -1, display.getTextRows(), 0.75f, 1.0f);
+          redrawFlags = 1;
+        }
+        display.blitSurface();
+        redrawFlags = 0;
+
+        while (!(redrawFlags || nextFileFlag || quitFlag))
+        {
+          display.pollEvents(eventBuf, 10, false, false);
+          for (size_t i = 0; i < eventBuf.size(); i++)
+          {
+            int     t = eventBuf[i].type();
+            int     d1 = eventBuf[i].data1();
+            if (t == SDLDisplay::SDLEventWindow)
             {
-              if (event.type == SDL_QUIT)
+              if (d1 == 0)
                 quitFlag = true;
+              else if (d1 == 1)
+                redrawFlags = 1;
               continue;
             }
-            switch (event.key.keysym.sym)
+            if (!(t == SDLDisplay::SDLEventKeyRepeat ||
+                  t == SDLDisplay::SDLEventKeyDown))
             {
-              case SDLK_0:
-              case SDLK_1:
-                debugMode = 0;
+              continue;
+            }
+            redrawFlags = 2;
+            switch (d1)
+            {
+              case '0':
+              case '1':
+              case '2':
+              case '3':
+              case '4':
+              case '5':
+                debugMode = (unsigned int) (d1 != '1' ? (d1 - '0') : 0);
+                messageBuf += "Debug mode set to ";
+                messageBuf += char(debugMode | 0x30U);
+                messageBuf += '\n';
                 break;
-              case SDLK_2:
-              case SDLK_3:
-              case SDLK_4:
-              case SDLK_5:
-                debugMode = (unsigned int) (event.key.keysym.sym - SDLK_0);
+              case '-':
+              case SDLDisplay::SDLKeySymKPMinus:
+                updateValueLogScale(viewScale, -1, 0.0625f, 16.0f, messageBuf,
+                                    "View scale");
                 break;
-              case SDLK_MINUS:
-              case SDLK_KP_MINUS:
-                viewScale -= int(viewScale > -16);
+              case '=':
+              case SDLDisplay::SDLKeySymKPPlus:
+                updateValueLogScale(viewScale, 1, 0.0625f, 16.0f, messageBuf,
+                                    "View scale");
                 break;
-              case SDLK_EQUALS:
-              case SDLK_KP_PLUS:
-                viewScale += int(viewScale < 16);
+              case SDLDisplay::SDLKeySymKP1 + 6:
+                viewRotation = 0;
+                messageBuf += "Isometric view from the NW\n";
                 break;
-              case SDLK_KP_7:
-                viewRotation = 0;                       // isometric / NW
+              case SDLDisplay::SDLKeySymKP1:
+                viewRotation = 1;
+                messageBuf += "Isometric view from the SW\n";
                 break;
-              case SDLK_KP_1:
-                viewRotation = 1;                       // isometric / SW
+              case SDLDisplay::SDLKeySymKP1 + 2:
+                viewRotation = 2;
+                messageBuf += "Isometric view from the SE\n";
                 break;
-              case SDLK_KP_3:
-                viewRotation = 2;                       // isometric / SE
+              case SDLDisplay::SDLKeySymKP1 + 8:
+                viewRotation = 3;
+                messageBuf += "Isometric view from the NE\n";
                 break;
-              case SDLK_KP_9:
-                viewRotation = 3;                       // isometric / NE
+              case SDLDisplay::SDLKeySymKP1 + 4:
+                viewRotation = 4;
+                messageBuf += "Top view\n";
                 break;
-              case SDLK_KP_5:
-                viewRotation = 4;                       // top
+              case SDLDisplay::SDLKeySymKP1 + 1:
+                viewRotation = 5;
+                messageBuf += "S view\n";
                 break;
-              case SDLK_KP_2:
-                viewRotation = 5;                       // front
+              case SDLDisplay::SDLKeySymKP1 + 5:
+                viewRotation = 6;
+                messageBuf += "E view\n";
                 break;
-              case SDLK_KP_6:
-                viewRotation = 6;                       // right
+              case SDLDisplay::SDLKeySymKP1 + 7:
+                viewRotation = 7;
+                messageBuf += "N view\n";
                 break;
-              case SDLK_KP_8:
-                viewRotation = 7;                       // back
+              case SDLDisplay::SDLKeySymKP1 + 3:
+                viewRotation = 8;
+                messageBuf += "W view\n";
                 break;
-              case SDLK_KP_4:
-                viewRotation = 8;                       // left
+              case SDLDisplay::SDLKeySymF1:
+              case SDLDisplay::SDLKeySymF1 + 1:
+              case SDLDisplay::SDLKeySymF1 + 2:
+              case SDLDisplay::SDLKeySymF1 + 3:
+              case SDLDisplay::SDLKeySymF1 + 4:
+                envMapNum = d1 - SDLDisplay::SDLKeySymF1;
+                messageBuf += "Default environment map: ";
+                messageBuf += cubeMapPaths[envMapNum * 3
+                                           + int(nifFile.getVersion() >= 0x80)
+                                           + int(nifFile.getVersion() >= 0x90)];
+                messageBuf += '\n';
                 break;
-              case SDLK_F1:
-              case SDLK_F2:
-              case SDLK_F3:
-              case SDLK_F4:
-              case SDLK_F5:
-                envMapNum = int(event.key.keysym.sym - SDLK_F1);
+              case 'a':
+                updateRotation(modelRotationX, modelRotationY, modelRotationZ,
+                               0.0f, 0.0f, 11.25f,
+                               messageBuf, "Model rotation");
                 break;
-              case SDLK_a:
-                modelRotationZ += 0.19634954f;          // 11.25 degrees
+              case 'd':
+                updateRotation(modelRotationX, modelRotationY, modelRotationZ,
+                               0.0f, 0.0f, -11.25f,
+                               messageBuf, "Model rotation");
                 break;
-              case SDLK_d:
-                modelRotationZ -= 0.19634954f;
+              case 's':
+                updateRotation(modelRotationX, modelRotationY, modelRotationZ,
+                               11.25f, 0.0f, 0.0f,
+                               messageBuf, "Model rotation");
                 break;
-              case SDLK_s:
-                modelRotationX += 0.19634954f;
+              case 'w':
+                updateRotation(modelRotationX, modelRotationY, modelRotationZ,
+                               -11.25f, 0.0f, 0.0f,
+                               messageBuf, "Model rotation");
                 break;
-              case SDLK_w:
-                modelRotationX -= 0.19634954f;
+              case 'q':
+                updateRotation(modelRotationX, modelRotationY, modelRotationZ,
+                               0.0f, -11.25f, 0.0f,
+                               messageBuf, "Model rotation");
                 break;
-              case SDLK_q:
-                modelRotationY -= 0.19634954f;
+              case 'e':
+                updateRotation(modelRotationX, modelRotationY, modelRotationZ,
+                               0.0f, 11.25f, 0.0f,
+                               messageBuf, "Model rotation");
                 break;
-              case SDLK_e:
-                modelRotationY += 0.19634954f;
+              case 'k':
+                updateValueLogScale(lightLevel, -1, 0.25f, 4.0f, messageBuf,
+                                    "Brightness (linear color space)");
                 break;
-              case SDLK_k:
-                lightLevel = lightLevel * 0.84089642f;
-                lightLevel = (lightLevel > 0.25f ? lightLevel : 0.25f);
+              case 'l':
+                updateValueLogScale(lightLevel, 1, 0.25f, 4.0f, messageBuf,
+                                    "Brightness (linear color space)");
                 break;
-              case SDLK_l:
-                lightLevel = lightLevel * 1.18920712f;
-                lightLevel = (lightLevel < 4.0f ? lightLevel : 4.0f);
+              case SDLDisplay::SDLKeySymLeft:
+                updateRotation(lightRotationX, lightRotationY, lightRotationZ,
+                               0.0f, 0.0f, 11.25f,
+                               messageBuf, "Light rotation");
                 break;
-              case SDLK_LEFT:
-                lightRotationZ += 0.19634954f;
+              case SDLDisplay::SDLKeySymRight:
+                updateRotation(lightRotationX, lightRotationY, lightRotationZ,
+                               0.0f, 0.0f, -11.25f,
+                               messageBuf, "Light rotation");
                 break;
-              case SDLK_RIGHT:
-                lightRotationZ -= 0.19634954f;
+              case SDLDisplay::SDLKeySymDown:
+                updateRotation(lightRotationX, lightRotationY, lightRotationZ,
+                               0.0f, 11.25f, 0.0f,
+                               messageBuf, "Light rotation");
                 break;
-              case SDLK_DOWN:
-                lightRotationY += 0.19634954f;
+              case SDLDisplay::SDLKeySymUp:
+                updateRotation(lightRotationX, lightRotationY, lightRotationZ,
+                               0.0f, -11.25f, 0.0f,
+                               messageBuf, "Light rotation");
                 break;
-              case SDLK_UP:
-                lightRotationY -= 0.19634954f;
+              case '7':
+                updateLightColor(lightColor,
+                                 FloatVector4(1.18920712f, 1.0f, 1.0f, 1.0f),
+                                 messageBuf);
                 break;
-              case SDLK_INSERT:
-                envMapScale = envMapScale * 1.18920712f;
-                envMapScale = (envMapScale < 4.0f ? envMapScale : 4.0f);
+              case 'u':
+                updateLightColor(lightColor,
+                                 FloatVector4(0.84089642f, 1.0f, 1.0f, 1.0f),
+                                 messageBuf);
                 break;
-              case SDLK_DELETE:
-                envMapScale = envMapScale * 0.84089642f;
-                envMapScale = (envMapScale > 0.5f ? envMapScale : 0.5f);
+              case '8':
+                updateLightColor(lightColor,
+                                 FloatVector4(1.0f, 1.18920712f, 1.0f, 1.0f),
+                                 messageBuf);
                 break;
-              case SDLK_PAGEUP:
-              case SDLK_PAGEDOWN:
-                enableDownscale = (event.key.keysym.sym == SDLK_PAGEUP);
-                imageWidth = screenWidth << int(enableDownscale);
-                imageHeight = screenHeight << int(enableDownscale);
+              case 'i':
+                updateLightColor(lightColor,
+                                 FloatVector4(1.0f, 0.84089642f, 1.0f, 1.0f),
+                                 messageBuf);
+                break;
+              case '9':
+                updateLightColor(lightColor,
+                                 FloatVector4(1.0f, 1.0f, 1.18920712f, 1.0f),
+                                 messageBuf);
+                break;
+              case 'o':
+                updateLightColor(lightColor,
+                                 FloatVector4(1.0f, 1.0f, 0.84089642f, 1.0f),
+                                 messageBuf);
+                break;
+              case SDLDisplay::SDLKeySymInsert:
+                updateValueLogScale(envMapScale, 1, 0.5f, 4.0f, messageBuf,
+                                    "Reflection f scale");
+                break;
+              case SDLDisplay::SDLKeySymDelete:
+                updateValueLogScale(envMapScale, -1, 0.5f, 4.0f, messageBuf,
+                                    "Reflection f scale");
+                break;
+              case SDLDisplay::SDLKeySymPageUp:
+              case SDLDisplay::SDLKeySymPageDown:
+                if ((d1 == SDLDisplay::SDLKeySymPageUp)
+                    == display.getIsDownsampled())
+                {
+                  redrawFlags = 0;
+                  continue;
+                }
+                display.setEnableDownsample(d1 == SDLDisplay::SDLKeySymPageUp);
+                imageWidth = display.getWidth();
+                imageHeight = display.getHeight();
                 imageDataSize = size_t(imageWidth) * size_t(imageHeight);
-                outBufRGBA.resize(imageDataSize, 0U);
-                outBufZ.resize(imageDataSize, 16777216.0f);
+                outBufZ.resize(imageDataSize);
+                if (display.getIsDownsampled())
+                  messageBuf += "Downsampling enabled\n";
+                else
+                  messageBuf += "Downsampling disabled\n";
                 break;
-              case SDLK_ESCAPE:
+              case SDLDisplay::SDLKeySymBackspace:
+                fileNum = (fileNum > 0 ? fileNum : int(nifFileNames.size()));
+                fileNum--;
+                nextFileFlag = true;
+                break;
+              case ' ':
+                fileNum++;
+                fileNum = (size_t(fileNum) < nifFileNames.size() ? fileNum : 0);
+                nextFileFlag = true;
+                break;
+              case SDLDisplay::SDLKeySymF1 + 11:
+              case SDLDisplay::SDLKeySymPrintScr:
+                screenshotFlag = true;
+                break;
+              case 'h':
+                messageBuf = keyboardUsageString;
+                break;
+              case SDLDisplay::SDLKeySymEscape:
                 quitFlag = true;
                 break;
               default:
+                redrawFlags = 0;
                 continue;
             }
-            keyPressed = true;
+            display.clearTextBuffer();
           }
         }
-        if (!quitFlag)
-          continue;
       }
-#endif
-      break;
     }
-#ifdef HAVE_SDL2
-    if (outFileName)
-#endif
+  }
+  catch (std::exception& e)
+  {
+    display.unlockScreenSurface();
+    messageBuf += "\033[41m\033[33m\033[1m    Error: ";
+    messageBuf += e.what();
+    messageBuf += "    ";
+    display.printString(messageBuf.c_str());
+    display.drawText(0, -1, display.getTextRows(), 1.0f, 1.0f);
+    display.blitSurface();
+    do
     {
-      DDSOutputFile outFile(outFileName, imageWidth >> 1, imageHeight >> 1,
-                            DDSInputFile::pixelFormatRGB24);
-      for (int y = 0; y < imageHeight; y = y + 2)
+      display.pollEvents(eventBuf, 10, false, false);
+      for (size_t i = 0; i < eventBuf.size(); i++)
       {
-        for (int x = 0; x < imageWidth; x = x + 2)
+        if ((eventBuf[i].type() == SDLDisplay::SDLEventWindow &&
+             eventBuf[i].data1() == 0) ||
+            eventBuf[i].type() == SDLDisplay::SDLEventKeyDown)
         {
-          unsigned int  c = downsample2xFilter(&(outBufRGBA.front()),
-                                               imageWidth, imageHeight, x, y);
-          outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
-          outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
-          outFile.writeByte((unsigned char) (c & 0xFF));
+          quitFlag = true;
+          break;
+        }
+        else if (eventBuf[i].type() == SDLDisplay::SDLEventWindow &&
+                 eventBuf[i].data1() == 1)
+        {
+          display.blitSurface();
         }
       }
     }
-#ifdef HAVE_SDL2
-    if (!outFileName)
-    {
-      SDL_FreeSurface(sdlScreen);
-      SDL_DestroyWindow(sdlWindow);
-      SDL_Quit();
-    }
-#endif
-  }
-  catch (...)
-  {
-#ifdef HAVE_SDL2
-    if (!outFileName)
-    {
-      if (sdlScreen)
-        SDL_FreeSurface(sdlScreen);
-      if (sdlWindow)
-        SDL_DestroyWindow(sdlWindow);
-      SDL_Quit();
-    }
-#endif
+    while (!quitFlag);
     throw;
   }
 }
@@ -1040,6 +1338,8 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
 int main(int argc, char **argv)
 {
   std::FILE *outFile = stdout;
+  const char  *outFileName = (char *) 0;
+  bool    consoleFlag = true;
   try
   {
     // 0: default (block list)
@@ -1052,30 +1352,35 @@ int main(int argc, char **argv)
     int     outFmt = 0;
     int     renderWidth = 1344;
     int     renderHeight = 896;
-    if (argc >= 2)
+    for ( ; argc >= 2 && argv[1][0] == '-'; argc--, argv++)
     {
-      static const char *formatOptions[6] =
+      if (std::strcmp(argv[1], "--") == 0)
       {
-        "-q", "-v", "-obj", "-mtl", "-render", "-view"
-      };
-      for (size_t i = 0; i < (sizeof(formatOptions) / sizeof(char *)); i++)
-      {
-        if (std::strcmp(argv[1], formatOptions[i]) == 0)
-        {
-          outFmt = int(i + 1);
-          argc--;
-          argv++;
-          break;
-        }
-      }
-      if (outFmt == 0 &&
-          (std::strncmp(argv[1], "-render", 7) == 0 ||
-           std::strncmp(argv[1], "-view", 5) == 0))
-      {
-        outFmt = (argv[1][1] == 'r' ? 5 : 6);
         argc--;
         argv++;
-        std::string tmp(argv[0] + (outFmt == 5 ? 7 : 5));
+        break;
+      }
+      if (std::strcmp(argv[1], "-q") == 0)
+      {
+        outFmt = 1;
+      }
+      else if (std::strcmp(argv[1], "-v") == 0)
+      {
+        outFmt = 2;
+      }
+      else if (std::strcmp(argv[1], "-obj") == 0)
+      {
+        outFmt = 3;
+      }
+      else if (std::strcmp(argv[1], "-mtl") == 0)
+      {
+        outFmt = 4;
+      }
+      else if (std::strncmp(argv[1], "-render", 7) == 0 ||
+               std::strncmp(argv[1], "-view", 5) == 0)
+      {
+        outFmt = (argv[1][1] == 'r' ? 5 : 6);
+        std::string tmp(argv[1] + (outFmt == 5 ? 7 : 5));
         size_t  n = tmp.find('x');
         if (n != std::string::npos)
         {
@@ -1085,42 +1390,78 @@ int main(int argc, char **argv)
           renderWidth = int(parseInteger(tmp.c_str(), 10,
                                          "invalid image width", 8, 16384));
         }
-        else
+        else if (!tmp.empty())
         {
           throw errorMessage("invalid image dimensions");
         }
+        if (outFmt == 5)
+        {
+          if (argc < 3)
+            throw errorMessage("missing output file name for -render");
+          outFileName = argv[2];
+          argc--;
+          argv++;
+        }
+      }
+      else
+      {
+        throw errorMessage("invalid option: %s", argv[1]);
       }
     }
-    if (argc < (outFmt != 5 ? 3 : 4))
+    if (argc < 3)
     {
-      std::fprintf(stderr, "Usage: nif_info [OPTION] ARCHIVEPATH PATTERN...\n");
+      std::fprintf(stderr,
+                   "Usage: nif_info [OPTIONS] ARCHIVEPATH PATTERN...\n");
       std::fprintf(stderr, "Options:\n");
+      std::fprintf(stderr, "    --      Remaining options are file names\n");
       std::fprintf(stderr, "    -q      Print author name, file name, "
                            "and file size only\n");
       std::fprintf(stderr, "    -v      Verbose mode, print block list, "
                            "and vertex and triangle data\n");
       std::fprintf(stderr, "    -obj    Print model data in .obj format\n");
       std::fprintf(stderr, "    -mtl    Print material data in .mtl format\n");
-      std::fprintf(stderr, "    -render[WIDTHxHEIGHT] DDSFILE       "
-                           "Render model to DDS file (experimental)\n");
+      std::fprintf(stderr, "    -render[WIDTHxHEIGHT] DDSFILE   "
+                           "Render model to DDS file\n");
 #ifdef HAVE_SDL2
-      std::fprintf(stderr, "    -view[WIDTHxHEIGHT] View model\n");
+      std::fprintf(stderr, "    -view[WIDTHxHEIGHT]     View model\n");
 #endif
       return 1;
     }
+    consoleFlag = false;
+    if (outFmt != 6)
+      SDLDisplay::enableConsole();
     std::vector< std::string >  fileNames;
     for (int i = 2; i < argc; i++)
       fileNames.push_back(argv[i]);
     fileNames.push_back(".bgsm");
     if (outFmt >= 5)
       fileNames.push_back(".dds");
-    if (outFmt == 5)
-    {
-      argc--;
-      argv++;
-    }
     BA2File ba2File(argv[1], &fileNames);
     ba2File.getFileList(fileNames);
+    if (outFmt == 6)
+    {
+      for (size_t i = 0; i < fileNames.size(); )
+      {
+        if (fileNames[i].length() >= 5)
+        {
+          const char  *suffix =
+              fileNames[i].c_str() + (fileNames[i].length() - 4);
+          if (std::strcmp(suffix, ".nif") == 0 ||
+              std::strcmp(suffix, ".btr") == 0 ||
+              std::strcmp(suffix, ".bto") == 0)
+          {
+            i++;
+            continue;
+          }
+        }
+        if ((i + 1) < fileNames.size())
+          fileNames[i] = fileNames[fileNames.size() - 1];
+        fileNames.resize(fileNames.size() - 1);
+      }
+      std::sort(fileNames.begin(), fileNames.end());
+      viewMeshes(ba2File, fileNames, renderWidth, renderHeight);
+      return 0;
+    }
     for (size_t i = 0; i < fileNames.size(); i++)
     {
       if (fileNames[i].length() < 5)
@@ -1161,29 +1502,19 @@ int main(int argc, char **argv)
       }
       if (outFmt == 4)
         printMTLData(outFile, nifFile);
-      if (outFmt == 5 || outFmt == 6)
+      if (outFmt == 5)
       {
         std::fprintf(stderr, "%s\n", fileNames[i].c_str());
-        if (outFmt == 5)
-        {
-          renderMeshToFile(argv[0], nifFile, ba2File,
-                           renderWidth << 1, renderHeight << 1);
-        }
-        else
-        {
-#ifdef HAVE_SDL2
-          renderMeshToFile((char *) 0, nifFile, ba2File,
-                           renderWidth, renderHeight);
-#else
-          throw errorMessage("viewing the model requires SDL 2");
-#endif
-        }
+        renderMeshToFile(outFileName, nifFile, ba2File,
+                         renderWidth << 1, renderHeight << 1);
         break;
       }
     }
   }
   catch (std::exception& e)
   {
+    if (consoleFlag)
+      SDLDisplay::enableConsole();
     std::fprintf(stderr, "nif_info: %s\n", e.what());
     return 1;
   }
