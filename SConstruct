@@ -26,13 +26,13 @@ libSources += ["src/plot3d.cpp", "src/landtxt.cpp", "src/terrmesh.cpp"]
 fo76utilsLib = env.StaticLibrary("fo76utils", libSources)
 env.Prepend(LIBS = [fo76utilsLib])
 nifViewEnv = env.Clone()
-buildNIFView = True
+buildCubeView = True
 try:
     sdlPackageName = ["sdl2", "SDL2"][int("win" in sys.platform)]
     nifViewEnv.ParseConfig("pkg-config --cflags --libs " + sdlPackageName)
     nifViewEnv.Append(CXXFLAGS = ["-DHAVE_SDL2=1"])
 except:
-    buildNIFView = False
+    buildCubeView = False
 
 baunpack = env.Program("baunpack", ["src/baunpack.cpp"])
 bcdecode = env.Program("bcdecode", ["src/bcdecode.cpp"])
@@ -43,24 +43,20 @@ findwater = env.Program("findwater", ["src/findwater.cpp"])
 fo4land = env.Program("fo4land", ["src/fo4land.cpp"])
 landtxt = env.Program("landtxt", ["src/ltxtmain.cpp"])
 markers = env.Program("markers", ["src/markers.cpp"])
-if buildNIFView and not "win" in sys.platform:
-    nif_info = nifViewEnv.Program("nif_info", ["src/nif_info.cpp"])
-    cubeview = nifViewEnv.Program("cubeview", ["src/cubeview.cpp"])
-else:
-    nif_info = env.Program("nif_info", ["src/nif_info.cpp"])
+nif_info = nifViewEnv.Program("nif_info",
+                              ["src/nif_info.cpp", "src/sdlvideo.cpp"])
+if buildCubeView:
+    cubeview = nifViewEnv.Program("cubeview",
+                                  ["src/cubeview.cpp", "src/sdlvideo.cpp"])
 render = env.Program("render", ["src/render.cpp"])
 terrain = env.Program("terrain", ["src/terrain.cpp"])
 
 if "win" in sys.platform:
-    if buildNIFView:
-        nif_view_o = nifViewEnv.Object("nif_view", ["src/nif_info.cpp"])
-        nif_view = nifViewEnv.Program("nif_view", nif_view_o)
-        cubeview = nifViewEnv.Program("cubeview", ["src/cubeview.cpp"])
     if buildPackage:
         pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, findwater]
         pkgFiles += [fo4land, landtxt, markers, nif_info, render, terrain]
-        if buildNIFView:
-            pkgFiles += [nif_view, cubeview]
+        if buildCubeView:
+            pkgFiles += [cubeview]
             pkgFiles += ["/mingw64/bin/SDL2.dll", "LICENSE.SDL"]
         pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
         pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
