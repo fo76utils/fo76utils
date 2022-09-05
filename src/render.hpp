@@ -120,7 +120,7 @@ class Renderer
     void join();
     void clear();
   };
-  unsigned int  *outBufRGBA;
+  std::uint32_t *outBufRGBA;
   float   *outBufZ;
   int     width;
   int     height;
@@ -133,7 +133,7 @@ class Renderer
   int     textureMip;
   float   landTextureMip;
   float   landTxtRGBScale;
-  unsigned int  landTxtDefColor;
+  std::uint32_t landTxtDefColor;
   LandscapeData *landData;
   int     cellTextureResolution;
   float   defaultWaterLevel;
@@ -164,7 +164,7 @@ class Renderer
   std::map< unsigned int, std::vector< MaterialSwap > > materialSwaps;
   std::vector< RenderThread > renderThreads;
   std::string stringBuf;
-  unsigned int  waterColor;
+  std::uint32_t waterColor;
   float   waterReflectionLevel;
   int     zRangeMax;
   bool    verboseMode;
@@ -225,18 +225,18 @@ class Renderer
   static void threadFunction(Renderer *p, size_t threadNum,
                              size_t startPos, size_t endPos,
                              unsigned long long tileIndexMask);
-  static inline unsigned int bgraToRGBA(unsigned int c)
+  static inline std::uint32_t bgraToRGBA(std::uint32_t c)
   {
     return ((c & 0xFF00FF00U) | ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU));
   }
  public:
   Renderer(int imageWidth, int imageHeight,
            const BA2File& archiveFiles, ESMFile& masterFiles,
-           unsigned int *bufRGBA = 0, float *bufZ = 0, int zMax = 16777216);
+           std::uint32_t *bufRGBA = 0, float *bufZ = 0, int zMax = 16777216);
   virtual ~Renderer();
   // returns 0 if formID is not in an exterior world, 0xFFFFFFFF on error
   unsigned int findParentWorld(unsigned int formID);
-  inline const unsigned int *getImageData() const
+  inline const std::uint32_t *getImageData() const
   {
     return outBufRGBA;
   }
@@ -254,6 +254,7 @@ class Renderer
   }
   void clear();
   void clearImage();
+  void deallocateBuffers(unsigned int mask);    // mask & 1: RGBA, 2: depth
   // rotations are in radians
   void setViewTransform(float scale,
                         float rotationX, float rotationY, float rotationZ,
@@ -277,7 +278,7 @@ class Renderer
   {
     landTxtRGBScale = n;
   }
-  void setLandDefaultColor(unsigned int n)
+  void setLandDefaultColor(std::uint32_t n)
   {
     landTxtDefColor = n;        // 0x00RRGGBB
   }
@@ -328,7 +329,7 @@ class Renderer
   // water normal map texture path
   void setWaterTexture(const std::string& s);
   // 0xAARRGGBB
-  void setWaterColor(unsigned int n)
+  void setWaterColor(std::uint32_t n)
   {
     useESMWaterColors = (n == 0xFFFFFFFFU);
     waterColor = bgraToRGBA(n);

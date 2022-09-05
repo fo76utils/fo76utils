@@ -222,16 +222,16 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
     int     h = landData->getImageHeight();
     x0 = (x0 > 0 ? (x0 < (w - 1) ? x0 : (w - 1)) : 0);
     x1 = (x1 > 0 ? (x1 < (w - 1) ? x1 : (w - 1)) : 0);
-    unsigned short  z0 = 0xFFFF;
-    unsigned short  z1 = 0;
+    std::uint16_t z0 = 0xFFFF;
+    std::uint16_t z1 = 0;
     for (int y = y0; y <= y1; y++)
     {
       int     yc = (y > 0 ? (y < (h - 1) ? y : (h - 1)) : 0);
-      const unsigned short  *srcPtr = landData->getHeightMap();
+      const std::uint16_t *srcPtr = landData->getHeightMap();
       srcPtr = srcPtr + (size_t(yc) * size_t(w));
       for (int x = x0; x <= x1; x++)
       {
-        unsigned short  z = srcPtr[x];
+        std::uint16_t z = srcPtr[x];
         z0 = (z < z0 ? z : z0);
         z1 = (z > z1 ? z : z1);
       }
@@ -462,7 +462,7 @@ void Renderer::getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r)
       }
       d = (d > 0.125f ? (d < 8128.0f ? d : 8128.0f) : 0.125f);
       c[3] = 256.0f - float(std::sqrt(d * 8.0f));
-      p.mswpFormID = (unsigned int) c;
+      p.mswpFormID = (std::uint32_t) c;
     }
   }
 }
@@ -948,7 +948,7 @@ size_t Renderer::getTextureDataSize(const DDSTexture *t)
   if (!t)
     return 0;
   size_t  n =
-      size_t(t->getWidth()) * size_t(t->getHeight()) * sizeof(unsigned int);
+      size_t(t->getWidth()) * size_t(t->getHeight()) * sizeof(std::uint32_t);
   size_t  dataSize = 1024;
   for ( ; n > 0; n = n >> 2)
     dataSize = dataSize + n;
@@ -1707,7 +1707,7 @@ void Renderer::threadFunction(Renderer *p, size_t threadNum,
 
 Renderer::Renderer(int imageWidth, int imageHeight,
                    const BA2File& archiveFiles, ESMFile& masterFiles,
-                   unsigned int *bufRGBA, float *bufZ, int zMax)
+                   std::uint32_t *bufRGBA, float *bufZ, int zMax)
   : outBufRGBA(bufRGBA),
     outBufZ(bufZ),
     width(imageWidth),
@@ -1749,7 +1749,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
 {
   size_t  imageDataSize = size_t(width) * size_t(height);
   if (bufAllocFlags & 0x01)
-    outBufRGBA = new unsigned int[imageDataSize];
+    outBufRGBA = new std::uint32_t[imageDataSize];
   if (bufAllocFlags & 0x02)
     outBufZ = new float[imageDataSize];
   clear(bufAllocFlags);
@@ -1765,10 +1765,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
 Renderer::~Renderer()
 {
   clear(0x7C);
-  if ((bufAllocFlags & 0x02) && outBufZ)
-    delete[] outBufZ;
-  if ((bufAllocFlags & 0x01) && outBufRGBA)
-    delete[] outBufRGBA;
+  deallocateBuffers(0x03);
 }
 
 unsigned int Renderer::findParentWorld(unsigned int formID)
@@ -1809,6 +1806,21 @@ void Renderer::clear()
 void Renderer::clearImage()
 {
   clear(0x03);
+}
+
+void Renderer::deallocateBuffers(unsigned int mask)
+{
+  if (((bufAllocFlags & mask) & 0x02) && outBufZ)
+  {
+    delete[] outBufZ;
+    outBufZ = (float *) 0;
+  }
+  if (((bufAllocFlags & mask) & 0x01) && outBufRGBA)
+  {
+    delete[] outBufRGBA;
+    outBufRGBA = (std::uint32_t *) 0;
+  }
+  bufAllocFlags = bufAllocFlags & ~mask;
 }
 
 void Renderer::setViewTransform(
@@ -1893,9 +1905,9 @@ void Renderer::setLighting(int lightColor, int ambientColor, int envColor,
 {
   if (renderThreads.size() < 1)
     return;
-  FloatVector4  c(bgraToRGBA((unsigned int) lightColor));
-  FloatVector4  a(bgraToRGBA((unsigned int) ambientColor & 0x00FFFFFFU));
-  FloatVector4  e(bgraToRGBA((unsigned int) envColor));
+  FloatVector4  c(bgraToRGBA((std::uint32_t) lightColor));
+  FloatVector4  a(bgraToRGBA((std::uint32_t) ambientColor & 0x00FFFFFFU));
+  FloatVector4  e(bgraToRGBA((std::uint32_t) envColor));
   FloatVector4  l(lightLevel, envLevel, rgbScale, 0.0f);
   l *= 255.0f;
   l.srgbExpand();
@@ -2105,13 +2117,13 @@ int main(int argc, char **argv)
     int     terrainX1 = 32767;
     int     terrainY1 = 32767;
     unsigned int  defTxtID = 0U;
-    unsigned int  ltxtDefColor = 0x003F3F3FU;
+    std::uint32_t ltxtDefColor = 0x003F3F3FU;
     int     ltxtResolution = 128;
     int     textureMip = 2;
     float   landTextureMip = 3.0f;
     float   landTextureMult = 1.0f;
     int     modelLOD = 0;
-    unsigned int  waterColor = 0x7FFFFFFFU;
+    std::uint32_t waterColor = 0x7FFFFFFFU;
     float   waterReflectionLevel = 1.0f;
     int     zMin = 0;
     int     zMax = 16777216;
@@ -2170,7 +2182,7 @@ int main(int argc, char **argv)
                     terrainX0, terrainY0, terrainX1, terrainY1);
         std::printf("-l %d\n", btdLOD);
         std::printf("-deftxt 0x%08X\n", defTxtID);
-        std::printf("-defclr 0x%08X\n", ltxtDefColor);
+        std::printf("-defclr 0x%08X\n", (unsigned int) ltxtDefColor);
         std::printf("-ltxtres %d\n", ltxtResolution);
         std::printf("-mip %d\n", textureMip);
         std::printf("-lmip %.1f\n", landTextureMip);
@@ -2210,7 +2222,7 @@ int main(int argc, char **argv)
         std::printf("-mlod %d\n", modelLOD);
         std::printf("-vis %d\n", int(distantObjectsOnly));
         std::printf("-ndis %d\n", int(noDisabledObjects));
-        std::printf("-watercolor 0x%08X\n", waterColor);
+        std::printf("-watercolor 0x%08X\n", (unsigned int) waterColor);
         std::printf("-wrefl %.3f\n", waterReflectionLevel);
         return 0;
       }
@@ -2315,9 +2327,9 @@ int main(int argc, char **argv)
       {
         if (++i >= argc)
           throw errorMessage("missing argument for %s", argv[i - 1]);
-        ltxtDefColor = (unsigned int) parseInteger(argv[i], 0,
-                                                   "invalid land texture color",
-                                                   0, 0x00FFFFFF);
+        ltxtDefColor = (std::uint32_t) parseInteger(
+                           argv[i], 0, "invalid land texture color",
+                           0, 0x00FFFFFF);
       }
       else if (std::strcmp(argv[i], "-ltxtres") == 0)
       {
@@ -2480,9 +2492,8 @@ int main(int argc, char **argv)
       {
         if (++i >= argc)
           throw errorMessage("missing argument for %s", argv[i - 1]);
-        waterColor = (unsigned int) parseInteger(argv[i], 0,
-                                                 "invalid water color",
-                                                 0, 0x7FFFFFFF);
+        waterColor = (std::uint32_t) parseInteger(
+                         argv[i], 0, "invalid water color", 0, 0x7FFFFFFF);
       }
       else if (std::strcmp(argv[i], "-wrefl") == 0)
       {
@@ -2543,7 +2554,7 @@ int main(int argc, char **argv)
     BA2File ba2File(args[4]);
     ESMFile esmFile(args[0]);
     Renderer  renderer(width, height, ba2File, esmFile,
-                       (unsigned int *) 0, (float *) 0, zMax);
+                       (std::uint32_t *) 0, (float *) 0, zMax);
     if (threadCnt > 0)
       renderer.setThreadCount(threadCnt);
     renderer.setTextureCacheSize(size_t(textureCacheSize) << 20);
@@ -2609,35 +2620,29 @@ int main(int argc, char **argv)
                      b.xMax() * scale, b.yMax() * scale, b.zMax() * scale);
       }
     }
+    renderer.clear();
+    renderer.deallocateBuffers(0x02);
 
-    DDSOutputFile outFile(args[1],
-                          width >> (!enableDownscale ? 0 : 1),
-                          height >> (!enableDownscale ? 0 : 1),
+    width = width >> int(enableDownscale);
+    height = height >> int(enableDownscale);
+    DDSOutputFile outFile(args[1], width, height,
                           DDSInputFile::pixelFormatRGB24);
-    if (!enableDownscale)
+    const std::uint32_t *imageDataPtr = renderer.getImageData();
+    size_t  imageDataSize = size_t(width) * size_t(height);
+    std::vector< std::uint32_t >  downsampleBuf;
+    if (enableDownscale)
     {
-      size_t  imageDataSize = size_t(width) * size_t(height);
-      for (size_t i = 0; i < imageDataSize; i++)
-      {
-        unsigned int  c = renderer.getImageData()[i];
-        outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
-        outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
-        outFile.writeByte((unsigned char) (c & 0xFF));
-      }
+      downsampleBuf.resize(imageDataSize);
+      downsample2xFilter(&(downsampleBuf.front()), imageDataPtr,
+                         width << 1, height << 1, width);
+      imageDataPtr = &(downsampleBuf.front());
     }
-    else
+    for (size_t i = 0; i < imageDataSize; i++)
     {
-      for (int y = 0; y < height; y = y + 2)
-      {
-        for (int x = 0; x < width; x = x + 2)
-        {
-          unsigned int  c = downsample2xFilter(renderer.getImageData(),
-                                               width, height, x, y);
-          outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
-          outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
-          outFile.writeByte((unsigned char) (c & 0xFF));
-        }
-      }
+      std::uint32_t c = imageDataPtr[i];
+      outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
+      outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
+      outFile.writeByte((unsigned char) (c & 0xFF));
     }
     err = 0;
   }
