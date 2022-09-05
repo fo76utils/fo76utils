@@ -41,10 +41,10 @@ class ZLibDecompressor
     w = w | ((unsigned short) *(inPtr++) << 8);
     return w;
   }
-  unsigned int readU32LE();
-  unsigned long long readU64LE();
-  unsigned short readU16BE();
-  unsigned int readU32BE();
+  std::uint32_t readU32LE();
+  std::uint64_t readU64LE();
+  std::uint16_t readU16BE();
+  std::uint32_t readU32BE();
   inline void srLoad(unsigned long long& sr);
   inline void srReset(unsigned long long& sr);
   // read bits packed in Deflate order (LSB first - LSB first)

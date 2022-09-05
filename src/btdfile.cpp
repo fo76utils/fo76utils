@@ -62,7 +62,7 @@ void BTDFile::loadBlockLines_8(unsigned char *dst, const unsigned char *src)
     *dst = *src;
 }
 
-void BTDFile::loadBlockLines_16(unsigned short *dst, const unsigned char *src,
+void BTDFile::loadBlockLines_16(std::uint16_t *dst, const unsigned char *src,
                                 size_t xd, size_t yd)
 {
   for (size_t i = 0; i < 64; i++, dst = dst + xd, src = src + 2)
@@ -77,7 +77,7 @@ void BTDFile::loadBlockLines_16(unsigned short *dst, const unsigned char *src,
 
 void BTDFile::loadBlock(TileData& tileData, size_t dataOffs,
                         size_t n, unsigned char l, unsigned char b,
-                        std::vector< unsigned short >& zlibBuf)
+                        std::vector< std::uint16_t >& zlibBuf)
 {
   if (l >= 2)
     n = (n << 1) + b;
@@ -98,7 +98,7 @@ void BTDFile::loadBlock(TileData& tileData, size_t dataOffs,
     throw errorMessage("end of input file");
   unsigned char *p = reinterpret_cast< unsigned char * >(&(zlibBuf.front()));
   if (ZLibDecompressor::decompressData(p,
-                                       zlibBuf.size() * sizeof(unsigned short),
+                                       zlibBuf.size() * sizeof(std::uint16_t),
                                        fileBuf + offs, compressedSize)
       != ((l == 0 && b != 0) ? 16384 : ((l >= 2 && b != 0) ? 32768 : 49152)))
   {
@@ -141,7 +141,7 @@ void BTDFile::loadBlocks(TileData& tileData, size_t x, size_t y,
                          size_t threadIndex, size_t threadCnt,
                          unsigned int blockMask)
 {
-  std::vector< unsigned short > zlibBuf(0x6000, 0);
+  std::vector< std::uint16_t >  zlibBuf(0x6000, 0);
   size_t  t = 0;
   // LOD3..LOD0
   for (unsigned char l = 4; l-- > 0; )
@@ -392,7 +392,7 @@ unsigned int BTDFile::getGroundCover(size_t n) const
   return readUInt32(gcvrOffs + (n << 2));
 }
 
-void BTDFile::getCellHeightMap(unsigned short *buf, int cellX, int cellY,
+void BTDFile::getCellHeightMap(std::uint16_t *buf, int cellX, int cellY,
                                unsigned char l)
 {
   const TileData& tileData = loadTile(cellX, cellY, (~0U << (l + l)) & 0x0155U);
@@ -410,7 +410,7 @@ void BTDFile::getCellHeightMap(unsigned short *buf, int cellX, int cellY,
   }
 }
 
-void BTDFile::getCellLandTexture(unsigned short *buf, int cellX, int cellY,
+void BTDFile::getCellLandTexture(std::uint16_t *buf, int cellX, int cellY,
                                  unsigned char l)
 {
   const TileData& tileData = loadTile(cellX, cellY, (~0U << (l + l)) & 0x0155U);
@@ -426,7 +426,7 @@ void BTDFile::getCellLandTexture(unsigned short *buf, int cellX, int cellY,
           tileData.ltexData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
       tmp = ((tmp & 0x7E00) >> 9) | (tmp & 0x01C0) | ((tmp & 0x003F) << 9);
       tmp = ((tmp & 0x7038) >> 3) | (tmp & 0x01C0) | ((tmp & 0x0E07) << 3);
-      buf[(yc << m) | xc] = (unsigned short) tmp;
+      buf[(yc << m) | xc] = (std::uint16_t) tmp;
     }
   }
 }
@@ -463,7 +463,7 @@ void BTDFile::getCellGroundCover(unsigned char *buf, int cellX, int cellY,
   }
 }
 
-void BTDFile::getCellTerrainColor(unsigned short *buf, int cellX, int cellY,
+void BTDFile::getCellTerrainColor(std::uint16_t *buf, int cellX, int cellY,
                                   unsigned char l)
 {
   const TileData& tileData = loadTile(cellX, cellY, (~0U << (l + l)) & 0x02A0U);

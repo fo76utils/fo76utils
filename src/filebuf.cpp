@@ -14,11 +14,11 @@ extern "C"
 #  include <sys/mman.h>
 #endif
 
-unsigned int FileBuffer::swapUInt32(unsigned int n)
+std::uint32_t FileBuffer::swapUInt32(unsigned int n)
 {
   n = ((n & 0xFF00FF00U) >> 8) | ((n & 0x00FF00FFU) << 8);
   n = ((n & 0xFFFF0000U) >> 16) | ((n & 0x0000FFFFU) << 16);
-  return n;
+  return (std::uint32_t) n;
 }
 
 unsigned char FileBuffer::readUInt8()
@@ -35,28 +35,28 @@ signed char FileBuffer::readInt8()
   return (signed char) ((int(readUInt8Fast()) ^ 0x80) - 0x80);
 }
 
-unsigned short FileBuffer::readUInt16()
+std::uint16_t FileBuffer::readUInt16()
 {
   if ((filePos + 2) > fileBufSize)
     throw errorMessage("end of input file");
   return readUInt16Fast();
 }
 
-short FileBuffer::readInt16()
+std::int16_t FileBuffer::readInt16()
 {
   if ((filePos + 2) > fileBufSize)
     throw errorMessage("end of input file");
   return uint16ToSigned(readUInt16Fast());
 }
 
-unsigned int FileBuffer::readUInt32()
+std::uint32_t FileBuffer::readUInt32()
 {
   if ((filePos + 4) > fileBufSize)
     throw errorMessage("end of input file");
   return readUInt32Fast();
 }
 
-int FileBuffer::readInt32()
+std::int32_t FileBuffer::readInt32()
 {
   if ((filePos + 4) > fileBufSize)
     throw errorMessage("end of input file");
@@ -67,7 +67,7 @@ float FileBuffer::readFloat()
 {
   if ((filePos + 4) > fileBufSize)
     throw errorMessage("end of input file");
-  unsigned int  tmp = readUInt32Fast();
+  std::uint32_t tmp = readUInt32Fast();
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   if (!((tmp + 0x00800000U) & 0x7F000000U))
     return 0.0f;
@@ -84,13 +84,18 @@ float FileBuffer::readFloat()
 #endif
 }
 
-unsigned long long FileBuffer::readUInt64()
+std::uint64_t FileBuffer::readUInt64()
 {
   if ((filePos + 8) > fileBufSize)
     throw errorMessage("end of input file");
-  unsigned long long  tmp = (unsigned long long) readUInt32Fast();
-  tmp = tmp | ((unsigned long long) readUInt32Fast() << 32);
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  filePos = filePos + 8;
+  return *(reinterpret_cast< const std::uint64_t * >(fileBuf + (filePos - 8)));
+#else
+  std::uint64_t tmp = (std::uint64_t) readUInt32Fast();
+  tmp = tmp | ((std::uint64_t) readUInt32Fast() << 32);
   return tmp;
+#endif
 }
 
 float FileBuffer::readFloat16()
@@ -166,14 +171,14 @@ unsigned char FileBuffer::readUInt8(size_t offs) const
   return fileBuf[offs];
 }
 
-unsigned short FileBuffer::readUInt16(size_t offs) const
+std::uint16_t FileBuffer::readUInt16(size_t offs) const
 {
   if ((offs + 2) > fileBufSize)
     throw errorMessage("end of input file");
   return readUInt16Fast(fileBuf + offs);
 }
 
-unsigned int FileBuffer::readUInt32(size_t offs) const
+std::uint32_t FileBuffer::readUInt32(size_t offs) const
 {
   if ((offs + 4) > fileBufSize)
     throw errorMessage("end of input file");

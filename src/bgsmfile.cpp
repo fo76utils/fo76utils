@@ -104,13 +104,13 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   {
     tmp = roundFloat(buf.readFloat() * 255.0f);
     tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-    specularColor = (unsigned int) tmp | 0xFF000000U;   // R
+    specularColor = std::uint32_t(tmp) | 0xFF000000U;   // R
     tmp = roundFloat(buf.readFloat() * 255.0f);
     tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-    specularColor |= ((unsigned int) tmp << 8);         // G
+    specularColor |= (std::uint32_t(tmp) << 8);         // G
     tmp = roundFloat(buf.readFloat() * 255.0f);
     tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-    specularColor |= ((unsigned int) tmp << 16);        // B
+    specularColor |= (std::uint32_t(tmp) << 16);        // B
     tmp = roundFloat(buf.readFloat() * 128.0f);
     specularScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
     tmp = roundFloat(buf.readFloat() * 255.0f);

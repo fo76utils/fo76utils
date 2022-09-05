@@ -357,7 +357,7 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
       v.vertexColor = f.readUInt32Fast();
     }
     v.bitangent =
-        (unsigned int) (bitangentX | (bitangentY << 8) | (bitangentZ << 16));
+        std::uint32_t(bitangentX | (bitangentY << 8) | (bitangentZ << 16));
     f.setPosition(offs + vertexSize);
   }
   for (size_t i = 0; i < triangleCnt; i++)
@@ -442,13 +442,13 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
       bgsmSpecularSmoothness = (unsigned char) tmp;
       tmp = roundFloat(f.readFloat() * 255.0f);
       tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-      bgsmSpecularColor = (unsigned int) tmp | 0xFF000000U;     // R
+      bgsmSpecularColor = std::uint32_t(tmp) | 0xFF000000U;     // R
       tmp = roundFloat(f.readFloat() * 255.0f);
       tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-      bgsmSpecularColor |= ((unsigned int) tmp << 8);           // G
+      bgsmSpecularColor |= (std::uint32_t(tmp) << 8);           // G
       tmp = roundFloat(f.readFloat() * 255.0f);
       tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-      bgsmSpecularColor |= ((unsigned int) tmp << 16);          // B
+      bgsmSpecularColor |= (std::uint32_t(tmp) << 16);          // B
       tmp = roundFloat(f.readFloat() * 128.0f);
       tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
       bgsmSpecularScale = (unsigned char) tmp;

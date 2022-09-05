@@ -36,18 +36,18 @@ inline FloatVector4 LandscapeTexture::normalToColor(FloatVector4 n)
   return tmp;
 }
 
-inline unsigned int LandscapeTexture::getFO76VertexColor(size_t offs) const
+inline std::uint32_t LandscapeTexture::getFO76VertexColor(size_t offs) const
 {
-  unsigned int  c = FileBuffer::readUInt16Fast(vclrData16 + (offs << 1));
+  std::uint32_t c = FileBuffer::readUInt16Fast(vclrData16 + (offs << 1));
   c = ((c >> 10) & 0x1FU) | ((c << 3) & 0x1F00U) | ((c & 0x1FU) << 16);
   return c;
 }
 
-inline unsigned int LandscapeTexture::getTES4VertexColor(size_t offs) const
+inline std::uint32_t LandscapeTexture::getTES4VertexColor(size_t offs) const
 {
-  unsigned int  b = vclrData24[offs * 3];
-  unsigned int  g = vclrData24[offs * 3 + 1];
-  unsigned int  r = vclrData24[offs * 3 + 2];
+  std::uint32_t b = vclrData24[offs * 3];
+  std::uint32_t g = vclrData24[offs * 3 + 1];
+  std::uint32_t r = vclrData24[offs * 3 + 2];
   return (r | (g << 8) | (b << 16));
 }
 
@@ -122,21 +122,21 @@ FloatVector4 LandscapeTexture::renderPixelFO76I_NoNormals(
   const unsigned char *p0 = p.txtSetData;
   p0 = p0 + (((size_t(y) >> p.txtSetMip) * (size_t(p.width) >> p.txtSetMip)
               + (size_t(x) >> p.txtSetMip)) << 4);
-  unsigned int  a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
+  std::uint32_t a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
   a = (a << 3) | 7U;
-  unsigned int  c = p.defaultColor;
+  std::uint32_t c = p.defaultColor;
   p0 = p0 + 6;
   for ( ; a; a = a << 3)
   {
     p0--;
     if (a < 0x8000U)
       continue;
-    unsigned int  aTmp = ~a & 0x00038000U;
+    std::uint32_t aTmp = ~a & 0x00038000U;
     a = a & 0x7FFFU;
     unsigned char t = *p0;
     if (t >= p.landTextureCnt || !p.landTextures[t])
       continue;
-    unsigned int  cTmp =
+    std::uint32_t cTmp =
         p.landTextures[t]->getPixelN(txtX - txtY, txtX + txtY, int(p.mipLevel));
     if (cTmp < ((aTmp * 0x4900U + 0x00800000U) & 0xFF000000U))
       continue;
@@ -156,21 +156,21 @@ FloatVector4 LandscapeTexture::renderPixelFO76I(
   const unsigned char *p0 = p.txtSetData;
   p0 = p0 + (((size_t(y) >> p.txtSetMip) * (size_t(p.width) >> p.txtSetMip)
               + (size_t(x) >> p.txtSetMip)) << 4);
-  unsigned int  a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
+  std::uint32_t a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
   a = (a << 3) | 7U;
-  unsigned int  c = p.defaultColor;
+  std::uint32_t c = p.defaultColor;
   p0 = p0 + 6;
   for ( ; a; a = a << 3)
   {
     p0--;
     if (a < 0x8000U)
       continue;
-    unsigned int  aTmp = ~a & 0x00038000U;
+    std::uint32_t aTmp = ~a & 0x00038000U;
     a = a & 0x7FFFU;
     unsigned char t = *p0;
     if (t >= p.landTextureCnt || !p.landTextures[t])
       continue;
-    unsigned int  cTmp =
+    std::uint32_t cTmp =
         p.landTextures[t]->getPixelN(txtX - txtY, txtX + txtY, int(p.mipLevel));
     if (cTmp < ((aTmp * 0x4900U + 0x00800000U) & 0xFF000000U))
       continue;
@@ -196,7 +196,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76F(
   const unsigned char *p0 = p.txtSetData;
   p0 = p0 + (((size_t(y) >> p.txtSetMip) * (size_t(p.width) >> p.txtSetMip)
               + (size_t(x) >> p.txtSetMip)) << 4);
-  unsigned int  a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
+  std::uint32_t a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
   a = (a << 3) | 7U;
   FloatVector4  c(p.defaultColor);
   p0 = p0 + 6;
@@ -205,7 +205,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76F(
     p0--;
     if (a < 0x8000U)
       continue;
-    unsigned int  aTmp = ~a & 0x00038000U;
+    std::uint32_t aTmp = ~a & 0x00038000U;
     a = a & 0x7FFFU;
     unsigned char t = *p0;
     if (t >= p.landTextureCnt || !p.landTextures[t])
@@ -237,7 +237,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76I_GCVR(
   const unsigned char *p0 = p.txtSetData;
   p0 = p0 + (((size_t(y) >> p.txtSetMip) * (size_t(p.width) >> p.txtSetMip)
               + (size_t(x) >> p.txtSetMip)) << 4);
-  unsigned int  a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
+  std::uint32_t a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
   a = (a << 3) | 7U;
   FloatVector4  c(p.defaultColor);
   p0 = p0 + 6;
@@ -246,12 +246,12 @@ FloatVector4 LandscapeTexture::renderPixelFO76I_GCVR(
     p0--;
     if (a < 0x8000U)
       continue;
-    unsigned int  aTmp = ~a & 0x00038000U;
+    std::uint32_t aTmp = ~a & 0x00038000U;
     a = a & 0x7FFFU;
     unsigned char t = *p0;
     if (t >= p.landTextureCnt || !p.landTextures[t])
       continue;
-    unsigned int  cTmp =
+    std::uint32_t cTmp =
         p.landTextures[t]->getPixelN(txtX - txtY, txtX + txtY, int(p.mipLevel));
     if (cTmp < ((aTmp * 0x4900U + 0x00800000U) & 0xFF000000U))
       continue;
@@ -299,7 +299,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76F_GCVR(
   const unsigned char *p0 = p.txtSetData;
   p0 = p0 + (((size_t(y) >> p.txtSetMip) * (size_t(p.width) >> p.txtSetMip)
               + (size_t(x) >> p.txtSetMip)) << 4);
-  unsigned int  a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
+  std::uint32_t a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
   a = (a << 3) | 7U;
   FloatVector4  c(p.defaultColor);
   p0 = p0 + 6;
@@ -308,7 +308,7 @@ FloatVector4 LandscapeTexture::renderPixelFO76F_GCVR(
     p0--;
     if (a < 0x8000U)
       continue;
-    unsigned int  aTmp = ~a & 0x00038000U;
+    std::uint32_t aTmp = ~a & 0x00038000U;
     a = a & 0x7FFFU;
     unsigned char t = *p0;
     if (t >= p.landTextureCnt || !p.landTextures[t])
@@ -364,14 +364,13 @@ FloatVector4 LandscapeTexture::renderPixelTES4I_NoNormals(
   const unsigned char *p0 = p.txtSetData;
   p0 = p0 + (((size_t(y) >> p.txtSetMip) * (size_t(p.width) >> p.txtSetMip)
               + (size_t(x) >> p.txtSetMip)) << 4);
-  unsigned long long  a =
-      FileBuffer::readUInt32Fast(p.ltexData32 + (offs << 2));
+  std::uint64_t a = FileBuffer::readUInt32Fast(p.ltexData32 + (offs << 2));
   a = (a << 4) | 15ULL;
   FloatVector4  c(p.defaultColor);
   unsigned char prvTexture = 0xFF;
   for ( ; a; a = a >> 4, p0++)
   {
-    unsigned int  aTmp = (unsigned int) (a & 0x0FU);
+    std::uint32_t aTmp = (std::uint32_t) (a & 0x0FU);
     if (!aTmp)
       continue;
     unsigned char t = *p0;
@@ -397,14 +396,13 @@ FloatVector4 LandscapeTexture::renderPixelTES4I(
   const unsigned char *p0 = p.txtSetData;
   p0 = p0 + (((size_t(y) >> p.txtSetMip) * (size_t(p.width) >> p.txtSetMip)
               + (size_t(x) >> p.txtSetMip)) << 4);
-  unsigned long long  a =
-      FileBuffer::readUInt32Fast(p.ltexData32 + (offs << 2));
+  std::uint64_t a = FileBuffer::readUInt32Fast(p.ltexData32 + (offs << 2));
   a = (a << 4) | 15ULL;
   FloatVector4  c(p.defaultColor);
   unsigned char prvTexture = 0xFF;
   for ( ; a; a = a >> 4, p0++)
   {
-    unsigned int  aTmp = (unsigned int) (a & 0x0FU);
+    std::uint32_t aTmp = (std::uint32_t) (a & 0x0FU);
     if (!aTmp)
       continue;
     unsigned char t = *p0;
@@ -440,14 +438,13 @@ FloatVector4 LandscapeTexture::renderPixelTES4F(
   const unsigned char *p0 = p.txtSetData;
   p0 = p0 + (((size_t(y) >> p.txtSetMip) * (size_t(p.width) >> p.txtSetMip)
               + (size_t(x) >> p.txtSetMip)) << 4);
-  unsigned long long  a =
-      FileBuffer::readUInt32Fast(p.ltexData32 + (offs << 2));
+  std::uint64_t a = FileBuffer::readUInt32Fast(p.ltexData32 + (offs << 2));
   a = (a << 4) | 15ULL;
   FloatVector4  c(p.defaultColor);
   unsigned char prvTexture = 0xFF;
   for ( ; a; a = a >> 4, p0++)
   {
-    unsigned int  aTmp = (unsigned int) (a & 0x0FU);
+    std::uint32_t aTmp = (std::uint32_t) (a & 0x0FU);
     if (!aTmp)
       continue;
     unsigned char t = *p0;
@@ -604,7 +601,7 @@ void LandscapeTexture::setRGBScale(float n)
   rgbScale = (n > 0.5f ? (n < 8.0f ? n : 8.0f) : 0.5f) / 255.0f;
 }
 
-void LandscapeTexture::setDefaultColor(unsigned int c)
+void LandscapeTexture::setDefaultColor(std::uint32_t c)
 {
   defaultColor = ((c >> 16) & 0x00FFU) | (c & 0xFF00U) | ((c & 0x00FFU) << 16);
 }
@@ -669,7 +666,7 @@ void LandscapeTexture::renderTexture(unsigned char *outBuf, int renderScale,
         vColor = getTES4VertexColor(x, y, renderScale);
       c *= vColor;
       c *= rgbScale;
-      unsigned int  cTmp = (unsigned int) c;
+      std::uint32_t cTmp = (std::uint32_t) c;
       outBuf[0] = (unsigned char) ((cTmp >> 16) & 0xFFU);       // B
       outBuf[1] = (unsigned char) ((cTmp >> 8) & 0xFFU);        // G
       outBuf[2] = (unsigned char) (cTmp & 0xFFU);               // R
@@ -677,7 +674,7 @@ void LandscapeTexture::renderTexture(unsigned char *outBuf, int renderScale,
       {
         if (isFO76)
           n = rotateNormalFO76(n);
-        unsigned int  nTmp = (unsigned int) normalToColor(n);
+        std::uint32_t nTmp = (std::uint32_t) normalToColor(n);
         outBufN[0] = (unsigned char) (nTmp & 0xFFU);            // X
         outBufN[1] = (unsigned char) ((nTmp >> 8) & 0xFFU);     // Y
         outBufN = outBufN + 2;

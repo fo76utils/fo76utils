@@ -219,7 +219,7 @@ int main(int argc, char **argv)
     const char    *gcvrFileName = (char *) 0;
     float         mipLevel = 5.0f;
     float         rgbScale = 1.0f;
-    unsigned int  defaultColor = 0x003F3F3F;
+    std::uint32_t defaultColor = 0x003F3F3F;
     int           xyScale = 0;
     int           threadCnt = int(std::thread::hardware_concurrency());
     threadCnt = (threadCnt > 1 ? (threadCnt < 256 ? threadCnt : 256) : 1);
@@ -286,8 +286,8 @@ int main(int argc, char **argv)
         if (++i >= argc)
           throw errorMessage("missing argument for %s", argv[i - 1]);
         defaultColor =
-            (unsigned int) parseInteger(argv[i], 0, "invalid default color",
-                                        0L, 0x00FFFFFFL);
+            (std::uint32_t) parseInteger(argv[i], 0, "invalid default color",
+                                         0L, 0x00FFFFFFL);
       }
       else if (std::strcmp(argv[i], "-scale") == 0)
       {
@@ -543,7 +543,7 @@ int main(int argc, char **argv)
       threads[i]->setDefaultColor(defaultColor);
       threads[i]->xyScale = xyScale;
     }
-    std::vector< unsigned int > downsampleBuf;
+    std::vector< std::uint32_t >  downsampleBuf;
     int     h = 1 << xyScale;
     h = (h > 16 ? h : 16);
     if (enableDownscale)
@@ -577,9 +577,9 @@ int main(int argc, char **argv)
           downsampleY1 += int(threads[i]->outBuf.size() / (size_t(width) * 3U));
           for (size_t j = 0; (j + 2) < threads[i]->outBuf.size(); j = j + 3)
           {
-            unsigned int  b = threads[i]->outBuf[j];
-            unsigned int  g = threads[i]->outBuf[j + 1];
-            unsigned int  r = threads[i]->outBuf[j + 2];
+            std::uint32_t b = threads[i]->outBuf[j];
+            std::uint32_t g = threads[i]->outBuf[j + 1];
+            std::uint32_t r = threads[i]->outBuf[j + 2];
             downsampleBuf[k] = 0xFF000000U | r | (g << 8) | (b << 16);
             k++;
           }
@@ -588,13 +588,13 @@ int main(int argc, char **argv)
                !((i + 1) < threads.size() && threads[i + 1]->threadPtr));
           if (downsampleY1 >= (h << 1) || endFlag)
           {
-            unsigned int  *p = &(downsampleBuf.front());
+            std::uint32_t *p = &(downsampleBuf.front());
             int     yc = downsampleY0;
             for ( ; yc < (downsampleY1 - (!endFlag ? 8 : 0)); yc = yc + 2)
             {
               for (int xc = 0; xc < width; xc = xc + 2)
               {
-                unsigned int  c =
+                std::uint32_t c =
                     downsample2xFilter(p, width, downsampleY1, xc, yc);
                 outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
                 outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
@@ -604,7 +604,7 @@ int main(int argc, char **argv)
             if (!endFlag)
             {
               std::memcpy(p, p + (size_t(downsampleY1 - 16) * size_t(width)),
-                          (size_t(width) * 16U) * sizeof(unsigned int));
+                          (size_t(width) * 16U) * sizeof(std::uint32_t));
               downsampleY0 = 8;
               downsampleY1 = 16;
             }

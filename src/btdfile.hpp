@@ -49,21 +49,21 @@ class BTDFile : public FileBuffer
     // bit 8: LOD4 vertex height and land textures are loaded
     // bit 9: LOD4 terrain color is loaded
     unsigned int  blockMask;
-    std::vector< unsigned short > hmapData;     // vertex height, 1024 * 1024
-    std::vector< unsigned short > ltexData;     // land textures, 1024 * 1024
+    std::vector< std::uint16_t >  hmapData;     // vertex height, 1024 * 1024
+    std::vector< std::uint16_t >  ltexData;     // land textures, 1024 * 1024
     std::vector< unsigned char >  gcvrData;     // ground cover, 1024 * 1024
-    std::vector< unsigned short > vclrData;     // terrain color, 256 * 256
+    std::vector< std::uint16_t >  vclrData;     // terrain color, 256 * 256
   };
   std::map< unsigned int, TileData * >  tileCacheMap;
   std::vector< TileData > tileCache;
   size_t  tileCacheIndex;
   // ----------------
   static void loadBlockLines_8(unsigned char *dst, const unsigned char *src);
-  static void loadBlockLines_16(unsigned short *dst, const unsigned char *src,
+  static void loadBlockLines_16(std::uint16_t *dst, const unsigned char *src,
                                 size_t xd, size_t yd);
   void loadBlock(TileData& tileData, size_t dataOffs,
                  size_t n, unsigned char l, unsigned char b,
-                 std::vector< unsigned short >& zlibBuf);
+                 std::vector< std::uint16_t >& zlibBuf);
   void loadBlocks(TileData& tileData, size_t x, size_t y,
                   size_t threadIndex, size_t threadCnt, unsigned int blockMask);
   static void loadBlocksThread(BTDFile *p, std::string *errMsg,
@@ -112,16 +112,16 @@ class BTDFile : public FileBuffer
   unsigned int getGroundCover(size_t n) const;
   // N = 128 >> l, buffer size = N * N
   // height map in pixelFormatGRAY16 format
-  void getCellHeightMap(unsigned short *buf, int cellX, int cellY,
+  void getCellHeightMap(std::uint16_t *buf, int cellX, int cellY,
                         unsigned char l = 0);
   // land texture opacities in pixelFormatA16 format (see filebuf.hpp)
-  void getCellLandTexture(unsigned short *buf, int cellX, int cellY,
+  void getCellLandTexture(std::uint16_t *buf, int cellX, int cellY,
                           unsigned char l = 0);
   // ground cover mask in pixelFormatA8 format
   void getCellGroundCover(unsigned char *buf, int cellX, int cellY,
                           unsigned char l = 0);
   // vertex colors in pixelFormatRGBA16 format, l >= 2
-  void getCellTerrainColor(unsigned short *buf, int cellX, int cellY,
+  void getCellTerrainColor(std::uint16_t *buf, int cellX, int cellY,
                            unsigned char l = 2);
   // buf[0..5]   = SW quadrant land texture IDs (0xFF: no texture),
   //               getLandTexture() returns the corresponding form IDs

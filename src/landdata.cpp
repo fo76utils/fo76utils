@@ -15,11 +15,11 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
   size_t  txtSetDataSize = 0;
   size_t  vertexCnt = size_t(getImageWidth()) * size_t(getImageHeight());
   if (formatMask & 0x01)
-    hmapDataSize = vertexCnt * sizeof(unsigned short);
+    hmapDataSize = vertexCnt * sizeof(std::uint16_t);
   if (!isFO76)
   {
     if (formatMask & 0x02)
-      ltexData32Size = vertexCnt * sizeof(unsigned int);
+      ltexData32Size = vertexCnt * sizeof(std::uint32_t);
     if (formatMask & 0x04)
       vnmlDataSize = vertexCnt * 3;
     if (formatMask & 0x08)
@@ -28,10 +28,10 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
   else
   {
     if (formatMask & 0x02)
-      ltexData16Size = vertexCnt * sizeof(unsigned short);
+      ltexData16Size = vertexCnt * sizeof(std::uint16_t);
     if (formatMask & 0x08)
     {
-      vclrData16Size = vertexCnt * sizeof(unsigned short);
+      vclrData16Size = vertexCnt * sizeof(std::uint16_t);
       if (cellResolution >= 128)
         vclrData16Size = vclrData16Size >> 4;
       else if (cellResolution >= 64)
@@ -48,20 +48,20 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
   size_t  totalDataSize =
       (hmapDataSize + ltexData32Size + vnmlDataSize + vclrData24Size
        + ltexData16Size + vclrData16Size + gcvrDataSize + txtSetDataSize)
-      / sizeof(unsigned int);
+      / sizeof(std::uint32_t);
   if (totalDataSize < 1)
     return;
   dataBuf.resize(totalDataSize);
   unsigned char *p = reinterpret_cast< unsigned char * >(&(dataBuf.front()));
   if (hmapDataSize)
   {
-    hmapData = reinterpret_cast< unsigned short * >(p);
+    hmapData = reinterpret_cast< std::uint16_t * >(p);
     p = p + hmapDataSize;
   }
   if (ltexData32Size)
   {
-    ltexData32 = reinterpret_cast< unsigned int * >(p);
-    for (size_t i = 0; i < (ltexData32Size / sizeof(unsigned int)); i++)
+    ltexData32 = reinterpret_cast< std::uint32_t * >(p);
+    for (size_t i = 0; i < (ltexData32Size / sizeof(std::uint32_t)); i++)
       ltexData32[i] = 0U;
     p = p + ltexData32Size;
   }
@@ -77,12 +77,12 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
   }
   if (ltexData16Size)
   {
-    ltexData16 = reinterpret_cast< unsigned short * >(p);
+    ltexData16 = reinterpret_cast< std::uint16_t * >(p);
     p = p + ltexData16Size;
   }
   if (vclrData16Size)
   {
-    vclrData16 = reinterpret_cast< unsigned short * >(p);
+    vclrData16 = reinterpret_cast< std::uint16_t * >(p);
     p = p + vclrData16Size;
   }
   if (gcvrDataSize)
@@ -135,7 +135,7 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
   allocateDataBuf(formatMask, true);
   size_t  n = size_t(cellResolution);
   unsigned char m = 7 - mipLevel;
-  std::vector< unsigned short > tmpBuf(n * n);
+  std::vector< std::uint16_t >  tmpBuf(n * n);
   int     x0 = cellMinX;
   int     y0 = cellMaxY;
   int     x = cellMinX;
@@ -145,7 +145,7 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
     size_t  w = size_t(cellMaxX + 1 - cellMinX);
     if (formatMask & 0x01)              // height map
     {
-      unsigned short  *bufp16 = &(tmpBuf.front());
+      std::uint16_t *bufp16 = &(tmpBuf.front());
       btdFile.getCellHeightMap(bufp16, x, y, mipLevel);
       for (size_t yy = 0; yy < n; yy++)
       {
@@ -157,7 +157,7 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
     }
     if (formatMask & 0x02)              // land texture
     {
-      unsigned short  *bufp16 = &(tmpBuf.front());
+      std::uint16_t *bufp16 = &(tmpBuf.front());
       btdFile.getCellLandTexture(bufp16, x, y, mipLevel);
       for (size_t yy = 0; yy < n; yy++)
       {
@@ -169,7 +169,7 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
     }
     if (formatMask & 0x08)              // terrain color
     {
-      unsigned short  *bufp16 = &(tmpBuf.front());
+      std::uint16_t *bufp16 = &(tmpBuf.front());
       if (mipLevel > 2)
       {
         btdFile.getCellTerrainColor(bufp16, x, y, mipLevel);
@@ -371,12 +371,12 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
         float   zOffs = f.readFloat() * 8.0f;
         cellHeightOffsets[k] = zOffs;
         int     z = 0;
-        unsigned short  *p = hmapData + dataOffs;
+        std::uint16_t *p = hmapData + dataOffs;
         for (int yy = 0; yy < 32; yy++, p = p - (w + 32))
         {
           int     tmp = f.readUInt8Fast();
           z += (!(tmp & 0x80) ? tmp : (tmp - 256));
-          *(p++) = (unsigned short) (z + 32768);
+          *(p++) = (std::uint16_t) (z + 32768);
           float   zf = zOffs + float(z << 3);
           zMin = (zf < zMin ? zf : zMin);
           zMax = (zf > zMax ? zf : zMax);
@@ -385,7 +385,7 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
           {
             tmp = f.readUInt8Fast();
             z += (!(tmp & 0x80) ? tmp : (tmp - 256));
-            *(p++) = (unsigned short) (z + 32768);
+            *(p++) = (std::uint16_t) (z + 32768);
             zf = zOffs + float(z << 3);
             zMin = (zf < zMin ? zf : zMin);
             zMax = (zf > zMax ? zf : zMax);
@@ -453,11 +453,11 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
             unsigned int  yy = (n / 17U) % 17U;
             if ((xx | yy) & 16)
               continue;
-            unsigned int  *p = ltexData32 + dataOffs;
+            std::uint32_t *p = ltexData32 + dataOffs;
             p = p + (xx + ((textureQuadrant & 1U) << 4));
             p = p - ((yy + ((textureQuadrant & 2U) << 3)) * w);
-            unsigned int  m = 15U << ((textureLayer - 1U) << 2);
-            *p = (*p & ~m) | (((unsigned int) a * 0x11111111U) & m);
+            std::uint32_t m = 15U << ((textureLayer - 1U) << 2);
+            *p = (*p & ~m) | (((std::uint32_t) a * 0x11111111U) & m);
           }
         }
       }
@@ -518,7 +518,7 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
           double  z = double((int(hmapData[dataOffs]) - 32768) << 3);
           int     tmp = int(z * zScale + zOffset);
           tmp = (tmp >= 0 ? (tmp <= 65535 ? tmp : 65535) : 0);
-          hmapData[dataOffs] = (unsigned short) tmp;
+          hmapData[dataOffs] = (std::uint16_t) tmp;
         }
       }
     }
@@ -653,13 +653,13 @@ LandscapeData::LandscapeData(
     cellMaxY(yMax),
     cellResolution(32),
     cellOffset(0),
-    hmapData((unsigned short *) 0),
-    ltexData32((unsigned int *) 0),
+    hmapData((std::uint16_t *) 0),
+    ltexData32((std::uint32_t *) 0),
     vnmlData((unsigned char *) 0),
     vclrData24((unsigned char *) 0),
-    ltexData16((unsigned short *) 0),
+    ltexData16((std::uint16_t *) 0),
     gcvrData((unsigned char *) 0),
-    vclrData16((unsigned short *) 0),
+    vclrData16((std::uint16_t *) 0),
     txtSetData((unsigned char *) 0),
     zMin(1.0e9f),
     zMax(-1.0e9f),

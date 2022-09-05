@@ -17,14 +17,14 @@ class LandscapeData
   int     cellMaxY;
   int     cellResolution;
   int     cellOffset;
-  unsigned short  *hmapData;
-  unsigned int    *ltexData32;
-  unsigned char   *vnmlData;
-  unsigned char   *vclrData24;
-  unsigned short  *ltexData16;
-  unsigned char   *gcvrData;
-  unsigned short  *vclrData16;
-  unsigned char   *txtSetData;
+  std::uint16_t *hmapData;
+  std::uint32_t *ltexData32;
+  unsigned char *vnmlData;
+  unsigned char *vclrData24;
+  std::uint16_t *ltexData16;
+  unsigned char *gcvrData;
+  std::uint16_t *vclrData16;
+  unsigned char *txtSetData;
   float   zMin;
   float   zMax;
   float   waterLevel;
@@ -35,7 +35,7 @@ class LandscapeData
   std::vector< std::string >  ltexBGSMPaths;
   std::vector< std::string >  ltexDPaths;
   std::vector< std::string >  ltexNPaths;
-  std::vector< unsigned int > dataBuf;
+  std::vector< std::uint32_t >  dataBuf;
   void allocateDataBuf(unsigned int formatMask, bool isFO76);
   void loadBTDFile(const char *btdFileName,
                    unsigned int formatMask, unsigned char mipLevel);
@@ -151,12 +151,12 @@ class LandscapeData
   {
     return txtSetData;
   }
-  inline const unsigned short *getHeightMap() const
+  inline const std::uint16_t *getHeightMap() const
   {
     return hmapData;
   }
   // for Fallout 4 and older
-  inline const unsigned int *getLandTexture32() const
+  inline const std::uint32_t *getLandTexture32() const
   {
     return ltexData32;
   }
@@ -169,7 +169,7 @@ class LandscapeData
     return vclrData24;
   }
   // for Fallout 76
-  inline const unsigned short *getLandTexture16() const
+  inline const std::uint16_t *getLandTexture16() const
   {
     return ltexData16;
   }
@@ -177,7 +177,7 @@ class LandscapeData
   {
     return gcvrData;
   }
-  inline const unsigned short *getVertexColor16() const
+  inline const std::uint16_t *getVertexColor16() const
   {
     // the maximum cell resolution for this data is 32
     return vclrData16;

@@ -31,14 +31,14 @@ class LandscapeTexture
   bool    isFO76;
   unsigned char txtSetMip;
   unsigned char fo76VClrMip;
-  unsigned int  defaultColor;
+  std::uint32_t defaultColor;
   static inline FloatVector4 rotateNormalFO76(FloatVector4 n);
   static inline FloatVector4 blendColors(FloatVector4 c0, FloatVector4 c1,
                                          float f);
   static inline FloatVector4 colorToNormal(FloatVector4 c);
   static inline FloatVector4 normalToColor(FloatVector4 n);
-  inline unsigned int getFO76VertexColor(size_t offs) const;
-  inline unsigned int getTES4VertexColor(size_t offs) const;
+  inline std::uint32_t getFO76VertexColor(size_t offs) const;
+  inline std::uint32_t getTES4VertexColor(size_t offs) const;
   inline FloatVector4 getFO76VertexColor(int x, int y, int renderScale) const;
   inline FloatVector4 getTES4VertexColor(int x, int y, int renderScale) const;
   static FloatVector4 renderPixelFO76I_NoNormals(
@@ -81,7 +81,7 @@ class LandscapeTexture
   void setMipLevel(float n);
   void setRGBScale(float n);
   // 0x00RRGGBB
-  void setDefaultColor(unsigned int c);
+  void setDefaultColor(std::uint32_t c);
   inline FloatVector4 renderPixel(FloatVector4& n,
                                   int x, int y, int txtX, int txtY) const
   {

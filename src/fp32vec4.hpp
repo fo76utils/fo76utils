@@ -20,14 +20,14 @@ struct FloatVector4
     : v { x, x, x, x }
   {
   }
-  inline FloatVector4(const unsigned int *p)
+  inline FloatVector4(const std::uint32_t *p)
   {
     float   tmp __attribute__ ((__vector_size__ (16)));
     __asm__ ("vpmovzxbd %1, %0" : "=x" (tmp) : "m" (*p));
     __asm__ ("vcvtdq2ps %1, %0" : "=x" (v) : "x" (tmp));
   }
   // the first two elements are taken from p1, and the third and fourth from p2
-  inline FloatVector4(const unsigned int *p1, const unsigned int *p2)
+  inline FloatVector4(const std::uint32_t *p1, const std::uint32_t *p2)
   {
     float   tmp1 __attribute__ ((__vector_size__ (16)));
     float   tmp2 __attribute__ ((__vector_size__ (16)));
@@ -175,11 +175,11 @@ struct FloatVector4
     union
     {
       float   f;
-      unsigned int  n;
+      std::uint32_t n;
     }
     tmp;
     tmp.f = x;
-    unsigned int  n = tmp.n;
+    std::uint32_t n = tmp.n;
     float   e = float(int(n >> 23));
     tmp.n = (n & 0x007FFFFFU) | 0x3F800000U;
     float   m = tmp.f;
@@ -274,10 +274,10 @@ struct FloatVector4
     v *= (float(-0.13942692 * 255.0) + (tmp * float(1.13942692 * 255.0)));
     return (*this);
   }
-  inline operator unsigned int() const
+  inline operator std::uint32_t() const
   {
     float   tmp __attribute__ ((__vector_size__ (16))) = v;
-    unsigned int  c;
+    std::uint32_t c;
     __asm__ ("vcvtps2dq %0, %0" : "+x" (tmp));
     __asm__ ("vpackssdw %0, %0, %0" : "+x" (tmp));
     __asm__ ("vpackuswb %0, %0, %0" : "+x" (tmp));
@@ -300,18 +300,18 @@ struct FloatVector4
     v[2] = x;
     v[3] = x;
   }
-  inline FloatVector4(const unsigned int *p)
+  inline FloatVector4(const std::uint32_t *p)
   {
-    unsigned int  c = *p;
+    std::uint32_t c = *p;
     v[0] = float(int(c & 0xFF));
     v[1] = float(int((c >> 8) & 0xFF));
     v[2] = float(int((c >> 16) & 0xFF));
     v[3] = float(int((c >> 24) & 0xFF));
   }
-  inline FloatVector4(const unsigned int *p1, const unsigned int *p2)
+  inline FloatVector4(const std::uint32_t *p1, const std::uint32_t *p2)
   {
-    unsigned int  c1 = *p1;
-    unsigned int  c2 = *p2;
+    std::uint32_t c1 = *p1;
+    std::uint32_t c2 = *p2;
     v[0] = float(int(c1 & 0xFF));
     v[1] = float(int((c1 >> 8) & 0xFF));
     v[2] = float(int(c2 & 0xFF));
@@ -525,7 +525,7 @@ struct FloatVector4
             + (tmp * FloatVector4(float(1.13942692 * 255.0)));
     return (*this);
   }
-  inline operator unsigned int() const
+  inline operator std::uint32_t() const
   {
     int     c0 = roundFloat(v[0]);
     int     c1 = roundFloat(v[1]);
@@ -535,8 +535,8 @@ struct FloatVector4
     c1 = (c1 > 0 ? (c1 < 255 ? c1 : 255) : 0);
     c2 = (c2 > 0 ? (c2 < 255 ? c2 : 255) : 0);
     c3 = (c3 > 0 ? (c3 < 255 ? c3 : 255) : 0);
-    return ((unsigned int) c0 | ((unsigned int) c1 << 8)
-            | ((unsigned int) c2 << 16) | ((unsigned int) c3 << 24));
+    return ((std::uint32_t) c0 | ((std::uint32_t) c1 << 8)
+            | ((std::uint32_t) c2 << 16) | ((std::uint32_t) c3 << 24));
   }
 #endif
   inline FloatVector4(unsigned int c0, unsigned int c1,
@@ -568,8 +568,8 @@ struct FloatVector4
     }
     *this = v0;
   }
-  inline FloatVector4(const unsigned int *p0, const unsigned int *p1,
-                      const unsigned int *p2, const unsigned int *p3,
+  inline FloatVector4(const std::uint32_t *p0, const std::uint32_t *p1,
+                      const std::uint32_t *p2, const std::uint32_t *p3,
                       float xf, float yf, bool isSRGB = false)
   {
     FloatVector4  v0(p0);
@@ -596,10 +596,10 @@ struct FloatVector4
     }
     *this = v0;
   }
-  inline FloatVector4(const unsigned int *p1_0, const unsigned int *p2_0,
-                      const unsigned int *p1_1, const unsigned int *p2_1,
-                      const unsigned int *p1_2, const unsigned int *p2_2,
-                      const unsigned int *p1_3, const unsigned int *p2_3,
+  inline FloatVector4(const std::uint32_t *p1_0, const std::uint32_t *p2_0,
+                      const std::uint32_t *p1_1, const std::uint32_t *p2_1,
+                      const std::uint32_t *p1_2, const std::uint32_t *p2_2,
+                      const std::uint32_t *p1_3, const std::uint32_t *p2_3,
                       float xf, float yf, bool isSRGB = false)
   {
     FloatVector4  v0(p1_0, p2_0);

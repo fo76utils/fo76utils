@@ -3,30 +3,30 @@
 #include "zlib.hpp"
 #include "fp32vec4.hpp"
 
-unsigned int ZLibDecompressor::readU32LE()
+std::uint32_t ZLibDecompressor::readU32LE()
 {
-  unsigned int  w = readU16LE();
-  w = w | ((unsigned int) readU16LE() << 16);
+  std::uint32_t w = readU16LE();
+  w = w | ((std::uint32_t) readU16LE() << 16);
   return w;
 }
 
-unsigned long long ZLibDecompressor::readU64LE()
+std::uint64_t ZLibDecompressor::readU64LE()
 {
-  unsigned long long  w = readU32LE();
-  w = w | ((unsigned long long) readU32LE() << 32);
+  std::uint64_t w = readU32LE();
+  w = w | ((std::uint64_t) readU32LE() << 32);
   return w;
 }
 
-unsigned short ZLibDecompressor::readU16BE()
+std::uint16_t ZLibDecompressor::readU16BE()
 {
-  unsigned short  w = readU8();
+  std::uint16_t w = readU8();
   w = (w << 8) | readU8();
   return w;
 }
 
-unsigned int ZLibDecompressor::readU32BE()
+std::uint32_t ZLibDecompressor::readU32BE()
 {
-  unsigned int  w = readU16BE();
+  std::uint32_t w = readU16BE();
   w = (w << 16) | readU16BE();
   return w;
 }
@@ -40,15 +40,15 @@ inline void ZLibDecompressor::srLoad(unsigned long long& sr)
     if (BRANCH_EXPECT((inPtr + 6) <= inBufEnd, true))
     {
       // inPtr - 2 is always valid because of the 2 bytes long zlib header
-      const unsigned long long  *p =
-          reinterpret_cast< const unsigned long long * >(inPtr - 2);
+      const std::uint64_t *p =
+          reinterpret_cast< const std::uint64_t * >(inPtr - 2);
       sr = (*p >> (16U - bitCnt)) | (1ULL << (bitCnt + 48U));
       inPtr = inPtr + 6;
     }
     else if (BRANCH_EXPECT((inPtr + 2) <= inBufEnd, true))
     {
-      const unsigned int  *p =
-          reinterpret_cast< const unsigned int * >(inPtr - 2);
+      const std::uint32_t *p =
+          reinterpret_cast< const std::uint32_t * >(inPtr - 2);
       sr = (unsigned long long) *p | (1ULL << 32);
       sr = sr >> (16U - bitCnt);
       inPtr = inPtr + 2;
@@ -559,7 +559,7 @@ size_t ZLibDecompressor::decompressData(unsigned char *buf,
 {
   ZLibDecompressor  zlibDecompressor(inBuf, compressedSize);
   // CMF, FLG
-  unsigned short  h = zlibDecompressor.readU16BE();
+  std::uint16_t h = zlibDecompressor.readU16BE();
   if (h == 0x0422)
     return zlibDecompressor.decompressLZ4(buf, uncompressedSize);
   if ((h & 0x8F20) != 0x0800 || (h % 31) != 0)

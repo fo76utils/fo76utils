@@ -23,8 +23,8 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
   unsigned char m = 7 - l;
   int     w = (xMax + 1 - xMin) << m;
   int     h = (yMax + 1 - yMin) << m;
-  std::vector< unsigned short > buf((size_t(w) * size_t(h)) << 1, 0);
-  std::vector< unsigned short > cellBuf(size_t(16384 >> (l + l)), 0);
+  std::vector< std::uint16_t >  buf((size_t(w) * size_t(h)) << 1, 0);
+  std::vector< std::uint16_t >  cellBuf(size_t(16384 >> (l + l)), 0);
   float   zMin = btdFile.getMinHeight();
   float   xyScale = 4096.0f / float(cellResolution);
   float   xyScale2 = xyScale * 65535.0f / (btdFile.getMaxHeight() - zMin);
@@ -37,11 +37,11 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
       {
         for (int cellX = xMin; cellX <= xMax; cellX++)
         {
-          unsigned short  *srcPtr = &(cellBuf.front());
+          std::uint16_t *srcPtr = &(cellBuf.front());
           btdFile.getCellHeightMap(srcPtr, cellX, cellY, l);
           for (int yc = 0; yc < cellResolution; yc++)
           {
-            unsigned short  *dstPtr = &(buf.front());
+            std::uint16_t *dstPtr = &(buf.front());
             dstPtr = dstPtr + (size_t((cellResolution << ((yMax - cellY) & 1))
                                       - (yc + 1)) * size_t(w));
             dstPtr = dstPtr + (size_t(cellX - xMin) << m);
@@ -242,10 +242,10 @@ int main(int argc, char **argv)
       ltexPalette.resize(256);
       loadPalette(&(ltexPalette.front()), argv[9]);
     }
-    std::vector< unsigned short > heightBuf;
-    std::vector< unsigned short > ltexBuf;
+    std::vector< std::uint16_t >  heightBuf;
+    std::vector< std::uint16_t >  ltexBuf;
     std::vector< unsigned char >  gcvrBuf;
-    std::vector< unsigned short > vclrBuf;
+    std::vector< std::uint16_t >  vclrBuf;
     std::vector< unsigned char >  txtSetBuf(64, 0xFF);
     static const unsigned int outFmtDataSizes[12] =
     {

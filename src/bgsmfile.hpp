@@ -13,7 +13,7 @@ struct BGSMFile
   unsigned char flags;
   unsigned char gradientMapV;           // 255 = 1.0
   unsigned char envMapScale;            // 128 = 1.0
-  unsigned int  specularColor;
+  std::uint32_t specularColor;
   unsigned char specularScale;          // 128 = 1.0
   unsigned char specularSmoothness;     // 255 = 1.0, glossiness from 2 to 1024
   // bit 0 = blending enabled

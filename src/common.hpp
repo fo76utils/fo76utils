@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdarg>
+#include <cstdint>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -32,27 +33,23 @@ inline int roundFloat(float x)
 #endif
 }
 
-inline int uint16ToSigned(unsigned short x)
+inline std::int16_t uint16ToSigned(unsigned short x)
 {
-  if (sizeof(short) == 2)
-    return int(short(x));
-  return (int((unsigned int) x ^ 0x8000U) + int(-0x8000));
+  return (std::int16_t) x;
 }
 
-inline int uint32ToSigned(unsigned int x)
+inline std::int32_t uint32ToSigned(unsigned int x)
 {
-  if (sizeof(int) == 4)
-    return int(x);
-  return (int(x ^ 0x80000000U) + int(-0x80000000));
+  return (std::int32_t) x;
 }
 
 inline float convertFloat16(unsigned short n)
 {
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
-  unsigned int  m = (unsigned int) int((signed short) n);
+  std::uint32_t m = (std::uint32_t) int((std::int16_t) n);
   union
   {
-    unsigned int  i;
+    std::uint32_t i;
     float   f;
   }
   tmp;
@@ -75,7 +72,7 @@ inline float convertFloat16(unsigned short n)
 #endif
 }
 
-unsigned short convertToFloat16(float x);
+std::uint16_t convertToFloat16(float x);
 
 inline unsigned long long rgba32ToRBGA64(unsigned int c)
 {

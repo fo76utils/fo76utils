@@ -328,7 +328,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       return (z < r.z);
     }
   };
-  unsigned int  *bufRGBA;
+  std::uint32_t *bufRGBA;
   float   *bufZ;
   int     width;
   int     height;
@@ -416,10 +416,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
  public:
   // alpha = 255 - sqrt(waterDepth*16) after first pass water rendering.
   // isFO76 enables GGX specular function and sRGB cube maps.
-  Plot3D_TriShape(unsigned int *outBufRGBA, float *outBufZ,
+  Plot3D_TriShape(std::uint32_t *outBufRGBA, float *outBufZ,
                   int imageWidth, int imageHeight, bool isFO76 = false);
   virtual ~Plot3D_TriShape();
-  inline void setBuffers(unsigned int *outBufRGBA, float *outBufZ,
+  inline void setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
                          int imageWidth, int imageHeight)
   {
     bufRGBA = outBufRGBA;
@@ -469,14 +469,14 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                  const NIFFile::NIFVertexTransform& viewTransform,
                  float lightX, float lightY, float lightZ,
                  const DDSTexture * const *textures, size_t textureCnt,
-                 unsigned int waterColor, float envMapLevel = 1.0f);
+                 std::uint32_t waterColor, float envMapLevel = 1.0f);
   // n = 0: default mode
   // n = 1: render c as a solid color (0x00RRGGBB)
   // n = 2: Z * 16 (blue = LSB, red = MSB)
   // n = 3: normal map
   // n = 4: disable lighting and reflections
   // n = 5: lighting only (white texture)
-  void setDebugMode(unsigned int n, unsigned int c)
+  void setDebugMode(unsigned int n, std::uint32_t c)
   {
     debugMode = (n <= 5U ? (n != 1U ? n : (0xFF000000U | c)) : 0U);
   }

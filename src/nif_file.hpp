@@ -15,12 +15,12 @@ class NIFFile : public FileBuffer
     float   x;
     float   y;
     float   z;
-    unsigned int  bitangent;            // 0x00ZZYYXX
-    unsigned int  tangent;
-    unsigned int  normal;
-    unsigned short  u;                  // FP16 format
-    unsigned short  v;
-    unsigned int    vertexColor;        // 0xAABBGGRR
+    std::uint32_t bitangent;            // 0x00ZZYYXX
+    std::uint32_t tangent;
+    std::uint32_t normal;
+    std::uint16_t u;                    // FP16 format
+    std::uint16_t v;
+    std::uint32_t vertexColor;          // 0xAABBGGRR
     NIFVertex()
       : x(0.0f), y(0.0f), z(0.0f),
         bitangent(0x008080FFU), tangent(0x0080FF80U), normal(0x00FF8080U),
@@ -149,7 +149,7 @@ class NIFFile : public FileBuffer
     unsigned char gradientMapV;
     unsigned char envMapScale;          // 128 = 1.0
     unsigned char alphaThreshold;
-    unsigned int  specularColor;
+    std::uint32_t specularColor;
     unsigned char specularScale;        // 128 = 1.0
     unsigned char specularSmoothness;   // 255 = 1.0, glossiness from 2 to 1024
     unsigned short  texturePathCnt;
@@ -265,7 +265,7 @@ class NIFFile : public FileBuffer
     unsigned char   bgsmFlags;
     unsigned char   bgsmGradientMapV;
     unsigned char   bgsmEnvMapScale;
-    unsigned int    bgsmSpecularColor;
+    std::uint32_t   bgsmSpecularColor;
     unsigned char   bgsmSpecularScale;
     unsigned char   bgsmSpecularSmoothness;
     unsigned short  bgsmAlphaFlags;

@@ -12,7 +12,7 @@ class FileBuffer
   size_t  filePos;
   std::FILE *fileStream;
  public:
-  static unsigned int swapUInt32(unsigned int n);
+  static std::uint32_t swapUInt32(unsigned int n);
   // the fast versions of the functions are inline
   // and do not check if the read position is valid
   inline unsigned char readUInt8Fast()
@@ -21,14 +21,14 @@ class FileBuffer
   }
   unsigned char readUInt8();
   signed char readInt8();
-  inline unsigned short readUInt16Fast();
-  unsigned short readUInt16();
-  short readInt16();
-  inline unsigned int readUInt32Fast();
-  unsigned int readUInt32();
-  int readInt32();
+  inline std::uint16_t readUInt16Fast();
+  std::uint16_t readUInt16();
+  std::int16_t readInt16();
+  inline std::uint32_t readUInt32Fast();
+  std::uint32_t readUInt32();
+  std::int32_t readInt32();
   float readFloat();
-  unsigned long long readUInt64();
+  std::uint64_t readUInt64();
   float readFloat16();
   // read n bytes of string data, or until '\0' or end of buffer by default
   void readString(std::string& s, size_t n = std::string::npos);
@@ -38,10 +38,10 @@ class FileBuffer
                 const char *prefix = 0, const char *suffix = 0);
   // read data from specified offset or pointer
   unsigned char readUInt8(size_t offs) const;
-  unsigned short readUInt16(size_t offs) const;
-  unsigned int readUInt32(size_t offs) const;
-  static inline unsigned short readUInt16Fast(const void *p);
-  static inline unsigned int readUInt32Fast(const void *p);
+  std::uint16_t readUInt16(size_t offs) const;
+  std::uint32_t readUInt32(size_t offs) const;
+  static inline std::uint16_t readUInt16Fast(const void *p);
+  static inline std::uint32_t readUInt32Fast(const void *p);
   static inline bool checkType(unsigned int id, const char *s);
   inline size_t size() const
   {
@@ -70,54 +70,54 @@ class FileBuffer
   virtual ~FileBuffer();
 };
 
-inline unsigned short FileBuffer::readUInt16Fast()
+inline std::uint16_t FileBuffer::readUInt16Fast()
 {
   const unsigned char *p = fileBuf + filePos;
   filePos = filePos + 2;
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
-  return *(reinterpret_cast< const unsigned short * >(p));
+  return *(reinterpret_cast< const std::uint16_t * >(p));
 #else
-  return ((unsigned short) p[0] | ((unsigned short) p[1] << 8));
+  return ((std::uint16_t) p[0] | ((std::uint16_t) p[1] << 8));
 #endif
 }
 
-inline unsigned int FileBuffer::readUInt32Fast()
+inline std::uint32_t FileBuffer::readUInt32Fast()
 {
   const unsigned char *p = fileBuf + filePos;
   filePos = filePos + 4;
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
-  return *(reinterpret_cast< const unsigned int * >(p));
+  return *(reinterpret_cast< const std::uint32_t * >(p));
 #else
-  return ((unsigned int) p[0] | ((unsigned int) p[1] << 8)
-          | ((unsigned int) p[2] << 16) | ((unsigned int) p[3] << 24));
+  return ((std::uint32_t) p[0] | ((std::uint32_t) p[1] << 8)
+          | ((std::uint32_t) p[2] << 16) | ((std::uint32_t) p[3] << 24));
 #endif
 }
 
-inline unsigned short FileBuffer::readUInt16Fast(const void *p)
+inline std::uint16_t FileBuffer::readUInt16Fast(const void *p)
 {
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
-  return *(reinterpret_cast< const unsigned short * >(p));
+  return *(reinterpret_cast< const std::uint16_t * >(p));
 #else
   const unsigned char *q = reinterpret_cast< const unsigned char * >(p);
-  return ((unsigned short) q[0] | ((unsigned short) q[1] << 8));
+  return ((std::uint16_t) q[0] | ((std::uint16_t) q[1] << 8));
 #endif
 }
 
-inline unsigned int FileBuffer::readUInt32Fast(const void *p)
+inline std::uint32_t FileBuffer::readUInt32Fast(const void *p)
 {
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
-  return *(reinterpret_cast< const unsigned int * >(p));
+  return *(reinterpret_cast< const std::uint32_t * >(p));
 #else
   const unsigned char *q = reinterpret_cast< const unsigned char * >(p);
-  return ((unsigned int) q[0] | ((unsigned int) q[1] << 8)
-          | ((unsigned int) q[2] << 16) | ((unsigned int) q[3] << 24));
+  return ((std::uint32_t) q[0] | ((std::uint32_t) q[1] << 8)
+          | ((std::uint32_t) q[2] << 16) | ((std::uint32_t) q[3] << 24));
 #endif
 }
 
 inline bool FileBuffer::checkType(unsigned int id, const char *s)
 {
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
-  return (id == *(reinterpret_cast< const unsigned int * >(s)));
+  return (id == *(reinterpret_cast< const std::uint32_t * >(s)));
 #else
   return (char(id & 0xFF) == s[0] && char((id >> 8) & 0xFF) == s[1] &&
           char((id >> 16) & 0xFF) == s[2] && char((id >> 24) & 0xFF) == s[3]);
