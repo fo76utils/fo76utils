@@ -10,6 +10,9 @@
 #  define VERTEX_XY_SNAP  0.03125f
 #endif
 
+static DDSTexture defaultTexture_L(0xFF00FF7FU);
+static DDSTexture defaultTexture_R(0xFF0A0A0AU);
+
 size_t Plot3D_TriShape::transformVertexData(
     const NIFFile::NIFVertexTransform& modelTransform,
     const NIFFile::NIFVertexTransform& viewTransform)
@@ -301,7 +304,7 @@ void Plot3D_TriShape::drawPixel_Water(
   p.bufZ[offs] = z.xyz[2] * 1.00000025f + 0.00000025f;
   // alpha channel = 255 - sqrt(waterDepth*16)
   p.bufRGBA[offs] = (p.bufRGBA[offs] & 0x00FFFFFFU)
-                    | ((unsigned int) (255 - roundFloat(d)) << 24);
+                    | ((std::uint32_t) (255 - roundFloat(d)) << 24);
 }
 
 void Plot3D_TriShape::drawPixel_Water_2(
@@ -332,7 +335,7 @@ void Plot3D_TriShape::drawPixel_Water_2(
   float   nDotV = -(z.normal[2]);
   float   specular = p.specularPhong(reflectedView, 0.875f, nDotL, true);
   FloatVector4  c(p.calculateLighting_Water(c0, e, specular, nDotL, nDotV));
-  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
+  p.bufRGBA[offs] = (std::uint32_t) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_Water_2G(
@@ -363,7 +366,7 @@ void Plot3D_TriShape::drawPixel_Water_2G(
   float   nDotV = -(z.normal[2]);
   float   specular = p.specularGGX(reflectedView, 0.875f, nDotL);
   FloatVector4  c(p.calculateLighting_Water(c0, e, specular, nDotL, nDotV));
-  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
+  p.bufRGBA[offs] = (std::uint32_t) c | 0xFF000000U;
 }
 
 inline FloatVector4 Plot3D_TriShape::getDiffuseColor(
@@ -410,13 +413,13 @@ void Plot3D_TriShape::drawPixel_Debug(
   p.bufZ[offs] = z.xyz[2];
   if (!(p.debugMode == 0 || p.debugMode == 3 || p.debugMode == 5))
   {
-    unsigned int  tmp = 0xFF000000U;
+    std::uint32_t tmp = 0xFF000000U;
     if (p.debugMode & 0x80000000U)
-      tmp = tmp | p.debugMode;
+      tmp = tmp | (std::uint32_t) p.debugMode;
     else if (p.debugMode == 2)
-      tmp = tmp | (unsigned int) roundFloat(z.xyz[2] * 16.0f);
+      tmp = tmp | (std::uint32_t) roundFloat(z.xyz[2] * 16.0f);
     else
-      tmp = tmp | (unsigned int) c.srgbCompress();
+      tmp = tmp | (std::uint32_t) c.srgbCompress();
     if (p.debugMode != 4)
       tmp = (tmp & 0xFF00FF00U) | ((tmp & 0xFFU) << 16) | ((tmp >> 16) & 0xFFU);
     p.bufRGBA[offs] = tmp;
@@ -444,7 +447,7 @@ void Plot3D_TriShape::drawPixel_Debug(
     }
     c = (c * FloatVector4(p.lightColor[3])).srgbCompress();
   }
-  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
+  p.bufRGBA[offs] = (std::uint32_t) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_Diffuse(
@@ -467,7 +470,7 @@ void Plot3D_TriShape::drawPixel_Diffuse(
              txtU, txtV, p.mipLevel + p.mipOffsetG).srgbExpand();
   }
   c = (c * FloatVector4(p.lightColor[3])).srgbCompress();
-  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
+  p.bufRGBA[offs] = (std::uint32_t) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_Normal(
@@ -503,7 +506,7 @@ void Plot3D_TriShape::drawPixel_Normal(
              txtU, txtV, p.mipLevel + p.mipOffsetG).srgbExpand();
   }
   c = (c * FloatVector4(p.lightColor[3])).srgbCompress();
-  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
+  p.bufRGBA[offs] = (std::uint32_t) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_NormalEnv(
@@ -527,7 +530,7 @@ void Plot3D_TriShape::drawPixel_NormalEnv(
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, false);
   c = p.calculateLighting(c, e, specular, specLevel, FloatVector4(0.25f),
                           txtU, txtV, nDotL, nDotV, smoothness);
-  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
+  p.bufRGBA[offs] = (std::uint32_t) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_NormalEnvM(
@@ -552,7 +555,7 @@ void Plot3D_TriShape::drawPixel_NormalEnvM(
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, false);
   c = p.calculateLighting(c, e, specular, specLevel, FloatVector4(0.25f),
                           txtU, txtV, nDotL, nDotV, smoothness);
-  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
+  p.bufRGBA[offs] = (std::uint32_t) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_NormalEnvS(
@@ -567,7 +570,7 @@ void Plot3D_TriShape::drawPixel_NormalEnvS(
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT_2(txtU, txtV, p.mipLevel + p.mipOffsetN,
-                                          p.textureS));
+                                          *(p.textureS)));
   float   specLevel = n[2] * (1.0f / 255.0f);
   float   smoothness =
       float(int(p.specularSmoothness)) * n[3] * (1.0f / (255.0f * 255.0f));
@@ -578,7 +581,7 @@ void Plot3D_TriShape::drawPixel_NormalEnvS(
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, true);
   c = p.calculateLighting(c, e, specular, specLevel, FloatVector4(0.25f),
                           txtU, txtV, nDotL, nDotV, smoothness);
-  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
+  p.bufRGBA[offs] = (std::uint32_t) c | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_NormalRefl(
@@ -593,22 +596,13 @@ void Plot3D_TriShape::drawPixel_NormalRefl(
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT_2(txtU, txtV, p.mipLevel + p.mipOffsetN,
-                                          p.textureS));
+                                          *(p.textureS)));
   FloatVector4  r(p.textureR->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetR));
   r.srgbExpand();
   r.maxValues(FloatVector4(0.015625f));
-  float   smoothness = float(int(p.specularSmoothness));
-  float   ao;
-  if (BRANCH_EXPECT(!p.textureS, false))
-  {
-    smoothness *= (0.5f / 255.0f);
-    ao = 1.0f;
-  }
-  else
-  {
-    smoothness *= (n[2] * (1.0f / (255.0f * 255.0f)));
-    ao = n[3] * (1.0f / 255.0f);
-  }
+  float   smoothness =
+      float(int(p.specularSmoothness)) * (n[2] * (1.0f / (255.0f * 255.0f)));
+  float   ao = n[3] * (1.0f / 255.0f);
   float   nDotL = p.normalMap(z, n).dotProduct3(p.lightVector);
   float   nDotV = -(z.normal[2]);
   FloatVector4  reflectedView(p.calculateReflection(z));
@@ -616,7 +610,7 @@ void Plot3D_TriShape::drawPixel_NormalRefl(
   float   specular = p.specularGGX(reflectedView, smoothness, nDotL);
   c = p.calculateLighting(c, e, specular, ao, r,
                           txtU, txtV, nDotL, nDotV, smoothness, true);
-  p.bufRGBA[offs] = (unsigned int) c | 0xFF000000U;
+  p.bufRGBA[offs] = (std::uint32_t) c | 0xFF000000U;
 }
 
 inline void Plot3D_TriShape::drawPixel(
@@ -839,7 +833,7 @@ void Plot3D_TriShape::drawTriangles()
 }
 
 Plot3D_TriShape::Plot3D_TriShape(
-    unsigned int *outBufRGBA, float *outBufZ, int imageWidth, int imageHeight,
+    std::uint32_t *outBufRGBA, float *outBufZ, int imageWidth, int imageHeight,
     bool isFO76)
   : bufRGBA(outBufRGBA),
     bufZ(outBufZ),
@@ -991,11 +985,11 @@ void Plot3D_TriShape::drawTriShape(
     else
     {
       textureE = textures[4];
-      if (textureCnt >= 10 && textures[8])      // Fallout 76
+      if (textureCnt >= 10 && (textures[8] || textures[9]))     // Fallout 76
       {
-        textureR = textures[8];
+        textureR = (textures[8] ? textures[8] : &defaultTexture_R);
         mipOffsetR = calculateMipOffset(textureR, textureD);
-        textureS = textures[9];
+        textureS = (textures[9] ? textures[9] : &defaultTexture_L);
         drawPixelFunction = &drawPixel_NormalRefl;
       }
       else if (textureCnt >= 7 && textures[6])  // Fallout 4
@@ -1025,7 +1019,7 @@ void Plot3D_TriShape::drawWater(
     const NIFFile::NIFVertexTransform& viewTransform,
     float lightX, float lightY, float lightZ,
     const DDSTexture * const *textures, size_t textureCnt,
-    unsigned int waterColor, float envMapLevel)
+    std::uint32_t waterColor, float envMapLevel)
 {
   if (!(flags & 0x02) || debugMode)
     return;
