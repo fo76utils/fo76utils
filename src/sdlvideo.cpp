@@ -438,7 +438,7 @@ void SDLDisplay::enableConsole()
 {
 #ifdef HAVE_SDL2
 #  if defined(_WIN32) || defined(_WIN64)
-  if (AllocConsole())
+  if (!std::getenv("TERM") && AttachConsole((DWORD) -1))
   {
     std::FILE *tmp = (std::FILE *) 0;
     (void) freopen_s(&tmp, "CONOUT$", "w", stdout);
