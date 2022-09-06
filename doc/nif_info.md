@@ -1,10 +1,11 @@
     nif_info [OPTIONS] ARCHIVEPATH PATTERN...
 
-List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ format, or render the model to a DDS file, or display it (nif\_view on Windows).
+List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ format, or render the model to a DDS file, or display it.
 
 ### Options
 
 * **--**: Remaining options are file names.
+* **-o FILENAME**: Set output file name (default: standard output).
 * **-q**: Print author name, file name, and file size only.
 * **-v**: Verbose mode, print block list, and vertex and triangle data.
 * **-obj**: Print model data in .obj format.
@@ -18,7 +19,7 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **+**, **-**: Zoom in or out.
 * **Keypad 1**, **3**, **9**, **7**: Set isometric view from the SW, SE, NE, or NW (default).
 * **Keypad 2**, **6**, **8**, **4**, **5**: Set view from the S, E, N, W, or top.
-* **F1** to **F5**: Select default cube map.
+* **F1** to **F8**: Select default cube map.
 * **A**, **D**: Rotate model around the Z axis.
 * **S**, **W**: Rotate model around the X axis.
 * **Q**, **E**: Rotate model around the Y axis.
@@ -29,11 +30,14 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **Left**, **Right**: Rotate light vector around the Z axis.
 * **Up**, **Down**: Rotate light vector around the Y axis.
 * **Insert**, **Delete**: Zoom reflected environment in or out.
+* **Caps Lock**: Toggle fine adjustment of view and lighting parameters.
 * **Page Up**: Enable downsampling (slow).
 * **Page Down**: Disable downsampling.
 * **Space**, **Backspace**: Load next or previous file matching the pattern.
 * **F12** or **Print Screen**: Save screenshot.
+* **P**: Print current settings and file list.
 * **H**: Show help screen.
+* **C**: Clear messages.
 * **Esc**: Quit program.
 
 ### Examples
