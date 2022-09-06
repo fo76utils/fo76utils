@@ -1844,13 +1844,18 @@ void Renderer::setThreadCount(int n)
     return;
   threadCnt = n;
   renderThreads.resize(size_t(n));
+  // enable GGX for Fallout 76
+  unsigned int  flags = (unsigned int) (esmFile.getESMVersion() >= 0xC0U);
+  // cube maps in linear color space for Fallout 4
+  flags |= ((unsigned int) ((esmFile.getESMVersion() & ~0x3FU) != 0x80U) << 1);
+  // cube maps flipped vertically for Skyrim
+  flags |= ((unsigned int) (esmFile.getESMVersion() < 0x80U) << 2);
   for (size_t i = 0; i < renderThreads.size(); i++)
   {
     if (!renderThreads[i].renderer)
     {
       renderThreads[i].renderer =
-          new Plot3D_TriShape(outBufRGBA, outBufZ, width, height,
-                              (esmFile.getESMVersion() >= 0xC0));
+          new Plot3D_TriShape(outBufRGBA, outBufZ, width, height, flags);
     }
   }
 }
@@ -1914,7 +1919,7 @@ void Renderer::setLighting(int lightColor, int ambientColor, int envColor,
   {
     a = Plot3D_TriShape::cubeMapToAmbient(
             loadTexture(defaultEnvMap, renderThreads[0].fileBuf, 0),
-            (esmFile.getESMVersion() >= 0xC0));
+            ((esmFile.getESMVersion() & ~0x3FU) != 0x80U));
   }
   for (size_t i = 0; i < renderThreads.size(); i++)
   {
