@@ -32,10 +32,17 @@ size_t Plot3D_TriShape::transformVertexData(
   xt *= vt;
   {
     NIFFile::NIFBounds  b;
+    FloatVector4  rX(xt.rotateXX, xt.rotateYX, xt.rotateZX, xt.rotateXY);
+    FloatVector4  rY(xt.rotateXY, xt.rotateYY, xt.rotateZY, xt.rotateXZ);
+    FloatVector4  rZ(xt.rotateXZ, xt.rotateYZ, xt.rotateZZ, xt.scale);
+    FloatVector4  scale(xt.scale);
+    FloatVector4  offsXYZ(xt.offsX, xt.offsY, xt.offsZ, 0.0f);
+    scale[3] = 0.0f;
     for (size_t i = 0; i < vertexCnt; i++)
     {
       Vertex  v(vertexData[i]);
-      v.xyz = xt.transformXYZ(v.xyz);
+      v.xyz = ((FloatVector4(v.xyz[0]) * rX) + (FloatVector4(v.xyz[1]) * rY)
+               + (FloatVector4(v.xyz[2]) * rZ)) * scale + offsXYZ;
       b += v.xyz;
       vertexBuf.push_back(v);
     }
@@ -249,8 +256,7 @@ inline FloatVector4 Plot3D_TriShape::environmentMap(
   FloatVector4  v((FloatVector4(reflectedView[0]) * viewTransformInvX)
                   + (FloatVector4(reflectedView[1]) * viewTransformInvY)
                   + (FloatVector4(reflectedView[2]) * viewTransformInvZ));
-  float   r = 1.0f - smoothness;        // roughness
-  float   m = (r > 0.0f ? r : 0.0f) * float(textureE->getMaxMipLevel());
+  float   m = (1.0f - smoothness) * float(textureE->getMaxMipLevel());
   FloatVector4  e(textureE->cubeMap(v[0], v[1], v[2], m));
   if (!isSRGB)
     return (e * FloatVector4(1.0f / 255.0f));
@@ -330,7 +336,7 @@ void Plot3D_TriShape::drawPixel_Water_2(
   FloatVector4  reflectedView(p.calculateReflection(z));
   FloatVector4  e(0.0f);
   if (BRANCH_EXPECT(p.textureE, true))
-    e = p.environmentMap(reflectedView, 1.0f, false);
+    e = p.environmentMap(reflectedView, 1.0f, p.cubeMapSRGB);
   float   nDotL = z.normal.dotProduct3(p.lightVector);
   float   nDotV = -(z.normal[2]);
   float   specular = p.specularPhong(reflectedView, 0.875f, nDotL, true);
@@ -491,14 +497,15 @@ void Plot3D_TriShape::drawPixel_Normal(
   float   v = float(std::fabs(nDotV));
   // assume roughness = 1.0, f0 = 0.04, specular = 0.25
   FloatVector4  e(p.ambientLight);      // already multiplied with envColor
-  FloatVector4  s(p.specularColorFloat * FloatVector4(0.25f * p.specularLevel));
+  FloatVector4  s(p.specularColorFloat
+                  * FloatVector4(0.53125f * p.specularLevel));
   e *= p.reflectionLevel;
   s *= p.lightColor;
-  // geometry function (kEnv = kSpec = 0.5)
-  FloatVector4  g(v / (v * 0.5f + 0.5f));
+  // geometry function (kEnv = kSpec = 0.5), multiplied with ao = 0.94
+  FloatVector4  g(v / (v * 0.53125f + 0.53125f));
   e *= g;
   c *= (FloatVector4(l) * p.lightColor + (p.ambientLight * g));
-  s *= (g * FloatVector4(l / (l * 0.5f + 0.5f)));
+  s *= (g * FloatVector4(l / (l + 1.0f)));
   c = c + ((e + s - c) * FloatVector4(0.04f));
   if (BRANCH_EXPECT(p.textureGlow, false))
   {
@@ -526,7 +533,7 @@ void Plot3D_TriShape::drawPixel_NormalEnv(
   float   nDotV = -(z.normal[2]);
   float   smoothness = float(int(p.specularSmoothness)) * (1.0f / 255.0f);
   FloatVector4  reflectedView(p.calculateReflection(z));
-  FloatVector4  e(p.environmentMap(reflectedView, smoothness, false));
+  FloatVector4  e(p.environmentMap(reflectedView, smoothness, p.cubeMapSRGB));
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, false);
   c = p.calculateLighting(c, e, specular, specLevel, FloatVector4(0.25f),
                           txtU, txtV, nDotL, nDotV, smoothness);
@@ -551,7 +558,7 @@ void Plot3D_TriShape::drawPixel_NormalEnvM(
   float   nDotV = -(z.normal[2]);
   float   smoothness = float(int(p.specularSmoothness)) * (1.0f / 255.0f);
   FloatVector4  reflectedView(p.calculateReflection(z));
-  FloatVector4  e(p.environmentMap(reflectedView, smoothness, false));
+  FloatVector4  e(p.environmentMap(reflectedView, smoothness, p.cubeMapSRGB));
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, false);
   c = p.calculateLighting(c, e, specular, specLevel, FloatVector4(0.25f),
                           txtU, txtV, nDotL, nDotV, smoothness);
@@ -577,7 +584,7 @@ void Plot3D_TriShape::drawPixel_NormalEnvS(
   float   nDotL = p.normalMap(z, n).dotProduct3(p.lightVector);
   float   nDotV = -(z.normal[2]);
   FloatVector4  reflectedView(p.calculateReflection(z));
-  FloatVector4  e(p.environmentMap(reflectedView, smoothness, false));
+  FloatVector4  e(p.environmentMap(reflectedView, smoothness, p.cubeMapSRGB));
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, true);
   c = p.calculateLighting(c, e, specular, specLevel, FloatVector4(0.25f),
                           txtU, txtV, nDotL, nDotV, smoothness);
@@ -834,7 +841,7 @@ void Plot3D_TriShape::drawTriangles()
 
 Plot3D_TriShape::Plot3D_TriShape(
     std::uint32_t *outBufRGBA, float *outBufZ, int imageWidth, int imageHeight,
-    bool isFO76)
+    unsigned int renderFlags)
   : bufRGBA(outBufRGBA),
     bufZ(outBufZ),
     width(imageWidth),
@@ -853,7 +860,9 @@ Plot3D_TriShape::Plot3D_TriShape(
     mipLevel(15.0f),
     alphaThresholdFloat(0.0f),
     invNormals(false),
-    ggxEnabled(isFO76),
+    ggxEnabled(bool(renderFlags & 1U)),
+    cubeMapSRGB(bool(renderFlags & 2U)),
+    cubeMapZMult((signed char) (1 - int((renderFlags >> 1) & 2U))),
     viewScale(1.0f),
     lightVector(0.0f, 0.0f, 1.0f, 0.0f),
     lightColor(1.0f),
@@ -943,15 +952,16 @@ void Plot3D_TriShape::drawTriShape(
   mipLevel = 15.0f;
   alphaThresholdFloat = float(int(alphaThreshold)) * 0.999999f;
   viewScale = viewTransform.scale;
+  float   zMult = float(int(cubeMapZMult));
   viewTransformInvX =
       FloatVector4(viewTransform.rotateXX, viewTransform.rotateXY,
-                   viewTransform.rotateXZ, 0.0f);
+                   viewTransform.rotateXZ * zMult, 0.0f);
   viewTransformInvY =
       FloatVector4(viewTransform.rotateYX, viewTransform.rotateYY,
-                   viewTransform.rotateYZ, 0.0f);
+                   viewTransform.rotateYZ * zMult, 0.0f);
   viewTransformInvZ =
       FloatVector4(viewTransform.rotateZX, viewTransform.rotateZY,
-                   viewTransform.rotateZZ, 0.0f);
+                   viewTransform.rotateZZ * zMult, 0.0f);
   specularColorFloat = FloatVector4(specularColor);
   specularColorFloat *= (1.0f / 255.0f);
   reflectionLevel = float(int(envMapScale)) * (1.0f / 128.0f);
@@ -1042,15 +1052,16 @@ void Plot3D_TriShape::drawWater(
   mipLevel = 15.0f;
   alphaThresholdFloat = float(int(alphaThreshold)) * 0.999999f;
   viewScale = viewTransform.scale;
+  float   zMult = float(int(cubeMapZMult));
   viewTransformInvX =
       FloatVector4(viewTransform.rotateXX, viewTransform.rotateXY,
-                   viewTransform.rotateXZ, 0.0f);
+                   viewTransform.rotateXZ * zMult, 0.0f);
   viewTransformInvY =
       FloatVector4(viewTransform.rotateYX, viewTransform.rotateYY,
-                   viewTransform.rotateYZ, 0.0f);
+                   viewTransform.rotateYZ * zMult, 0.0f);
   viewTransformInvZ =
       FloatVector4(viewTransform.rotateZX, viewTransform.rotateZY,
-                   viewTransform.rotateZZ, 0.0f);
+                   viewTransform.rotateZZ * zMult, 0.0f);
   specularColorFloat = FloatVector4(waterColor);
   float   a = 256.0f - specularColorFloat[3];
   specularColorFloat.srgbExpand();
