@@ -49,13 +49,16 @@ static void renderCubeMap(const BA2File& ba2File,
   float   viewRotationX = 0.0f;
   float   viewRotationY = 0.0f;
   float   viewRotationZ = 0.0f;
+  float   mouseViewOffsX = 0.0f;
+  float   mouseViewOffsZ = 0.0f;
   int     viewScale = 0;
   bool    enableGamma = false;
   std::vector< SDLDisplay::SDLEvent > eventBuf;
   while (true)
   {
     NIFFile::NIFVertexTransform viewTransform(
-        1.0f, viewRotationX, viewRotationY, viewRotationZ, 0.0f, 0.0f, 0.0f);
+        1.0f, viewRotationX + mouseViewOffsX, viewRotationY,
+        viewRotationZ + mouseViewOffsZ, 0.0f, 0.0f, 0.0f);
     NIFFile::NIFVertexTransform viewTransformInv(viewTransform);
     viewTransformInv.rotateYX = viewTransform.rotateXY;
     viewTransformInv.rotateZX = viewTransform.rotateXZ;
@@ -109,8 +112,7 @@ static void renderCubeMap(const BA2File& ba2File,
       {
         int     t = eventBuf[i].type();
         int     d1 = eventBuf[i].data1();
-        int     d3 = eventBuf[i].data3();
-        int     d4 = eventBuf[i].data4();
+        int     d2 = eventBuf[i].data2();
         switch (t)
         {
           case SDLDisplay::SDLEventWindow:
@@ -185,9 +187,14 @@ static void renderCubeMap(const BA2File& ba2File,
                 redrawFlag = false;
                 break;
             }
+            break;
+          case SDLDisplay::SDLEventMButtonUp:
+          case SDLDisplay::SDLEventMButtonDown:
           case SDLDisplay::SDLEventMouseMotion:
-            viewRotationZ -= ((float(d3) / float(imageHeight)) * 3.14159265f);
-            viewRotationX -= ((float(d4) / float(imageHeight)) * 3.14159265f);
+            mouseViewOffsZ = float((imageWidth >> 1) - d1)
+                             * (3.14159265f / float(imageHeight));
+            mouseViewOffsX = float((imageHeight >> 1) - d2)
+                             * (3.14159265f / float(imageHeight));
             redrawFlag = true;
             break;
         }
@@ -212,6 +219,7 @@ static void renderCubeMap(const BA2File& ba2File,
 
 int main(int argc, char **argv)
 {
+  SDLDisplay::enableConsole();
   try
   {
     if (argc != 5 && argc != 6)
