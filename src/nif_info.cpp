@@ -333,23 +333,32 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
   }
 }
 
-static const char *cubeMapPaths[15] =
+static const char *cubeMapPaths[24] =
 {
-  "textures/cubemaps/chrome_e.dds",                             // Skyrim
+  "textures/cubemaps/bleakfallscube_e.dds",                     // Skyrim
   "textures/shared/cubemaps/mipblur_defaultoutside1.dds",       // Fallout 4
   "textures/shared/cubemaps/mipblur_defaultoutside1.dds",       // Fallout 76
   "textures/cubemaps/wrtemple_e.dds",
   "textures/shared/cubemaps/outsideoldtownreflectcube_e.dds",
   "textures/shared/cubemaps/outsideoldtownreflectcube_e.dds",
-  "textures/cubemaps/cavegreencube_e.dds",
+  "textures/cubemaps/duncaveruingreen_e.dds",
   "textures/shared/cubemaps/cgprewarstreet_e.dds",
   "textures/shared/cubemaps/swampcube.dds",
-  "textures/cubemaps/quickskydark_e.dds",
+  "textures/cubemaps/chrome_e.dds",
   "textures/shared/cubemaps/metalchrome01cube_e.dds",
   "textures/shared/cubemaps/metalchrome01cube_e.dds",
-  "textures/cubemaps/mghallcube_e.dds",
+  "textures/cubemaps/cavegreencube_e.dds",
   "textures/shared/cubemaps/outsideday01.dds",
-  "textures/shared/cubemaps/outsideday01.dds"
+  "textures/shared/cubemaps/outsideday01.dds",
+  "textures/cubemaps/mghallcube_e.dds",
+  "textures/shared/cubemaps/cgplayerhousecube.dds",
+  "textures/shared/cubemaps/chrome_e.dds",
+  "textures/cubemaps/caveicecubemap_e.dds",
+  "textures/shared/cubemaps/inssynthproductionpoolcube.dds",
+  "textures/shared/cubemaps/vault111cryocube.dds",
+  "textures/cubemaps/minecube_e.dds",
+  "textures/shared/cubemaps/memorydencube.dds",
+  "textures/shared/cubemaps/mipblur_defaultoutside_pitt.dds"
 };
 
 static float viewRotations[27] =
@@ -401,7 +410,7 @@ struct Renderer
   std::string waterTexture;
   std::string whiteTexture;
   Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
-           int imageWidth, int imageHeight, bool isFO76);
+           int imageWidth, int imageHeight, unsigned int nifVersion);
   ~Renderer();
   void setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
                   int imageWidth, int imageHeight, float envMapScale);
@@ -411,7 +420,7 @@ struct Renderer
 };
 
 Renderer::Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
-                   int imageWidth, int imageHeight, bool isFO76)
+                   int imageWidth, int imageHeight, unsigned int nifVersion)
 {
   lightX = 0.0f;
   lightY = 0.0f;
@@ -427,12 +436,18 @@ Renderer::Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
   renderers.resize(size_t(threadCnt), (Plot3D_TriShape *) 0);
   threadErrMsg.resize(size_t(threadCnt));
   viewOffsetY.resize(size_t(threadCnt + 1), 0);
+  // enable GGX for Fallout 76
+  unsigned int  flags = (unsigned int) (nifVersion >= 0x90U);
+  // cube maps in linear color space for Fallout 4
+  flags |= ((unsigned int) ((nifVersion & ~0x0FU) != 0x80U) << 1);
+  // cube maps flipped vertically for Skyrim
+  flags |= ((unsigned int) (nifVersion < 0x80U) << 2);
   try
   {
     for (size_t i = 0; i < renderers.size(); i++)
     {
       renderers[i] = new Plot3D_TriShape(outBufRGBA, outBufZ,
-                                         imageWidth, imageHeight, isFO76);
+                                         imageWidth, imageHeight, flags);
     }
   }
   catch (...)
@@ -686,7 +701,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
   {
     std::vector< float >  outBufZ(imageDataSize, 16777216.0f);
     Renderer  renderer(&(outBufRGBA.front()), &(outBufZ.front()),
-                       imageWidth, imageHeight, (nifFile.getVersion() >= 0x90));
+                       imageWidth, imageHeight, nifFile.getVersion());
     renderer.ba2File = &ba2File;
     nifFile.getMesh(renderer.meshData);
     renderer.waterTexture = "textures/water/defaultwater.dds";
@@ -748,7 +763,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       FloatVector4  a(Plot3D_TriShape::cubeMapToAmbient(
                           renderer.loadTexture(&(renderer.defaultEnvMap),
                                                false),
-                          (nifFile.getVersion() >= 0x90)));
+                          ((nifFile.getVersion() & ~0x0FU) != 0x80U)));
       for (size_t i = 0; i < renderer.renderers.size(); i++)
       {
         renderer.renderers[i]->setLighting(
@@ -776,12 +791,12 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
 }
 
 static void updateRotation(float& rx, float& ry, float& rz,
-                           float dx, float dy, float dz,
+                           int dx, int dy, int dz,
                            std::string& messageBuf, const char *msg)
 {
-  rx += dx;
-  ry += dy;
-  rz += dz;
+  rx += (float(dx) * 2.8125f);
+  ry += (float(dy) * 2.8125f);
+  rz += (float(dz) * 2.8125f);
   rx = (rx < -180.0f ? (rx + 360.0f) : (rx > 180.0f ? (rx - 360.0f) : rx));
   ry = (ry < -180.0f ? (ry + 360.0f) : (ry > 180.0f ? (ry - 360.0f) : ry));
   rz = (rz < -180.0f ? (rz + 360.0f) : (rz > 180.0f ? (rz - 360.0f) : rz));
@@ -793,10 +808,15 @@ static void updateRotation(float& rx, float& ry, float& rz,
   messageBuf = buf;
 }
 
-static void updateLightColor(FloatVector4& lightColor, FloatVector4 d,
+static void updateLightColor(FloatVector4& lightColor, int dR, int dG, int dB,
                              std::string& messageBuf)
 {
-  lightColor *= d;
+  int     r = roundFloat(float(std::log2(lightColor[0])) * 16.0f);
+  lightColor[0] = float(std::exp2(float(r + dR) * 0.0625f));
+  int     g = roundFloat(float(std::log2(lightColor[1])) * 16.0f);
+  lightColor[1] = float(std::exp2(float(g + dG) * 0.0625f));
+  int     b = roundFloat(float(std::log2(lightColor[2])) * 16.0f);
+  lightColor[2] = float(std::exp2(float(b + dB) * 0.0625f));
   lightColor.maxValues(FloatVector4(0.0625f));
   lightColor.minValues(FloatVector4(4.0f));
   char    buf[64];
@@ -810,8 +830,8 @@ static void updateLightColor(FloatVector4& lightColor, FloatVector4 d,
 static void updateValueLogScale(float& s, int d, float minVal, float maxVal,
                                 std::string& messageBuf, const char *msg)
 {
-  int     tmp = roundFloat(float(std::log2(s)) * 4.0f);
-  s = float(std::exp2(float(tmp + d) * 0.25f));
+  int     tmp = roundFloat(float(std::log2(s)) * 16.0f);
+  s = float(std::exp2(float(tmp + d) * 0.0625f));
   s = (s > minVal ? (s < maxVal ? s : maxVal) : minVal);
   if (!msg)
     msg = "";
@@ -880,7 +900,7 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mKeypad 2, 6, 8, 4, 5\033[m  "
     "Set view from the S, E, N, W, or top.                           \n"
     "  \033[4m\033[38;5;228mF1\033[m "
-    "to \033[4m\033[38;5;228mF5\033[m              "
+    "to \033[4m\033[38;5;228mF8\033[m              "
     "Select default cube map.                                        \n"
     "  \033[4m\033[38;5;228mA\033[m, "
     "\033[4m\033[38;5;228mD\033[m                  "
@@ -912,6 +932,8 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mInsert\033[m, "
     "\033[4m\033[38;5;228mDelete\033[m        "
     "Zoom reflected environment in or out.                           \n"
+    "  \033[4m\033[38;5;228mCaps Lock\033[m             "
+    "Toggle fine adjustment of view and lighting parameters.         \n"
     "  \033[4m\033[38;5;228mPage Up\033[m               "
     "Enable downsampling (slow).                                     \n"
     "  \033[4m\033[38;5;228mPage Down\033[m             "
@@ -922,8 +944,12 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mF12\033[m "
     "or \033[4m\033[38;5;228mPrint Screen\033[m   "
     "Save screenshot.                                                \n"
+    "  \033[4m\033[38;5;228mP\033[m                     "
+    "Print current settings and file list.                           \n"
     "  \033[4m\033[38;5;228mH\033[m                     "
     "Show help screen.                                               \n"
+    "  \033[4m\033[38;5;228mC\033[m                     "
+    "Clear messages.                                                 \n"
     "  \033[4m\033[38;5;228mEsc\033[m                   "
     "Quit program.                                                   \n";
 
@@ -956,6 +982,7 @@ static void viewMeshes(const BA2File& ba2File,
     float   envMapScale = 1.0f;
     unsigned int  debugMode = 0;
     int     fileNum = 0;
+    int     d = 4;              // scale of adjusting parameters
 
     size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
     std::vector< float >  outBufZ(imageDataSize);
@@ -967,8 +994,7 @@ static void viewMeshes(const BA2File& ba2File,
       ba2File.extractFile(fileBuf, nifFileNames[fileNum]);
       NIFFile   nifFile(&(fileBuf.front()), fileBuf.size(), &ba2File);
       Renderer  renderer((std::uint32_t *) 0, (float *) 0,
-                         imageWidth, imageHeight,
-                         (nifFile.getVersion() >= 0x90));
+                         imageWidth, imageHeight, nifFile.getVersion());
       renderer.ba2File = &ba2File;
       nifFile.getMesh(renderer.meshData);
       renderer.waterTexture = "textures/water/defaultwater.dds";
@@ -1046,7 +1072,7 @@ static void viewMeshes(const BA2File& ba2File,
           FloatVector4  a(Plot3D_TriShape::cubeMapToAmbient(
                               renderer.loadTexture(&(renderer.defaultEnvMap),
                                                    false),
-                              (nifFile.getVersion() >= 0x90)));
+                              ((nifFile.getVersion() & ~0x0FU) != 0x80U)));
           for (size_t i = 0; i < renderer.renderers.size(); i++)
           {
             renderer.renderers[i]->setLighting(
@@ -1102,12 +1128,12 @@ static void viewMeshes(const BA2File& ba2File,
                 break;
               case '-':
               case SDLDisplay::SDLKeySymKPMinus:
-                updateValueLogScale(viewScale, -1, 0.0625f, 16.0f, messageBuf,
+                updateValueLogScale(viewScale, -d, 0.0625f, 16.0f, messageBuf,
                                     "View scale");
                 break;
               case '=':
               case SDLDisplay::SDLKeySymKPPlus:
-                updateValueLogScale(viewScale, 1, 0.0625f, 16.0f, messageBuf,
+                updateValueLogScale(viewScale, d, 0.0625f, 16.0f, messageBuf,
                                     "View scale");
                 break;
               case SDLDisplay::SDLKeySymKP1 + 6:
@@ -1151,6 +1177,9 @@ static void viewMeshes(const BA2File& ba2File,
               case SDLDisplay::SDLKeySymF1 + 2:
               case SDLDisplay::SDLKeySymF1 + 3:
               case SDLDisplay::SDLKeySymF1 + 4:
+              case SDLDisplay::SDLKeySymF1 + 5:
+              case SDLDisplay::SDLKeySymF1 + 6:
+              case SDLDisplay::SDLKeySymF1 + 7:
                 envMapNum = d1 - SDLDisplay::SDLKeySymF1;
                 messageBuf += "Default environment map: ";
                 messageBuf += cubeMapPaths[envMapNum * 3
@@ -1160,99 +1189,84 @@ static void viewMeshes(const BA2File& ba2File,
                 break;
               case 'a':
                 updateRotation(modelRotationX, modelRotationY, modelRotationZ,
-                               0.0f, 0.0f, 11.25f,
-                               messageBuf, "Model rotation");
+                               0, 0, d, messageBuf, "Model rotation");
                 break;
               case 'd':
                 updateRotation(modelRotationX, modelRotationY, modelRotationZ,
-                               0.0f, 0.0f, -11.25f,
-                               messageBuf, "Model rotation");
+                               0, 0, -d, messageBuf, "Model rotation");
                 break;
               case 's':
                 updateRotation(modelRotationX, modelRotationY, modelRotationZ,
-                               11.25f, 0.0f, 0.0f,
-                               messageBuf, "Model rotation");
+                               d, 0, 0, messageBuf, "Model rotation");
                 break;
               case 'w':
                 updateRotation(modelRotationX, modelRotationY, modelRotationZ,
-                               -11.25f, 0.0f, 0.0f,
-                               messageBuf, "Model rotation");
+                               -d, 0, 0, messageBuf, "Model rotation");
                 break;
               case 'q':
                 updateRotation(modelRotationX, modelRotationY, modelRotationZ,
-                               0.0f, -11.25f, 0.0f,
-                               messageBuf, "Model rotation");
+                               0, -d, 0, messageBuf, "Model rotation");
                 break;
               case 'e':
                 updateRotation(modelRotationX, modelRotationY, modelRotationZ,
-                               0.0f, 11.25f, 0.0f,
-                               messageBuf, "Model rotation");
+                               0, d, 0, messageBuf, "Model rotation");
                 break;
               case 'k':
-                updateValueLogScale(lightLevel, -1, 0.25f, 4.0f, messageBuf,
+                updateValueLogScale(lightLevel, -d, 0.25f, 4.0f, messageBuf,
                                     "Brightness (linear color space)");
                 break;
               case 'l':
-                updateValueLogScale(lightLevel, 1, 0.25f, 4.0f, messageBuf,
+                updateValueLogScale(lightLevel, d, 0.25f, 4.0f, messageBuf,
                                     "Brightness (linear color space)");
                 break;
               case SDLDisplay::SDLKeySymLeft:
                 updateRotation(lightRotationX, lightRotationY, lightRotationZ,
-                               0.0f, 0.0f, 11.25f,
-                               messageBuf, "Light rotation");
+                               0, 0, d, messageBuf, "Light rotation");
                 break;
               case SDLDisplay::SDLKeySymRight:
                 updateRotation(lightRotationX, lightRotationY, lightRotationZ,
-                               0.0f, 0.0f, -11.25f,
-                               messageBuf, "Light rotation");
+                               0, 0, -d, messageBuf, "Light rotation");
                 break;
               case SDLDisplay::SDLKeySymDown:
                 updateRotation(lightRotationX, lightRotationY, lightRotationZ,
-                               0.0f, 11.25f, 0.0f,
-                               messageBuf, "Light rotation");
+                               0, d, 0, messageBuf, "Light rotation");
                 break;
               case SDLDisplay::SDLKeySymUp:
                 updateRotation(lightRotationX, lightRotationY, lightRotationZ,
-                               0.0f, -11.25f, 0.0f,
-                               messageBuf, "Light rotation");
+                               0, -d, 0, messageBuf, "Light rotation");
                 break;
               case '7':
-                updateLightColor(lightColor,
-                                 FloatVector4(1.18920712f, 1.0f, 1.0f, 1.0f),
-                                 messageBuf);
+                updateLightColor(lightColor, d, 0, 0, messageBuf);
                 break;
               case 'u':
-                updateLightColor(lightColor,
-                                 FloatVector4(0.84089642f, 1.0f, 1.0f, 1.0f),
-                                 messageBuf);
+                updateLightColor(lightColor, -d, 0, 0, messageBuf);
                 break;
               case '8':
-                updateLightColor(lightColor,
-                                 FloatVector4(1.0f, 1.18920712f, 1.0f, 1.0f),
-                                 messageBuf);
+                updateLightColor(lightColor, 0, d, 0, messageBuf);
                 break;
               case 'i':
-                updateLightColor(lightColor,
-                                 FloatVector4(1.0f, 0.84089642f, 1.0f, 1.0f),
-                                 messageBuf);
+                updateLightColor(lightColor, 0, -d, 0, messageBuf);
                 break;
               case '9':
-                updateLightColor(lightColor,
-                                 FloatVector4(1.0f, 1.0f, 1.18920712f, 1.0f),
-                                 messageBuf);
+                updateLightColor(lightColor, 0, 0, d, messageBuf);
                 break;
               case 'o':
-                updateLightColor(lightColor,
-                                 FloatVector4(1.0f, 1.0f, 0.84089642f, 1.0f),
-                                 messageBuf);
+                updateLightColor(lightColor, 0, 0, -d, messageBuf);
                 break;
               case SDLDisplay::SDLKeySymInsert:
-                updateValueLogScale(envMapScale, 1, 0.5f, 4.0f, messageBuf,
+                updateValueLogScale(envMapScale, d, 0.5f, 4.0f, messageBuf,
                                     "Reflection f scale");
                 break;
               case SDLDisplay::SDLKeySymDelete:
-                updateValueLogScale(envMapScale, -1, 0.5f, 4.0f, messageBuf,
+                updateValueLogScale(envMapScale, -d, 0.5f, 4.0f, messageBuf,
                                     "Reflection f scale");
+                break;
+              case SDLDisplay::SDLKeySymCapsLock:
+                d = (d == 1 ? 4 : 1);
+                if (d == 1)
+                  messageBuf += "Step size: 2.8125\302\260, exp2(1/16)\n";
+                else
+                  messageBuf += "Step size: 11.25\302\260, exp2(1/4)\n";
                 break;
               case SDLDisplay::SDLKeySymPageUp:
               case SDLDisplay::SDLKeySymPageDown:
@@ -1286,8 +1300,60 @@ static void viewMeshes(const BA2File& ba2File,
               case SDLDisplay::SDLKeySymPrintScr:
                 screenshotFlag = true;
                 break;
+              case 'p':
+                display.clearTextBuffer();
+                updateRotation(modelRotationX, modelRotationY, modelRotationZ,
+                               0, 0, 0, messageBuf, "Model rotation");
+                display.printString(messageBuf.c_str());
+                updateRotation(lightRotationX, lightRotationY, lightRotationZ,
+                               0, 0, 0, messageBuf, "Light rotation");
+                display.printString(messageBuf.c_str());
+                updateValueLogScale(lightLevel, 0, 0.25f, 4.0f, messageBuf,
+                                    "Brightness (linear color space)");
+                display.printString(messageBuf.c_str());
+                updateLightColor(lightColor, 0, 0, 0, messageBuf);
+                display.printString(messageBuf.c_str());
+                updateValueLogScale(viewScale, 0, 0.0625f, 16.0f, messageBuf,
+                                    "View scale");
+                display.printString(messageBuf.c_str());
+                updateValueLogScale(envMapScale, 0, 0.5f, 4.0f, messageBuf,
+                                    "Reflection f scale");
+                if (d == 1)
+                  messageBuf += "Step size: 2.8125\302\260, exp2(1/16)\n";
+                else
+                  messageBuf += "Step size: 11.25\302\260, exp2(1/4)\n";
+                if (display.getIsDownsampled())
+                  messageBuf += "Downsampling enabled\n";
+                else
+                  messageBuf += "Downsampling disabled\n";
+                messageBuf += "Default environment map: ";
+                messageBuf += cubeMapPaths[envMapNum * 3
+                                           + int(nifFile.getVersion() >= 0x80)
+                                           + int(nifFile.getVersion() >= 0x90)];
+                messageBuf += "\nFile list:\n";
+                {
+                  int     n0 = 0;
+                  int     n1 = int(nifFileNames.size());
+                  while ((n1 - n0) > (display.getTextRows() - 12))
+                  {
+                    if (fileNum < ((n0 + n1) >> 1))
+                      n1--;
+                    else
+                      n0++;
+                  }
+                  for ( ; n0 < n1; n0++)
+                  {
+                    messageBuf += (n0 != fileNum ?
+                                   "  " : "  \033[44m\033[37m\033[1m");
+                    messageBuf += nifFileNames[n0];
+                    messageBuf += "\033[m  \n";
+                  }
+                }
+                continue;
               case 'h':
                 messageBuf = keyboardUsageString;
+                break;
+              case 'c':
                 break;
               case SDLDisplay::SDLKeySymEscape:
                 quitFlag = true;
@@ -1337,7 +1403,7 @@ static void viewMeshes(const BA2File& ba2File,
 
 int main(int argc, char **argv)
 {
-  std::FILE *outFile = stdout;
+  std::FILE   *outFile = (std::FILE *) 0;
   const char  *outFileName = (char *) 0;
   bool    consoleFlag = true;
   try
@@ -1403,17 +1469,37 @@ int main(int argc, char **argv)
           argv++;
         }
       }
+      else if (std::strcmp(argv[1], "-o") == 0)
+      {
+        if (argc < 3)
+          throw errorMessage("missing output file name");
+        outFileName = argv[2];
+        argc--;
+        argv++;
+      }
+      else if (std::strcmp(argv[1], "-h") == 0 ||
+               std::strcmp(argv[1], "--help") == 0)
+      {
+        argc = 1;
+        outFmt = 0;
+        break;
+      }
       else
       {
         throw errorMessage("invalid option: %s", argv[1]);
       }
     }
+    consoleFlag = false;
+    if (outFmt != 6)
+      SDLDisplay::enableConsole();
     if (argc < 3)
     {
       std::fprintf(stderr,
                    "Usage: nif_info [OPTIONS] ARCHIVEPATH PATTERN...\n");
       std::fprintf(stderr, "Options:\n");
       std::fprintf(stderr, "    --      Remaining options are file names\n");
+      std::fprintf(stderr, "    -o FILENAME     Set output file name "
+                           "(default: standard output)\n");
       std::fprintf(stderr, "    -q      Print author name, file name, "
                            "and file size only\n");
       std::fprintf(stderr, "    -v      Verbose mode, print block list, "
@@ -1427,9 +1513,6 @@ int main(int argc, char **argv)
 #endif
       return 1;
     }
-    consoleFlag = false;
-    if (outFmt != 6)
-      SDLDisplay::enableConsole();
     std::vector< std::string >  fileNames;
     for (int i = 2; i < argc; i++)
       fileNames.push_back(argv[i]);
@@ -1461,6 +1544,16 @@ int main(int argc, char **argv)
       std::sort(fileNames.begin(), fileNames.end());
       viewMeshes(ba2File, fileNames, renderWidth, renderHeight);
       return 0;
+    }
+    if (outFileName)
+    {
+      outFile = std::fopen(outFileName, (outFmt != 5 ? "w" : "wb"));
+      if (!outFile)
+        throw errorMessage("error opening output file");
+    }
+    else
+    {
+      outFile = stdout;
     }
     for (size_t i = 0; i < fileNames.size(); i++)
     {
@@ -1515,9 +1608,13 @@ int main(int argc, char **argv)
   {
     if (consoleFlag)
       SDLDisplay::enableConsole();
+    if (outFileName && outFile)
+      std::fclose(outFile);
     std::fprintf(stderr, "nif_info: %s\n", e.what());
     return 1;
   }
+  if (outFileName && outFile)
+    std::fclose(outFile);
   return 0;
 }
 
