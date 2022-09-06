@@ -304,8 +304,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     }
     Vertex(const NIFFile::NIFVertex& r)
       : xyz(r.x, r.y, r.z, 0.0f),
-        bitangent(r.bitangent), tangent(r.tangent), normal(r.normal),
-        vertexColor(r.vertexColor)
+        bitangent(&(r.bitangent)), tangent(&(r.tangent)), normal(&(r.normal)),
+        vertexColor(&(r.vertexColor))
     {
       bitangent *= (1.0f / 127.5f);
       tangent *= (1.0f / 127.5f);
@@ -347,6 +347,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   float   alphaThresholdFloat;
   bool    invNormals;
   bool    ggxEnabled;                   // Fallout 76 mode
+  bool    cubeMapSRGB;
+  signed char cubeMapZMult;
   float   viewScale;
   FloatVector4  lightVector;
   FloatVector4  lightColor;             // lightColor[3] = overall RGB scale
@@ -415,9 +417,12 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   void drawTriangles();
  public:
   // alpha = 255 - sqrt(waterDepth*16) after first pass water rendering.
-  // isFO76 enables GGX specular function and sRGB cube maps.
+  // renderFlags & 1: enable GGX specular function
+  // renderFlags & 2: cube maps are in sRGB color space (implied if bit 0 is 1)
+  // renderFlags & 4: cube maps are flipped vertically
   Plot3D_TriShape(std::uint32_t *outBufRGBA, float *outBufZ,
-                  int imageWidth, int imageHeight, bool isFO76 = false);
+                  int imageWidth, int imageHeight,
+                  unsigned int renderFlags = 0U);
   virtual ~Plot3D_TriShape();
   inline void setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
                          int imageWidth, int imageHeight)
