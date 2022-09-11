@@ -2,6 +2,8 @@
 #ifndef FP32VEC4_HPP_INCLUDED
 #define FP32VEC4_HPP_INCLUDED
 
+#include "common.hpp"
+
 struct FloatVector4
 {
 #if defined(__GNUC__) && (defined(__x86_64__) || defined(__x86_64))
@@ -33,12 +35,34 @@ struct FloatVector4
     float   tmp2 __attribute__ ((__vector_size__ (16)));
     __asm__ ("vpmovzxbd %1, %0" : "=x" (tmp1) : "m" (*p1));
     __asm__ ("vpmovzxbd %1, %0" : "=x" (tmp2) : "m" (*p2));
-    __asm__ ("vshufps $0x44, %1, %0, %0" : "+x" (tmp1) : "x" (tmp2));
+    __asm__ ("vpunpcklqdq %1, %0, %0" : "+x" (tmp1) : "x" (tmp2));
     __asm__ ("vcvtdq2ps %1, %0" : "=x" (v) : "x" (tmp1));
   }
   inline FloatVector4(float v0, float v1, float v2, float v3)
     : v { v0, v1, v2, v3 }
   {
+  }
+  static inline FloatVector4 convertFloat16(std::uint64_t n)
+  {
+    float   v __attribute__ ((__vector_size__ (16)));
+    std::int32_t  tmp1 __attribute__ ((__vector_size__ (16)));
+    std::int32_t  tmp2 __attribute__ ((__vector_size__ (16))) =
+    {
+      std::int32_t(0x8FFFE000U), 0x38000000, std::int32_t(0xB8000000U), 0
+    };
+    __asm__ ("vmovq %1, %0" : "=x" (v) : "rm" (n));
+    __asm__ ("vpmovsxwd %0, %0" : "+x" (v));
+    __asm__ ("vpshufd $0x00, %1, %0" : "=x" (tmp1) : "x" (tmp2));
+    __asm__ ("vpslld $0x0d, %0, %0" : "+x" (v));
+    __asm__ ("vpand %1, %0, %0" : "+x" (v) : "x" (tmp1));
+    __asm__ ("vpshufd $0x55, %1, %0" : "=x" (tmp1) : "x" (tmp2));
+    __asm__ ("vpshufd $0xaa, %0, %0" : "+x" (tmp2));
+    __asm__ ("vpaddd %1, %0, %0" : "+x" (v) : "x" (tmp1));
+    __asm__ ("vpand %1, %0, %0" : "+x" (tmp2) : "x" (v));
+    __asm__ ("vsubps %0, %1, %0" : "+x" (tmp2) : "x" (v));
+    __asm__ ("vaddps %0, %0, %0" : "+x" (tmp2));
+    __asm__ ("vpminud %1, %0, %0" : "+x" (v) : "x" (tmp2));
+    return FloatVector4(v[0], v[1], v[2], v[3]);
   }
   inline float& operator[](size_t n)
   {
@@ -323,6 +347,13 @@ struct FloatVector4
     v[1] = v1;
     v[2] = v2;
     v[3] = v3;
+  }
+  static inline FloatVector4 convertFloat16(std::uint64_t n)
+  {
+    return FloatVector4(::convertFloat16(std::uint16_t(n & 0xFFFFU)),
+                        ::convertFloat16(std::uint16_t((n >> 16) & 0xFFFFU)),
+                        ::convertFloat16(std::uint16_t((n >> 32) & 0xFFFFU)),
+                        ::convertFloat16(std::uint16_t((n >> 48) & 0xFFFFU)));
   }
   inline float& operator[](size_t n)
   {
