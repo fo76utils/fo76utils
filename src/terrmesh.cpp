@@ -29,7 +29,7 @@ TerrainMesh::~TerrainMesh()
 }
 
 void TerrainMesh::createMesh(
-    const unsigned short *hmapData, int hmapWidth, int hmapHeight,
+    const std::uint16_t *hmapData, int hmapWidth, int hmapHeight,
     const unsigned char *ltexData, const unsigned char *ltexDataN,
     int ltexWidth, int ltexHeight, int textureScale,
     int x0, int y0, int x1, int y1, int cellResolution,
@@ -58,12 +58,13 @@ void TerrainMesh::createMesh(
   triangleDataBuf.resize(triangleCnt);
   vertexData = &(vertexDataBuf.front());
   triangleData = &(triangleDataBuf.front());
+  specularSmoothness = 0;
   NIFFile::NIFVertex    *vertexPtr = &(vertexDataBuf.front());
   NIFFile::NIFTriangle  *trianglePtr = &(triangleDataBuf.front());
   float   xyScale = 4096.0f / float(cellResolution);
   float   zScale = (zMax - zMin) / 65535.0f;
-  float   uScale = 1.0f / float(txtWP2 >> textureScale);
-  float   vScale = 1.0f / float(txtHP2 >> textureScale);
+  textureScaleU = 1.0f / float(txtWP2 >> textureScale);
+  textureScaleV = 1.0f / float(txtHP2 >> textureScale);
   for (int y = y1; y >= y0; y--)
   {
     for (int x = x0; x <= x1; x++, vertexPtr++)
@@ -127,31 +128,31 @@ void TerrainMesh::createMesh(
       tangent *= 127.5f;
       normal += 1.0f;
       normal *= 127.5f;
-      vertexPtr->bitangent = (unsigned int) bitangent & 0x00FFFFFFU;
-      vertexPtr->tangent = (unsigned int) tangent & 0x00FFFFFFU;
-      vertexPtr->normal = (unsigned int) normal & 0x00FFFFFFU;
-      vertexPtr->u = convertToFloat16(float(x - x0) * uScale);
-      vertexPtr->v = convertToFloat16(float(y - y0) * vScale);
+      vertexPtr->bitangent = std::uint32_t(bitangent) & 0x00FFFFFFU;
+      vertexPtr->tangent = std::uint32_t(tangent) & 0x00FFFFFFU;
+      vertexPtr->normal = std::uint32_t(normal) & 0x00FFFFFFU;
+      vertexPtr->u = convertToFloat16(float(x - x0));
+      vertexPtr->v = convertToFloat16(float(y - y0));
       if (x != x1 && y != y0)
       {
         int     v0 = int(vertexPtr - &(vertexDataBuf.front())); // SW
         int     v1 = v0 + 1;            // SE
         int     v2 = v0 + (w + 1);      // NE
         int     v3 = v0 + w;            // NW
-        trianglePtr[0].v0 = (unsigned short) v0;
-        trianglePtr[0].v1 = (unsigned short) v1;
+        trianglePtr[0].v0 = std::uint16_t(v0);
+        trianglePtr[0].v1 = std::uint16_t(v1);
         if ((x ^ y) & 1)                // split SW -> NE
         {                               // vertices must be in CCW order
-          trianglePtr[0].v2 = (unsigned short) v2;
-          trianglePtr[1].v0 = (unsigned short) v0;
+          trianglePtr[0].v2 = std::uint16_t(v2);
+          trianglePtr[1].v0 = std::uint16_t(v0);
         }
         else                            // split SE -> NW
         {
-          trianglePtr[0].v2 = (unsigned short) v3;
-          trianglePtr[1].v0 = (unsigned short) v1;
+          trianglePtr[0].v2 = std::uint16_t(v3);
+          trianglePtr[1].v0 = std::uint16_t(v1);
         }
-        trianglePtr[1].v1 = (unsigned short) v2;
-        trianglePtr[1].v2 = (unsigned short) v3;
+        trianglePtr[1].v1 = std::uint16_t(v2);
+        trianglePtr[1].v2 = std::uint16_t(v3);
         trianglePtr = trianglePtr + 2;
       }
     }
@@ -257,7 +258,7 @@ void TerrainMesh::createMesh(
     int textureScale, int x0, int y0, int x1, int y1,
     const DDSTexture * const *landTextures,
     const DDSTexture * const *landTexturesN, size_t landTextureCnt,
-    float textureMip, float textureRGBScale, unsigned int textureDefaultColor)
+    float textureMip, float textureRGBScale, std::uint32_t textureDefaultColor)
 {
   int     w = std::abs(x1 - x0) + 8;
   int     h = std::abs(y1 - y0) + 8;
@@ -289,13 +290,13 @@ void TerrainMesh::createMesh(
     landTxt.renderTexture(ltexData, textureScale, x0, y0, x1, y1, ltexDataN);
   }
   hmapBuf.resize(size_t(w) * size_t(h));
-  unsigned short  *dstPtr = &(hmapBuf.front());
+  std::uint16_t *dstPtr = &(hmapBuf.front());
   int     landWidth = landData.getImageWidth();
   int     landHeight = landData.getImageHeight();
   for (int y = y0; y <= y1; y++)
   {
     int     yc = (y > 0 ? (y < (landHeight - 1) ? y : (landHeight - 1)) : 0);
-    const unsigned short  *srcPtr = landData.getHeightMap();
+    const std::uint16_t *srcPtr = landData.getHeightMap();
     srcPtr = srcPtr + (size_t(yc) * size_t(landWidth));
     for (int x = x0; x <= x1; x++, dstPtr++)
     {
