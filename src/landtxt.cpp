@@ -79,7 +79,7 @@ inline FloatVector4 LandscapeTexture::getFO76VertexColor(
   FloatVector4  c0(getFO76VertexColor(offs0), getFO76VertexColor(offs1),
                    getFO76VertexColor(offs2), getFO76VertexColor(offs3),
                    float(xf) * (1.0f / 256.0f), float(yf) * (1.0f / 256.0f));
-  c0 *= (1.0f / 15.5f);
+  c0 *= (1.0f / 31.0f);
   return c0.srgbCompress();
 }
 
@@ -533,7 +533,7 @@ LandscapeTexture::LandscapeTexture(
     landTexturesN(landTxtsN),
     landTextureCnt(landTxtCnt),
     mipLevel(0.0f),
-    rgbScale(1.0f / 255.0f),
+    rgbScale(1.0f),
     width(vertexCntX),
     height(vertexCntY),
     txtScale(1.0f),
@@ -568,7 +568,7 @@ LandscapeTexture::LandscapeTexture(
     landTexturesN(landTxtsN),
     landTextureCnt(landTxtCnt),
     mipLevel(0.0f),
-    rgbScale(1.0f / 255.0f),
+    rgbScale(1.0f),
     width(landData.getImageWidth()),
     height(landData.getImageHeight()),
     txtScale(1.0f),
@@ -598,7 +598,7 @@ void LandscapeTexture::setMipLevel(float n)
 
 void LandscapeTexture::setRGBScale(float n)
 {
-  rgbScale = (n > 0.5f ? (n < 8.0f ? n : 8.0f) : 0.5f) / 255.0f;
+  rgbScale = (n > 0.5f ? (n < 8.0f ? n : 8.0f) : 0.5f);
 }
 
 void LandscapeTexture::setDefaultColor(std::uint32_t c)
@@ -626,6 +626,9 @@ void LandscapeTexture::renderTexture(unsigned char *outBuf, int renderScale,
   y0 = y0 << renderScale;
   x1 = (x1 + 1) << renderScale;
   y1 = (y1 + 1) << renderScale;
+  FloatVector4  rgbScale_v(
+      rgbScale * (vclrData16 ?
+                  (1.0f / 187.67568f) : (vclrData24 ? (1.0f / 255.0f) : 1.0f)));
   int     m = (1 << renderScale) - 1;
   float   renderScale_f = 1.0f / float(1 << renderScale);
   for (int y = y0; y < y1; y++)
@@ -659,14 +662,11 @@ void LandscapeTexture::renderTexture(unsigned char *outBuf, int renderScale,
         n = blendColors(n, n2, float(yf) * renderScale_f);
         c = blendColors(c, c2, float(yf) * renderScale_f);
       }
-      FloatVector4  vColor(255.0f);
       if (vclrData16)
-        vColor = getFO76VertexColor(x, y, renderScale);
+        c *= getFO76VertexColor(x, y, renderScale);
       else if (vclrData24)
-        vColor = getTES4VertexColor(x, y, renderScale);
-      c *= vColor;
-      c *= rgbScale;
-      std::uint32_t cTmp = (std::uint32_t) c;
+        c *= getTES4VertexColor(x, y, renderScale);
+      std::uint32_t cTmp = std::uint32_t(c * rgbScale_v);
       outBuf[0] = (unsigned char) ((cTmp >> 16) & 0xFFU);       // B
       outBuf[1] = (unsigned char) ((cTmp >> 8) & 0xFFU);        // G
       outBuf[2] = (unsigned char) (cTmp & 0xFFU);               // R
