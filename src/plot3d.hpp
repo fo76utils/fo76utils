@@ -313,8 +313,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       bitangent -= 1.0f;
       tangent -= 1.0f;
       normal -= 1.0f;
-      bitangent[3] = r.getU();
-      tangent[3] = r.getV();
+      r.getUV(bitangent[3], tangent[3]);
       normal[3] = 0.0f;
       vertexColor *= (1.0f / 255.0f);
     }
@@ -346,13 +345,12 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   float   mipLevel;
   float   alphaThresholdFloat;
   bool    invNormals;
-  bool    ggxEnabled;                   // Fallout 76 mode
-  bool    cubeMapSRGB;
-  signed char cubeMapZMult;
-  float   viewScale;
+  unsigned char renderMode;
+  bool    usingSRGBColorSpace;
+  unsigned int  debugMode;
   FloatVector4  lightVector;
   FloatVector4  lightColor;             // lightColor[3] = overall RGB scale
-  FloatVector4  ambientLight;           // pre-multiplied with envColor
+  FloatVector4  ambientLight;
   FloatVector4  envColor;
   FloatVector4  envMapOffs;
   FloatVector4  viewTransformInvX;
@@ -361,34 +359,47 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   FloatVector4  specularColorFloat;     // water color for drawWater()
   float   reflectionLevel;
   float   specularLevel;
-  unsigned int  debugMode;
+  float   viewScale;
   // offs = frame buffer offset (y * width + x)
   void    (*drawPixelFunction)(Plot3D_TriShape& p, size_t offs, Vertex& z);
   std::vector< Vertex > vertexBuf;
   std::vector< Triangle > triangleBuf;
+  static FloatVector4 colorToSRGB(FloatVector4 c);
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                              const NIFFile::NIFVertexTransform& viewTransform);
   // c = albedo, e = environment, f0 = reflectance
-  // specLevel = specular mask if isFO76 is false, ambient occlusion if true
   // returns sRGB color
-  inline FloatVector4 calculateLighting(
+  inline FloatVector4 calculateLighting_FO76(
+      FloatVector4 c, FloatVector4 e, float specular, float ao, FloatVector4 f0,
+      float txtU, float txtV, float nDotL, float nDotV, float smoothness) const;
+  inline FloatVector4 calculateLighting_FO4(
       FloatVector4 c, FloatVector4 e, float specular, float specLevel,
-      FloatVector4 f0, float txtU, float txtV, float nDotL, float nDotV,
-      float smoothness, bool isFO76 = false) const;
-  // c0 = terrain color
-  inline FloatVector4 calculateLighting_Water(
-      FloatVector4 c0, FloatVector4 e, float specular,
-      float nDotL, float nDotV) const;
+      float txtU, float txtV, float nDotL, float nDotV, float smoothness) const;
+  inline FloatVector4 calculateLighting_TES5(
+      FloatVector4 c, FloatVector4 e, float specular, float envLevel,
+      float specLevel, float txtU, float txtV, float nDotL, float nDotV) const;
+  // simplified functions for diffuse texture/normal map only (n = normal)
+  inline FloatVector4 calculateLighting_FO76(
+      FloatVector4 c, FloatVector4 n, float txtU, float txtV) const;
+  inline FloatVector4 calculateLighting_FO4(
+      FloatVector4 c, FloatVector4 n, float txtU, float txtV) const;
+  inline FloatVector4 calculateLighting_TES5(
+      FloatVector4 c, FloatVector4 n, float txtU, float txtV) const;
   // returns normal
   inline FloatVector4 normalMap(Vertex& v, FloatVector4 n) const;
   // returns reflected view vector
   inline FloatVector4 calculateReflection(const Vertex& v) const;
   inline FloatVector4 environmentMap(
-      FloatVector4 reflectedView, float smoothness, bool isSRGB) const;
+      FloatVector4 reflectedView, float smoothness,
+      bool isSRGB, bool invZ) const;
   inline float specularPhong(FloatVector4 reflectedView, float smoothness,
                              float nDotL, bool isNormalized = false) const;
   inline float specularGGX(FloatVector4 reflectedView, float smoothness,
                            float nDotL) const;
+  // c0 = terrain color, a = water transparency
+  inline FloatVector4 calculateLighting_Water(
+      FloatVector4 c0, FloatVector4 n, FloatVector4 reflectedView, float a,
+      bool isFO76) const;
   // fill with water (first and second pass)
   static void drawPixel_Water(Plot3D_TriShape& p, size_t offs, Vertex& z);
   static void drawPixel_Water_2(Plot3D_TriShape& p, size_t offs, Vertex& z);
@@ -396,20 +407,20 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   static void drawPixel_Water_2G(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // alphaFlag is set to true if the pixel is visible (alpha >= threshold)
   inline FloatVector4 getDiffuseColor(
-      float txtU, float txtV, const Vertex& z, bool& alphaFlag) const;
+      float txtU, float txtV, const Vertex& z, bool& alphaFlag,
+      bool isFO76) const;
   static void drawPixel_Debug(Plot3D_TriShape& p, size_t offs, Vertex& z);
-  // diffuse texture with trilinear filtering
-  static void drawPixel_Diffuse(Plot3D_TriShape& p, size_t offs, Vertex& z);
-  // diffuse + normal map with trilinear filtering
-  static void drawPixel_Normal(Plot3D_TriShape& p, size_t offs, Vertex& z);
-  // diffuse + normal and environment map with trilinear filtering
-  static void drawPixel_NormalEnv(Plot3D_TriShape& p, size_t offs, Vertex& z);
-  // diffuse + normal and environment map/mask with trilinear filtering
-  static void drawPixel_NormalEnvM(Plot3D_TriShape& p, size_t offs, Vertex& z);
-  // diffuse + normal and environment + specular map with trilinear filtering
-  static void drawPixel_NormalEnvS(Plot3D_TriShape& p, size_t offs, Vertex& z);
-  // diffuse + normal and reflection map with trilinear filtering
-  static void drawPixel_NormalRefl(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  // diffuse texture only
+  static void drawPixel_D_TES5(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  // diffuse + normal map only
+  static void drawPixel_N_TES5(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  static void drawPixel_TES5(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  static void drawPixel_D_FO4(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  static void drawPixel_N_FO4(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  static void drawPixel_FO4(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  static void drawPixel_D_FO76(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  static void drawPixel_N_FO76(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  static void drawPixel_FO76(Plot3D_TriShape& p, size_t offs, Vertex& z);
   inline void drawPixel(int x, int y, Vertex& v,
                         const Vertex& v0, const Vertex& v1, const Vertex& v2,
                         float w0f, float w1f, float w2f);
@@ -417,12 +428,13 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   void drawTriangles();
  public:
   // alpha = 255 - sqrt(waterDepth*16) after first pass water rendering.
-  // renderFlags & 1: enable GGX specular function
-  // renderFlags & 2: cube maps are in sRGB color space (implied if bit 0 is 1)
-  // renderFlags & 4: cube maps are flipped vertically
+  // mode =  4: Skyrim
+  // mode =  8: Fallout 4
+  // mode = 12: Fallout 76
+  //       | 1: enable normal mapping
+  //       | 3: enable full quality
   Plot3D_TriShape(std::uint32_t *outBufRGBA, float *outBufZ,
-                  int imageWidth, int imageHeight,
-                  unsigned int renderFlags = 0U);
+                  int imageWidth, int imageHeight, unsigned int mode);
   virtual ~Plot3D_TriShape();
   inline void setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
                          int imageWidth, int imageHeight)
@@ -431,6 +443,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     bufZ = outBufZ;
     width = imageWidth;
     height = imageHeight;
+  }
+  inline void setRenderMode(unsigned int mode)
+  {
+    renderMode = (unsigned char) (mode & 15U);
+    usingSRGBColorSpace = (renderMode < 12);
   }
   // Vector to be added to (image X, image Y, 0.0) for cube mapping.
   // Defaults to -(imageWidth / 2), -(imageHeight / 2), imageHeight.
@@ -442,16 +459,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // a = ambient light (added to diffuse light level after multiplying with c)
   // e = environment map color and level, also multiplies ambient light
   // s = overall RGB scale to multiply the final color with (linear color space)
-  inline void setLighting(FloatVector4 c, FloatVector4 a, FloatVector4 e,
-                          float s)
-  {
-    lightColor = c;
-    lightColor[3] = s;
-    ambientLight = a * e;
-    ambientLight[3] = 0.0f;
-    envColor = e;
-    envColor[3] = 0.0f;
-  }
+  // setLighting() needs to be called again if the game type is changed.
+  void setLighting(FloatVector4 c, FloatVector4 a, FloatVector4 e, float s);
   Plot3D_TriShape& operator=(const NIFFile::NIFTriShape& t);
   // textures[0] = diffuse
   // textures[1] = normal
@@ -466,14 +475,15 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,
                     const NIFFile::NIFVertexTransform& viewTransform,
                     float lightX, float lightY, float lightZ,
-                    const DDSTexture * const *textures, size_t textureCnt);
+                    const DDSTexture * const *textures,
+                    unsigned int textureMask);
   // drawWater() should be called to render water meshes in a second pass.
   // waterColor is in 0xAABBGGRR format, the alpha channel contains the depth
   // beyond which the water has maximum opacity, as alpha = 256 - sqrt(depth*8).
   void drawWater(const NIFFile::NIFVertexTransform& modelTransform,
                  const NIFFile::NIFVertexTransform& viewTransform,
                  float lightX, float lightY, float lightZ,
-                 const DDSTexture * const *textures, size_t textureCnt,
+                 const DDSTexture * const *textures, unsigned int textureMask,
                  std::uint32_t waterColor, float envMapLevel = 1.0f);
   // n = 0: default mode
   // n = 1: render c as a solid color (0x00RRGGBB)
@@ -486,7 +496,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     debugMode = (n <= 5U ? (n != 1U ? n : (0xFF000000U | c)) : 0U);
   }
   // Calculate ambient light from the average color of a cube map.
-  static FloatVector4 cubeMapToAmbient(const DDSTexture *e, bool isSRGB);
+  FloatVector4 cubeMapToAmbient(const DDSTexture *e) const;
 };
 
 #endif
