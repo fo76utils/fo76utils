@@ -4,6 +4,7 @@ import os, sys
 env = Environment(ENV = { "PATH" : os.environ["PATH"],
                           "HOME" : os.environ["HOME"] })
 env["CXXFLAGS"] = Split("-Wall -std=c++11 -Isrc")
+env.Append(CXXFLAGS = Split("-march=sandybridge -mtune=generic"))
 env.Append(LIBS = ["m"])
 if "win" in sys.platform:
     buildPackage = ARGUMENTS.get("buildpkg", "")
@@ -15,7 +16,7 @@ elif ARGUMENTS.get("profile", 0):
     env.Append(CXXFLAGS = Split("-g -pg -O"))
     env.Prepend(LINKFLAGS = ["-pg"])
 else:
-    env.Append(CXXFLAGS = Split("-O3 -march=sandybridge -mtune=generic -fomit-frame-pointer -ffast-math"))
+    env.Append(CXXFLAGS = Split("-O3 -fomit-frame-pointer -ffast-math"))
     env.Append(LINKFLAGS = ["-s"])
 
 libSources = ["src/common.cpp", "src/filebuf.cpp", "src/zlib.cpp"]
