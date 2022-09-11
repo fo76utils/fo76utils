@@ -1148,14 +1148,10 @@ unsigned int Renderer::loadMaterialSwap(unsigned int formID)
     if (i != materialSwaps.end())
       return (i->second.size() > 0 ? formID : 0U);
   }
-  std::vector< MaterialSwap > *v;
-  {
-    std::map< unsigned int, std::vector< MaterialSwap > >::iterator i =
-        materialSwaps.insert(
-            std::pair< unsigned int, std::vector< MaterialSwap > >(
-                formID, std::vector< MaterialSwap >())).first;
-    v = &(i->second);
-  }
+  std::vector< MaterialSwap >&  v =
+      materialSwaps.insert(
+          std::pair< unsigned int, std::vector< MaterialSwap > >(
+              formID, std::vector< MaterialSwap >())).first->second;
   const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
   if (!(r && *r == "MSWP"))
     return 0U;
@@ -1214,7 +1210,16 @@ unsigned int Renderer::loadMaterialSwap(unsigned int formID)
             m.bgsmFile.loadBGSMFile(m.texturePaths, tmp);
             if (gradientMapV >= 0)
               m.bgsmFile.gradientMapV = (unsigned char) gradientMapV;
-            v->push_back(m);
+            v.push_back(m);
+            MaterialSwap& p = v[v.size() - 1];
+            unsigned int  txtPathMask = p.bgsmFile.texturePathMask & 0x03FFU;
+            for (size_t j = 0; txtPathMask; j++, txtPathMask = txtPathMask >> 1)
+            {
+              if (!(txtPathMask & 1U))
+                p.texturePathPtrs[j] = (std::string *) 0;
+              else
+                p.texturePathPtrs[j] = &(p.texturePaths.front()) + j;
+            }
           }
           catch (std::runtime_error&)
           {
@@ -1226,7 +1231,7 @@ unsigned int Renderer::loadMaterialSwap(unsigned int formID)
       m.materialPath.clear();
     }
   }
-  if (v->size() > 0)
+  if (v.size() > 0)
     return formID;
   return 0U;
 }
@@ -1399,9 +1404,7 @@ void Renderer::renderObjectList()
     std::fputc('\n', stderr);
 }
 
-void Renderer::materialSwap(
-    Plot3D_TriShape& t, const std::string **texturePaths, size_t texturePathCnt,
-    unsigned int formID)
+void Renderer::materialSwap(Plot3D_TriShape& t, unsigned int formID)
 {
   std::map< unsigned int, std::vector< MaterialSwap > >::const_iterator i =
       materialSwaps.find(formID);
@@ -1421,17 +1424,12 @@ void Renderer::materialSwap(
     t.specularColor = bgsmFile.specularColor;
     t.specularScale = bgsmFile.specularScale;
     t.specularSmoothness = bgsmFile.specularSmoothness;
+    t.texturePathMask = bgsmFile.texturePathMask;
+    t.texturePaths = i->second[j].texturePathPtrs;
     t.textureOffsetU = bgsmFile.offsetU;
     t.textureOffsetV = bgsmFile.offsetV;
     t.textureScaleU = bgsmFile.scaleU;
     t.textureScaleV = bgsmFile.scaleV;
-    for (size_t k = 0; k < texturePathCnt; k++)
-    {
-      if (k < i->second[j].texturePaths.size())
-        texturePaths[k] = &(i->second[j].texturePaths.front()) + k;
-      else
-        texturePaths[k] = (std::string *) 0;
-    }
     break;
   }
 }
@@ -1471,22 +1469,17 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     if (t.sortBuf.size() < 1)
       return true;
     std::stable_sort(t.sortBuf.begin(), t.sortBuf.end());
+    bool    isHDModel = bool(p.flags & 0x40);
     for (size_t j = 0; j < t.sortBuf.size(); j++)
     {
       *(t.renderer) = *(t.sortBuf[j].ts);
       if (p.flags & 0x80)
         t.renderer->gradientMapV = (unsigned char) (p.flags >> 8);
-      const std::string *texturePaths[10];
       const DDSTexture  *textures[10];
-      for (size_t k = 0; k < 10; k++)
+      unsigned int  textureMask = 0U;
+      if (BRANCH_EXPECT((t.renderer->flags & 0x02), false))
       {
-        texturePaths[k] = (std::string *) 0;
-        if (k < t.renderer->texturePathCnt)
-          texturePaths[k] = t.renderer->texturePaths[k];
-        textures[k] = (DDSTexture *) 0;
-      }
-      if (t.renderer->flags & 0x02)
-      {
+        t.renderer->setRenderMode(3U | renderMode);
         if (!waterSecondPass)
         {
           t.renderer->drawTriShape(
@@ -1495,59 +1488,71 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         }
         else
         {
-          if (!defaultWaterTexture.empty())
-            textures[1] = loadTexture(defaultWaterTexture, t.fileBuf);
-          if (!defaultEnvMap.empty())
-            textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0);
+          if (!defaultWaterTexture.empty() &&
+              bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf)))
+          {
+            textureMask |= 0x0002U;
+          }
+          if (!defaultEnvMap.empty() &&
+              bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
+          {
+            textureMask |= 0x0010U;
+          }
           t.renderer->drawWater(
               p.modelTransform, viewTransform, lightX, lightY, lightZ,
-              textures, 5, p.mswpFormID, waterReflectionLevel);
+              textures, textureMask, p.mswpFormID, waterReflectionLevel);
         }
       }
       else
       {
         if (p.model.o->mswpFormID && p.mswpFormID != p.model.o->mswpFormID)
-          materialSwap(*(t.renderer), texturePaths, 10, p.model.o->mswpFormID);
+          materialSwap(*(t.renderer), p.model.o->mswpFormID);
         if (p.mswpFormID)
-          materialSwap(*(t.renderer), texturePaths, 10, p.mswpFormID);
+          materialSwap(*(t.renderer), p.mswpFormID);
+        unsigned int  texturePathMask = t.renderer->texturePathMask;
+        texturePathMask &= ((((unsigned int) t.renderer->flags & 0x80U) >> 5)
+                            | (!isHDModel ? 0x0009U : 0x037BU));
+        t.renderer->setRenderMode((!isHDModel ? 0U : 3U) | renderMode);
         if (BRANCH_EXPECT(!enableTextures, false))
         {
-          if (t.renderer->alphaThreshold ||
-              (texturePaths[3] && !texturePaths[3]->empty()))
+          if (t.renderer->alphaThreshold || (texturePathMask & 0x0008U))
           {
-            texturePaths[3] = &whiteTexturePath;
+            texturePathMask &= ~0x0008U;
+            textures[3] = &whiteTexture;
+            textureMask |= 0x0008U;
           }
           else
           {
-            texturePaths[0] = &whiteTexturePath;
+            texturePathMask &= ~0x0001U;
+            textures[0] = &whiteTexture;
+            textureMask |= 0x0001U;
           }
         }
-        bool    isHDModel = bool(p.flags & 0x40);
-        unsigned int  txtSetMask =
-            (!isHDModel ? 0x0009U : 0x037BU)
-            | (((unsigned int) t.renderer->flags & 0x80U) >> 5);
-        for (size_t k = 0; txtSetMask; k++)
+        for (unsigned int m = 0x00080200U; texturePathMask; m = m >> 1)
         {
-          size_t  l = k - (k < 10 ? 0 : 10);
-          if (!(txtSetMask & (1U << (unsigned char) l)))
+          unsigned int  tmp = texturePathMask & m;
+          if (!tmp)
             continue;
+          int     k = FloatVector4::log2Int(int(tmp));
           bool    waitFlag = false;
-          if (texturePaths[l] && !texturePaths[l]->empty())
-          {
-            textures[l] = loadTexture(*(texturePaths[l]), t.fileBuf, -1,
-                                      (k < 10 ? &waitFlag : (bool *) 0));
-          }
+          textures[k] = loadTexture(*(t.renderer->texturePaths[k]), t.fileBuf,
+                                    -1, (m > 0x03FFU ? &waitFlag : (bool *) 0));
           if (!waitFlag)
-            txtSetMask &= ~(1U << (unsigned char) l);
+          {
+            texturePathMask &= ~tmp;
+            if (textures[k])
+              textureMask |= tmp;
+          }
         }
-        if (!textures[4] && (textures[6] || textures[8]) &&
-            !defaultEnvMap.empty())
+        if (!(textureMask & 0x0010U) && t.renderer->envMapScale > 0 &&
+            isHDModel && !defaultEnvMap.empty())
         {
-          textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0);
+          if (bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
+            textureMask |= 0x0010U;
         }
         t.renderer->drawTriShape(
             p.modelTransform, viewTransform, lightX, lightY, lightZ,
-            textures, 10);
+            textures, textureMask);
       }
     }
   }
@@ -1570,10 +1575,12 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           &(landTextures.front()), ltxtN, landTextures.size(),
           landTextureMip - float(int(landTextureMip)),
           landTxtRGBScale, landTxtDefColor);
+      t.renderer->setRenderMode((hdModelNamePatterns.size() > 0 ? 1U : 0U)
+                                | renderMode);
       *(t.renderer) = *(t.terrainMesh);
       t.renderer->drawTriShape(
           p.modelTransform, viewTransform, lightX, lightY, lightZ,
-          t.terrainMesh->getTextures(), t.terrainMesh->getTextureCount());
+          t.terrainMesh->getTextures(), t.terrainMesh->getTextureMask());
     }
   }
   else if (p.flags & 0x04)              // water cell
@@ -1608,8 +1615,9 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     tmp.vertexData = vTmp;
     tmp.triangleData = tTmp;
     tmp.flags = 0x12;                   // water
-    tmp.texturePathCnt = 0;
+    tmp.texturePathMask = 0;
     tmp.texturePaths = (std::string **) 0;
+    t.renderer->setRenderMode(3U | renderMode);
     *(t.renderer) = tmp;
     if (!waterSecondPass)
     {
@@ -1620,18 +1628,20 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     else
     {
       const DDSTexture  *textures[5];
-      textures[0] = (DDSTexture *) 0;
-      textures[1] = (DDSTexture *) 0;
-      textures[2] = (DDSTexture *) 0;
-      textures[3] = (DDSTexture *) 0;
-      textures[4] = (DDSTexture *) 0;
-      if (!defaultWaterTexture.empty())
-        textures[1] = loadTexture(defaultWaterTexture, t.fileBuf);
-      if (!defaultEnvMap.empty())
-        textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0);
+      unsigned int  textureMask = 0U;
+      if (!defaultWaterTexture.empty() &&
+          bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf)))
+      {
+        textureMask |= 0x0002U;
+      }
+      if (!defaultEnvMap.empty() &&
+          bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
+      {
+        textureMask |= 0x0010U;
+      }
       t.renderer->drawWater(
-          p.modelTransform, viewTransform, lightX, lightY, lightZ, textures, 5,
-          p.mswpFormID, waterReflectionLevel);
+          p.modelTransform, viewTransform, lightX, lightY, lightZ,
+          textures, textureMask, p.mswpFormID, waterReflectionLevel);
     }
   }
   return true;
@@ -1732,8 +1742,8 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     enableSCOL(false),
     enableAllObjects(false),
     enableTextures(true),
+    renderMode((unsigned char) ((masterFiles.getESMVersion() >> 4) & 0x0CU)),
     debugMode(0),
-    bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
     waterSecondPass(false),
     threadCnt(0),
     textureDataSize(0),
@@ -1744,8 +1754,12 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     waterReflectionLevel(1.0f),
     zRangeMax(zMax),
     verboseMode(true),
-    useESMWaterColors(true)
+    useESMWaterColors(true),
+    bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
+    whiteTexture(0xFFFFFFFFU)
 {
+  if (!renderMode)
+    renderMode = 4;
   size_t  imageDataSize = size_t(width) * size_t(height);
   if (bufAllocFlags & 0x01)
     outBufRGBA = new std::uint32_t[imageDataSize];
@@ -1755,10 +1769,6 @@ Renderer::Renderer(int imageWidth, int imageHeight,
   renderThreads.reserve(16);
   nifFiles.resize(modelBatchCnt);
   setThreadCount(-1);
-  if (esmFile.getESMVersion() < 0x80U)
-    whiteTexturePath = "textures/white.dds";
-  else
-    whiteTexturePath = "textures/effects/rainscene/test_flat_white.dds";
 }
 
 Renderer::~Renderer()
@@ -1844,18 +1854,12 @@ void Renderer::setThreadCount(int n)
     return;
   threadCnt = n;
   renderThreads.resize(size_t(n));
-  // enable GGX for Fallout 76
-  unsigned int  flags = (unsigned int) (esmFile.getESMVersion() >= 0xC0U);
-  // cube maps in linear color space for Fallout 4
-  flags |= ((unsigned int) ((esmFile.getESMVersion() & ~0x3FU) != 0x80U) << 1);
-  // cube maps flipped vertically for Skyrim
-  flags |= ((unsigned int) (esmFile.getESMVersion() < 0x80U) << 2);
   for (size_t i = 0; i < renderThreads.size(); i++)
   {
     if (!renderThreads[i].renderer)
     {
       renderThreads[i].renderer =
-          new Plot3D_TriShape(outBufRGBA, outBufZ, width, height, flags);
+          new Plot3D_TriShape(outBufRGBA, outBufZ, width, height, renderMode);
     }
   }
 }
@@ -1917,18 +1921,14 @@ void Renderer::setLighting(int lightColor, int ambientColor, int envColor,
   }
   else
   {
-    a = Plot3D_TriShape::cubeMapToAmbient(
-            loadTexture(defaultEnvMap, renderThreads[0].fileBuf, 0),
-            ((esmFile.getESMVersion() & ~0x3FU) != 0x80U));
+    a = renderThreads[0].renderer->cubeMapToAmbient(
+            loadTexture(defaultEnvMap, renderThreads[0].fileBuf, 0));
   }
   for (size_t i = 0; i < renderThreads.size(); i++)
   {
-    if (renderThreads[i].renderer)
-    {
-      renderThreads[i].renderer->setLighting(c, a, e, l[2]);
-      renderThreads[i].renderer->setEnvMapOffset(
-          float(width) * -0.5f, float(height) * -0.5f, float(height) * 2.0f);
-    }
+    renderThreads[i].renderer->setLighting(c, a, e, l[2]);
+    renderThreads[i].renderer->setEnvMapOffset(
+        float(width) * -0.5f, float(height) * -0.5f, float(height) * 2.0f);
   }
 }
 
@@ -1973,7 +1973,7 @@ void Renderer::loadTerrain(const char *btdFileName,
   {
     if (!enableTextures)
     {
-      landTextures[i] = loadTexture(whiteTexturePath, fileBuf);
+      landTextures[i] = &whiteTexture;
     }
     else if (!landData->getTextureDiffuse(i).empty())
     {

@@ -122,36 +122,32 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
         std::fprintf(f, "    Controller: %3d\n", lspBlock->controller);
       if (lspBlock->textureSet >= 0)
         std::fprintf(f, "    Texture set: %3d\n", lspBlock->textureSet);
-      if (lspBlock->bgsmTextures.size() > 0)
-      {
-        std::fprintf(f, "    Material version: 0x%02X\n",
-                     (unsigned int) lspBlock->bgsmVersion);
-        std::fprintf(f, "    Material flags: 0x%02X\n",
-                     (unsigned int) lspBlock->bgsmFlags);
-        std::fprintf(f, "    Material alpha flags: 0x%04X\n",
-                     (unsigned int) lspBlock->bgsmAlphaFlags);
-        std::fprintf(f, "    Material alpha threshold: %3u\n",
-                     (unsigned int) lspBlock->bgsmAlphaThreshold);
-      }
+      std::fprintf(f, "    Material version: 0x%02X\n",
+                   (unsigned int) lspBlock->material.version);
+      std::fprintf(f, "    Material flags: 0x%02X\n",
+                   (unsigned int) lspBlock->material.flags);
+      std::fprintf(f, "    Material alpha flags: 0x%04X\n",
+                   (unsigned int) lspBlock->material.alphaFlags);
+      std::fprintf(f, "    Material alpha threshold: %3u\n",
+                   (unsigned int) lspBlock->material.alphaThreshold);
       std::fprintf(f, "    Material alpha: %.3f\n",
-                   double(int(lspBlock->bgsmAlpha)) * (1.0 / 128.0));
+                   double(int(lspBlock->material.alpha)) / 128.0);
       std::fprintf(f, "    Material gradient map scale: %.3f\n",
-                   double(int(lspBlock->bgsmGradientMapV)) * (1.0 / 255.0));
+                   double(int(lspBlock->material.gradientMapV)) / 255.0);
       std::fprintf(f, "    Material environment map scale: %.3f\n",
-                   double(int(lspBlock->bgsmEnvMapScale)) * (1.0 / 128.0));
+                   double(int(lspBlock->material.envMapScale)) / 128.0);
       std::fprintf(f, "    Material specular color (0xAABBGGRR): 0x%08X\n",
-                   (unsigned int) lspBlock->bgsmSpecularColor);
+                   (unsigned int) lspBlock->material.specularColor);
       std::fprintf(f, "    Material specular scale: %.3f\n",
-                   double(int(lspBlock->bgsmSpecularScale)) * (1.0 / 128.0));
+                   double(int(lspBlock->material.specularScale)) / 128.0);
       std::fprintf(f, "    Material specular smoothness: %.3f\n",
-                   double(int(lspBlock->bgsmSpecularSmoothness))
-                   * (1.0 / 255.0));
-      for (size_t j = 0; j < lspBlock->bgsmTextures.size(); j++)
+                   double(int(lspBlock->material.specularSmoothness)) / 255.0);
+      for (size_t j = 0; j < lspBlock->texturePaths.size(); j++)
       {
-        if (!lspBlock->bgsmTextures[j]->empty())
+        if (lspBlock->material.texturePathMask & (1U << (unsigned int) j))
         {
           std::fprintf(f, "    Material texture %d: %s\n",
-                       int(j), lspBlock->bgsmTextures[j]->c_str());
+                       int(j), lspBlock->texturePaths[j]->c_str());
         }
       }
     }
@@ -159,7 +155,7 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
     {
       for (size_t j = 0; j < shaderTextureSetBlock->texturePaths.size(); j++)
       {
-        if (!shaderTextureSetBlock->texturePaths[j]->empty())
+        if (shaderTextureSetBlock->texturePathMask & (1U << (unsigned int) j))
         {
           std::fprintf(f, "    Texture %2d: %s\n",
                        int(j), shaderTextureSetBlock->texturePaths[j]->c_str());
@@ -216,10 +212,14 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "  Texture UV offset, scale: (%f, %f), (%f, %f)\n",
                  meshData[i].textureOffsetU, meshData[i].textureOffsetV,
                  meshData[i].textureScaleU, meshData[i].textureScaleV);
-    for (size_t j = 0; j < meshData[i].texturePathCnt; j++)
+    unsigned int  m = meshData[i].texturePathMask;
+    for (int j = 0; m; j++, m = m >> 1)
     {
-      std::fprintf(f, "  Texture %2d: %s\n",
-                   int(j), meshData[i].texturePaths[j]->c_str());
+      if (m & 1U)
+      {
+        std::fprintf(f, "  Texture %2d: %s\n",
+                     j, meshData[i].texturePaths[j]->c_str());
+      }
     }
     std::fprintf(f, "  Vertex list:\n");
     for (size_t j = 0; j < meshData[i].vertexCnt; j++)
@@ -297,32 +297,26 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "newmtl Material%06u\n", (unsigned int) (i + 1));
     std::fprintf(f, "Ka 1.0 1.0 1.0\n");
     std::fprintf(f, "Kd 1.0 1.0 1.0\n");
-    float   specularR = float(int(meshData[i].specularColor & 0xFFU));
-    float   specularG = float(int((meshData[i].specularColor >> 8) & 0xFFU));
-    float   specularB = float(int((meshData[i].specularColor >> 16) & 0xFFU));
+    FloatVector4  specularColor(meshData[i].specularColor);
     float   specularScale =
         float(int(meshData[i].specularScale)) / (128.0f * 255.0f);
     float   specularGlossiness = float(int(meshData[i].specularSmoothness));
-    if ((meshData[i].texturePathCnt >= 7 && meshData[i].texturePaths[6] &&
-         !meshData[i].texturePaths[6]->empty()) ||
-        (meshData[i].texturePathCnt >= 10 && meshData[i].texturePaths[9] &&
-         !meshData[i].texturePaths[9]->empty()))
+    if ((meshData[i].texturePathMask & 0x0040) ||
+        (meshData[i].texturePathMask & 0x0200))
     {
       specularScale *= 0.5f;
       specularGlossiness *= 0.5f;
     }
-    specularR *= specularScale;
-    specularG *= specularScale;
-    specularB *= specularScale;
+    specularColor *= specularScale;
     specularGlossiness =
         float(std::pow(2.0f, specularGlossiness * (9.0f / 255.0f) + 1.0f));
-    std::fprintf(f, "Ks %.3f %.3f %.3f\n", specularR, specularG, specularB);
+    std::fprintf(f, "Ks %.3f %.3f %.3f\n",
+                 specularColor[0], specularColor[1], specularColor[2]);
     std::fprintf(f, "d 1.0\n");
     std::fprintf(f, "Ns %.1f\n", specularGlossiness);
     for (size_t j = 0; j < 2; j++)
     {
-      if (j < meshData[i].texturePathCnt &&
-          !meshData[i].texturePaths[j]->empty())
+      if (meshData[i].texturePathMask & (1U << (unsigned int) j))
       {
         std::fprintf(f, "%s %s\n",
                      (!j ? "map_Kd" : "map_Kn"),
@@ -408,25 +402,26 @@ struct Renderer
   std::vector< unsigned char >  fileBuf;
   std::string defaultEnvMap;
   std::string waterTexture;
-  std::string whiteTexture;
+  DDSTexture  whiteTexture;
   Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
            int imageWidth, int imageHeight, unsigned int nifVersion);
   ~Renderer();
   void setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
                   int imageWidth, int imageHeight, float envMapScale);
-  const DDSTexture *loadTexture(const std::string *texturePath, bool isDiffuse);
+  const DDSTexture *loadTexture(const std::string *texturePath);
   static void threadFunction(Renderer *p, size_t n);
   void renderModel();
 };
 
 Renderer::Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
                    int imageWidth, int imageHeight, unsigned int nifVersion)
+  : lightX(0.0f),
+    lightY(0.0f),
+    lightZ(1.0f),
+    waterEnvMapLevel(1.0f),
+    waterColor(0xC0804000U),
+    whiteTexture(0xFFFFFFFFU)
 {
-  lightX = 0.0f;
-  lightY = 0.0f;
-  lightZ = 1.0f;
-  waterEnvMapLevel = 1.0f;
-  waterColor = 0xC0804000U;
   threadCnt = int(std::thread::hardware_concurrency());
   if (threadCnt < 1 || imageHeight < 64)
     threadCnt = 1;
@@ -436,18 +431,14 @@ Renderer::Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
   renderers.resize(size_t(threadCnt), (Plot3D_TriShape *) 0);
   threadErrMsg.resize(size_t(threadCnt));
   viewOffsetY.resize(size_t(threadCnt + 1), 0);
-  // enable GGX for Fallout 76
-  unsigned int  flags = (unsigned int) (nifVersion >= 0x90U);
-  // cube maps in linear color space for Fallout 4
-  flags |= ((unsigned int) ((nifVersion & ~0x0FU) != 0x80U) << 1);
-  // cube maps flipped vertically for Skyrim
-  flags |= ((unsigned int) (nifVersion < 0x80U) << 2);
+  unsigned int  renderMode =
+      (nifVersion < 0x80U ? 7U : (nifVersion < 0x90U ? 11U : 15U));
   try
   {
     for (size_t i = 0; i < renderers.size(); i++)
     {
       renderers[i] = new Plot3D_TriShape(outBufRGBA, outBufZ,
-                                         imageWidth, imageHeight, flags);
+                                         imageWidth, imageHeight, renderMode);
     }
   }
   catch (...)
@@ -512,8 +503,7 @@ void Renderer::setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
   viewOffsetY[renderers.size()] = imageHeight;
 }
 
-const DDSTexture * Renderer::loadTexture(const std::string *texturePath,
-                                         bool isDiffuse)
+const DDSTexture * Renderer::loadTexture(const std::string *texturePath)
 {
   if (!texturePath || texturePath->empty() || !ba2File)
     return (DDSTexture *) 0;
@@ -535,11 +525,6 @@ const DDSTexture * Renderer::loadTexture(const std::string *texturePath,
         std::fprintf(stderr, "Warning: failed to load texture '%s': %s\n",
                      texturePath->c_str(), e.what());
         t = (DDSTexture *) 0;
-        if (isDiffuse && !whiteTexture.empty() && *texturePath != whiteTexture)
-        {
-          ba2File->extractFile(fileBuf, whiteTexture);
-          t = new DDSTexture(&(fileBuf.front()), fileBuf.size());
-        }
       }
       i = textureSet.insert(std::pair< std::string, DDSTexture * >(
                                 *texturePath, t)).first;
@@ -598,26 +583,29 @@ void Renderer::threadFunction(Renderer *p, size_t n)
       *(p->renderers[n]) = ts;
       const DDSTexture  *textures[10];
       unsigned int  texturePathMask = (!(ts.flags & 0x80) ? 0x037BU : 0x037FU)
-                                      & ((1U << ts.texturePathCnt) - 1U);
+                                      & (unsigned int) ts.texturePathMask;
+      unsigned int  textureMask = 0U;
       for (size_t j = 0; j < 10; j++, texturePathMask >>= 1)
       {
-        textures[j] = (DDSTexture *) 0;
-        const std::string *texturePath = (std::string *) 0;
         if (texturePathMask & 1)
-          texturePath = ts.texturePaths[j];
-        if (!texturePath || texturePath->empty())
         {
-          if (j != 0)
-            continue;
-          texturePath = &(p->whiteTexture);
+          if (bool(textures[j] = p->loadTexture(ts.texturePaths[j])))
+            textureMask |= (1U << (unsigned char) j);
         }
-        textures[j] = p->loadTexture(texturePath, (j == 0));
       }
-      if (!textures[4] && (textures[6] || textures[8]))
-        textures[4] = p->loadTexture(&(p->defaultEnvMap), false);
+      if (!(textureMask & 0x0001U))
+      {
+        textures[0] = &(p->whiteTexture);
+        textureMask |= 0x0001U;
+      }
+      if (!(textureMask & 0x0010U) && ts.envMapScale > 0)
+      {
+        if (bool(textures[4] = p->loadTexture(&(p->defaultEnvMap))))
+          textureMask |= 0x0010U;
+      }
       p->renderers[n]->drawTriShape(p->modelTransform, vt,
                                     p->lightX, p->lightY, p->lightZ,
-                                    textures, 10);
+                                    textures, textureMask);
     }
     if (haveWater)
     {
@@ -627,14 +615,15 @@ void Renderer::threadFunction(Renderer *p, size_t n)
         if ((ts.flags & 0x07) != 0x02)          // ignore if not water
           continue;
         *(p->renderers[n]) = ts;
-        const DDSTexture  *textures[10];
-        for (size_t j = 10; j-- > 0; )
-          textures[j] = (DDSTexture *) 0;
-        textures[1] = p->loadTexture(&(p->waterTexture), false);
-        textures[4] = p->loadTexture(&(p->defaultEnvMap), false);
+        const DDSTexture  *textures[5];
+        unsigned int  textureMask = 0U;
+        if (bool(textures[1] = p->loadTexture(&(p->waterTexture))))
+          textureMask |= 0x0002U;
+        if (bool(textures[4] = p->loadTexture(&(p->defaultEnvMap))))
+          textureMask |= 0x0010U;
         p->renderers[n]->drawWater(p->modelTransform, vt,
                                    p->lightX, p->lightY, p->lightZ,
-                                   textures, 10,
+                                   textures, textureMask,
                                    p->waterColor, p->waterEnvMapLevel);
       }
     }
@@ -705,10 +694,6 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     renderer.ba2File = &ba2File;
     nifFile.getMesh(renderer.meshData);
     renderer.waterTexture = "textures/water/defaultwater.dds";
-    if (nifFile.getVersion() < 0x80U)
-      renderer.whiteTexture = "textures/white.dds";
-    else
-      renderer.whiteTexture = "textures/effects/rainscene/test_flat_white.dds";
     renderer.modelTransform =
         NIFFile::NIFVertexTransform(
             1.0f, degreesToRadians(modelRotationX),
@@ -760,10 +745,8 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
     renderer.setBuffers(&(outBufRGBA.front()), &(outBufZ.front()),
                         imageWidth, imageHeight, envMapScale);
     {
-      FloatVector4  a(Plot3D_TriShape::cubeMapToAmbient(
-                          renderer.loadTexture(&(renderer.defaultEnvMap),
-                                               false),
-                          ((nifFile.getVersion() & ~0x0FU) != 0x80U)));
+      FloatVector4  a(renderer.renderers[0]->cubeMapToAmbient(
+                          renderer.loadTexture(&(renderer.defaultEnvMap))));
       for (size_t i = 0; i < renderer.renderers.size(); i++)
       {
         renderer.renderers[i]->setLighting(
@@ -998,10 +981,6 @@ static void viewMeshes(const BA2File& ba2File,
       renderer.ba2File = &ba2File;
       nifFile.getMesh(renderer.meshData);
       renderer.waterTexture = "textures/water/defaultwater.dds";
-      renderer.whiteTexture =
-          (nifFile.getVersion() < 0x80U ?
-           "textures/white.dds"
-           : "textures/effects/rainscene/test_flat_white.dds");
 
       bool    nextFileFlag = false;
       bool    screenshotFlag = false;
@@ -1069,10 +1048,8 @@ static void viewMeshes(const BA2File& ba2File,
           std::uint32_t *outBufRGBA = display.lockDrawSurface();
           renderer.setBuffers(outBufRGBA, &(outBufZ.front()),
                               imageWidth, imageHeight, envMapScale);
-          FloatVector4  a(Plot3D_TriShape::cubeMapToAmbient(
-                              renderer.loadTexture(&(renderer.defaultEnvMap),
-                                                   false),
-                              ((nifFile.getVersion() & ~0x0FU) != 0x80U)));
+          FloatVector4  a(renderer.renderers[0]->cubeMapToAmbient(
+                              renderer.loadTexture(&(renderer.defaultEnvMap))));
           for (size_t i = 0; i < renderer.renderers.size(); i++)
           {
             renderer.renderers[i]->setLighting(

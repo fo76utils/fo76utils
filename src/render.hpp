@@ -95,6 +95,7 @@ class Renderer
     std::string materialPath;
     BGSMFile    bgsmFile;
     std::vector< std::string >  texturePaths;
+    const std::string *texturePathPtrs[10];
   };
   struct RenderThread
   {
@@ -143,8 +144,8 @@ class Renderer
   bool    enableSCOL;
   bool    enableAllObjects;
   bool    enableTextures;
+  unsigned char renderMode;
   unsigned char debugMode;
-  unsigned char bufAllocFlags;          // bit 0: RGBA buffer, bit 1: Z buffer
   bool    waterSecondPass;
   int     threadCnt;
   size_t  textureDataSize;
@@ -169,9 +170,10 @@ class Renderer
   int     zRangeMax;
   bool    verboseMode;
   bool    useESMWaterColors;
+  unsigned char bufAllocFlags;          // bit 0: RGBA buffer, bit 1: Z buffer
   NIFFile::NIFBounds  worldBounds;
-  std::string whiteTexturePath;
   std::map< unsigned int, BaseObject >  baseObjects;
+  DDSTexture  whiteTexture;
   // bit Y * 8 + X of the return value is set if the bounds of the object
   // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
   // in the top left corner
@@ -215,9 +217,7 @@ class Renderer
                                unsigned int t, unsigned long long modelIDMask);
   unsigned int loadMaterialSwap(unsigned int formID);
   void renderObjectList();
-  void materialSwap(Plot3D_TriShape& t,
-                    const std::string **texturePaths, size_t texturePathCnt,
-                    unsigned int formID);
+  void materialSwap(Plot3D_TriShape& t, unsigned int formID);
   bool renderObject(RenderThread& t, size_t i,
                     unsigned long long tileMask = ~0ULL);
   void renderThread(size_t threadNum, size_t startPos, size_t endPos,
