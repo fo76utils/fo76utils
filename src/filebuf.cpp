@@ -84,6 +84,50 @@ float FileBuffer::readFloat()
 #endif
 }
 
+FloatVector4 FileBuffer::readFloatVector4()
+{
+#if defined(__GNUC__) && (defined(__x86_64__) || defined(__x86_64))
+  if ((filePos + 16) > fileBufSize)
+    throw errorMessage("end of input file");
+  union
+  {
+    std::int32_t  i __attribute__ ((__vector_size__ (16)));
+    float   f __attribute__ ((__vector_size__ (16)));
+  }
+  tmp;
+  const std::int32_t  *p =
+      reinterpret_cast< const std::int32_t * >(fileBuf + filePos);
+  filePos = filePos + 16;
+  tmp.i[0] = p[0];
+  tmp.i[1] = p[1];
+  tmp.i[2] = p[2];
+  tmp.i[3] = p[3];
+  tmp.i &= (((tmp.i + 0x00800000) & 0x7F000000) != 0);
+  return FloatVector4(tmp.f[0], tmp.f[1], tmp.f[2], tmp.f[3]);
+#else
+  float   v0 = readFloat();
+  float   v1 = readFloat();
+  float   v2 = readFloat();
+  float   v3 = readFloat();
+  return FloatVector4(v0, v1, v2, v3);
+#endif
+}
+
+FloatVector4 FileBuffer::readFloat16Vector4()
+{
+  if ((filePos + 8) > fileBufSize)
+    throw errorMessage("end of input file");
+  std::uint64_t tmp;
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  tmp = *(reinterpret_cast< const std::uint64_t * >(fileBuf + filePos));
+  filePos = filePos + 8;
+#else
+  tmp = (std::uint64_t) readUInt32Fast();
+  tmp = tmp | ((std::uint64_t) readUInt32Fast() << 32);
+#endif
+  return FloatVector4::convertFloat16(tmp);
+}
+
 std::uint64_t FileBuffer::readUInt64()
 {
   if ((filePos + 8) > fileBufSize)
@@ -150,7 +194,27 @@ void FileBuffer::readPath(std::string& s, size_t n,
   }
   if (prefix && prefix[0] != '\0')
   {
-    if (std::strncmp(s.c_str(), prefix, std::strlen(prefix)) != 0)
+    size_t  p = 0;
+    size_t  l = std::strlen(prefix);
+    while (true)
+    {
+      if ((p + l) > s.length())
+      {
+        p = std::string::npos;
+        break;
+      }
+      if (std::memcmp(s.c_str() + p, prefix, l * sizeof(char)) == 0)
+      {
+        if (p > 0)
+          s.erase(0, p);
+        break;
+      }
+      p = s.find('/', p);
+      if (p == std::string::npos)
+        break;
+      p++;
+    }
+    if (p == std::string::npos)
       s.insert(0, prefix);
   }
   if (suffix && suffix[0] != '\0')

@@ -3,6 +3,7 @@
 #define FILEBUF_HPP_INCLUDED
 
 #include "common.hpp"
+#include "fp32vec4.hpp"
 
 class FileBuffer
 {
@@ -28,6 +29,8 @@ class FileBuffer
   std::uint32_t readUInt32();
   std::int32_t readInt32();
   float readFloat();
+  FloatVector4 readFloatVector4();
+  FloatVector4 readFloat16Vector4();
   std::uint64_t readUInt64();
   float readFloat16();
   // read n bytes of string data, or until '\0' or end of buffer by default
