@@ -314,21 +314,12 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
     if (xyzOffs >= 0)
     {
       f.setPosition(offs + size_t(xyzOffs));
-      if (!useFloat16)
-      {
-        v.x = f.readFloat();
-        v.y = f.readFloat();
-        v.z = f.readFloat();
-        bitangentX = roundFloat((f.readFloat() + 1.0f) * 127.5f);
-      }
-      else
-      {
-        v.x = convertFloat16(f.readUInt16Fast());
-        v.y = convertFloat16(f.readUInt16Fast());
-        v.z = convertFloat16(f.readUInt16Fast());
-        bitangentX =
-            roundFloat((convertFloat16(f.readUInt16Fast()) + 1.0f) * 127.5f);
-      }
+      FloatVector4  xyz(!useFloat16 ?
+                        f.readFloatVector4() : f.readFloat16Vector4());
+      v.x = xyz[0];
+      v.y = xyz[1];
+      v.z = xyz[2];
+      bitangentX = roundFloat((xyz[3] + 1.0f) * 127.5f);
       bitangentX = (bitangentX > 0 ? (bitangentX < 255 ? bitangentX : 255) : 0);
     }
     if (uvOffs >= 0)
@@ -408,50 +399,35 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
   for (unsigned int i = f.readUInt32(); i--; )
     extraData.push_back(f.readUInt32());
   controller = f.readBlockID();
-  bgsmVersion = 0;
-  bgsmFlags = 0;
-  bgsmGradientMapV = 128;
-  bgsmEnvMapScale = 0;
-  bgsmSpecularColor = 0xFFFFFFFFU;
-  bgsmSpecularScale = 0;
-  bgsmSpecularSmoothness = 128;
-  bgsmAlphaFlags = 0x00EC;
-  bgsmAlphaThreshold = 0;
-  bgsmAlpha = 128;
   if (f.bsVersion < 0x90)
   {
     flags = f.readUInt64();
-    offsetU = f.readFloat();
-    offsetV = f.readFloat();
-    scaleU = f.readFloat();
-    scaleV = f.readFloat();
+    material.offsetU = f.readFloat();
+    material.offsetV = f.readFloat();
+    material.scaleU = f.readFloat();
+    material.scaleV = f.readFloat();
     textureSet = f.readBlockID();
     if (shaderType == 1 &&              // environment map
         (f.getPosition() + (f.bsVersion < 0x80 ? 60 : 100)) <= f.size())
     {
       f.setPosition(f.getPosition() + (f.bsVersion < 0x80 ? 16 : 20));
-      bgsmFlags = (unsigned char) (f.readUInt32Fast() & 0x03);
+      material.flags = (unsigned char) (f.readUInt32Fast() & 0x03);
       int     tmp = roundFloat(f.readFloat() * 128.0f);
-      bgsmAlpha = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+      material.alpha = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
       f.setPosition(f.getPosition() + 4);
       float   s = f.readFloat();
       if (f.bsVersion < 0x80)
         s = (s > 2.0f ? ((float(std::log2(s)) - 1.0f) * (1.0f / 9.0f)) : 0.0f);
       tmp = roundFloat(s * 255.0f);
       tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-      bgsmSpecularSmoothness = (unsigned char) tmp;
-      tmp = roundFloat(f.readFloat() * 255.0f);
+      material.specularSmoothness = (unsigned char) tmp;
+      FloatVector4  specColor(f.readFloatVector4());
+      s = specColor[3] * 128.0f;
+      material.specularColor =
+          std::uint32_t(specColor * FloatVector4(255.0f)) | 0xFF000000U;
+      tmp = roundFloat(s);
       tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-      bgsmSpecularColor = std::uint32_t(tmp) | 0xFF000000U;     // R
-      tmp = roundFloat(f.readFloat() * 255.0f);
-      tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-      bgsmSpecularColor |= (std::uint32_t(tmp) << 8);           // G
-      tmp = roundFloat(f.readFloat() * 255.0f);
-      tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-      bgsmSpecularColor |= (std::uint32_t(tmp) << 16);          // B
-      tmp = roundFloat(f.readFloat() * 128.0f);
-      tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-      bgsmSpecularScale = (unsigned char) tmp;
+      material.specularScale = (unsigned char) tmp;
       if (f.bsVersion < 0x80)
       {
         f.setPosition(f.getPosition() + 8);
@@ -460,21 +436,18 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
       {
         f.setPosition(f.getPosition() + 12);
         tmp = roundFloat(f.readFloat() * 255.0f);
-        bgsmGradientMapV = (unsigned char) (tmp & 0xFF);
+        material.gradientMapV = (unsigned char) (tmp & 0xFF);
         f.setPosition(f.getPosition() + 28);
       }
-      tmp = roundFloat(f.readFloat() * 128.0f);
-      bgsmEnvMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+      tmp = roundFloat(f.readFloat() * s);      // s = specular scale * 128
+      material.envMapScale =
+          (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
     }
   }
   else
   {
     controller = -1;
     flags = 0ULL;
-    offsetU = 0.0f;
-    offsetV = 0.0f;
-    scaleU = 1.0f;
-    scaleV = 1.0f;
     textureSet =
         (nxtBlkType == NIFFile::BlkTypeBSShaderTextureSet ? int(nxtBlk) : -1);
   }
@@ -491,23 +464,10 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
     }
     if (bgsmFile.version)
     {
-      bgsmVersion = bgsmFile.version;
-      bgsmFlags = bgsmFile.flags;
-      bgsmGradientMapV = bgsmFile.gradientMapV;
-      bgsmEnvMapScale = bgsmFile.envMapScale;
-      bgsmSpecularColor = bgsmFile.specularColor;
-      bgsmSpecularScale = bgsmFile.specularScale;
-      bgsmSpecularSmoothness = bgsmFile.specularSmoothness;
-      bgsmAlphaFlags = bgsmFile.alphaFlags;
-      bgsmAlphaThreshold = bgsmFile.alphaThreshold;
-      bgsmAlpha = bgsmFile.alpha;
-      offsetU = bgsmFile.offsetU;
-      offsetV = bgsmFile.offsetV;
-      scaleU = bgsmFile.scaleU;
-      scaleV = bgsmFile.scaleV;
-      bgsmTextures.resize(f.bgsmTexturePaths.size(), (std::string *) 0);
+      material = bgsmFile;
+      texturePaths.resize(f.bgsmTexturePaths.size(), (std::string *) 0);
       for (size_t i = 0; i < f.bgsmTexturePaths.size(); i++)
-        bgsmTextures[i] = f.storeString(f.bgsmTexturePaths[i]);
+        texturePaths[i] = f.storeString(f.bgsmTexturePaths[i]);
     }
   }
 }
@@ -525,6 +485,7 @@ NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(NIFFile& f)
   f.stringBuf.clear();
   const std::string *s = f.storeString(f.stringBuf);
   texturePaths.resize((f.bsVersion < 0x90 ? 9 : 10), s);
+  texturePathMask = 0;
   unsigned long long  texturePathMap = 0xFFFFFFFF6E743210ULL;   // Fallout 4
   if (f.bsVersion < 0x80)
     texturePathMap = 0xFFFFFFFFEE54E210ULL;     // Skyrim
@@ -534,19 +495,20 @@ NIFFile::NIFBlkBSShaderTextureSet::NIFBlkBSShaderTextureSet(NIFFile& f)
   {
     size_t  j = size_t(texturePathMap & 15U);
     f.readString(4);
-    if (j < texturePaths.size())
+    if (j >= texturePaths.size())
+      continue;
+    if (f.stringBuf.length() > 0 &&
+        std::strncmp(f.stringBuf.c_str(), "textures/", 9) != 0)
     {
-      if (f.stringBuf.length() > 0 &&
-          std::strncmp(f.stringBuf.c_str(), "textures/", 9) != 0)
-      {
-        size_t  n = f.stringBuf.find("/textures/");
-        if (n != std::string::npos)
-          f.stringBuf.erase(0, n + 1);
-        else
-          f.stringBuf.insert(0, "textures/");
-      }
-      texturePaths[j] = f.storeString(f.stringBuf);
+      size_t  n = f.stringBuf.find("/textures/");
+      if (n != std::string::npos)
+        f.stringBuf.erase(0, n + 1);
+      else
+        f.stringBuf.insert(0, "textures/");
     }
+    if (!f.stringBuf.empty())
+      texturePathMask = texturePathMask | std::uint16_t(1U << (unsigned int) j);
+    texturePaths[j] = f.storeString(f.stringBuf);
   }
 }
 
@@ -738,6 +700,24 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
   fileBuf = savedFileBuf;
   fileBufSize = savedFileBufSize;
   filePos = savedFileBufSize;
+  for (size_t i = 0; i < blockCnt; i++)
+  {
+    if (blockTypeBaseTable[blockTypes[i]] != BlkTypeBSLightingShaderProperty)
+      continue;
+    NIFBlkBSLightingShaderProperty& lspBlock =
+        *((NIFBlkBSLightingShaderProperty *) blocks[i]);
+    if (!lspBlock.material.texturePathMask && lspBlock.textureSet >= 0)
+    {
+      if (blockTypeBaseTable[blockTypes[lspBlock.textureSet]]
+          == BlkTypeBSShaderTextureSet)
+      {
+        NIFBlkBSShaderTextureSet& tsBlock =
+            *((NIFBlkBSShaderTextureSet *) blocks[lspBlock.textureSet]);
+        lspBlock.texturePaths = tsBlock.texturePaths;
+        lspBlock.material.texturePathMask = tsBlock.texturePathMask;
+      }
+    }
+  }
 }
 
 void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
@@ -790,9 +770,9 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
     t.vertexTransform *=
         ((const NIFBlkNiNode *) blocks[parentBlocks[i]])->vertexTransform;
   }
-  unsigned short  alphaFlags = 0x00EC;
-  unsigned char   alphaThreshold = 0;
-  unsigned char   alpha = 128;
+  std::uint16_t alphaFlags = 0x00EC;
+  unsigned char alphaThreshold = 0;
+  unsigned char alpha = 128;
   if (b.shaderProperty >= 0)
   {
     size_t  n = size_t(b.shaderProperty);
@@ -801,29 +781,17 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
     {
       const NIFBlkBSLightingShaderProperty& lsBlock =
           *((const NIFBlkBSLightingShaderProperty *) blocks[n]);
-      if (lsBlock.materialName && !lsBlock.materialName->empty())
-        t.materialPath = lsBlock.materialName;
-      t.textureOffsetU = lsBlock.offsetU;
-      t.textureOffsetV = lsBlock.offsetV;
-      t.textureScaleU = lsBlock.scaleU;
-      t.textureScaleV = lsBlock.scaleV;
       // decal, two sided, tree, glow map
-      t.flags = t.flags | (unsigned char) (lsBlock.bgsmFlags & 0xB8);
-      t.gradientMapV = lsBlock.bgsmGradientMapV;
-      t.envMapScale = lsBlock.bgsmEnvMapScale;
-      t.specularColor = lsBlock.bgsmSpecularColor;
-      t.specularScale = lsBlock.bgsmSpecularScale;
-      t.specularSmoothness = lsBlock.bgsmSpecularSmoothness;
-      alpha = lsBlock.bgsmAlpha;
-      if (lsBlock.bgsmVersion)
+      t.flags = t.flags | (unsigned char) (lsBlock.material.flags & 0xB8);
+      t.gradientMapV = lsBlock.material.gradientMapV;
+      t.envMapScale = lsBlock.material.envMapScale;
+      t.specularColor = lsBlock.material.specularColor;
+      t.specularScale = lsBlock.material.specularScale;
+      t.specularSmoothness = lsBlock.material.specularSmoothness;
+      if (lsBlock.material.version)
       {
-        alphaFlags = lsBlock.bgsmAlphaFlags;
-        alphaThreshold = lsBlock.bgsmAlphaThreshold;
-        if (lsBlock.bgsmTextures.size() > 0)
-        {
-          t.texturePathCnt = (unsigned char) lsBlock.bgsmTextures.size();
-          t.texturePaths = &(lsBlock.bgsmTextures.front());
-        }
+        alphaFlags = lsBlock.material.alphaFlags;
+        alphaThreshold = lsBlock.material.alphaThreshold;
       }
       else
       {
@@ -832,8 +800,15 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
         // glow map
         t.flags = t.flags | (unsigned char) ((lsBlock.flags >> 31) & 0x80U);
       }
-      if (lsBlock.textureSet >= 0 && !t.texturePathCnt)
-        n = size_t(lsBlock.textureSet);
+      alpha = lsBlock.material.alpha;
+      t.texturePathMask = lsBlock.material.texturePathMask;
+      t.texturePaths = &(lsBlock.texturePaths.front());
+      if (lsBlock.materialName && !lsBlock.materialName->empty())
+        t.materialPath = lsBlock.materialName;
+      t.textureOffsetU = lsBlock.material.offsetU;
+      t.textureOffsetV = lsBlock.material.offsetV;
+      t.textureScaleU = lsBlock.material.scaleU;
+      t.textureScaleV = lsBlock.material.scaleV;
     }
     else if (baseBlockType == BlkTypeBSEffectShaderProperty)
     {
@@ -848,13 +823,6 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       // unknown shader type
       return;
     }
-    if (getBaseBlockType(n) == BlkTypeBSShaderTextureSet)
-    {
-      const NIFBlkBSShaderTextureSet& tsBlock =
-          *((const NIFBlkBSShaderTextureSet *) blocks[n]);
-      t.texturePathCnt = (unsigned char) tsBlock.texturePaths.size();
-      t.texturePaths = &(tsBlock.texturePaths.front());
-    }
   }
   if (b.alphaProperty >= 0 &&
       getBaseBlockType(size_t(b.alphaProperty)) == BlkTypeNiAlphaProperty)
@@ -866,7 +834,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   }
   t.alphaThreshold =
       BGSMFile::calculateAlphaThreshold(alphaFlags, alphaThreshold, alpha);
-  if (t.texturePathCnt &&
+  if ((t.texturePathMask & 1) &&
       t.texturePaths[0]->find("/fxwater") != std::string::npos)
   {
     t.flags = t.flags | 0x12;

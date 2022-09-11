@@ -6,6 +6,7 @@
 #include "filebuf.hpp"
 #include "ba2file.hpp"
 #include "fp32vec4.hpp"
+#include "bgsmfile.hpp"
 
 class NIFFile : public FileBuffer
 {
@@ -35,23 +36,39 @@ class NIFFile : public FileBuffer
     {
       return convertFloat16(v);
     }
+    inline void getUV(float& u_f, float& v_f) const
+    {
+      FloatVector4  tmp(FloatVector4::convertFloat16(
+                            std::uint32_t(u) | (std::uint32_t(v) << 16)));
+      u_f = tmp[0];
+      v_f = tmp[1];
+    }
     inline void getBitangent(float& btngX, float& btngY, float& btngZ) const
     {
-      btngX = float(int(bitangent & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
-      btngY = float(int((bitangent >> 8) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
-      btngZ = float(int((bitangent >> 16) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+      FloatVector4  tmp(bitangent);
+      tmp *= (1.0f / 127.5f);
+      tmp -= 1.0f;
+      btngX = tmp[0];
+      btngY = tmp[1];
+      btngZ = tmp[2];
     }
     inline void getTangent(float& tangX, float& tangY, float& tangZ) const
     {
-      tangX = float(int(tangent & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
-      tangY = float(int((tangent >> 8) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
-      tangZ = float(int((tangent >> 16) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+      FloatVector4  tmp(tangent);
+      tmp *= (1.0f / 127.5f);
+      tmp -= 1.0f;
+      tangX = tmp[0];
+      tangY = tmp[1];
+      tangZ = tmp[2];
     }
     inline void getNormal(float& normX, float& normY, float& normZ) const
     {
-      normX = float(int(normal & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
-      normY = float(int((normal >> 8) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
-      normZ = float(int((normal >> 16) & 0xFFU)) * (1.0f / 127.5f) - 1.0f;
+      FloatVector4  tmp(normal);
+      tmp *= (1.0f / 127.5f);
+      tmp -= 1.0f;
+      normX = tmp[0];
+      normY = tmp[1];
+      normZ = tmp[2];
     }
   };
   struct NIFTriangle
@@ -152,7 +169,7 @@ class NIFFile : public FileBuffer
     std::uint32_t specularColor;
     unsigned char specularScale;        // 128 = 1.0
     unsigned char specularSmoothness;   // 255 = 1.0, glossiness from 2 to 1024
-    unsigned short  texturePathCnt;
+    std::uint16_t texturePathMask;      // bit N = 1 if texturePaths[N] is valid
     // texturePaths[0] = diffuse texture
     // texturePaths[1] = normal map
     // texturePaths[2] = glow texture
@@ -176,7 +193,7 @@ class NIFFile : public FileBuffer
         vertexData((NIFVertex *) 0), triangleData((NIFTriangle *) 0),
         flags(0x00), gradientMapV(128), envMapScale(128), alphaThreshold(0),
         specularColor(0xFFFFFFFFU), specularScale(0), specularSmoothness(128),
-        texturePathCnt(0), texturePaths((std::string **) 0),
+        texturePathMask(0), texturePaths((std::string **) 0),
         materialPath((std::string *) 0), textureOffsetU(0.0f),
         textureOffsetV(0.0f), textureScaleU(1.0f), textureScaleV(1.0f), name("")
     {
@@ -255,23 +272,10 @@ class NIFFile : public FileBuffer
     const std::string *materialName;
     std::vector< unsigned int > extraData;
     int     controller;
-    unsigned long long  flags;
-    float   offsetU;
-    float   offsetV;
-    float   scaleU;
-    float   scaleV;
     int     textureSet;
-    unsigned char   bgsmVersion;
-    unsigned char   bgsmFlags;
-    unsigned char   bgsmGradientMapV;
-    unsigned char   bgsmEnvMapScale;
-    std::uint32_t   bgsmSpecularColor;
-    unsigned char   bgsmSpecularScale;
-    unsigned char   bgsmSpecularSmoothness;
-    unsigned short  bgsmAlphaFlags;
-    unsigned char   bgsmAlphaThreshold;
-    unsigned char   bgsmAlpha;          // 128 = 1.0
-    std::vector< const std::string * >  bgsmTextures;
+    unsigned long long  flags;
+    BGSMFile  material;
+    std::vector< const std::string * >  texturePaths;
     NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType,
                                    const BA2File *ba2File);
     virtual ~NIFBlkBSLightingShaderProperty();
@@ -279,6 +283,7 @@ class NIFFile : public FileBuffer
   struct NIFBlkBSShaderTextureSet : public NIFBlock
   {
     std::vector< const std::string * >  texturePaths;
+    std::uint16_t texturePathMask;
     NIFBlkBSShaderTextureSet(NIFFile& f);
     virtual ~NIFBlkBSShaderTextureSet();
   };

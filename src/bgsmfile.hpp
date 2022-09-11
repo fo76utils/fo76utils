@@ -21,9 +21,10 @@ struct BGSMFile
   // bits 5-8 = destination blend mode
   // bit 9 = threshold enabled
   // bits 10-12 = threshold mode (always 4 = greater)
-  unsigned short  alphaFlags;
+  std::uint16_t alphaFlags;
   unsigned char alphaThreshold;
   unsigned char alpha;                  // 128 = 1.0
+  std::uint16_t texturePathMask;
   float   offsetU;
   float   offsetV;
   float   scaleU;
@@ -50,7 +51,7 @@ struct BGSMFile
                     const BA2File& ba2File, const std::string& fileName);
   void clear();
   static inline unsigned char calculateAlphaThreshold(
-      unsigned short alphaFlags, unsigned char alphaThreshold,
+      std::uint16_t alphaFlags, unsigned char alphaThreshold,
       unsigned char alpha)
   {
     if (!(alphaFlags & 0x0201))
