@@ -28,9 +28,10 @@ Running any of the programs without arguments prints detailed usage information.
         pacman -Su
         pacman -S --needed base-devel mingw-w64-x86_64-toolchain
         pacman -S msys/scons
-* Optionally, for nif\_view and plotting scripts only, install SDL 2 and matplotlib:
+* Optionally, for cubeview and the view mode of nif\_info, install SDL 2, and matplotlib for plotting scripts:
   *     pacman -S mingw64/mingw-w64-x86_64-SDL2
   *     pacman -S mingw64/mingw-w64-x86_64-python-matplotlib
+* The installed MSYS2 and MinGW packages can be updated anytime by running **pacman -Syu** again.
 * In the MSYS2 MinGW x64 terminal, compile the utilities with **scons**. Use **scons -j 8** for building with 8 parallel jobs, and **scons -c** to clean up and delete the object files and executables.
 * Optionally, for the makemap and icon extraction scripts only, download and install [ImageMagick](https://imagemagick.org/script/download.php#windows) and [SWFTools](http://www.swftools.org/download.html).
 
@@ -76,7 +77,7 @@ Running any of the programs without arguments prints detailed usage information.
 #### Example 6
 
     ./nif_info -render1920x1080 glassdome.dds Fallout76/Data palaceofthewindingpath/palace_bld_glassdome01.nif
-    ./nif_info -render1920x1080 44.dds Fallout4/Data weapons/44/44load.nif
+    ./nif_info -render1920x1080 44.dds Fallout76/Data weapons/44/44load.nif
     ./nif_info -view1920x1080 Fallout76/Data meshes/test/testpbrmaterials01.nif
     ./cubeview 1280 720 Fallout76/Data textures/shared/cubemaps/outsideoldtownreflectcube_e.dds
 
