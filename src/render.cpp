@@ -538,6 +538,17 @@ const Renderer::BaseObject * Renderer::readModelProperties(
         {
           f.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
           isHDModel = isHighQualityModel(stringBuf);
+          if (r == "SCOL" && esmFile.getESMVersion() >= 0xC0)
+          {
+            if (stringBuf.find(".esm/", 0, 5) == std::string::npos)
+            {
+              // fix invalid SCOL model paths in SeventySix.esm
+              stringBuf = "meshes/scol/seventysix.esm/cm00000000.nif";
+              unsigned int  n = r.formID;
+              for (int j = 36; n; j--, n = n >> 4)
+                stringBuf[j] = char(n & 15U) + ((n & 15U) < 10U ? '0' : 'W');
+            }
+          }
         }
         else if (f == "MNAM" && f.size() == 1040 && modelLOD && !isHDModel)
         {
@@ -1025,9 +1036,7 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName,
   textureCacheMutex.unlock();
   try
   {
-    if (m < 0)
-      m = (fileName.find("/cubemaps/") == std::string::npos ? textureMip : 0);
-    m = ba2File.extractTexture(fileBuf, fileName, m);
+    m = ba2File.extractTexture(fileBuf, fileName, (m >= 0 ? m : textureMip));
     t = new DDSTexture(&(fileBuf.front()), fileBuf.size(), m);
     cachedTexture->texture = t;
     textureCacheMutex.lock();
@@ -1473,8 +1482,6 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     for (size_t j = 0; j < t.sortBuf.size(); j++)
     {
       *(t.renderer) = *(t.sortBuf[j].ts);
-      if (p.flags & 0x80)
-        t.renderer->gradientMapV = (unsigned char) (p.flags >> 8);
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
       if (BRANCH_EXPECT((t.renderer->flags & 0x02), false))
@@ -1509,6 +1516,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           materialSwap(*(t.renderer), p.model.o->mswpFormID);
         if (p.mswpFormID)
           materialSwap(*(t.renderer), p.mswpFormID);
+        if (p.flags & 0x80)
+          t.renderer->gradientMapV = (unsigned char) (p.flags >> 8);
         unsigned int  texturePathMask = t.renderer->texturePathMask;
         texturePathMask &= ((((unsigned int) t.renderer->flags & 0x80U) >> 5)
                             | (!isHDModel ? 0x0009U : 0x037BU));
@@ -1536,7 +1545,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           int     k = FloatVector4::log2Int(int(tmp));
           bool    waitFlag = false;
           textures[k] = loadTexture(*(t.renderer->texturePaths[k]), t.fileBuf,
-                                    -1, (m > 0x03FFU ? &waitFlag : (bool *) 0));
+                                    (!(m & 0x0018U) ? -1 : 0),
+                                    (m > 0x03FFU ? &waitFlag : (bool *) 0));
           if (!waitFlag)
           {
             texturePathMask &= ~tmp;

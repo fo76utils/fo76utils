@@ -206,6 +206,7 @@ class Renderer
   static size_t getTextureDataSize(const DDSTexture *t);
   // returns NULL on failure
   // *waitFlag is set to true if the texture is locked by another thread
+  // m = mip level (< 0: use default)
   const DDSTexture *loadTexture(const std::string& fileName,
                                 std::vector< unsigned char >& fileBuf,
                                 int m = -1, bool *waitFlag = (bool *) 0);
