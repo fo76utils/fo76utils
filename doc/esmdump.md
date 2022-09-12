@@ -24,6 +24,10 @@ List records from ESM file(s) in text or TSV format.
 * **-u**: Print TSV format version control info.
 * **-v**: Verbose mode.
 
+#### Note
+
+The Fallout: New Vegas base game ESM includes a LAND record (form ID = 0x00150FC0, the parent cell is 0x0014F962) with invalid compressed data that causes an error when running esmdump. Adding the option **-x LAND** avoids this error.
+
 ### Field definition line format
 
     RECORD[,...]\tFIELD[,...]\tNAME\tDATATYPES
