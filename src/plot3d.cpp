@@ -168,7 +168,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
 {
   float   l = (nDotL > 0.0f ? nDotL : 0.0f);
   float   v = float(std::fabs(nDotV));
-  FloatVector4  s(specularColorFloat * FloatVector4(specular * specularLevel));
+  FloatVector4  s(specularColorFloat * FloatVector4(specular));
   e *= reflectionLevel;
   s *= lightColor;
   // geometry function
@@ -204,7 +204,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO4(
   float   v = float(std::fabs(nDotV));
   FloatVector4  s(specularColorFloat * lightColor);
   e *= (reflectionLevel * specLevel);
-  s *= (specular * specularLevel * specLevel);
+  s *= (specular * specLevel);
   // geometry function
   float   r = 0.96875f - (smoothness * 0.9375f);
   float   kEnv = r * r * 0.5f;
@@ -242,7 +242,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
   a *= envColor;
   FloatVector4  s(specularColorFloat * lightColor);
   e *= (FloatVector4(reflectionLevel * envLevel) * a);
-  s *= (specular * specularLevel * specLevel * g);
+  s *= (specular * specLevel * g);
   FloatVector4  glow(0.0f);
   if (BRANCH_EXPECT(textureGlow, false))
   {
@@ -262,7 +262,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   float   v = float(std::fabs(nDotV));
   // assume roughness = 1.0, f0 = 0.04, specular = 0.25
   FloatVector4  e(ambientLight);
-  FloatVector4  s(specularColorFloat * FloatVector4(0.53125f * specularLevel));
+  FloatVector4  s(specularColorFloat * FloatVector4(0.53125f));
   s *= lightColor;
   // geometry function (kEnv = kSpec = 0.5), multiplied with ao = 0.94
   FloatVector4  g(v / (v * 0.53125f + 0.53125f));
@@ -372,7 +372,7 @@ inline float Plot3D_TriShape::specularPhong(
     FloatVector4 reflectedView, float smoothness, float nDotL,
     bool isNormalized) const
 {
-  if (!((specularLevel * nDotL) > 0.0f))
+  if (!(nDotL > -0.125f))
     return 0.0f;
   float   s = reflectedView.dotProduct3(lightVector);
   if (!(s > -0.5f))
@@ -392,7 +392,7 @@ inline float Plot3D_TriShape::specularPhong(
 inline float Plot3D_TriShape::specularGGX(
     FloatVector4 reflectedView, float smoothness, float nDotL) const
 {
-  if (!((specularLevel * nDotL) > 0.0f))
+  if (!(nDotL > 0.0f))
     return 0.0f;
   // h2 = 2.0 * squared dot product with halfway vector
   float   h2 = reflectedView.dotProduct3(lightVector) + 1.0f;
@@ -428,14 +428,13 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_Water(
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * envColor));
   c *= (lightColor[3] * (1.0f - a));
   c += c0;
-  FloatVector4  s(specular * specularLevel);
-  e *= reflectionLevel;
+  FloatVector4  s(specular);
   e *= envColor;
   s *= lightColor;
   // geometry function (roughness assumed to be zero, kEnv = 0.0, kSpec = 0.125)
   s *= ((l * v) / ((l * 0.875f + 0.125f) * (v * 0.875f + 0.125f)));
   s += e;
-  s *= lightColor[3];
+  s *= (reflectionLevel * lightColor[3]);
   // Fresnel (water)
   float   v2 = v * v;
   float   f =
@@ -509,9 +508,21 @@ inline FloatVector4 Plot3D_TriShape::getDiffuseColor(
   FloatVector4  c(textureD->getPixelT(txtU, txtV, mipLevel));
   FloatVector4  vColor(z.vertexColor);
   float   a = c[3] * vColor[3];
-  alphaFlag = !(a < alphaThresholdFloat);
-  if (BRANCH_EXPECT(!alphaFlag, false))
-    return c;
+  if (BRANCH_EXPECT((alphaThreshold | alphaBlendScale), false))
+  {
+    alphaFlag = false;
+    if (a < alphaThresholdFloat)
+      return c;
+    if (BRANCH_EXPECT(alphaBlendScale, false))
+    {
+      if ((((roundFloat(z.xyz[0]) & 1) << 1) ^ ((roundFloat(z.xyz[1]) & 1) * 3))
+          >= roundFloat(a * float(int(alphaBlendScale)) * (1.0f / 8160.0f)))
+      {
+        return c;
+      }
+    }
+  }
+  alphaFlag = true;
   if (BRANCH_EXPECT(textureG, false))
   {
     float   u = c[1] * (1.0f / 255.0f);
@@ -1005,10 +1016,10 @@ Plot3D_TriShape::Plot3D_TriShape(
     mipOffsetG(0.0f),
     mipLevel(15.0f),
     alphaThresholdFloat(0.0f),
+    reflectionLevel(0.0f),
     invNormals(false),
     renderMode((unsigned char) (mode & 15U)),
     usingSRGBColorSpace(renderMode < 12),
-    debugMode(0U),
     lightVector(0.0f, 0.0f, 1.0f, 0.0f),
     lightColor(1.0f),
     ambientLight(renderMode < 12 ? 0.2497363f : 0.05f),
@@ -1019,9 +1030,8 @@ Plot3D_TriShape::Plot3D_TriShape(
     viewTransformInvY(0.0f, 1.0f, 0.0f, 0.0f),
     viewTransformInvZ(0.0f, 0.0f, 1.0f, 0.0f),
     specularColorFloat(1.0f),
-    reflectionLevel(0.0f),
-    specularLevel(0.0f),
     viewScale(1.0f),
+    debugMode(0U),
     drawPixelFunction(&drawPixel_Water)
 {
 }
@@ -1049,26 +1059,7 @@ void Plot3D_TriShape::setLighting(
 
 Plot3D_TriShape& Plot3D_TriShape::operator=(const NIFFile::NIFTriShape& t)
 {
-  vertexCnt = t.vertexCnt;
-  triangleCnt = t.triangleCnt;
-  vertexData = t.vertexData;
-  triangleData = t.triangleData;
-  vertexTransform = t.vertexTransform;
-  flags = t.flags;
-  gradientMapV = t.gradientMapV;
-  envMapScale = t.envMapScale;
-  alphaThreshold = t.alphaThreshold;
-  specularColor = t.specularColor;
-  specularScale = t.specularScale;
-  specularSmoothness = t.specularSmoothness;
-  texturePathMask = t.texturePathMask;
-  texturePaths = t.texturePaths;
-  materialPath = t.materialPath;
-  textureOffsetU = t.textureOffsetU;
-  textureOffsetV = t.textureOffsetV;
-  textureScaleU = t.textureScaleU;
-  textureScaleV = t.textureScaleV;
-  name = t.name;
+  *(static_cast< NIFFile::NIFTriShape * >(this)) = t;
   return (*this);
 }
 
@@ -1109,14 +1100,16 @@ void Plot3D_TriShape::drawTriShape(
       FloatVector4(viewTransform.rotateZX, viewTransform.rotateZY,
                    viewTransform.rotateZZ, 0.0f);
   specularColorFloat = FloatVector4(specularColor);
-  specularColorFloat *= (1.0f / 255.0f);
+  specularColorFloat *= (specularColorFloat[3] * (1.0f / (128.0f * 255.0f)));
   reflectionLevel = float(int(envMapScale)) * (1.0f / 128.0f);
-  specularLevel = float(int(specularScale)) * (1.0f / 128.0f);
   if (BRANCH_EXPECT((flags & 0x02), false))
   {
-    drawPixelFunction = &drawPixel_Water;
-    drawTriangles();
-    return;
+    if (!debugMode)
+    {
+      drawPixelFunction = &drawPixel_Water;
+      drawTriangles();
+      return;
+    }
   }
   int     mode = (!debugMode ? int(renderMode) : 0);
   textureD = textures[0];
@@ -1205,7 +1198,7 @@ void Plot3D_TriShape::drawWater(
     const DDSTexture * const *textures, unsigned int textureMask,
     std::uint32_t waterColor, float envMapLevel)
 {
-  if (BRANCH_EXPECT(!(flags & 0x02), false))
+  if (BRANCH_EXPECT(!((flags & 0x02) && !debugMode), false))
     return;
   lightVector = FloatVector4(lightX, lightY, lightZ, 0.0f);
   size_t  triangleCntRendered =
@@ -1233,7 +1226,6 @@ void Plot3D_TriShape::drawWater(
     specularColorFloat.srgbExpand();
   specularColorFloat[3] = -1.5f / (a * a);      // = -3.0 / (maxDepth * 16.0)
   reflectionLevel = envMapLevel;
-  specularLevel = envMapLevel;
   textureN = &defaultTexture_N;
   if (textureMask & 2U)
     textureN = textures[1];
@@ -1242,12 +1234,6 @@ void Plot3D_TriShape::drawWater(
   textureD = textureN;
   drawPixelFunction =
       (usingSRGBColorSpace ? &drawPixel_Water_2 : &drawPixel_Water_2G);
-  if (BRANCH_EXPECT(debugMode, false))
-  {
-    textureG = (DDSTexture *) 0;
-    textureGlow = (DDSTexture *) 0;
-    drawPixelFunction = &drawPixel_Debug;
-  }
   textureE = (DDSTexture *) 0;
   if (textureMask & 16U)
     textureE = textures[4];

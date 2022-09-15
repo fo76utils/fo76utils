@@ -344,10 +344,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   float   mipOffsetG;                   // for the glow map
   float   mipLevel;
   float   alphaThresholdFloat;
+  float   reflectionLevel;
   bool    invNormals;
   unsigned char renderMode;
   bool    usingSRGBColorSpace;
-  unsigned int  debugMode;
   FloatVector4  lightVector;
   FloatVector4  lightColor;             // lightColor[3] = overall RGB scale
   FloatVector4  ambientLight;
@@ -357,9 +357,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   FloatVector4  viewTransformInvY;
   FloatVector4  viewTransformInvZ;
   FloatVector4  specularColorFloat;     // water color for drawWater()
-  float   reflectionLevel;
-  float   specularLevel;
   float   viewScale;
+  unsigned int  debugMode;
   // offs = frame buffer offset (y * width + x)
   void    (*drawPixelFunction)(Plot3D_TriShape& p, size_t offs, Vertex& z);
   std::vector< Vertex > vertexBuf;
