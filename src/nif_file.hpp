@@ -164,11 +164,11 @@ class NIFFile : public FileBuffer
     // bit 7: uses glow map
     unsigned char flags;
     unsigned char gradientMapV;
-    unsigned char envMapScale;          // 128 = 1.0
     unsigned char alphaThreshold;
-    std::uint32_t specularColor;
-    unsigned char specularScale;        // 128 = 1.0
+    unsigned char alphaBlendScale;      // 128 = 1.0, 0 = no blending
+    std::uint32_t specularColor;        // alpha channel = specular scale * 128
     unsigned char specularSmoothness;   // 255 = 1.0, glossiness from 2 to 1024
+    unsigned char envMapScale;          // 128 = 1.0
     std::uint16_t texturePathMask;      // bit N = 1 if texturePaths[N] is valid
     // texturePaths[0] = diffuse texture
     // texturePaths[1] = normal map
@@ -191,14 +191,37 @@ class NIFFile : public FileBuffer
     NIFTriShape()
       : vertexCnt(0), triangleCnt(0),
         vertexData((NIFVertex *) 0), triangleData((NIFTriangle *) 0),
-        flags(0x00), gradientMapV(128), envMapScale(128), alphaThreshold(0),
-        specularColor(0xFFFFFFFFU), specularScale(0), specularSmoothness(128),
+        flags(0x00), gradientMapV(128), alphaThreshold(0), alphaBlendScale(0),
+        specularColor(0x00FFFFFFU), specularSmoothness(128), envMapScale(128),
         texturePathMask(0), texturePaths((std::string **) 0),
         materialPath((std::string *) 0), textureOffsetU(0.0f),
         textureOffsetV(0.0f), textureScaleU(1.0f), textureScaleV(1.0f), name("")
     {
     }
     void calculateBounds(NIFBounds& b, const NIFVertexTransform *vt = 0) const;
+    // f = alpha flags, t = threshold, a = alpha (see bgsmfile.hpp)
+    inline void setAlphaProperties(
+        std::uint16_t f, unsigned char t, unsigned char a)
+    {
+      int     tmp = 0;
+      if (f & 0x0200)
+      {
+        if (!a)
+          tmp = 255;
+        else if (a == 128)
+          tmp = int(t);
+        else
+          tmp = roundFloat(float(int(t)) * 128.0f / float(int(a)));
+        tmp = (tmp < 255 ? (tmp + 1) : 255);
+      }
+      alphaThreshold = (unsigned char) tmp;
+      if ((f & 0x01FF) != 0x00ED)
+        alphaBlendScale = 0;
+      else if (!a)
+        alphaBlendScale = 1;
+      else
+        alphaBlendScale = a;
+    }
   };
   enum
   {
@@ -291,8 +314,8 @@ class NIFFile : public FileBuffer
   {
     std::vector< unsigned int > extraData;
     int     controller;
-    unsigned short  flags;
-    unsigned char   alphaThreshold;
+    std::uint16_t flags;
+    unsigned char alphaThreshold;
     NIFBlkNiAlphaProperty(NIFFile& f);
     virtual ~NIFBlkNiAlphaProperty();
   };

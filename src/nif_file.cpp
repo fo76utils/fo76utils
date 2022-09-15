@@ -423,11 +423,8 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
       material.specularSmoothness = (unsigned char) tmp;
       FloatVector4  specColor(f.readFloatVector4());
       s = specColor[3] * 128.0f;
-      material.specularColor =
-          std::uint32_t(specColor * FloatVector4(255.0f)) | 0xFF000000U;
-      tmp = roundFloat(s);
-      tmp = (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-      material.specularScale = (unsigned char) tmp;
+      specColor[3] = specColor[3] * (128.0f / 255.0f);
+      material.specularColor = std::uint32_t(specColor * FloatVector4(255.0f));
       if (f.bsVersion < 0x80)
       {
         f.setPosition(f.getPosition() + 8);
@@ -770,9 +767,6 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
     t.vertexTransform *=
         ((const NIFBlkNiNode *) blocks[parentBlocks[i]])->vertexTransform;
   }
-  std::uint16_t alphaFlags = 0x00EC;
-  unsigned char alphaThreshold = 0;
-  unsigned char alpha = 128;
   if (b.shaderProperty >= 0)
   {
     size_t  n = size_t(b.shaderProperty);
@@ -784,23 +778,28 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       // decal, two sided, tree, glow map
       t.flags = t.flags | (unsigned char) (lsBlock.material.flags & 0xB8);
       t.gradientMapV = lsBlock.material.gradientMapV;
-      t.envMapScale = lsBlock.material.envMapScale;
-      t.specularColor = lsBlock.material.specularColor;
-      t.specularScale = lsBlock.material.specularScale;
-      t.specularSmoothness = lsBlock.material.specularSmoothness;
-      if (lsBlock.material.version)
+      std::uint16_t alphaFlags = lsBlock.material.alphaFlags;
+      unsigned char alphaThreshold = lsBlock.material.alphaThreshold;
+      unsigned char alpha = lsBlock.material.alpha;
+      if (b.alphaProperty >= 0 &&
+          getBaseBlockType(size_t(b.alphaProperty)) == BlkTypeNiAlphaProperty)
       {
-        alphaFlags = lsBlock.material.alphaFlags;
-        alphaThreshold = lsBlock.material.alphaThreshold;
+        const NIFBlkNiAlphaProperty&  apBlock =
+            *((const NIFBlkNiAlphaProperty *) blocks[b.alphaProperty]);
+        alphaFlags = apBlock.flags;
+        alphaThreshold = apBlock.alphaThreshold;
       }
-      else
+      t.setAlphaProperties(alphaFlags, alphaThreshold, alpha);
+      t.specularColor = lsBlock.material.specularColor;
+      t.specularSmoothness = lsBlock.material.specularSmoothness;
+      t.envMapScale = lsBlock.material.envMapScale;
+      if (!lsBlock.material.version)
       {
         // two sided
         t.flags = t.flags | (unsigned char) ((lsBlock.flags >> 32) & 0x10U);
         // glow map
         t.flags = t.flags | (unsigned char) ((lsBlock.flags >> 31) & 0x80U);
       }
-      alpha = lsBlock.material.alpha;
       t.texturePathMask = lsBlock.material.texturePathMask;
       t.texturePaths = &(lsBlock.texturePaths.front());
       if (lsBlock.materialName && !lsBlock.materialName->empty())
@@ -824,16 +823,6 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       return;
     }
   }
-  if (b.alphaProperty >= 0 &&
-      getBaseBlockType(size_t(b.alphaProperty)) == BlkTypeNiAlphaProperty)
-  {
-    const NIFBlkNiAlphaProperty&  apBlock =
-        *((const NIFBlkNiAlphaProperty *) blocks[b.alphaProperty]);
-    alphaFlags = apBlock.flags;
-    alphaThreshold = apBlock.alphaThreshold;
-  }
-  t.alphaThreshold =
-      BGSMFile::calculateAlphaThreshold(alphaFlags, alphaThreshold, alpha);
   if ((t.texturePathMask & 1) &&
       t.texturePaths[0]->find("/fxwater") != std::string::npos)
   {
