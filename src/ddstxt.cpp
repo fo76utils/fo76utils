@@ -16,18 +16,18 @@ static inline std::uint64_t decodeBC3Alpha(std::uint64_t& a,
   if (a0 > a1)
   {
     FloatVector4  m(0.0f, 1.0f, 1.0f / 7.0f, 2.0f / 7.0f);
-    a = (std::uint32_t) (a0_f + (a1_f * m));
+    a = std::uint32_t(a0_f + (a1_f * m));
     m = FloatVector4(3.0f / 7.0f, 4.0f / 7.0f, 5.0f / 7.0f, 6.0f / 7.0f);
-    a = a | ((std::uint64_t) ((std::uint32_t) (a0_f + (a1_f * m))) << 32);
+    a = a | (std::uint64_t(std::uint32_t(a0_f + (a1_f * m))) << 32);
   }
   else
   {
     a = a0 | (a1 << 8) | 0xFF00000000000000ULL;
     FloatVector4  m(0.2f, 0.4f, 0.6f, 0.8f);
-    a = a | ((std::uint64_t) ((std::uint32_t) (a0_f + (a1_f * m))) << 16);
+    a = a | (std::uint64_t(std::uint32_t(a0_f + (a1_f * m))) << 16);
   }
   std::uint64_t ba = FileBuffer::readUInt16Fast(src + 2);
-  ba = ba | ((std::uint64_t) FileBuffer::readUInt32Fast(src + 4) << 16);
+  ba = ba | (std::uint64_t(FileBuffer::readUInt32Fast(src + 4)) << 16);
   return ba;
 }
 
@@ -37,7 +37,7 @@ static inline std::uint32_t decodeAlphaChannel(const std::uint64_t& a,
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   return reinterpret_cast< const unsigned char * >(&a)[ba & 7];
 #else
-  return ((std::uint32_t) (a >> (unsigned char) ((ba & 7) << 3)) & 0xFFU);
+  return (std::uint32_t(a >> (unsigned char) ((ba & 7) << 3)) & 0xFFU);
 #endif
 }
 
@@ -53,16 +53,16 @@ static inline std::uint32_t decodeBC1Colors(std::uint32_t *c,
                      | ((c1 & 0xF800U) >> 11) | a);
   c0_f *= FloatVector4(255.0f / 31.0f, 255.0f / 63.0f, 255.0f / 31.0f, 1.0f);
   c1_f *= FloatVector4(255.0f / 31.0f, 255.0f / 63.0f, 255.0f / 31.0f, 1.0f);
-  c[0] = (std::uint32_t) c0_f;
-  c[1] = (std::uint32_t) c1_f;
+  c[0] = std::uint32_t(c0_f);
+  c[1] = std::uint32_t(c1_f);
   if (BRANCH_EXPECT(c0 > c1, true))
   {
-    c[2] = (std::uint32_t) ((c0_f + c0_f + c1_f) * FloatVector4(1.0f / 3.0f));
-    c[3] = (std::uint32_t) ((c0_f + c1_f + c1_f) * FloatVector4(1.0f / 3.0f));
+    c[2] = std::uint32_t((c0_f + c0_f + c1_f) * FloatVector4(1.0f / 3.0f));
+    c[3] = std::uint32_t((c0_f + c1_f + c1_f) * FloatVector4(1.0f / 3.0f));
   }
   else
   {
-    c[2] = (std::uint32_t) ((c0_f + c1_f) * FloatVector4(0.5f));
+    c[2] = std::uint32_t((c0_f + c1_f) * FloatVector4(0.5f));
     c[3] = c[2] & ~a;
   }
   return FileBuffer::readUInt32Fast(src + 4);
@@ -333,7 +333,7 @@ void DDSTexture::loadTextureData(
           c += FloatVector4(p2 + (offsY2 + offsX2p1));
           c += FloatVector4(p2 + (offsY2p1 + offsX2));
           c += FloatVector4(p2 + (offsY2p1 + offsX2p1));
-          p[y * w + x] = (std::uint32_t) (c * FloatVector4(0.25f));
+          p[y * w + x] = std::uint32_t(c * FloatVector4(0.25f));
         }
 #else
         size_t  offsY2m1 = size_t(((y << 1) - 1U) & yMask) * w2;
@@ -351,10 +351,9 @@ void DDSTexture::loadTextureData(
           c2 += FloatVector4(p2 + (offsY2m1 + offsX2m1));
           c1 += FloatVector4(p2 + (offsY2m1 + offsX2));
           c2 += FloatVector4(p2 + (offsY2m1 + offsX2p1));
-          p[y * w + x] =
-              (std::uint32_t) ((c0 * FloatVector4(0.23031584f))
-                               + (c1 * FloatVector4(0.12479824f))
-                               + (c2 * FloatVector4(0.06762280f)));
+          p[y * w + x] = std::uint32_t((c0 * FloatVector4(0.23031584f))
+                                       + (c1 * FloatVector4(0.12479824f))
+                                       + (c2 * FloatVector4(0.06762280f)));
         }
 #endif
       }
@@ -964,17 +963,17 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
   return c0;
 }
 
-//  0.003  0.000 -0.010  0.000  0.035  0.055  0.035  0.000 -0.010  0.000  0.003
+//  0.003  0.000 -0.009  0.000  0.033  0.054  0.033  0.000 -0.009  0.000  0.003
 //  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
-// -0.010  0.000  0.031  0.000 -0.109 -0.175 -0.109  0.000  0.031  0.000 -0.010
+// -0.009  0.000  0.030  0.000 -0.108 -0.174 -0.108  0.000  0.030  0.000 -0.009
 //  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
-//  0.035  0.000 -0.109  0.000  0.389  0.624  0.389  0.000 -0.109  0.000  0.035
-//  0.055  0.000 -0.175  0.000  0.624  1.000  0.624  0.000 -0.175  0.000  0.055
-//  0.035  0.000 -0.109  0.000  0.389  0.624  0.389  0.000 -0.109  0.000  0.035
+//  0.033  0.000 -0.108  0.000  0.385  0.620  0.385  0.000 -0.108  0.000  0.033
+//  0.054  0.000 -0.174  0.000  0.620  1.000  0.620  0.000 -0.174  0.000  0.054
+//  0.033  0.000 -0.108  0.000  0.385  0.620  0.385  0.000 -0.108  0.000  0.033
 //  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
-// -0.010  0.000  0.031  0.000 -0.109 -0.175 -0.109  0.000  0.031  0.000 -0.010
+// -0.009  0.000  0.030  0.000 -0.108 -0.174 -0.108  0.000  0.030  0.000 -0.009
 //  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
-//  0.003  0.000 -0.010  0.000  0.035  0.055  0.035  0.000 -0.010  0.000  0.003
+//  0.003  0.000 -0.009  0.000  0.033  0.054  0.033  0.000 -0.009  0.000  0.003
 
 struct Downsample2xTable
 {
@@ -999,9 +998,10 @@ struct Downsample2xTable
 
 const float Downsample2xTable::filterTable[12] =
 {
-   0.6239888f,  0.3893620f, -0.1091126f,  0.0346086f,   // Y + 1, X + 0, 1, 3, 5
-  -0.1748631f, -0.1091126f,  0.0305771f, -0.0096985f,   // Y + 3, X + 0, 1, 3, 5
-   0.0554635f,  0.0346086f, -0.0096985f,  0.0030762f    // Y + 5, X + 0, 1, 3, 5
+  // X + 0, 1, 3, 5
+   0.62039170f,  0.38488586f, -0.10814215f,  0.03345214f,       // Y + 1
+  -0.17431270f, -0.10814215f,  0.03038492f, -0.00939912f,       // Y + 3
+   0.05392100f,  0.03345214f, -0.00939912f,  0.00290747f        // Y + 5
 };
 
 std::uint32_t downsample2xFilter(const std::uint32_t *buf,
@@ -1050,8 +1050,8 @@ std::uint32_t downsample2xFilter(const std::uint32_t *buf,
       }
     }
   }
-  c *= (1.0f / 4.036798f);
-  return (std::uint32_t) c.squareRootFast();
+  c *= 0.25f;
+  return std::uint32_t(c.squareRootFast());
 }
 
 static void downsample2xThread(std::uint32_t *outBuf,
