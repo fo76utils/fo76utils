@@ -136,10 +136,10 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
                    double(int(lspBlock->material.gradientMapV)) / 255.0);
       std::fprintf(f, "    Material environment map scale: %.3f\n",
                    double(int(lspBlock->material.envMapScale)) / 128.0);
-      std::fprintf(f, "    Material specular color (0xAABBGGRR): 0x%08X\n",
-                   (unsigned int) lspBlock->material.specularColor);
+      std::fprintf(f, "    Material specular color (0xBBGGRR): 0x%06X\n",
+                   (unsigned int) lspBlock->material.specularColor & 0xFFFFFFU);
       std::fprintf(f, "    Material specular scale: %.3f\n",
-                   double(int(lspBlock->material.specularScale)) / 128.0);
+                   double(int(lspBlock->material.specularColor >> 24)) / 128.0);
       std::fprintf(f, "    Material specular smoothness: %.3f\n",
                    double(int(lspBlock->material.specularSmoothness)) / 255.0);
       for (size_t j = 0; j < lspBlock->texturePaths.size(); j++)
@@ -205,7 +205,16 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
       }
       std::fputc('\n', f);
     }
-    std::fprintf(f, "  Alpha threshold: %d\n", int(meshData[i].alphaThreshold));
+    if (meshData[i].alphaThreshold)
+    {
+      std::fprintf(f, "  Alpha threshold: %d\n",
+                   int(meshData[i].alphaThreshold));
+    }
+    if (meshData[i].alphaBlendScale)
+    {
+      std::fprintf(f, "  Alpha blend scale: %.3f\n",
+                   double(int(meshData[i].alphaBlendScale)) / 128.0);
+    }
     printVertexTransform(f, meshData[i].vertexTransform);
     if (meshData[i].materialPath)
       std::fprintf(f, "  Material: %s\n", meshData[i].materialPath->c_str());
@@ -298,8 +307,7 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "Ka 1.0 1.0 1.0\n");
     std::fprintf(f, "Kd 1.0 1.0 1.0\n");
     FloatVector4  specularColor(meshData[i].specularColor);
-    float   specularScale =
-        float(int(meshData[i].specularScale)) / (128.0f * 255.0f);
+    float   specularScale = specularColor[3] / (128.0f * 255.0f);
     float   specularGlossiness = float(int(meshData[i].specularSmoothness));
     if ((meshData[i].texturePathMask & 0x0040) ||
         (meshData[i].texturePathMask & 0x0200))

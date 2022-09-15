@@ -1428,11 +1428,11 @@ void Renderer::materialSwap(Plot3D_TriShape& t, unsigned int formID)
     t.flags = (t.flags & 0x47) | (bgsmFile.flags & 0xB8);
     t.flags = t.flags | ((t.flags & 0x02) << 3);
     t.gradientMapV = bgsmFile.gradientMapV;
-    t.envMapScale = bgsmFile.envMapScale;
-    t.alphaThreshold = bgsmFile.calculateAlphaThreshold();
+    t.setAlphaProperties(bgsmFile.alphaFlags,
+                         bgsmFile.alphaThreshold, bgsmFile.alpha);
     t.specularColor = bgsmFile.specularColor;
-    t.specularScale = bgsmFile.specularScale;
     t.specularSmoothness = bgsmFile.specularSmoothness;
+    t.envMapScale = bgsmFile.envMapScale;
     t.texturePathMask = bgsmFile.texturePathMask;
     t.texturePaths = i->second[j].texturePathPtrs;
     t.textureOffsetU = bgsmFile.offsetU;
