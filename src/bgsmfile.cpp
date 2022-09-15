@@ -48,7 +48,7 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   if (tmp != 2 && tmp != 20)
     throw errorMessage("unsupported BGSM file version");
   version = (unsigned char) tmp;
-  flags = (unsigned char) (buf.readUInt32Fast() & 3U);
+  flags = std::uint16_t(buf.readUInt32Fast() & 3U);
   offsetU = buf.readFloat();
   offsetV = buf.readFloat();
   scaleU = buf.readFloat();
@@ -67,9 +67,9 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   // Z buffer write, Z buffer test, screen space reflections
   (void) buf.readUInt32Fast();
   // decal
-  flags = flags | ((unsigned char) bool(buf.readUInt8Fast()) << 3);
+  flags = flags | (std::uint16_t(bool(buf.readUInt8Fast())) << 3);
   // two sided
-  flags = flags | ((unsigned char) bool(buf.readUInt8Fast()) << 4);
+  flags = flags | (std::uint16_t(bool(buf.readUInt8Fast())) << 4);
   unsigned long long  texturePathMap = 0ULL;
   float   envScale = 0.0f;
   if (version == 2)                     // Fallout 4
@@ -81,8 +81,8 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
     }
     // gradient map disabled / enabled
     texturePathMap = (!buf[62] ? 0xFFFFFFFE7E244610ULL : 0xFFFFFFFE7E243610ULL);
-    flags = flags | ((unsigned char) bool(buf[buf.size() - 29]) << 5);  // tree
-    flags = flags | ((unsigned char) bool(buf[buf.size() - 45]) << 7);  // glow
+    flags = flags | (std::uint16_t(bool(buf[buf.size() - 29])) << 5);   // tree
+    flags = flags | (std::uint16_t(bool(buf[buf.size() - 45])) << 7);   // glow
     texturePaths.resize(9);
     buf.setPosition(63);
   }
@@ -90,8 +90,8 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   {
     envScale = 1.0f;
     texturePathMap = (!buf[58] ? 0xFFFFFFEE98724E10ULL : 0xFFFFFFEE98723E10ULL);
-    flags = flags | ((unsigned char) bool(buf[buf.size() - 10]) << 5);
-    flags = flags | ((unsigned char) bool(buf[buf.size() - 24]) << 7);
+    flags = flags | (std::uint16_t(bool(buf[buf.size() - 10])) << 5);
+    flags = flags | (std::uint16_t(bool(buf[buf.size() - 24])) << 7);
     texturePaths.resize(10);
     buf.setPosition(60);
   }
@@ -111,17 +111,18 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   buf.setPosition(buf.getPosition() + (version == 2 ? 15 : 24));
   bool    specularEnabled = bool(buf.readUInt8());
   FloatVector4  specColor(buf.readFloatVector4());
-  float   specScale = specColor[3] * 128.0f;
-  tmp = roundFloat(envScale * specScale);
+  tmp = roundFloat(envScale * specColor[3] * 128.0f);
   envMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-  specularColor = std::uint32_t(specColor * FloatVector4(255.0f)) | 0xFF000000U;
-  if (specularEnabled)
-  {
-    tmp = roundFloat(specScale);
-    specularScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-  }
+  specColor[3] = specColor[3] * (specularEnabled ? (128.0f / 255.0f) : 0.0f);
+  specularColor = std::uint32_t(specColor * FloatVector4(255.0f));
   tmp = roundFloat(buf.readFloat() * 255.0f);
   specularSmoothness = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+  buf.setPosition(buf.getPosition() + (version == 2 ? 28 : 30));
+  size_t  len = buf.readUInt32();               // root material
+  buf.setPosition(buf.getPosition() + len);
+  buf.setPosition(buf.getPosition() + 1);
+  if (buf.getPosition() < buf.size())           // emit enabled
+    flags = flags & ~(std::uint16_t(buf.readUInt8Fast() == 0) << 7);
   if (!texturePaths[3].empty())
   {
     buf.setPosition(buf.size() - (version == 2 ? 5 : 6));
@@ -142,15 +143,14 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
 void BGSMFile::clear()
 {
   version = 0;
-  flags = 0;
   gradientMapV = 128;
-  envMapScale = 0;
-  specularColor = 0xFFFFFFFFU;
-  specularScale = 0;
-  specularSmoothness = 128;
+  flags = 0;
   alphaFlags = 0x00EC;
   alphaThreshold = 0;
   alpha = 128;
+  specularColor = 0x00FFFFFFU;
+  specularSmoothness = 128;
+  envMapScale = 0;
   texturePathMask = 0;
   offsetU = 0.0f;
   offsetV = 0.0f;

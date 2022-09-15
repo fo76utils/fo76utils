@@ -9,13 +9,9 @@
 struct BGSMFile
 {
   unsigned char version;                // 2: Fallout 4, 20: Fallout 76
-  // 1: tile U, 2: tile V, 8: is decal, 16: two sided, 32: tree, 128: glow map
-  unsigned char flags;
   unsigned char gradientMapV;           // 255 = 1.0
-  unsigned char envMapScale;            // 128 = 1.0
-  std::uint32_t specularColor;
-  unsigned char specularScale;          // 128 = 1.0
-  unsigned char specularSmoothness;     // 255 = 1.0, glossiness from 2 to 1024
+  // 1: tile U, 2: tile V, 8: is decal, 16: two sided, 32: tree, 128: glow map
+  std::uint16_t flags;
   // bit 0 = blending enabled
   // bits 1-4 = source blend mode
   // bits 5-8 = destination blend mode
@@ -24,6 +20,9 @@ struct BGSMFile
   std::uint16_t alphaFlags;
   unsigned char alphaThreshold;
   unsigned char alpha;                  // 128 = 1.0
+  std::uint32_t specularColor;          // alpha channel = specular scale * 128
+  unsigned char specularSmoothness;     // 255 = 1.0, glossiness from 2 to 1024
+  unsigned char envMapScale;            // 128 = 1.0
   std::uint16_t texturePathMask;
   float   offsetU;
   float   offsetV;
@@ -50,26 +49,6 @@ struct BGSMFile
   void loadBGSMFile(std::vector< std::string >& texturePaths,
                     const BA2File& ba2File, const std::string& fileName);
   void clear();
-  static inline unsigned char calculateAlphaThreshold(
-      std::uint16_t alphaFlags, unsigned char alphaThreshold,
-      unsigned char alpha)
-  {
-    if (!(alphaFlags & 0x0201))
-      return 0;
-    if (!alpha)
-      return 255;
-    if (!(alphaFlags & 0x0200))
-      alphaThreshold = 127;             // default to emulate blending
-    if (alpha == 128)
-      return (unsigned char) (int(alphaThreshold) + int(alphaThreshold < 255));
-    int     tmp =
-        roundFloat(float(int(alphaThreshold) + 1) * 128.0f / float(int(alpha)));
-    return (unsigned char) (tmp < 255 ? tmp : 255);
-  }
-  inline unsigned char calculateAlphaThreshold() const
-  {
-    return calculateAlphaThreshold(alphaFlags, alphaThreshold, alpha);
-  }
 };
 
 #endif
