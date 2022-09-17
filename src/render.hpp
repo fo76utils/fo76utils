@@ -105,6 +105,8 @@ class Renderer
       float   z;
       inline bool operator<(const TriShapeSortObject& r) const
       {
+        if (!ts->alphaBlendScale && r.ts->alphaBlendScale)
+          return true;
         return (z < r.z);
       }
     };
