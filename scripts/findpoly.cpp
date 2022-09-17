@@ -198,6 +198,8 @@ static void findPolynomial(double *a, int k, const double *f, int n,
     if (minDist < 1.0)
       continue;
     maxIterations--;
+    if (pRange > (double(n) * 0.0001))
+      pRange = pRange * 0.9999;
     for (int i = 0; i <= k; i++)
       y[i] = interpolateFunction(f, n, k, &(m.front()), p[i]);
     for (int i = 0; i <= k; i++)
@@ -220,170 +222,200 @@ static void findPolynomial(double *a, int k, const double *f, int n,
       {
         a[i] = aTmp[i];
         bestP[i] = p[i];
-        std::printf(" %11.8f", a[i]);
       }
-      std::printf(", err =%11.8f\n", std::sqrt(bestError / double(n + 1)));
+      if (maxIterations > 0 && maxIterations < 0x10000000)
+        continue;
     }
-    if (pRange > (double(n) * 0.0001))
-      pRange = pRange * 0.9999;
+    else if (maxIterations > 0)
+    {
+      continue;
+    }
+    for (int i = k; i >= 0; i--)
+      std::printf(" %11.8f", a[i]);
+    std::printf(", err =%11.8f\n", std::sqrt(bestError / double(n + 1)));
   }
 }
 
+static inline double fresnel(double x, double n1, double n2)
+{
+  // x = NdotV
+  if (!(x > 0.0))
+    return 1.0;
+  if (!(x < 1.0))
+    return (((n2 - n1) * (n2 - n1)) / ((n1 + n2) * (n1 + n2)));
+  // sqrt(1.0 - ((n1 / n2) * sin(acos(x)))^2)
+  double  y = std::sqrt(1.0 - ((n1 / n2) * (n1 / n2) * (1.0 - (x * x))));
+  double  r_s = ((n1 * x) - (n2 * y)) / ((n1 * x) + (n2 * y));
+  double  r_p = ((n1 * y) - (n2 * x)) / ((n1 * y) + (n2 * x));
+  return (((r_s * r_s) + (r_p * r_p)) * 0.5);
+}
+
+static double fresnelGGX(double v_r, double n1, double n2, double r)
+{
+  // v_r = NdotV, r = roughness
+  v_r = (v_r > 0.0000001 ? (v_r < 0.9999999 ? v_r : 0.9999999) : 0.0000001);
+  double  v_i = std::sqrt(1.0 - (v_r * v_r));
+  if (r < (1.0 / 64.0))
+    r = 1.0 / 64.0;
+  else if (r > 1.0)
+    r = 1.0;
+  double  a2 = r * r * r * r;
+  double  k = (r + 1.0) * (r + 1.0) * 0.125;
+  double  g = v_r / (v_r * (1.0 - k) + k);
+  double  s = 0.0;
+  double  w = 0.0;
+  double  pi = std::atan(1.0) * 4.0;
+  int     i = 4096;
+  double  f_r = std::cos(pi * 2.0 / double(i));
+  double  f_i = std::sin(pi * 2.0 / double(i));
+  double  l_r = 1.0;
+  double  l_i = 0.0;
+  while (--i >= 0)
+  {
+    double  h_r = v_r + l_r;
+    double  h_i = v_i + l_i;
+    double  tmp = (h_r * h_r) + (h_i * h_i);
+    if (tmp > 0.0)
+      tmp = 1.0 / std::sqrt(tmp);
+    h_r *= tmp;
+    h_i *= tmp;
+    double  nDotL = (l_r > 0.0 ? l_r : 0.0);
+    double  nDotH = (h_r > 0.0 ? h_r : 0.0);
+    double  vDotH = std::fabs((v_r * h_r) + (v_i * h_i));
+    double  d = nDotH * nDotH * (a2 - 1.0) + 1.0;
+    d = a2 / (pi * d * d);
+    d = d * g * (nDotL / (nDotL * (1.0 - k) + k));
+    w += d;
+    s += (fresnel(vDotH, n1, n2) * d);
+    tmp = (l_r * f_r) - (l_i * f_i);
+    l_i = (l_r * f_i) + (l_i * f_r);
+    l_r = tmp;
+  }
+  return (s / w);
+}
+
+struct FunctionDesc
+{
+  const char  *name;
+  int     type;
+  int     k;
+  int     n;
+  unsigned int  flags;
+  double  x0;
+  double  x1;
+};
+
+static const FunctionDesc functionTable[9] =
+{
+  // name,           type, k,    n,  flags,   x0,  x1
+  { "lpoly",            0, 5,  512, 0x00A5, -1.0, 1.0   },
+  { "log2",             1, 4,  512, 0x002D,  1.0, 2.0   },
+  { "exp2",             2, 3,  512, 0x006D,  0.0, 1.0   },
+  { "fresnel2",         3, 5,  512, 0x0175,  0.0, 1.0   },
+  { "fresnel",          4, 4,  512, 0x0175,  0.0, 1.0   },
+  { "srgb_expand",      5, 2,  512, 0x0160,  0.0, 1.0   },
+  { "srgb_compress",    6, 2,  512, 0x0160,  0.0, 1.0   },
+  { "fresnelggx",       7, 3,  512, 0x0139,  0.0, 1.0   },
+  { (char *) 0,         0, 0,    0,      0,  0.0, 0.0   }
+};
+
 int main(int argc, char **argv)
 {
-  int     funcType = 0;                 // 0: lpoly, 1: log2, 2: expsqrt2
-  int     k = 5;
-  int     n = 512;
-  unsigned int  flags = 0x00A5;
-  double  x0 = -1.0;
-  double  x1 = 1.0;
-  if (argc > 1 && std::strcmp(argv[1], "log2") == 0)
+  int     funcType = 0;
+  if (argc > 1)
   {
-    funcType = 1;
-    k = 4;
-    flags = 0x002D;
-    x0 = 1.0;
-    x1 = 2.0;
-    argc--;
-    argv++;
+    for (int i = 0; functionTable[i].name; i++)
+    {
+      if (std::strcmp(argv[1], functionTable[i].name) == 0)
+      {
+        funcType = i;
+        argc--;
+        argv++;
+        break;
+      }
+    }
   }
-  else if (argc > 1 && std::strcmp(argv[1], "exp2") == 0)
-  {
-    funcType = 2;
-    k = 3;
-    flags = 0x006D;
-    x0 = 0.0;
-    x1 = 1.0;
-    argc--;
-    argv++;
-  }
-  else if (argc > 1 && std::strcmp(argv[1], "fresnel2") == 0)
-  {
-    funcType = 3;
-    k = 5;
-    flags = 0x0175;
-    x0 = 0.0;
-    x1 = 1.0;
-    argc--;
-    argv++;
-  }
-  else if (argc > 1 && std::strcmp(argv[1], "fresnel") == 0)
-  {
-    funcType = 4;
-    k = 4;
-    flags = 0x0175;
-    x0 = 0.0;
-    x1 = 1.0;
-    argc--;
-    argv++;
-  }
-  else if (argc > 1 && std::strcmp(argv[1], "srgb_expand") == 0)
-  {
-    funcType = 5;
-    k = 2;
-    flags = 0x0160;
-    x0 = 0.0;
-    x1 = 1.0;
-    argc--;
-    argv++;
-  }
-  else if (argc > 1 && std::strcmp(argv[1], "srgb_compress") == 0)
-  {
-    funcType = 6;
-    k = 2;
-    flags = 0x0160;
-    x0 = 0.0;
-    x1 = 1.0;
-    argc--;
-    argv++;
-  }
+  int     k = functionTable[funcType].k;
+  int     n = functionTable[funcType].n;
+  unsigned int  flags = functionTable[funcType].flags;
+  double  x0 = functionTable[funcType].x0;
+  double  x1 = functionTable[funcType].x1;
+  funcType = functionTable[funcType].type;
+  // gamma or Fresnel n2 (water: 1.3325, glass: 1.5)
+  double  arg1 = (funcType == 0 ? 2.2 : 1.5);
+  // ambient1 or roughness
+  double  arg2 = (funcType == 0 ? 0.2 : 0.5);
+  // ambient2
+  double  arg3 = 0.4;
+  if (argc > 1)
+    arg1 = std::atof(argv[1]);
+  if (argc > 2)
+    arg2 = std::atof(argv[2]);
+  if (argc > 3)
+    arg3 = std::atof(argv[3]);
   std::vector< double > a(size_t(k + 1));
   std::vector< double > f(size_t(n + 1));
-  if (funcType == 0)
+  for (int i = 0; i <= n; i++)
   {
-    double  gamma = 2.2;
-    double  ambient1 = 0.2;
-    double  ambient2 = 0.4;
-    if (argc > 1)
-      gamma = std::atof(argv[1]);
-    if (argc > 2)
-      ambient1 = std::atof(argv[2]);
-    if (argc > 3)
-      ambient2 = std::atof(argv[3]);
-    double  offs = std::pow(ambient1, gamma);
-    for (int i = 0; i <= n; i++)
+    double  x = (double(i) / double(n)) * (x1 - x0) + x0;
+    double  y = 0.0;
+    switch (funcType)
     {
-      double  x = (double(i) / double(n)) * (x1 - x0) + x0;
-      if (x >= 0.0)
-        x = x * (2.0 - ambient2) + ambient2;
-      else
-        x = (x + 1.0) * (x + 1.0) * (x + 1.0) * (x + 1.0) * ambient2;
-      f[i] = std::pow(x * (1.0 - offs) + offs, 1.0 / gamma);
+      case 0:                           // lpoly
+        {
+          double  offs = std::pow(arg2, arg1);
+          if (x >= 0.0)
+            x = x * (2.0 - arg3) + arg3;
+          else
+            x = (x + 1.0) * (x + 1.0) * (x + 1.0) * (x + 1.0) * arg3;
+          y = std::pow(x * (1.0 - offs) + offs, 1.0 / arg1);
+        }
+        break;
+      case 1:                           // log2
+        y = std::log2(x);
+        break;
+      case 2:                           // expsqrt2
+        y = std::exp2(x / 2.0);
+        break;
+      case 3:                           // fresnel gamma 2.0
+        {
+          double  f0 = fresnel(1.0, 1.0, arg1);
+          double  r = fresnel(x, 1.0, arg1);
+          r = (r - f0) / (1.0 - f0);
+          y = std::pow((r > 0.0 ? (r < 1.0 ? r : 1.0) : 0.0), 2.0 / 2.2);
+        }
+        break;
+      case 4:                           // sqrt(fresnel)
+        {
+          double  f0 = fresnel(1.0, 1.0, arg1);
+          double  r = fresnel(x, 1.0, arg1);
+          r = (r - f0) / (1.0 - f0);
+          y = std::sqrt(r > 0.0 ? (r < 1.0 ? r : 1.0) : 0.0);
+        }
+        break;
+      case 5:                           // srgb_expand
+        y = std::sqrt(x > 0.04045 ?
+                      std::pow((x + 0.055) / 1.055, 2.4) : (x / 12.92));
+        break;
+      case 6:                           // srgb_compress
+        y = ((x * x) > 0.0031308 ?
+             (std::pow(x * x, 1.0 / 2.4) * 1.055 - 0.055) : (x * x * 12.92));
+        break;
+      case 7:                           // sqrt(fresnelggx)
+        {
+          double  f0 = fresnel(1.0, 1.0, arg1);
+          double  r = fresnelGGX(x, 1.0, arg1, arg2);
+          r = (r - f0) / (1.0 - f0);
+          y = std::sqrt(r > 0.0 ? (r < 1.0 ? r : 1.0) : 0.0);
+        }
+        break;
     }
+    f[i] = y;
   }
-  else if (funcType == 1)
-  {
-    for (int i = 0; i <= n; i++)
-    {
-      double  x = (double(i) / double(n)) * (x1 - x0) + x0;
-      f[i] = std::log2(x);
-    }
-  }
-  else if (funcType == 2)
-  {
-    for (int i = 0; i <= n; i++)
-    {
-      double  x = (double(i) / double(n)) * (x1 - x0) + x0;
-      f[i] = std::exp2(x / 2.0);
-    }
-  }
-  else if (funcType == 3 || funcType == 4)
-  {
-    double  n1 = 1.0;
-    double  n2 = 1.5;           // glass (1.3325 for water)
-    if (argc > 1)
-      n2 = std::atof(argv[1]);
-    double  f0 = ((n2 - n1) * (n2 - n1)) / ((n1 + n2) * (n1 + n2));
-    for (int i = 0; i <= n; i++)
-    {
-      double  x = (double(i) / double(n)) * (x1 - x0) + x0;
-      // sqrt(1.0 - ((n1 / n2) * sin(acos(x)))^2)
-      double  y = std::sqrt(1.0 - ((n1 / n2) * (n1 / n2) * (1.0 - (x * x))));
-      double  r_s = ((n1 * x) - (n2 * y)) / ((n1 * x) + (n2 * y));
-      double  r_p = ((n1 * y) - (n2 * x)) / ((n1 * y) + (n2 * x));
-      double  r = (((r_s * r_s) + (r_p * r_p)) * 0.5 - f0) / (1.0 - f0);
-      r = (r > 0.0 ? (r < 1.0 ? r : 1.0) : 0.0);
-      if (funcType == 3)
-        r = std::pow(r, 2.0 / 2.2);
-      else
-        r = std::sqrt(r);
-      f[i] = r;
-    }
-  }
-  else if (funcType == 5)
-  {
-    for (int i = 0; i <= n; i++)
-    {
-      double  x = (double(i) / double(n)) * (x1 - x0) + x0;
-      double  y = x / 12.92;
-      if (y > 0.0031308)
-        y = std::pow((x + 0.055) / 1.055, 2.4);
-      f[i] = std::sqrt(y > 0.0 ? y : 0.0);
-    }
-  }
-  else if (funcType == 6)
-  {
-    for (int i = 0; i <= n; i++)
-    {
-      double  x = (double(i) / double(n)) * (x1 - x0) + x0;
-      x = x * x;
-      double  y = x * 12.92;
-      if (x > 0.0031308)
-        y = std::pow(x, 1.0 / 2.4) * 1.055 - 0.055;
-      f[i] = y;
-    }
-  }
-  findPolynomial(&(a.front()), k, &(f.front()), n, x0, x1, flags);
+  if (funcType == 7)
+    findPolynomial(&(a.front()), k, &(f.front()), n, x0, x1, flags, 1000000);
+  else
+    findPolynomial(&(a.front()), k, &(f.front()), n, x0, x1, flags);
   return 0;
 }
 
