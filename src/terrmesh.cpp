@@ -58,6 +58,7 @@ void TerrainMesh::createMesh(
   triangleDataBuf.resize(triangleCnt);
   vertexData = &(vertexDataBuf.front());
   triangleData = &(triangleDataBuf.front());
+  specularColor = 0x80FFFFFFU;
   specularSmoothness = 0;
   NIFFile::NIFVertex    *vertexPtr = &(vertexDataBuf.front());
   NIFFile::NIFTriangle  *trianglePtr = &(triangleDataBuf.front());
