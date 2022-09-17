@@ -287,6 +287,7 @@ struct ColorV4 : public ColorV2
 class Plot3D_TriShape : public NIFFile::NIFTriShape
 {
  protected:
+  static const float  fresnelRoughTable[1024];
   struct Vertex
   {
     FloatVector4  xyz;
@@ -317,6 +318,14 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       normal[3] = 0.0f;
       vertexColor *= (1.0f / 255.0f);
     }
+    inline const float& u() const
+    {
+      return bitangent[3];
+    }
+    inline const float& v() const
+    {
+      return tangent[3];
+    }
   };
   struct Triangle
   {
@@ -325,6 +334,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     inline bool operator<(const Triangle& r) const
     {
       return (z < r.z);
+    }
+    static inline bool gt(const Triangle& r1, const Triangle& r2)
+    {
+      return (r1.z > r2.z);
     }
   };
   std::uint32_t *bufRGBA;
@@ -366,24 +379,27 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   static FloatVector4 colorToSRGB(FloatVector4 c);
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
                              const NIFFile::NIFVertexTransform& viewTransform);
+  // a = alpha * 255
+  FloatVector4 alphaBlend(FloatVector4 c, float a, const Vertex& z) const;
   // c = albedo, e = environment, f0 = reflectance
+  // r = roughness, s_i = smoothness * 255
   // returns sRGB color
   inline FloatVector4 calculateLighting_FO76(
       FloatVector4 c, FloatVector4 e, float specular, float ao, FloatVector4 f0,
-      float txtU, float txtV, float nDotL, float nDotV, float smoothness) const;
+      const Vertex& z, float nDotL, float nDotV, float r, int s_i) const;
   inline FloatVector4 calculateLighting_FO4(
       FloatVector4 c, FloatVector4 e, float specular, float specLevel,
-      float txtU, float txtV, float nDotL, float nDotV, float smoothness) const;
+      const Vertex& z, float nDotL, float nDotV, float smoothness) const;
   inline FloatVector4 calculateLighting_TES5(
       FloatVector4 c, FloatVector4 e, float specular, float envLevel,
-      float specLevel, float txtU, float txtV, float nDotL, float nDotV) const;
+      float specLevel, const Vertex& z, float nDotL, float nDotV) const;
   // simplified functions for diffuse texture/normal map only (n = normal)
   inline FloatVector4 calculateLighting_FO76(
-      FloatVector4 c, FloatVector4 n, float txtU, float txtV) const;
+      FloatVector4 c, const Vertex& z) const;
   inline FloatVector4 calculateLighting_FO4(
-      FloatVector4 c, FloatVector4 n, float txtU, float txtV) const;
+      FloatVector4 c, const Vertex& z) const;
   inline FloatVector4 calculateLighting_TES5(
-      FloatVector4 c, FloatVector4 n, float txtU, float txtV) const;
+      FloatVector4 c, const Vertex& z) const;
   // returns normal
   inline FloatVector4 normalMap(Vertex& v, FloatVector4 n) const;
   // returns reflected view vector
@@ -393,7 +409,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       bool isSRGB, bool invZ) const;
   inline float specularPhong(FloatVector4 reflectedView, float smoothness,
                              float nDotL, bool isNormalized = false) const;
-  inline float specularGGX(FloatVector4 reflectedView, float smoothness,
+  inline float specularGGX(FloatVector4 reflectedView, float roughness,
                            float nDotL) const;
   // c0 = terrain color, a = water transparency
   inline FloatVector4 calculateLighting_Water(

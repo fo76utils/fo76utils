@@ -15,6 +15,8 @@ static const DDSTexture defaultTexture_S(0xFF0040C0U);
 static const DDSTexture defaultTexture_L(0xFF00F042U);
 static const DDSTexture defaultTexture_R(0xFF0A0A0AU);
 
+#include "frtable.cpp"
+
 FloatVector4 Plot3D_TriShape::colorToSRGB(FloatVector4 c)
 {
   FloatVector4  tmp(c);
@@ -79,8 +81,8 @@ size_t Plot3D_TriShape::transformVertexData(
 #endif
     if (flags & 0x20)                   // tree: ignore vertex alpha
       v.vertexColor[3] = 1.0f;
-    float   txtU = v.bitangent[3];
-    float   txtV = v.tangent[3];
+    float   txtU = v.u();
+    float   txtV = v.v();
     if (BRANCH_EXPECT((flags & 0x02), false))   // water
     {
       FloatVector4  tmp(vertexData[i].x, vertexData[i].y, vertexData[i].z,
@@ -158,13 +160,37 @@ size_t Plot3D_TriShape::transformVertexData(
     tmp.n = (unsigned int) i;
     triangleBuf.push_back(tmp);
   }
-  std::stable_sort(triangleBuf.begin(), triangleBuf.end());
+  if (BRANCH_EXPECT(alphaBlendScale, false))
+    std::stable_sort(triangleBuf.begin(), triangleBuf.end(), Triangle::gt);
+  else
+    std::stable_sort(triangleBuf.begin(), triangleBuf.end());
   return triangleBuf.size();
+}
+
+FloatVector4 Plot3D_TriShape::alphaBlend(
+    FloatVector4 c, float a, const Vertex& z) const
+{
+  a = a * float(int(alphaBlendScale)) * (1.0f / (128.0f * 255.0f));
+  if (a >= (511.0f / 512.0f))
+    return c;
+  int     x = roundFloat(z.xyz[0]);
+  int     y = roundFloat(z.xyz[1]);
+  if (BRANCH_EXPECT(((unsigned int) x >= (unsigned int) width), false))
+    return c;
+  if (BRANCH_EXPECT(((unsigned int) y >= (unsigned int) height), false))
+    return c;
+  FloatVector4  c0(bufRGBA + (size_t(y) * size_t(width) + size_t(x)));
+  if (usingSRGBColorSpace)
+    c0 *= (1.0f / 255.0f);
+  else
+    c0.srgbExpand();
+  c0 /= lightColor[3];
+  return (c0 + ((c - c0) * FloatVector4(a)));
 }
 
 inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
     FloatVector4 c, FloatVector4 e, float specular, float ao, FloatVector4 f0,
-    float txtU, float txtV, float nDotL, float nDotV, float smoothness) const
+    const Vertex& z, float nDotL, float nDotV, float r, int s_i) const
 {
   float   l = (nDotL > 0.0f ? nDotL : 0.0f);
   float   v = float(std::fabs(nDotV));
@@ -172,33 +198,36 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   e *= reflectionLevel;
   s *= lightColor;
   // geometry function
-  float   r = 0.96875f - (smoothness * 0.9375f);
   float   kEnv = r * r * 0.5f;
   float   kSpec = (kEnv + r + 0.5f) * 0.25f;    // = (r + 1) * (r + 1) / 8
   FloatVector4  g((ao * v) / (v * (1.0f - kEnv) + kEnv));
   g *= envColor;
   e *= g;
+  float   a = c[3];
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * g));
   s /= ((l * (1.0f - kSpec) + kSpec) * (v * (1.0f - kSpec) + kSpec));
   s *= (l * v);
+  if (BRANCH_EXPECT(alphaBlendScale, false))
+    c = alphaBlend(c, a, z);
   // Fresnel (coefficients are optimized for glass) with roughness
   float   v2 = v * v;
-  float   f =
-      FloatVector4(v, v2, v * v2, v2 * v2).dotProduct(
-          FloatVector4(-2.93238548f, 4.14755923f, -3.28213005f, 1.06695631f))
-      + 1.0f;
-  FloatVector4  f2(f0 + ((FloatVector4(smoothness).maxValues(f0) - f0)
-                         * FloatVector4(f * f)));
+  const float *p = &(fresnelRoughTable[0]) + (s_i << 2);
+  float   f = FloatVector4(v * v2, v2, v, 1.0f).dotProduct(
+                  FloatVector4(p[0], p[1], p[2], p[3]));
+  FloatVector4  f2(f0 + ((FloatVector4(1.0f) - f0) * FloatVector4(f * f)));
   c += (((e + s) - c) * f2);
   if (BRANCH_EXPECT(textureGlow, false))
-    c += textureGlow->getPixelT(txtU, txtV, mipLevel + mipOffsetG).srgbExpand();
+  {
+    c += textureGlow->getPixelT(z.u(), z.v(),
+                                mipLevel + mipOffsetG).srgbExpand();
+  }
   c *= FloatVector4(lightColor[3]);
   return c.srgbCompress();
 }
 
 inline FloatVector4 Plot3D_TriShape::calculateLighting_FO4(
     FloatVector4 c, FloatVector4 e, float specular, float specLevel,
-    float txtU, float txtV, float nDotL, float nDotV, float smoothness) const
+    const Vertex& z, float nDotL, float nDotV, float smoothness) const
 {
   float   l = (nDotL > 0.0f ? nDotL : 0.0f);
   float   v = float(std::fabs(nDotV));
@@ -206,32 +235,35 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO4(
   e *= (reflectionLevel * specLevel);
   s *= (specular * specLevel);
   // geometry function
-  float   r = 0.96875f - (smoothness * 0.9375f);
+  float   r = 1.0f - (smoothness < 0.999f ? smoothness : 0.999f);
   float   kEnv = r * r * 0.5f;
   float   kSpec = (kEnv + r + 0.5f) * 0.25f;    // = (r + 1) * (r + 1) / 8
   FloatVector4  g(v / (v * (1.0f - kEnv) + kEnv));
   g *= envColor;
+  float   a = c[3];
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * g));
+  if (BRANCH_EXPECT(alphaBlendScale, false))
+    c = alphaBlend(c, a, z);
   c += (e * g);
   s /= ((l * (1.0f - kSpec) + kSpec) * (v * (1.0f - kSpec) + kSpec));
   // Fresnel (coefficients are optimized for glass) with roughness
   float   v2 = v * v;
-  float   f =
-      FloatVector4(v, v2, v * v2, v2 * v2).dotProduct(
-          FloatVector4(-2.93238548f, 4.14755923f, -3.28213005f, 1.06695631f))
-      + 1.0f;
+  const float *p =
+      &(fresnelRoughTable[0]) + ((roundFloat(smoothness * 255.0f) & 0xFF) << 2);
+  float   f = FloatVector4(v * v2, v2, v, 1.0f).dotProduct(
+                  FloatVector4(p[0], p[1], p[2], p[3]));
   float   f0 = 0.25f;
-  f = f0 + (((smoothness > f0 ? smoothness : f0) - f0) * f);
+  f = f0 + ((1.0f - f0) * f);   // f is not squared because of the color space
   c += (s * FloatVector4(l * v * f));
   c *= 255.0f;
   if (BRANCH_EXPECT(textureGlow, false))
-    c += textureGlow->getPixelT(txtU, txtV, mipLevel + mipOffsetG);
+    c += textureGlow->getPixelT(z.u(), z.v(), mipLevel + mipOffsetG);
   return (c * FloatVector4(lightColor[3]));
 }
 
 inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
     FloatVector4 c, FloatVector4 e, float specular, float envLevel,
-    float specLevel, float txtU, float txtV, float nDotL, float nDotV) const
+    float specLevel, const Vertex& z, float nDotL, float nDotV) const
 {
   float   l = (nDotL > 0.0f ? nDotL : 0.0f);
   float   v = float(std::fabs(nDotV));
@@ -246,18 +278,21 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
   FloatVector4  glow(0.0f);
   if (BRANCH_EXPECT(textureGlow, false))
   {
-    glow = textureGlow->getPixelT(txtU, txtV, mipLevel + mipOffsetG);
+    glow = textureGlow->getPixelT(z.u(), z.v(), mipLevel + mipOffsetG);
     glow *= (c * FloatVector4(4.0f / 255.0f));
   }
+  float   alpha = c[3];
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * a));
+  if (BRANCH_EXPECT(alphaBlendScale, false))
+    c = alphaBlend(c, alpha, z);
   return ((c + glow + e + s) * FloatVector4(lightColor[3] * 255.0f));
 }
 
 inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
-    FloatVector4 c, FloatVector4 n, float txtU, float txtV) const
+    FloatVector4 c, const Vertex& z) const
 {
-  float   nDotL = n.dotProduct3(lightVector);
-  float   nDotV = -(n[2]);
+  float   nDotL = z.normal.dotProduct3(lightVector);
+  float   nDotV = -(z.normal[2]);
   float   l = (nDotL > 0.0f ? nDotL : 0.0f);
   float   v = float(std::fabs(nDotV));
   // assume roughness = 1.0, f0 = 0.04, specular = 0.25
@@ -268,37 +303,47 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   FloatVector4  g(v / (v * 0.53125f + 0.53125f));
   e *= envColor;
   e *= g;
+  float   a = c[3];
   c *= (FloatVector4(l) * lightColor + e);
   e *= reflectionLevel;
   s *= (g * FloatVector4(l / (l + 1.0f)));
-  c = c + ((e + s - c) * FloatVector4(0.04f));
+  if (BRANCH_EXPECT(alphaBlendScale, false))
+    c = alphaBlend(c, a, z);
+  FloatVector4  f((v * 0.05959029f - 0.11906419f) * v + 0.10030248f);
+  c = c + ((e + s - c) * f);
   if (BRANCH_EXPECT(textureGlow, false))
-    c += textureGlow->getPixelT(txtU, txtV, mipLevel + mipOffsetG).srgbExpand();
+  {
+    c += textureGlow->getPixelT(z.u(), z.v(),
+                                mipLevel + mipOffsetG).srgbExpand();
+  }
   return (c * FloatVector4(lightColor[3])).srgbCompress();
 }
 
 inline FloatVector4 Plot3D_TriShape::calculateLighting_FO4(
-    FloatVector4 c, FloatVector4 n, float txtU, float txtV) const
+    FloatVector4 c, const Vertex& z) const
 {
-  float   nDotL = n.dotProduct3(lightVector);
-  float   nDotV = -(n[2]);
+  float   nDotL = z.normal.dotProduct3(lightVector);
+  float   nDotV = -(z.normal[2]);
   float   l = (nDotL > 0.0f ? nDotL : 0.0f);
   float   v = float(std::fabs(nDotV));
   // geometry function for ambient light only
   FloatVector4  g(v / (v * 0.875f + 0.125f));
   g *= envColor;
+  float   a = c[3];
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * g));
+  if (BRANCH_EXPECT(alphaBlendScale, false))
+    c = alphaBlend(c, a, z);
   c *= 255.0f;
   if (BRANCH_EXPECT(textureGlow, false))
-    c += textureGlow->getPixelT(txtU, txtV, mipLevel + mipOffsetG);
+    c += textureGlow->getPixelT(z.u(), z.v(), mipLevel + mipOffsetG);
   return (c * FloatVector4(lightColor[3]));
 }
 
 inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
-    FloatVector4 c, FloatVector4 n, float txtU, float txtV) const
+    FloatVector4 c, const Vertex& z) const
 {
-  float   nDotL = n.dotProduct3(lightVector);
-  float   nDotV = -(n[2]);
+  float   nDotL = z.normal.dotProduct3(lightVector);
+  float   nDotV = -(z.normal[2]);
   float   l = (nDotL > 0.0f ? nDotL : 0.0f);
   float   v = float(std::fabs(nDotV));
   // geometry function for ambient light only
@@ -307,10 +352,13 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
   FloatVector4  glow(0.0f);
   if (BRANCH_EXPECT(textureGlow, false))
   {
-    glow = textureGlow->getPixelT(txtU, txtV, mipLevel + mipOffsetG);
+    glow = textureGlow->getPixelT(z.u(), z.v(), mipLevel + mipOffsetG);
     glow *= (c * FloatVector4(4.0f / 255.0f));
   }
+  float   a = c[3];
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * g));
+  if (BRANCH_EXPECT(alphaBlendScale, false))
+    c = alphaBlend(c, a, z);
   return ((c + glow) * FloatVector4(lightColor[3] * 255.0f));
 }
 
@@ -390,14 +438,13 @@ inline float Plot3D_TriShape::specularPhong(
 }
 
 inline float Plot3D_TriShape::specularGGX(
-    FloatVector4 reflectedView, float smoothness, float nDotL) const
+    FloatVector4 reflectedView, float roughness, float nDotL) const
 {
   if (!(nDotL > 0.0f))
     return 0.0f;
   // h2 = 2.0 * squared dot product with halfway vector
   float   h2 = reflectedView.dotProduct3(lightVector) + 1.0f;
-  float   r = 0.96875f - (smoothness * 0.9375f);
-  float   a = r * r;
+  float   a = roughness * roughness;
   float   a2 = a * a;
   float   d = h2 * (a2 - 1.0f) + 2.0f;
   float   s = a2 / (d * d);
@@ -417,7 +464,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_Water(
   if (!isFO76)
     specular = specularPhong(reflectedView, 0.875f, nDotL, true);
   else
-    specular = specularGGX(reflectedView, 0.875f, nDotL);
+    specular = specularGGX(reflectedView, 0.125f, nDotL);
   float   l = (nDotL > 0.0f ? nDotL : 0.0f);
   float   v = float(std::fabs(nDotV));
   FloatVector4  c(specularColorFloat);
@@ -466,8 +513,6 @@ void Plot3D_TriShape::drawPixel_Water_2(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
   p.bufZ[offs] = z.xyz[2];
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
   FloatVector4  c0(p.bufRGBA[offs]);
   float   a = 255.0f - c0[3];
   a = (a * a) * p.specularColorFloat[3];
@@ -476,7 +521,7 @@ void Plot3D_TriShape::drawPixel_Water_2(
   else
     a = (a < -2.0f ? 0.0625f : 0.5f);
   FloatVector4  n(p.normalMap(
-                      z, p.textureN->getPixelT(txtU, txtV, p.mipLevel)));
+                      z, p.textureN->getPixelT(z.u(), z.v(), p.mipLevel)));
   FloatVector4  reflectedView(p.calculateReflection(z));
   FloatVector4  c(p.calculateLighting_Water(c0, n, reflectedView, a, false));
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
@@ -486,8 +531,6 @@ void Plot3D_TriShape::drawPixel_Water_2G(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
   p.bufZ[offs] = z.xyz[2];
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
   FloatVector4  c0(p.bufRGBA[offs]);
   float   a = 255.0f - c0[3];
   a = (a * a) * p.specularColorFloat[3];
@@ -496,7 +539,7 @@ void Plot3D_TriShape::drawPixel_Water_2G(
   else
     a = (a < -2.0f ? 0.0625f : 0.5f);
   FloatVector4  n(p.normalMap(
-                      z, p.textureN->getPixelT(txtU, txtV, p.mipLevel)));
+                      z, p.textureN->getPixelT(z.u(), z.v(), p.mipLevel)));
   FloatVector4  reflectedView(p.calculateReflection(z));
   FloatVector4  c(p.calculateLighting_Water(c0, n, reflectedView, a, true));
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
@@ -508,21 +551,9 @@ inline FloatVector4 Plot3D_TriShape::getDiffuseColor(
   FloatVector4  c(textureD->getPixelT(txtU, txtV, mipLevel));
   FloatVector4  vColor(z.vertexColor);
   float   a = c[3] * vColor[3];
-  if (BRANCH_EXPECT((alphaThreshold | alphaBlendScale), false))
-  {
-    alphaFlag = false;
-    if (a < alphaThresholdFloat)
-      return c;
-    if (BRANCH_EXPECT(alphaBlendScale, false))
-    {
-      if ((((roundFloat(z.xyz[0]) & 1) << 1) ^ ((roundFloat(z.xyz[1]) & 1) * 3))
-          >= roundFloat(a * float(int(alphaBlendScale)) * (1.0f / 8160.0f)))
-      {
-        return c;
-      }
-    }
-  }
-  alphaFlag = true;
+  alphaFlag = !(a < alphaThresholdFloat);
+  if (BRANCH_EXPECT(!alphaFlag, false))
+    return c;
   if (BRANCH_EXPECT(textureG, false))
   {
     float   u = c[1] * (1.0f / 255.0f);
@@ -541,17 +572,15 @@ inline FloatVector4 Plot3D_TriShape::getDiffuseColor(
       c.srgbExpand();
     c *= vColor;
   }
-#if 0
-  c[3] = a * (1.0f / 255.0f);           // currently unused
-#endif
+  c[3] = a;                     // alpha * 255
   return c;
 }
 
 void Plot3D_TriShape::drawPixel_Debug(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
+  float   txtU = z.u();
+  float   txtV = z.v();
   FloatVector4  c(0.0f);
   if (BRANCH_EXPECT(p.textureD, true))
   {
@@ -593,11 +622,11 @@ void Plot3D_TriShape::drawPixel_Debug(
   else
   {
     if (p.renderMode >= 12)
-      c = p.calculateLighting_FO76(c, n, txtU, txtV);
+      c = p.calculateLighting_FO76(c, z);
     else if (p.renderMode >= 8)
-      c = p.calculateLighting_FO4(c, n, txtU, txtV);
+      c = p.calculateLighting_FO4(c, z);
     else
-      c = p.calculateLighting_TES5(c, n, txtU, txtV);
+      c = p.calculateLighting_TES5(c, z);
   }
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
 }
@@ -606,15 +635,13 @@ void Plot3D_TriShape::drawPixel_D_TES5(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
   // diffuse texture only
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
   bool    alphaFlag = false;
-  FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, false));
+  FloatVector4  c(p.getDiffuseColor(z.u(), z.v(), z, alphaFlag, false));
   if (BRANCH_EXPECT(!alphaFlag, false))
     return;
   p.bufZ[offs] = z.xyz[2];
   z.normal.normalize(p.invNormals);
-  c = p.calculateLighting_TES5(c, z.normal, txtU, txtV);
+  c = p.calculateLighting_TES5(c, z);
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
 }
 
@@ -622,22 +649,23 @@ void Plot3D_TriShape::drawPixel_N_TES5(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
   // normal map only
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
+  float   txtU = z.u();
+  float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, false));
   if (BRANCH_EXPECT(!alphaFlag, false))
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
-  c = p.calculateLighting_TES5(c, p.normalMap(z, n), txtU, txtV);
+  (void) p.normalMap(z, n);
+  c = p.calculateLighting_TES5(c, z);
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_TES5(Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
+  float   txtU = z.u();
+  float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, false));
   if (BRANCH_EXPECT(!alphaFlag, false))
@@ -658,7 +686,7 @@ void Plot3D_TriShape::drawPixel_TES5(Plot3D_TriShape& p, size_t offs, Vertex& z)
   }
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, false);
   c = p.calculateLighting_TES5(c, e, specular, envLevel,
-                               specLevel, txtU, txtV, nDotL, nDotV);
+                               specLevel, z, nDotL, nDotV);
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
 }
 
@@ -666,15 +694,13 @@ void Plot3D_TriShape::drawPixel_D_FO4(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
   // diffuse texture only
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
   bool    alphaFlag = false;
-  FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, false));
+  FloatVector4  c(p.getDiffuseColor(z.u(), z.v(), z, alphaFlag, false));
   if (BRANCH_EXPECT(!alphaFlag, false))
     return;
   p.bufZ[offs] = z.xyz[2];
   z.normal.normalize(p.invNormals);
-  c = p.calculateLighting_FO4(c, z.normal, txtU, txtV);
+  c = p.calculateLighting_FO4(c, z);
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
 }
 
@@ -682,22 +708,23 @@ void Plot3D_TriShape::drawPixel_N_FO4(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
   // normal map only
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
+  float   txtU = z.u();
+  float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, false));
   if (BRANCH_EXPECT(!alphaFlag, false))
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
-  c = p.calculateLighting_FO4(c, p.normalMap(z, n), txtU, txtV);
+  (void) p.normalMap(z, n);
+  c = p.calculateLighting_FO4(c, z);
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_FO4(Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
+  float   txtU = z.u();
+  float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, false));
   if (BRANCH_EXPECT(!alphaFlag, false))
@@ -714,7 +741,7 @@ void Plot3D_TriShape::drawPixel_FO4(Plot3D_TriShape& p, size_t offs, Vertex& z)
   FloatVector4  e(p.environmentMap(reflectedView, smoothness, false, false));
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, true);
   c = p.calculateLighting_FO4(c, e, specular, specLevel,
-                              txtU, txtV, nDotL, nDotV, smoothness);
+                              z, nDotL, nDotV, smoothness);
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
 }
 
@@ -722,15 +749,13 @@ void Plot3D_TriShape::drawPixel_D_FO76(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
   // diffuse texture only
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
   bool    alphaFlag = false;
-  FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, true));
+  FloatVector4  c(p.getDiffuseColor(z.u(), z.v(), z, alphaFlag, true));
   if (BRANCH_EXPECT(!alphaFlag, false))
     return;
   p.bufZ[offs] = z.xyz[2];
   z.normal.normalize(p.invNormals);
-  c = p.calculateLighting_FO76(c, z.normal, txtU, txtV);
+  c = p.calculateLighting_FO76(c, z);
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
 }
 
@@ -738,22 +763,23 @@ void Plot3D_TriShape::drawPixel_N_FO76(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
   // normal map only
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
+  float   txtU = z.u();
+  float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, true));
   if (BRANCH_EXPECT(!alphaFlag, false))
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
-  c = p.calculateLighting_FO76(c, p.normalMap(z, n), txtU, txtV);
+  (void) p.normalMap(z, n);
+  c = p.calculateLighting_FO76(c, z);
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
 }
 
 void Plot3D_TriShape::drawPixel_FO76(Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
-  float   txtU = z.bitangent[3];
-  float   txtV = z.tangent[3];
+  float   txtU = z.u();
+  float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, true));
   if (BRANCH_EXPECT(!alphaFlag, false))
@@ -764,16 +790,18 @@ void Plot3D_TriShape::drawPixel_FO76(Plot3D_TriShape& p, size_t offs, Vertex& z)
   FloatVector4  r(p.textureR->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetR));
   r.srgbExpand();
   r.maxValues(FloatVector4(0.015625f));
-  float   smoothness =
-      float(int(p.specularSmoothness)) * (n[2] * (1.0f / (255.0f * 255.0f)));
+  float   smoothness = float(int(p.specularSmoothness)) * n[2];
   float   ao = n[3] * (1.0f / 255.0f);
+  float   roughness = 0.96875f - (smoothness * (0.9375f / (255.0f * 255.0f)));
+  int     s_i = roundFloat(smoothness * (1.0f / 255.0f)) & 0xFF;
+  smoothness = smoothness * (1.0f / (255.0f * 255.0f));
   float   nDotL = p.normalMap(z, n).dotProduct3(p.lightVector);
   float   nDotV = -(z.normal[2]);
   FloatVector4  reflectedView(p.calculateReflection(z));
   FloatVector4  e(p.environmentMap(reflectedView, smoothness, true, false));
-  float   specular = p.specularGGX(reflectedView, smoothness, nDotL);
+  float   specular = p.specularGGX(reflectedView, roughness, nDotL);
   c = p.calculateLighting_FO76(c, e, specular, ao, r,
-                               txtU, txtV, nDotL, nDotV, smoothness);
+                               z, nDotL, nDotV, roughness, s_i);
   p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
 }
 
@@ -912,10 +940,10 @@ void Plot3D_TriShape::drawTriangles()
     double  r2xArea = 1.0 / (((x1 - x0) * (y2 - y0)) - ((x2 - x0) * (y1 - y0)));
     if (BRANCH_EXPECT(textureD, true))
     {
-      float   txtU1d = v1->bitangent[3] - v0->bitangent[3];
-      float   txtU2d = v2->bitangent[3] - v0->bitangent[3];
-      float   txtV1d = v1->tangent[3] - v0->tangent[3];
-      float   txtV2d = v2->tangent[3] - v0->tangent[3];
+      float   txtU1d = v1->u() - v0->u();
+      float   txtU2d = v2->u() - v0->u();
+      float   txtV1d = v1->v() - v0->v();
+      float   txtV2d = v2->v() - v0->v();
       float   uvArea2 = float(std::fabs((txtU1d * txtV2d) - (txtU2d * txtV1d)));
       if (xyArea2 > uvArea2)
       {
@@ -1087,9 +1115,16 @@ void Plot3D_TriShape::drawTriShape(
       transformVertexData(modelTransform, viewTransform);
   if (!triangleCntRendered)
     return;
+  viewScale = viewTransform.scale;
+  if (BRANCH_EXPECT((flags & 0x02), false))
+  {
+    drawPixelFunction = &drawPixel_Water;
+    drawTriangles();
+    return;
+  }
+  textureD = textures[0];
   mipLevel = 15.0f;
   alphaThresholdFloat = float(int(alphaThreshold)) * 0.999999f;
-  viewScale = viewTransform.scale;
   viewTransformInvX =
       FloatVector4(viewTransform.rotateXX, viewTransform.rotateXY,
                    viewTransform.rotateXZ, 0.0f);
@@ -1102,17 +1137,7 @@ void Plot3D_TriShape::drawTriShape(
   specularColorFloat = FloatVector4(specularColor);
   specularColorFloat *= (specularColorFloat[3] * (1.0f / (128.0f * 255.0f)));
   reflectionLevel = float(int(envMapScale)) * (1.0f / 128.0f);
-  if (BRANCH_EXPECT((flags & 0x02), false))
-  {
-    if (!debugMode)
-    {
-      drawPixelFunction = &drawPixel_Water;
-      drawTriangles();
-      return;
-    }
-  }
   int     mode = (!debugMode ? int(renderMode) : 0);
-  textureD = textures[0];
   switch (mode)
   {
     case 4:                             // Skyrim
@@ -1198,7 +1223,7 @@ void Plot3D_TriShape::drawWater(
     const DDSTexture * const *textures, unsigned int textureMask,
     std::uint32_t waterColor, float envMapLevel)
 {
-  if (BRANCH_EXPECT(!((flags & 0x02) && !debugMode), false))
+  if (BRANCH_EXPECT(!(flags & 0x02), false))
     return;
   lightVector = FloatVector4(lightX, lightY, lightZ, 0.0f);
   size_t  triangleCntRendered =
@@ -1218,6 +1243,12 @@ void Plot3D_TriShape::drawWater(
   viewTransformInvZ =
       FloatVector4(viewTransform.rotateZX, viewTransform.rotateZY,
                    viewTransform.rotateZZ, 0.0f);
+  textureN = &defaultTexture_N;
+  if (textureMask & 2U)
+    textureN = textures[1];
+  else if (textureMask & 1U)
+    textureN = textures[0];
+  textureD = textureN;
   specularColorFloat = FloatVector4(waterColor);
   float   a = 256.0f - specularColorFloat[3];
   if (usingSRGBColorSpace)
@@ -1226,17 +1257,17 @@ void Plot3D_TriShape::drawWater(
     specularColorFloat.srgbExpand();
   specularColorFloat[3] = -1.5f / (a * a);      // = -3.0 / (maxDepth * 16.0)
   reflectionLevel = envMapLevel;
-  textureN = &defaultTexture_N;
-  if (textureMask & 2U)
-    textureN = textures[1];
-  else if (textureMask & 1U)
-    textureN = textures[0];
-  textureD = textureN;
   drawPixelFunction =
       (usingSRGBColorSpace ? &drawPixel_Water_2 : &drawPixel_Water_2G);
   textureE = (DDSTexture *) 0;
   if (textureMask & 16U)
     textureE = textures[4];
+  if (BRANCH_EXPECT(debugMode, false))
+  {
+    specularColorFloat = FloatVector4(specularColor);
+    specularColorFloat *= (specularColorFloat[3] * (1.0f / (128.0f * 255.0f)));
+    drawPixelFunction = &drawPixel_Debug;
+  }
   drawTriangles();
 }
 
