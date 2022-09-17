@@ -214,13 +214,21 @@ class NIFFile : public FileBuffer
           tmp = roundFloat(float(int(t)) * 128.0f / float(int(a)));
         tmp = (tmp < 255 ? (tmp + 1) : 255);
       }
+      int     b = 0;
+      if ((f & 0x01FF) == 0x00ED)
+      {
+        if (!a)
+        {
+          tmp = 255;
+        }
+        else
+        {
+          b = int(a);
+          tmp = tmp + int(tmp == 0);
+        }
+      }
       alphaThreshold = (unsigned char) tmp;
-      if ((f & 0x01FF) != 0x00ED)
-        alphaBlendScale = 0;
-      else if (!a)
-        alphaBlendScale = 1;
-      else
-        alphaBlendScale = a;
+      alphaBlendScale = (unsigned char) b;
     }
   };
   enum
