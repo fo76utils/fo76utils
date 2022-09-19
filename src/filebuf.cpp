@@ -286,10 +286,10 @@ FileBuffer::FileBuffer(const char *fileName)
     throw errorMessage("empty input file name");
   try
   {
-#if defined(_WIN32) || defined(_WIN64)
-    fileStream = fopen64(fileName, "rb");
+    fileStream = openFileInDataPath(fileName, "rb");
     if (!fileStream)
       throw errorMessage("error loading input file");
+#if defined(_WIN32) || defined(_WIN64)
     if (_fseeki64(fileStream, 0LL, SEEK_END) < 0)
       throw errorMessage("error loading input file");
     long long fsize = _ftelli64(fileStream);
@@ -298,9 +298,6 @@ FileBuffer::FileBuffer(const char *fileName)
     fileBufSize = size_t(fsize);
     int     fileDesc = _fileno(fileStream);
 #else
-    fileStream = std::fopen(fileName, "rb");
-    if (!fileStream)
-      throw errorMessage("error loading input file");
     if (std::fseek(fileStream, 0L, SEEK_END) < 0)
       throw errorMessage("error loading input file");
     long    fsize = std::ftell(fileStream);
@@ -329,6 +326,75 @@ FileBuffer::~FileBuffer()
     munmap((void *) fileBuf, fileBufSize);
     std::fclose(fileStream);
   }
+}
+
+bool FileBuffer::getDefaultDataPath(std::string& dataPath)
+{
+  dataPath.clear();
+  const char  *s = std::getenv("FO76UTILS_DATAPATH");
+  if (!s)
+    return false;
+  if (!(s[0] == '.' || s[0] == '/'
+#if defined(_WIN32) || defined(_WIN64)
+        || s[0] == '\\' ||
+        (((s[0] >= 'A' && s[0] <= 'Z') ||
+          (s[0] >= 'a' && s[0] <= 'z')) && s[1] == ':')
+#endif
+        ))
+  {
+    return false;
+  }
+  dataPath = s;
+  while (dataPath.length() > 0 &&
+         (dataPath[dataPath.length() - 1] == '/' ||
+          dataPath[dataPath.length() - 1] == '\\'))
+  {
+    dataPath.resize(dataPath.length() - 1);
+  }
+  return (dataPath.length() > 0);
+}
+
+std::FILE * FileBuffer::openFileInDataPath(const char *fileName,
+                                           const char *mode)
+{
+  if (!fileName)
+    return (std::FILE *) 0;
+  std::string nameBuf;
+  size_t  dataPathOffset = 0;
+  if (!(fileName[0] == '.' || fileName[0] == '/'
+#if defined(_WIN32) || defined(_WIN64)
+        || fileName[0] == '\\' ||
+        (((fileName[0] >= 'A' && fileName[0] <= 'Z') ||
+          (fileName[0] >= 'a' && fileName[0] <= 'z')) && fileName[1] == ':')
+#endif
+        ))
+  {
+    if (getDefaultDataPath(nameBuf))
+    {
+#if defined(_WIN32) || defined(_WIN64)
+      nameBuf += '\\';
+#else
+      nameBuf += '/';
+#endif
+      dataPathOffset = nameBuf.length();
+      nameBuf += fileName;
+      fileName = nameBuf.c_str();
+    }
+  }
+  std::FILE *f;
+#if defined(_WIN32) || defined(_WIN64)
+  f = fopen64(fileName, mode);
+#else
+  f = std::fopen(fileName, mode);
+#endif
+  if (f || !dataPathOffset)
+    return f;
+  fileName = fileName + dataPathOffset;
+#if defined(_WIN32) || defined(_WIN64)
+  return fopen64(fileName, mode);
+#else
+  return std::fopen(fileName, mode);
+#endif
 }
 
 void OutputFile::flushBuffer()

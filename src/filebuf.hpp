@@ -71,6 +71,8 @@ class FileBuffer
   FileBuffer(const unsigned char *fileData, size_t fileSize);
   FileBuffer(const char *fileName);
   virtual ~FileBuffer();
+  static bool getDefaultDataPath(std::string& dataPath);
+  static std::FILE *openFileInDataPath(const char *fileName, const char *mode);
 };
 
 inline std::uint16_t FileBuffer::readUInt16Fast()

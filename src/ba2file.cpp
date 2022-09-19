@@ -374,8 +374,14 @@ void BA2File::loadArchivesFromDir(const char *pathName)
 void BA2File::loadArchiveFile(const char *fileName)
 {
   {
-    if (!fileName || *fileName == '\0')
-      throw errorMessage("empty input file name");
+    if (BRANCH_UNLIKELY(!fileName || *fileName == '\0'))
+    {
+      std::string dataPath;
+      if (!FileBuffer::getDefaultDataPath(dataPath))
+        throw errorMessage("empty input file name");
+      loadArchivesFromDir(dataPath.c_str());
+      return;
+    }
 #if defined(_WIN32) || defined(_WIN64)
     char    c = fileName[std::strlen(fileName) - 1];
     if (c == '/' || c == '\\')
