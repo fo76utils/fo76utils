@@ -6,7 +6,7 @@
 
 struct FloatVector4
 {
-#if defined(__GNUC__) && (defined(__x86_64__) || defined(__x86_64))
+#if ENABLE_X86_64_AVX
  private:
   static constexpr float  floatMinVal = 5.16987883e-26f;
  public:
@@ -566,8 +566,8 @@ struct FloatVector4
     c1 = (c1 > 0 ? (c1 < 255 ? c1 : 255) : 0);
     c2 = (c2 > 0 ? (c2 < 255 ? c2 : 255) : 0);
     c3 = (c3 > 0 ? (c3 < 255 ? c3 : 255) : 0);
-    return ((std::uint32_t) c0 | ((std::uint32_t) c1 << 8)
-            | ((std::uint32_t) c2 << 16) | ((std::uint32_t) c3 << 24));
+    return (std::uint32_t(c0) | (std::uint32_t(c1) << 8)
+            | (std::uint32_t(c2) << 16) | (std::uint32_t(c3) << 24));
   }
 #endif
   inline FloatVector4(unsigned int c0, unsigned int c1,
