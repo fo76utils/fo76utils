@@ -16,31 +16,57 @@
 #include <exception>
 #include <stdexcept>
 
+#if defined(__GNUC__) && (defined(__x86_64__) || defined(__x86_64))
+#  if defined(__AVX__) && !defined(ENABLE_X86_64_AVX)
+#    define ENABLE_X86_64_AVX   1
+#  endif
+#endif
+#ifndef ENABLE_X86_64_AVX
+#  define ENABLE_X86_64_AVX     0
+#endif
+
 std::runtime_error errorMessage(const char *fmt, ...);
 
 #if defined(__GNUC__)
 #  define BRANCH_EXPECT(x, y)   (__builtin_expect(long(bool(x)), long(y)))
+#  define BRANCH_LIKELY(x)      (__builtin_expect(long(bool(x)), 1L))
+#  define BRANCH_UNLIKELY(x)    (__builtin_expect(long(bool(x)), 0L))
 #else
 #  define BRANCH_EXPECT(x, y)   (x)
+#  define BRANCH_LIKELY(x)      (x)
+#  define BRANCH_UNLIKELY(x)    (x)
 #endif
 
 inline int roundFloat(float x)
 {
-#if 0
-  return int(x + (x < 0.0f ? -0.5f : 0.5f));
+#if ENABLE_X86_64_AVX
+  int     tmp;
+  __asm__ ("vcvtss2si %1, %0" : "=r" (tmp) : "x" (x));
+  return tmp;
 #else
-  return int(std::lrintf(x));
+  return int(std::rintf(x));
+#endif
+}
+
+inline int roundDouble(double x)
+{
+#if ENABLE_X86_64_AVX
+  int     tmp;
+  __asm__ ("vcvtsd2si %1, %0" : "=r" (tmp) : "x" (x));
+  return tmp;
+#else
+  return int(std::rint(x));
 #endif
 }
 
 inline std::int16_t uint16ToSigned(unsigned short x)
 {
-  return (std::int16_t) x;
+  return std::int16_t(x);
 }
 
 inline std::int32_t uint32ToSigned(unsigned int x)
 {
-  return (std::int32_t) x;
+  return std::int32_t(x);
 }
 
 inline float convertFloat16(unsigned short n)
@@ -55,7 +81,7 @@ inline float convertFloat16(unsigned short n)
   tmp;
   tmp.i = ((m << 13) & 0x8FFFE000U) + 0x38000000U;
   float   r = tmp.f;
-  if (BRANCH_EXPECT(!(m & 0x7C00U), false))
+  if (BRANCH_UNLIKELY(!(m & 0x7C00U)))
   {
     // zero or denormal
     tmp.i = tmp.i & 0xFF800000U;
