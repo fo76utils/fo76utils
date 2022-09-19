@@ -55,7 +55,7 @@ static inline std::uint32_t decodeBC1Colors(std::uint32_t *c,
   c1_f *= FloatVector4(255.0f / 31.0f, 255.0f / 63.0f, 255.0f / 31.0f, 1.0f);
   c[0] = std::uint32_t(c0_f);
   c[1] = std::uint32_t(c1_f);
-  if (BRANCH_EXPECT(c0 > c1, true))
+  if (BRANCH_LIKELY(c0 > c1))
   {
     c[2] = std::uint32_t((c0_f + c0_f + c1_f) * FloatVector4(1.0f / 3.0f));
     c[3] = std::uint32_t((c0_f + c1_f + c1_f) * FloatVector4(1.0f / 3.0f));
@@ -194,7 +194,7 @@ size_t DDSTexture::decodeLine_RGB(
   unsigned int  x = 0;
   for ( ; (x + 1U) < w; x++, dst++, src = src + 3)
     *dst = 0xFF000000U | FileBuffer::readUInt32Fast(src);
-  if (BRANCH_EXPECT((x < w), true))
+  if (BRANCH_LIKELY(x < w))
   {
     std::uint32_t r = src[0];
     std::uint32_t g = src[1];
@@ -210,7 +210,7 @@ size_t DDSTexture::decodeLine_BGR(
   unsigned int  x = 0;
   for ( ; (x + 1U) < w; x++, dst++, src = src + 3)
     *dst = bgraToRGBA(0xFF000000U | FileBuffer::readUInt32Fast(src));
-  if (BRANCH_EXPECT((x < w), true))
+  if (BRANCH_LIKELY(x < w))
   {
     std::uint32_t b = src[0];
     std::uint32_t g = src[1];
@@ -706,18 +706,15 @@ FloatVector4 DDSTexture::getPixelB(float x, float y, int mipLevel) const
 FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
 {
   mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
-  int     m0 = int(float(std::floor(mipLevel)));
+  int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   int     x0, y0;
   float   xf, yf;
   unsigned int  xMask, yMask;
-  if (BRANCH_EXPECT(!convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0),
-                    false))
-  {
+  if (BRANCH_UNLIKELY(!convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0)))
     return FloatVector4(textureData[m0]);
-  }
   FloatVector4  c0(getPixelB(textureData[m0], x0, y0, xf, yf, xMask, yMask));
-  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
+  if (BRANCH_LIKELY(mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)))
   {
     xf = (xf + float(x0 & 1)) * 0.5f;
     yf = (yf + float(y0 & 1)) * 0.5f;
@@ -734,13 +731,13 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
                                      const DDSTexture& t) const
 {
   mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
-  int     m0 = int(float(std::floor(mipLevel)));
+  int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   const std::uint32_t * const *t1 = &(textureData[m0]);
   const std::uint32_t * const *t2 = &(t.textureData[m0]);
   unsigned int  w = xSizeMip0;
   unsigned int  h = ySizeMip0;
-  if (BRANCH_EXPECT(!(t.xSizeMip0 == w && t.ySizeMip0 == h), false))
+  if (BRANCH_UNLIKELY(!(t.xSizeMip0 == w && t.ySizeMip0 == h)))
   {
     if ((t.xSizeMip0 << 1) == w && (t.ySizeMip0 << 1) == h && m0 > 0)
     {
@@ -762,13 +759,10 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
   int     x0, y0;
   float   xf, yf;
   unsigned int  xMask, yMask;
-  if (BRANCH_EXPECT(!convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0),
-                    false))
-  {
+  if (BRANCH_UNLIKELY(!convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0)))
     return FloatVector4(t1[0], t2[0]);
-  }
   FloatVector4  c0(getPixelB_2(t1[0], t2[0], x0, y0, xf, yf, xMask, yMask));
-  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
+  if (BRANCH_LIKELY(mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)))
   {
     xf = (xf + float(x0 & 1)) * 0.5f;
     yf = (yf + float(y0 & 1)) * 0.5f;
@@ -784,11 +778,11 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
 FloatVector4 DDSTexture::getPixelT_N(float x, float y, float mipLevel) const
 {
   mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
-  int     m0 = int(float(std::floor(mipLevel)));
+  int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   unsigned int  xMask = (xSizeMip0 - 1U) >> (unsigned char) m0;
   unsigned int  yMask = (ySizeMip0 - 1U) >> (unsigned char) m0;
-  if (BRANCH_EXPECT(!(xMask | yMask), false))
+  if (BRANCH_UNLIKELY(!(xMask | yMask)))
     return FloatVector4(textureData[m0]);
   float   xf = float(std::floor(x));
   float   yf = float(std::floor(y));
@@ -797,7 +791,7 @@ FloatVector4 DDSTexture::getPixelT_N(float x, float y, float mipLevel) const
   xf = x - xf;
   yf = y - yf;
   FloatVector4  c0(getPixelB(textureData[m0], x0, y0, xf, yf, xMask, yMask));
-  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
+  if (BRANCH_LIKELY(mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)))
   {
     xf = (xf + float(x0 & 1)) * 0.5f;
     yf = (yf + float(y0 & 1)) * 0.5f;
@@ -828,7 +822,7 @@ FloatVector4 DDSTexture::getPixelBM(float x, float y, int mipLevel) const
 FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
 {
   mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
-  int     m0 = int(float(std::floor(mipLevel)));
+  int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   int     x0, y0;
   float   xf = float(std::floor(x));
@@ -838,13 +832,13 @@ FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
   x = (!(int(xf) & 1) ? x : (1.0f - x));
   y = (!(int(yf) & 1) ? y : (1.0f - y));
   unsigned int  xMask, yMask;
-  if (BRANCH_EXPECT(!convertTexCoord(
-                         x0, y0, xf, yf, xMask, yMask, x, y, m0, true), false))
+  if (BRANCH_UNLIKELY(!convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0,
+                                       true)))
   {
     return FloatVector4(textureData[m0]);
   }
   FloatVector4  c0(getPixelB(textureData[m0], x0, y0, xf, yf, xMask, yMask));
-  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
+  if (BRANCH_LIKELY(mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)))
   {
     (void) convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0 + 1, true);
     FloatVector4  c1(getPixelB(textureData[m0 + 1], x0, y0, xf, yf,
@@ -871,18 +865,18 @@ FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
   mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
   x = (x > 0.0f ? (x < 1.0f ? x : 1.0f) : 0.0f);
   y = (y > 0.0f ? (y < 1.0f ? y : 1.0f) : 0.0f);
-  int     m0 = int(float(std::floor(mipLevel)));
+  int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   int     x0, y0;
   float   xf, yf;
   unsigned int  xMask, yMask;
-  if (BRANCH_EXPECT(!convertTexCoord(
-                         x0, y0, xf, yf, xMask, yMask, x, y, m0, true), false))
+  if (BRANCH_UNLIKELY(!convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0,
+                                       true)))
   {
     return FloatVector4(textureData[m0]);
   }
   FloatVector4  c0(getPixelB(textureData[m0], x0, y0, xf, yf, xMask, yMask));
-  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
+  if (BRANCH_LIKELY(mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)))
   {
     (void) convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0 + 1, true);
     FloatVector4  c1(getPixelB(textureData[m0 + 1], x0, y0, xf, yf,
@@ -898,26 +892,25 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
   float   xm = float(std::fabs(x));
   float   ym = float(std::fabs(y));
   float   zm = float(std::fabs(z));
-  size_t  n = 0;
+  size_t  n = textureDataSize;
   if (xm >= ym && xm >= zm)             // right (0), left (1)
   {
     float   tmp = 1.0f / xm;
     if (x < 0.0f)
-    {
       z = -z;
-      n++;
-    }
+    else
+      n = 0;
     x = z * tmp;
     y = y * tmp;
   }
   else if (ym >= xm && ym >= zm)        // front (2), back (3)
   {
     float   tmp = 1.0f / ym;
-    n = 2;
+    n = n << 1;
     if (y < 0.0f)
     {
       z = -z;
-      n++;
+      n += textureDataSize;
     }
     x = x * tmp;
     y = z * tmp;
@@ -925,21 +918,18 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
   else                                  // bottom (4), top (5)
   {
     float   tmp = 1.0f / zm;
-    n = 4;
+    n = n << 2;
     if (z >= 0.0f)
     {
       x = -x;
-      n++;
+      n += textureDataSize;
     }
     x = x * tmp;
     y = y * tmp;
   }
-  if (BRANCH_EXPECT(!isCubeMap, false))
-    n = 0;
-  else
-    n *= textureDataSize;
+  n = (BRANCH_LIKELY(isCubeMap) ? n : 0U);
   mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
-  int     m0 = int(float(std::floor(mipLevel)));
+  int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   x = (x + 1.0f) * 0.5f;
   y = (1.0f - y) * 0.5f;
@@ -947,13 +937,13 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
   float   xf, yf;
   unsigned int  xMask, yMask;
   const std::uint32_t *p = textureData[m0] + n;
-  if (BRANCH_EXPECT(!convertTexCoord(
-                         x0, y0, xf, yf, xMask, yMask, x, y, m0, true), false))
+  if (BRANCH_UNLIKELY(!convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0,
+                                       true)))
   {
     return FloatVector4(p);
   }
   FloatVector4  c0(getPixelB(p, x0, y0, xf, yf, xMask, yMask));
-  if (BRANCH_EXPECT((mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)), true))
+  if (BRANCH_LIKELY(mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)))
   {
     (void) convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0 + 1, true);
     p = textureData[m0 + 1] + n;
@@ -1010,8 +1000,8 @@ std::uint32_t downsample2xFilter(const std::uint32_t *buf,
   static const Downsample2xTable  t;
   const float *p = t.filterTable;
   FloatVector4  c(0.0f);
-  if (BRANCH_EXPECT((x >= 5 && x < (imageWidth - 5) &&
-                     y >= 5 && y < (imageHeight - 5)), true))
+  if (BRANCH_LIKELY(x >= 5 && x < (imageWidth - 5) &&
+                    y >= 5 && y < (imageHeight - 5)))
   {
     buf = buf + (size_t(y) * size_t(imageWidth) + size_t(x));
     t.getPixelFast(c, buf, imageWidth, 0, 0);
