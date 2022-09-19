@@ -117,12 +117,15 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   specularColor = std::uint32_t(specColor * FloatVector4(255.0f));
   tmp = roundFloat(buf.readFloat() * 255.0f);
   specularSmoothness = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-  buf.setPosition(buf.getPosition() + (version == 2 ? 28 : 30));
-  size_t  len = buf.readUInt32();               // root material
-  buf.setPosition(buf.getPosition() + len);
-  buf.setPosition(buf.getPosition() + 1);
-  if (buf.getPosition() < buf.size())           // emit enabled
-    flags = flags & ~(std::uint16_t(buf.readUInt8Fast() == 0) << 7);
+  if (version == 2)
+  {
+    buf.setPosition(buf.getPosition() + 28);
+    size_t  len = buf.readUInt32();             // root material
+    buf.setPosition(buf.getPosition() + len);
+    buf.setPosition(buf.getPosition() + 1);
+    if (buf.getPosition() < buf.size())         // emit enabled
+      flags = flags & ~(std::uint16_t(buf.readUInt8Fast() == 0) << 7);
+  }
   if (!texturePaths[3].empty())
   {
     buf.setPosition(buf.size() - (version == 2 ? 5 : 6));
