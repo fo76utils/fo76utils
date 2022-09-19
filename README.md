@@ -83,7 +83,7 @@ Running any of the programs without arguments prints detailed usage information.
 
 #### Example 7
 
-    ./render Fallout76/Data/SeventySix.esm whitespring.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -32 -32 32 32 -cam 0.125 54.7356 180 -135 53340 -99681 74002.25 -light 1.7 70.5288 135 -a -ssaa 1 -hqm meshes -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 512
+    ./render Fallout76/Data/SeventySix.esm whitespring.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -32 -32 32 32 -cam 0.125 54.7356 180 -135 53340 -99681 74002.25 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -a -ssaa 1 -hqm meshes -ltxtres 512
     ./markers Fallout76/Data/SeventySix.esm fo76mmap.dds 4096,4096,0.125,54.7356,180,-135,4096,-256,16384 fo76icondefs.txt
-    ./render Fallout76/Data/SeventySix.esm watoga.dds 9024 9024 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r 0 -71 71 0 -cam 0.25 180 0 0 146368.4 -141504.4 65536 -light 1.7 70.5288 135 -a -ssaa 1 -hqm meshes -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 2048 -mip 1 -lmip 2
+    ./render Fallout76/Data/SeventySix.esm watoga.dds 9024 9024 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r 0 -71 71 0 -cam 0.25 180 0 0 146368.4 -141504.4 65536 -light 1.7 70.5288 135 -a -ssaa 1 -hqm meshes -ltxtres 2048 -mip 1 -lmip 2
 

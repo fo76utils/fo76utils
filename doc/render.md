@@ -18,7 +18,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 * **-textures BOOL**: Make all diffuse textures white if false.
 * **-txtcache INT**: Texture cache size in megabytes.
 * **-mip INT**: Base mip level for all textures other than cube maps. Defaults to 2.
-* **-env FILENAME.DDS**: Default environment map texture path in archives. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures, and [cubeview](cubeview.md) to preview them. The cube map is expected to be in sRGB color space for Fallout 76, and linear for the older games.
+* **-env FILENAME.DDS**: Default environment map texture path in archives. Defaults to **textures/shared/cubemaps/mipblur_defaultoutside1.dds**. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures, and [cubeview](cubeview.md) to preview them.
 
 ### Terrain options
 
@@ -56,18 +56,18 @@ For testing view and light settings, it is recommended to use faster low quality
 
 ### Water options
 
-* **-wtxt FILENAME.DDS**: Water normal map texture path in archives.
+* **-wtxt FILENAME.DDS**: Water normal map texture path in archives. Defaults to **textures/water/defaultwater.dds**. Setting the path to an empty string disables normal mapping on water.
 * **-watercolor UINT32**: Water color (A7R8G8B8), 0 disables water, 0x7FFFFFFF (the default) uses values from the ESM file. The alpha channel determines the depth at which water reaches maximum opacity, maxDepth = (128 - a) \* (128 - a) / 2.
 * **-wrefl FLOAT**: Water environment map scale, the default is 1.0.
 
 ### Examples
 
-    ./render Fallout76/Data/SeventySix.esm fo76_map_4k.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 512 -a -hqm meshes -ssaa 1 -xm swamptree -view 0.0070922 180 0 0 0 0 4096
-    ./render Fallout76/Data/SeventySix.esm fo76_map_8k.dds 8192 8192 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 512 -a -hqm meshes -ssaa 1 -xm swamptree -view 0.0141844 180 0 0 0 0 8192
-    ./render Fallout76/Data/SeventySix.esm fo76_map_16k.dds 16384 16384 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -ltxtres 512 -a -hqm meshes -ssaa 1 -xm swamptree -view 0.0283688 180 0 0 0 0 16384
-    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCNukaWorld.esm fo4_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -light 1.5 70.5288 135 -ltxtres 512 -view 0.03064 180 0 0 316.1 -680.1 16384 -a -hqm meshes -ssaa 1
-    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCCoast.esm fo4fh_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -w 0x01000B0F -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -light 1.5 70.5288 135 -ltxtres 512 -view 0.05482 180 0 0 -444.1 -20.1 16384 -a -hqm meshes -ssaa 1
-    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCNukaWorld.esm fo4nw_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -w 0x0100290F -env textures/shared/cubemaps/mipblur_defaultoutside1.dds -wtxt textures/water/defaultwater.dds -light 1.5 70.5288 135 -ltxtres 512 -view 0.06857 180 0 0 444.1 520.1 16384 -a -hqm meshes -scol 1 -ssaa 1
-    ./render Skyrim/Data/Skyrim.esm,Skyrim/Data/Dawnguard.esm tes5_map.dds 8192 6471 Skyrim/Data -deftxt 0x00000C16 -env textures/cubemaps/chrome_e.dds -wtxt textures/water/defaultwater.dds -light 2.6 70.5288 135 -ltxtres 256 -view 0.0168067 180 0 0 -173 274.5 8192 -a -hqm meshes -ssaa 1
-    ./render Skyrim/Data/Skyrim.esm,Skyrim/Data/Dragonborn.esm tes5db_map.dds 8192 8192 Skyrim/Data -deftxt 0x00000C16 -w 0x02000800 -env textures/cubemaps/chrome_e.dds -wtxt textures/water/defaultwater.dds -light 2.6 70.5288 135 -ltxtres 256 -view 0.0714286 180 0 0 -3776.1 3584.1 8192 -a -hqm meshes -ssaa 1
+    ./render Fallout76/Data/SeventySix.esm fo76_map_4k.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -a -hqm meshes -ssaa 1 -xm swamptree -view 0.0070922 180 0 0 0 0 4096
+    ./render Fallout76/Data/SeventySix.esm fo76_map_8k.dds 8192 8192 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -a -hqm meshes -ssaa 1 -xm swamptree -view 0.0141844 180 0 0 0 0 8192
+    ./render Fallout76/Data/SeventySix.esm fo76_map_16k.dds 16384 16384 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -a -hqm meshes -ssaa 1 -xm swamptree -view 0.0283688 180 0 0 0 0 16384
+    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCNukaWorld.esm fo4_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -light 1.5 70.5288 135 -ltxtres 512 -view 0.03064 180 0 0 316.1 -680.1 16384 -a -hqm meshes -ssaa 1
+    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCCoast.esm fo4fh_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -w 0x01000B0F -light 1.5 70.5288 135 -ltxtres 512 -view 0.05482 180 0 0 -444.1 -20.1 16384 -a -hqm meshes -ssaa 1
+    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCNukaWorld.esm fo4nw_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -w 0x0100290F -light 1.5 70.5288 135 -ltxtres 512 -view 0.06857 180 0 0 444.1 520.1 16384 -a -hqm meshes -scol 1 -ssaa 1
+    ./render Skyrim/Data/Skyrim.esm,Skyrim/Data/Dawnguard.esm tes5_map.dds 8192 6471 Skyrim/Data -deftxt 0x00000C16 -env textures/cubemaps/chrome_e.dds -light 2.6 70.5288 135 -ltxtres 256 -view 0.0168067 180 0 0 -173 274.5 8192 -a -hqm meshes -ssaa 1
+    ./render Skyrim/Data/Skyrim.esm,Skyrim/Data/Dragonborn.esm tes5db_map.dds 8192 8192 Skyrim/Data -deftxt 0x00000C16 -w 0x02000800 -env textures/cubemaps/chrome_e.dds -light 2.6 70.5288 135 -ltxtres 256 -view 0.0714286 180 0 0 -3776.1 3584.1 8192 -a -hqm meshes -ssaa 1
 
