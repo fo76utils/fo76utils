@@ -266,12 +266,14 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
   }
   worldBounds += screenBounds.boundsMin;
   worldBounds += screenBounds.boundsMax;
-  int     xMin = roundFloat(screenBounds.xMin() - 2.0f);
-  int     yMin = roundFloat(screenBounds.yMin() - 2.0f);
-  int     zMin = roundFloat(screenBounds.zMin() - 2.0f);
-  int     xMax = roundFloat(screenBounds.xMax() + 2.0f);
-  int     yMax = roundFloat(screenBounds.yMax() + 2.0f);
-  int     zMax = roundFloat(screenBounds.zMax() + 2.0f);
+  screenBounds.boundsMin -= 2.0f;
+  screenBounds.boundsMax += 2.0f;
+  int     xMin = roundFloat(screenBounds.xMin());
+  int     yMin = roundFloat(screenBounds.yMin());
+  int     zMin = roundFloat(screenBounds.zMin());
+  int     xMax = roundFloat(screenBounds.xMax());
+  int     yMax = roundFloat(screenBounds.yMax());
+  int     zMax = roundFloat(screenBounds.zMax());
   if (xMin >= width || xMax < 0 || yMin >= height || yMax < 0 ||
       zMin >= zRangeMax || zMax < 0)
   {
@@ -688,9 +690,9 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
   do
   {
     r = esmFile.getRecordPtr(formID);
-    if (BRANCH_EXPECT(!r, false))
+    if (BRANCH_UNLIKELY(!r))
       break;
-    if (BRANCH_EXPECT(!(*r == "REFR"), false))
+    if (BRANCH_UNLIKELY(!(*r == "REFR")))
     {
       if (*r == "CELL")
       {
@@ -1472,7 +1474,9 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         return false;
       RenderThread::TriShapeSortObject  tmp;
       tmp.ts = &(nifFiles[n].meshData.front()) + j;
-      tmp.z = b.zMin();
+      tmp.z = double(b.zMin());
+      if (tmp.ts->alphaBlendScale)
+        tmp.z = double(0x02000000) - tmp.z;
       t.sortBuf.push_back(tmp);
     }
     if (t.sortBuf.size() < 1)
@@ -1484,7 +1488,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       *(t.renderer) = *(t.sortBuf[j].ts);
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
-      if (BRANCH_EXPECT((t.renderer->flags & 0x02), false))
+      if (BRANCH_UNLIKELY(t.renderer->flags & 0x02))
       {
         t.renderer->setRenderMode(3U | renderMode);
         if (!waterSecondPass)
@@ -1522,7 +1526,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         texturePathMask &= ((((unsigned int) t.renderer->flags & 0x80U) >> 5)
                             | (!isHDModel ? 0x0009U : 0x037BU));
         t.renderer->setRenderMode((!isHDModel ? 0U : 3U) | renderMode);
-        if (BRANCH_EXPECT(!enableTextures, false))
+        if (BRANCH_UNLIKELY(!enableTextures))
         {
           if (t.renderer->alphaThreshold || (texturePathMask & 0x0008U))
           {
@@ -1673,7 +1677,7 @@ void Renderer::renderThread(size_t threadNum, size_t startPos, size_t endPos,
     {
       continue;
     }
-    if (BRANCH_EXPECT(!tileMask, false))
+    if (BRANCH_UNLIKELY(!tileMask))
     {
       // calculate mask of areas this thread is allowed to access
       if (tileIndex < 64 || tileIndexMask == ~0ULL)
@@ -2161,8 +2165,9 @@ int main(int argc, char **argv)
     int     envColor = 0x00FFFFFF;
     float   lightLevel = 1.0f;
     float   envLevel = 1.0f;
-    const char  *defaultEnvMap = (char *) 0;
-    const char  *waterTexture = (char *) 0;
+    const char  *defaultEnvMap =
+        "textures/shared/cubemaps/mipblur_defaultoutside1.dds";
+    const char  *waterTexture = "textures/water/defaultwater.dds";
     std::vector< const char * > hdModelNamePatterns;
     std::vector< const char * > excludeModelPatterns;
     float   d = float(std::atan(1.0) / 45.0);   // degrees to radians
