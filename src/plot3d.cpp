@@ -83,7 +83,7 @@ size_t Plot3D_TriShape::transformVertexData(
       v.vertexColor[3] = 1.0f;
     float   txtU = v.u();
     float   txtV = v.v();
-    if (BRANCH_EXPECT((flags & 0x02), false))   // water
+    if (BRANCH_UNLIKELY(flags & 0x02))  // water
     {
       FloatVector4  tmp(vertexData[i].x, vertexData[i].y, vertexData[i].z,
                         0.0f);
@@ -160,7 +160,7 @@ size_t Plot3D_TriShape::transformVertexData(
     tmp.n = (unsigned int) i;
     triangleBuf.push_back(tmp);
   }
-  if (BRANCH_EXPECT(alphaBlendScale, false))
+  if (BRANCH_UNLIKELY(alphaBlendScale))
     std::stable_sort(triangleBuf.begin(), triangleBuf.end(), Triangle::gt);
   else
     std::stable_sort(triangleBuf.begin(), triangleBuf.end());
@@ -175,9 +175,9 @@ FloatVector4 Plot3D_TriShape::alphaBlend(
     return c;
   int     x = roundFloat(z.xyz[0]);
   int     y = roundFloat(z.xyz[1]);
-  if (BRANCH_EXPECT(((unsigned int) x >= (unsigned int) width), false))
+  if (BRANCH_UNLIKELY((unsigned int) x >= (unsigned int) width))
     return c;
-  if (BRANCH_EXPECT(((unsigned int) y >= (unsigned int) height), false))
+  if (BRANCH_UNLIKELY((unsigned int) y >= (unsigned int) height))
     return c;
   FloatVector4  c0(bufRGBA + (size_t(y) * size_t(width) + size_t(x)));
   if (usingSRGBColorSpace)
@@ -207,7 +207,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * g));
   s /= ((l * (1.0f - kSpec) + kSpec) * (v * (1.0f - kSpec) + kSpec));
   s *= (l * v);
-  if (BRANCH_EXPECT(alphaBlendScale, false))
+  if (BRANCH_UNLIKELY(alphaBlendScale))
     c = alphaBlend(c, a, z);
   // Fresnel (coefficients are optimized for glass) with roughness
   float   v2 = v * v;
@@ -216,7 +216,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
                   FloatVector4(p[0], p[1], p[2], p[3]));
   FloatVector4  f2(f0 + ((FloatVector4(1.0f) - f0) * FloatVector4(f * f)));
   c += (((e + s) - c) * f2);
-  if (BRANCH_EXPECT(textureGlow, false))
+  if (BRANCH_UNLIKELY(textureGlow))
   {
     c += textureGlow->getPixelT(z.u(), z.v(),
                                 mipLevel + mipOffsetG).srgbExpand();
@@ -242,7 +242,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO4(
   g *= envColor;
   float   a = c[3];
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * g));
-  if (BRANCH_EXPECT(alphaBlendScale, false))
+  if (BRANCH_UNLIKELY(alphaBlendScale))
     c = alphaBlend(c, a, z);
   c += (e * g);
   s /= ((l * (1.0f - kSpec) + kSpec) * (v * (1.0f - kSpec) + kSpec));
@@ -256,7 +256,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO4(
   f = f0 + ((1.0f - f0) * f);   // f is not squared because of the color space
   c += (s * FloatVector4(l * v * f));
   c *= 255.0f;
-  if (BRANCH_EXPECT(textureGlow, false))
+  if (BRANCH_UNLIKELY(textureGlow))
     c += textureGlow->getPixelT(z.u(), z.v(), mipLevel + mipOffsetG);
   return (c * FloatVector4(lightColor[3]));
 }
@@ -276,14 +276,14 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
   e *= (FloatVector4(reflectionLevel * envLevel) * a);
   s *= (specular * specLevel * g);
   FloatVector4  glow(0.0f);
-  if (BRANCH_EXPECT(textureGlow, false))
+  if (BRANCH_UNLIKELY(textureGlow))
   {
     glow = textureGlow->getPixelT(z.u(), z.v(), mipLevel + mipOffsetG);
     glow *= (c * FloatVector4(4.0f / 255.0f));
   }
   float   alpha = c[3];
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * a));
-  if (BRANCH_EXPECT(alphaBlendScale, false))
+  if (BRANCH_UNLIKELY(alphaBlendScale))
     c = alphaBlend(c, alpha, z);
   return ((c + glow + e + s) * FloatVector4(lightColor[3] * 255.0f));
 }
@@ -307,11 +307,11 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   c *= (FloatVector4(l) * lightColor + e);
   e *= reflectionLevel;
   s *= (g * FloatVector4(l / (l + 1.0f)));
-  if (BRANCH_EXPECT(alphaBlendScale, false))
+  if (BRANCH_UNLIKELY(alphaBlendScale))
     c = alphaBlend(c, a, z);
   FloatVector4  f((v * 0.05959029f - 0.11906419f) * v + 0.10030248f);
   c = c + ((e + s - c) * f);
-  if (BRANCH_EXPECT(textureGlow, false))
+  if (BRANCH_UNLIKELY(textureGlow))
   {
     c += textureGlow->getPixelT(z.u(), z.v(),
                                 mipLevel + mipOffsetG).srgbExpand();
@@ -331,10 +331,10 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO4(
   g *= envColor;
   float   a = c[3];
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * g));
-  if (BRANCH_EXPECT(alphaBlendScale, false))
+  if (BRANCH_UNLIKELY(alphaBlendScale))
     c = alphaBlend(c, a, z);
   c *= 255.0f;
-  if (BRANCH_EXPECT(textureGlow, false))
+  if (BRANCH_UNLIKELY(textureGlow))
     c += textureGlow->getPixelT(z.u(), z.v(), mipLevel + mipOffsetG);
   return (c * FloatVector4(lightColor[3]));
 }
@@ -350,14 +350,14 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
   FloatVector4  g(v / (v * 0.875f + 0.125f));
   g *= envColor;
   FloatVector4  glow(0.0f);
-  if (BRANCH_EXPECT(textureGlow, false))
+  if (BRANCH_UNLIKELY(textureGlow))
   {
     glow = textureGlow->getPixelT(z.u(), z.v(), mipLevel + mipOffsetG);
     glow *= (c * FloatVector4(4.0f / 255.0f));
   }
   float   a = c[3];
   c *= ((FloatVector4(l) * lightColor) + (ambientLight * g));
-  if (BRANCH_EXPECT(alphaBlendScale, false))
+  if (BRANCH_UNLIKELY(alphaBlendScale))
     c = alphaBlend(c, a, z);
   return ((c + glow) * FloatVector4(lightColor[3] * 255.0f));
 }
@@ -368,7 +368,7 @@ inline FloatVector4 Plot3D_TriShape::normalMap(Vertex& v, FloatVector4 n) const
   float   y = n[1] * (1.0f / 127.5f) - 1.0f;
   // calculate Z normal
   float   z = 1.0f - ((x * x) + (y * y));
-  if (BRANCH_EXPECT((z > 0.0f), true))
+  if (BRANCH_LIKELY(z > 0.0f))
     z = float(std::sqrt(z));
   else
     z = 0.0f;
@@ -403,7 +403,7 @@ inline FloatVector4 Plot3D_TriShape::calculateReflection(const Vertex& v) const
 inline FloatVector4 Plot3D_TriShape::environmentMap(
     FloatVector4 reflectedView, float smoothness, bool isSRGB, bool invZ) const
 {
-  if (BRANCH_EXPECT(!textureE, false))
+  if (BRANCH_UNLIKELY(!textureE))
     return ambientLight;
   // inverse rotation by view matrix
   FloatVector4  v((FloatVector4(reflectedView[0]) * viewTransformInvX)
@@ -552,9 +552,9 @@ inline FloatVector4 Plot3D_TriShape::getDiffuseColor(
   FloatVector4  vColor(z.vertexColor);
   float   a = c[3] * vColor[3];
   alphaFlag = !(a < alphaThresholdFloat);
-  if (BRANCH_EXPECT(!alphaFlag, false))
+  if (BRANCH_UNLIKELY(!alphaFlag))
     return c;
-  if (BRANCH_EXPECT(textureG, false))
+  if (BRANCH_UNLIKELY(textureG))
   {
     float   u = c[1] * (1.0f / 255.0f);
     float   v = float(int(gradientMapV) - 255) * (1.0f / 255.0f) + vColor[0];
@@ -582,11 +582,11 @@ void Plot3D_TriShape::drawPixel_Debug(
   float   txtU = z.u();
   float   txtV = z.v();
   FloatVector4  c(0.0f);
-  if (BRANCH_EXPECT(p.textureD, true))
+  if (BRANCH_LIKELY(p.textureD))
   {
     bool    alphaFlag = false;
     c = p.getDiffuseColor(txtU, txtV, z, alphaFlag, (p.renderMode >= 12));
-    if (BRANCH_EXPECT(!alphaFlag, false))
+    if (BRANCH_UNLIKELY(!alphaFlag))
       return;
     if (p.debugMode == 5)
       c = FloatVector4(1.0f);
@@ -637,7 +637,7 @@ void Plot3D_TriShape::drawPixel_D_TES5(
   // diffuse texture only
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(z.u(), z.v(), z, alphaFlag, false));
-  if (BRANCH_EXPECT(!alphaFlag, false))
+  if (BRANCH_UNLIKELY(!alphaFlag))
     return;
   p.bufZ[offs] = z.xyz[2];
   z.normal.normalize(p.invNormals);
@@ -653,7 +653,7 @@ void Plot3D_TriShape::drawPixel_N_TES5(
   float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, false));
-  if (BRANCH_EXPECT(!alphaFlag, false))
+  if (BRANCH_UNLIKELY(!alphaFlag))
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
@@ -668,7 +668,7 @@ void Plot3D_TriShape::drawPixel_TES5(Plot3D_TriShape& p, size_t offs, Vertex& z)
   float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, false));
-  if (BRANCH_EXPECT(!alphaFlag, false))
+  if (BRANCH_UNLIKELY(!alphaFlag))
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
@@ -696,7 +696,7 @@ void Plot3D_TriShape::drawPixel_D_FO4(
   // diffuse texture only
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(z.u(), z.v(), z, alphaFlag, false));
-  if (BRANCH_EXPECT(!alphaFlag, false))
+  if (BRANCH_UNLIKELY(!alphaFlag))
     return;
   p.bufZ[offs] = z.xyz[2];
   z.normal.normalize(p.invNormals);
@@ -712,7 +712,7 @@ void Plot3D_TriShape::drawPixel_N_FO4(
   float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, false));
-  if (BRANCH_EXPECT(!alphaFlag, false))
+  if (BRANCH_UNLIKELY(!alphaFlag))
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
@@ -727,7 +727,7 @@ void Plot3D_TriShape::drawPixel_FO4(Plot3D_TriShape& p, size_t offs, Vertex& z)
   float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, false));
-  if (BRANCH_EXPECT(!alphaFlag, false))
+  if (BRANCH_UNLIKELY(!alphaFlag))
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT_2(txtU, txtV, p.mipLevel + p.mipOffsetN,
@@ -751,7 +751,7 @@ void Plot3D_TriShape::drawPixel_D_FO76(
   // diffuse texture only
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(z.u(), z.v(), z, alphaFlag, true));
-  if (BRANCH_EXPECT(!alphaFlag, false))
+  if (BRANCH_UNLIKELY(!alphaFlag))
     return;
   p.bufZ[offs] = z.xyz[2];
   z.normal.normalize(p.invNormals);
@@ -767,7 +767,7 @@ void Plot3D_TriShape::drawPixel_N_FO76(
   float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, true));
-  if (BRANCH_EXPECT(!alphaFlag, false))
+  if (BRANCH_UNLIKELY(!alphaFlag))
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
@@ -782,7 +782,7 @@ void Plot3D_TriShape::drawPixel_FO76(Plot3D_TriShape& p, size_t offs, Vertex& z)
   float   txtV = z.v();
   bool    alphaFlag = false;
   FloatVector4  c(p.getDiffuseColor(txtU, txtV, z, alphaFlag, true));
-  if (BRANCH_EXPECT(!alphaFlag, false))
+  if (BRANCH_UNLIKELY(!alphaFlag))
     return;
   p.bufZ[offs] = z.xyz[2];
   FloatVector4  n(p.textureN->getPixelT_2(txtU, txtV, p.mipLevel + p.mipOffsetN,
@@ -810,13 +810,11 @@ inline void Plot3D_TriShape::drawPixel(
     const Vertex& v0, const Vertex& v1, const Vertex& v2,
     float w0f, float w1f, float w2f)
 {
-  if (BRANCH_EXPECT(((unsigned int) x >= (unsigned int) width), false))
-    return;
   FloatVector4  w0(w0f);
   FloatVector4  w1(w1f);
   FloatVector4  w2(w2f);
   v.xyz = (v0.xyz * w0) + (v1.xyz * w1) + (v2.xyz * w2);
-  if (BRANCH_EXPECT((v.xyz[2] < 0.0f), false))
+  if (BRANCH_UNLIKELY(v.xyz[2] < 0.0f))
     return;
   size_t  offs = size_t(y) * size_t(width) + size_t(x);
   if (!(v.xyz[2] < bufZ[offs]))
@@ -840,12 +838,13 @@ void Plot3D_TriShape::drawLine(Vertex& v, const Vertex& v0, const Vertex& v1)
     while (true)
     {
       double  w1 = (double(y) - double(v0.xyz[1])) * dy1;
-      if (w1 > -0.000001 && w1 < 1.000001)
+      if (w1 > -0.0000005 && w1 < 1.0000005)
       {
         float   xf = (v1.xyz[0] - v0.xyz[0]) * float(w1) + v0.xyz[0];
         x = roundFloat(xf);
         if (float(std::fabs(xf - float(x))) < (1.0f / 1024.0f) &&
-            y >= 0 && y < height)
+            (unsigned int) y < (unsigned int) height &&
+            (unsigned int) x < (unsigned int) width)
         {
           drawPixel(x, y, v, v0, v1, v0, float(1.0 - w1), float(w1), 0.0f);
         }
@@ -856,7 +855,7 @@ void Plot3D_TriShape::drawLine(Vertex& v, const Vertex& v0, const Vertex& v1)
     }
     return;
   }
-  if (y < 0 || y >= height)
+  if ((unsigned int) y >= (unsigned int) height)
     return;
   if (float(std::fabs(v1.xyz[0] - v0.xyz[0])) >= (1.0f / 1024.0f))
   {
@@ -865,10 +864,11 @@ void Plot3D_TriShape::drawLine(Vertex& v, const Vertex& v0, const Vertex& v1)
     while (true)
     {
       double  w1 = (double(x) - double(v0.xyz[0])) * dx1;
-      if (w1 > -0.000001 && w1 < 1.000001)
+      if (w1 > -0.0000005 && w1 < 1.0000005)
       {
         float   yf = (v1.xyz[1] - v0.xyz[1]) * float(w1) + v0.xyz[1];
-        if (float(std::fabs(yf - float(y))) < (1.0f / 1024.0f))
+        if (float(std::fabs(yf - float(y))) < (1.0f / 1024.0f) &&
+            (unsigned int) x < (unsigned int) width)
         {
           drawPixel(x, y, v, v0, v1, v0, float(1.0 - w1), float(w1), 0.0f);
         }
@@ -879,7 +879,8 @@ void Plot3D_TriShape::drawLine(Vertex& v, const Vertex& v0, const Vertex& v1)
     }
   }
   else if (float(std::fabs(v0.xyz[0] - float(x))) < (1.0f / 1024.0f) &&
-           float(std::fabs(v0.xyz[1] - float(y))) < (1.0f / 1024.0f))
+           float(std::fabs(v0.xyz[1] - float(y))) < (1.0f / 1024.0f) &&
+           (unsigned int) x < (unsigned int) width)
   {
     drawPixel(x, y, v, v0, v0, v0, 1.0f, 0.0f, 0.0f);
   }
@@ -898,38 +899,23 @@ void Plot3D_TriShape::drawTriangles()
       v1 = &(vertexBuf.front()) + triangleData[t.n].v1;
       v2 = &(vertexBuf.front()) + triangleData[t.n].v2;
     }
-    float   xyArea2 = float(((double(v1->xyz[0]) - double(v0->xyz[0]))
-                             * (double(v2->xyz[1]) - double(v0->xyz[1])))
-                            - ((double(v2->xyz[0]) - double(v0->xyz[0]))
-                               * (double(v1->xyz[1]) - double(v0->xyz[1]))));
-    invNormals = (xyArea2 >= 0.0f);
-    xyArea2 = float(std::fabs(xyArea2));
-    if (xyArea2 < (1.0f / 1048576.0f))  // if area < 2^-21 square pixels
+    // rotate vertices so that v0 has the lowest Y coordinate
+    if (v0->xyz[1] > v1->xyz[1] || v0->xyz[1] > v2->xyz[1])
     {
-      drawLine(v, *v0, *v1);
-      drawLine(v, *v1, *v2);
-      drawLine(v, *v2, *v0);
-      continue;
-    }
-    // sort vertices by Y coordinate
-    if (v0->xyz[1] > v1->xyz[1])
-    {
-      const Vertex  *tmp = v0;
-      v0 = v1;
-      v1 = tmp;
-    }
-    if (v1->xyz[1] > v2->xyz[1])
-    {
-      const Vertex  *tmp;
-      if (v0->xyz[1] > v2->xyz[1])
+      if (v1->xyz[1] > v2->xyz[1])      // 2, 0, 1
       {
-        tmp = v0;
-        v0 = v2;
+        const Vertex  *tmp = v2;
+        v2 = v1;
+        v1 = v0;
+        v0 = tmp;
+      }
+      else                              // 1, 2, 0
+      {
+        const Vertex  *tmp = v0;
+        v0 = v1;
+        v1 = v2;
         v2 = tmp;
       }
-      tmp = v1;
-      v1 = v2;
-      v2 = tmp;
     }
     double  x0 = double(v0->xyz[0]);
     double  y0 = double(v0->xyz[1]);
@@ -937,19 +923,28 @@ void Plot3D_TriShape::drawTriangles()
     double  y1 = double(v1->xyz[1]);
     double  x2 = double(v2->xyz[0]);
     double  y2 = double(v2->xyz[1]);
-    double  r2xArea = 1.0 / (((x1 - x0) * (y2 - y0)) - ((x2 - x0) * (y1 - y0)));
-    if (BRANCH_EXPECT(textureD, true))
+    double  xyArea2_d = ((x1 - x0) * (y2 - y0)) - ((x2 - x0) * (y1 - y0));
+    invNormals = (xyArea2_d >= 0.0);
+    float   xyArea2 = float(std::fabs(xyArea2_d));
+    if (BRANCH_UNLIKELY(xyArea2 < (1.0f / 1048576.0f)))
     {
-      float   txtU1d = v1->u() - v0->u();
-      float   txtU2d = v2->u() - v0->u();
-      float   txtV1d = v1->v() - v0->v();
-      float   txtV2d = v2->v() - v0->v();
-      float   uvArea2 = float(std::fabs((txtU1d * txtV2d) - (txtU2d * txtV1d)));
+      // if area < 2^-21 square pixels
+      drawLine(v, *v0, *v1);
+      drawLine(v, *v1, *v2);
+      drawLine(v, *v2, *v0);
+      continue;
+    }
+    double  r2xArea = 1.0 / xyArea2_d;
+    if (BRANCH_LIKELY(textureD))
+    {
+      float   uvArea2 =
+          float(std::fabs(((v1->u() - v0->u()) * (v2->v() - v0->v()))
+                          - ((v2->u() - v0->u()) * (v1->v() - v0->v()))));
       if (xyArea2 > uvArea2)
       {
         uvArea2 *= (float(textureD->getWidth()) * float(textureD->getHeight()));
         mipLevel = -6.0f;
-        if (BRANCH_EXPECT(((uvArea2 * 4096.0f) > xyArea2), true))
+        if (BRANCH_LIKELY((uvArea2 * 4096.0f) > xyArea2))
         {
           // calculate base 4 logarithm of texel area / pixel area
           mipLevel = FloatVector4::log2Fast(float(std::fabs(r2xArea * uvArea2)))
@@ -960,66 +955,93 @@ void Plot3D_TriShape::drawTriangles()
         }
       }
     }
-    double  dy2 = 1.0 / (y2 - y0);
     double  a1 = (y2 - y0) * r2xArea;
-    double  b1 = -((x2 - x0) * a1);
+    double  b1 = (x0 - x2) * r2xArea;
     double  a2 = (y0 - y1) * r2xArea;
-    double  b2 = 1.0 - ((x2 - x0) * a2);
-    int     y = int(y0 + 0.9999995);
-    int     yMax = int(y2 + 0.0000005);
-    if (BRANCH_EXPECT((y > (height - 1) || yMax < 0), false))
-      continue;
+    double  b2 = (x1 - x0) * r2xArea;
+    int     y = roundDouble(y0 + 0.4999999995);
+    int     yMax = roundDouble((y1 > y2 ? y1 : y2) - 0.4999999995);
     y = (y > 0 ? y : 0);
     yMax = (yMax < (height - 1) ? yMax : (height - 1));
-    if (a1 < 0.0)                       // negative X direction
+    if (y1 > y2)                        // from v0 -> v1 edge to v0 -> v2
     {
-      do
+      double  c1 = (x1 - x0) / (y1 - y0);
+      if (a2 < 0.0)                     // negative X direction
       {
-        double  yf = (double(y) - y0) * dy2;
-        int     x = roundFloat(float((x2 - x0) * yf + x0));
-        double  w1 = ((double(x) - x0) * a1) + (yf * b1);
-        if (!(w1 >= -0.000001))
+        for ( ; y <= yMax; y++)
         {
-          w1 -= a1;
-          x--;
-        }
-        double  w2 = ((double(x) - x0) * a2) + (yf * b2);
-        double  w0 = 1.0 - (w1 + w2);
-        while (!(!(w0 >= -0.000001) | !(w2 >= -0.000001)))
-        {
-          drawPixel(x, y, v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
-          w1 -= a1;
-          w2 -= a2;
-          w0 = 1.0 - (w1 + w2);
-          x--;
+          double  yf = double(y) - y0;
+          int     x = roundDouble(yf * c1 + x0 - 0.4999999995);
+          x = (x < (width - 1) ? x : (width - 1));
+          double  w1 = ((double(x) - x0) * a1) + (yf * b1);
+          double  w2 = ((double(x) - x0) * a2) + (yf * b2);
+          for ( ; BRANCH_LIKELY(x >= 0); x--, w1 -= a1, w2 -= a2)
+          {
+            if (w1 < -0.0000005 || (w1 + w2) > 1.0000005)
+              break;
+            drawPixel(x, y, v, *v0, *v1, *v2,
+                      float(1.0 - (w1 + w2)), float(w1), float(w2));
+          }
         }
       }
-      while (++y <= yMax);
+      else                              // positive X direction
+      {
+        for ( ; y <= yMax; y++)
+        {
+          double  yf = double(y) - y0;
+          int     x = roundDouble(yf * c1 + x0 + 0.4999999995);
+          x = (x > 0 ? x : 0);
+          double  w1 = ((double(x) - x0) * a1) + (yf * b1);
+          double  w2 = ((double(x) - x0) * a2) + (yf * b2);
+          for ( ; BRANCH_LIKELY(x < width); x++, w1 += a1, w2 += a2)
+          {
+            if (w1 < -0.0000005 || (w1 + w2) > 1.0000005)
+              break;
+            drawPixel(x, y, v, *v0, *v1, *v2,
+                      float(1.0 - (w1 + w2)), float(w1), float(w2));
+          }
+        }
+      }
     }
-    else                                // positive X direction
+    else                                // from v0 -> v2 edge to v0 -> v1
     {
-      do
+      double  c1 = (x2 - x0) / (y2 - y0);
+      if (a1 < 0.0)                     // negative X direction
       {
-        double  yf = (double(y) - y0) * dy2;
-        int     x = roundFloat(float((x2 - x0) * yf + x0));
-        double  w1 = ((double(x) - x0) * a1) + (yf * b1);
-        if (!(w1 >= -0.000001))
+        for ( ; y <= yMax; y++)
         {
-          w1 += a1;
-          x++;
-        }
-        double  w2 = ((double(x) - x0) * a2) + (yf * b2);
-        double  w0 = 1.0 - (w1 + w2);
-        while (!(!(w0 >= -0.000001) | !(w2 >= -0.000001)))
-        {
-          drawPixel(x, y, v, *v0, *v1, *v2, float(w0), float(w1), float(w2));
-          w1 += a1;
-          w2 += a2;
-          w0 = 1.0 - (w1 + w2);
-          x++;
+          double  yf = double(y) - y0;
+          int     x = roundDouble(yf * c1 + x0 - 0.4999999995);
+          x = (x < (width - 1) ? x : (width - 1));
+          double  w1 = ((double(x) - x0) * a1) + (yf * b1);
+          double  w2 = ((double(x) - x0) * a2) + (yf * b2);
+          for ( ; BRANCH_LIKELY(x >= 0); x--, w1 -= a1, w2 -= a2)
+          {
+            if (w2 < -0.0000005 || (w1 + w2) > 1.0000005)
+              break;
+            drawPixel(x, y, v, *v0, *v1, *v2,
+                      float(1.0 - (w1 + w2)), float(w1), float(w2));
+          }
         }
       }
-      while (++y <= yMax);
+      else                              // positive X direction
+      {
+        for ( ; y <= yMax; y++)
+        {
+          double  yf = double(y) - y0;
+          int     x = roundDouble(yf * c1 + x0 + 0.4999999995);
+          x = (x > 0 ? x : 0);
+          double  w1 = ((double(x) - x0) * a1) + (yf * b1);
+          double  w2 = ((double(x) - x0) * a2) + (yf * b2);
+          for ( ; BRANCH_LIKELY(x < width); x++, w1 += a1, w2 += a2)
+          {
+            if (w2 < -0.0000005 || (w1 + w2) > 1.0000005)
+              break;
+            drawPixel(x, y, v, *v0, *v1, *v2,
+                      float(1.0 - (w1 + w2)), float(w1), float(w2));
+          }
+        }
+      }
     }
   }
 }
@@ -1116,14 +1138,13 @@ void Plot3D_TriShape::drawTriShape(
   if (!triangleCntRendered)
     return;
   viewScale = viewTransform.scale;
-  if (BRANCH_EXPECT((flags & 0x02), false))
+  if (BRANCH_UNLIKELY(flags & 0x02))
   {
     drawPixelFunction = &drawPixel_Water;
     drawTriangles();
     return;
   }
   textureD = textures[0];
-  mipLevel = 15.0f;
   alphaThresholdFloat = float(int(alphaThreshold)) * 0.999999f;
   viewTransformInvX =
       FloatVector4(viewTransform.rotateXX, viewTransform.rotateXY,
@@ -1164,7 +1185,7 @@ void Plot3D_TriShape::drawTriShape(
       break;
     case 10:
     case 11:
-      if (BRANCH_EXPECT(!(textureMask & 0x0040U), false))
+      if (BRANCH_UNLIKELY(!(textureMask & 0x0040U)))
         textureS = &defaultTexture_S;
       else
         textureS = textures[6];
@@ -1178,12 +1199,12 @@ void Plot3D_TriShape::drawTriShape(
       break;
     case 14:
     case 15:
-      if (BRANCH_EXPECT(!(textureMask & 0x0100U), false))
+      if (BRANCH_UNLIKELY(!(textureMask & 0x0100U)))
         textureR = &defaultTexture_R;
       else
         textureR = textures[8];
       mipOffsetR = calculateMipOffset(textureR, textureD);
-      if (BRANCH_EXPECT(!(textureMask & 0x0200U), false))
+      if (BRANCH_UNLIKELY(!(textureMask & 0x0200U)))
         textureS = &defaultTexture_L;
       else
         textureS = textures[9];
@@ -1196,12 +1217,12 @@ void Plot3D_TriShape::drawTriShape(
   textureG = (DDSTexture *) 0;
   textureE = (DDSTexture *) 0;
   textureGlow = (DDSTexture *) 0;
-  if (BRANCH_EXPECT(!(textureMask & 0x0002U), false))
+  if (BRANCH_UNLIKELY(!(textureMask & 0x0002U)))
     textureN = &defaultTexture_N;
   else
     textureN = textures[1];
   mipOffsetN = calculateMipOffset(textureN, textureD);
-  if (BRANCH_EXPECT((textureMask & 0x0004U), false))
+  if (BRANCH_UNLIKELY(textureMask & 0x0004U))
   {
     if (flags & 0x80)
     {
@@ -1223,7 +1244,7 @@ void Plot3D_TriShape::drawWater(
     const DDSTexture * const *textures, unsigned int textureMask,
     std::uint32_t waterColor, float envMapLevel)
 {
-  if (BRANCH_EXPECT(!(flags & 0x02), false))
+  if (BRANCH_UNLIKELY(!(flags & 0x02)))
     return;
   lightVector = FloatVector4(lightX, lightY, lightZ, 0.0f);
   size_t  triangleCntRendered =
@@ -1231,7 +1252,6 @@ void Plot3D_TriShape::drawWater(
   if (!triangleCntRendered)
     return;
   mipOffsetN = 0.0f;
-  mipLevel = 15.0f;
   alphaThresholdFloat = 0.0f;
   viewScale = viewTransform.scale;
   viewTransformInvX =
@@ -1262,7 +1282,7 @@ void Plot3D_TriShape::drawWater(
   textureE = (DDSTexture *) 0;
   if (textureMask & 16U)
     textureE = textures[4];
-  if (BRANCH_EXPECT(debugMode, false))
+  if (BRANCH_UNLIKELY(debugMode))
   {
     specularColorFloat = FloatVector4(specularColor);
     specularColorFloat *= (specularColorFloat[3] * (1.0f / (128.0f * 255.0f)));
