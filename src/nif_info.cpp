@@ -386,11 +386,9 @@ struct Renderer
   struct TriShapeSortObject
   {
     NIFFile::NIFTriShape  *ts;
-    float   z;
+    double  z;
     inline bool operator<(const TriShapeSortObject& r) const
     {
-      if (!ts->alphaBlendScale && r.ts->alphaBlendScale)
-        return true;
       return (z < r.z);
     }
   };
@@ -581,7 +579,9 @@ void Renderer::threadFunction(Renderer *p, size_t n)
       }
       TriShapeSortObject  tmp;
       tmp.ts = &(p->meshData.front()) + i;
-      tmp.z = b.zMin();
+      tmp.z = double(b.zMin());
+      if (tmp.ts->alphaBlendScale)
+        tmp.z = double(0x02000000) - tmp.z;
       sortBuf.push_back(tmp);
     }
     if (sortBuf.size() < 1)
