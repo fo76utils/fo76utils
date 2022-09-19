@@ -33,11 +33,11 @@ std::uint32_t ZLibDecompressor::readU32BE()
 
 inline void ZLibDecompressor::srLoad(unsigned long long& sr)
 {
-  if (BRANCH_EXPECT(sr < 0x00010000ULL, false))
+  if (BRANCH_UNLIKELY(sr < 0x00010000ULL))
   {
     unsigned int  bitCnt = (unsigned int) FloatVector4::log2Int(int(sr));
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
-    if (BRANCH_EXPECT((inPtr + 6) <= inBufEnd, true))
+    if (BRANCH_LIKELY((inPtr + 6) <= inBufEnd))
     {
       // inPtr - 2 is always valid because of the 2 bytes long zlib header
       const std::uint64_t *p =
@@ -45,7 +45,7 @@ inline void ZLibDecompressor::srLoad(unsigned long long& sr)
       sr = (*p >> (16U - bitCnt)) | (1ULL << (bitCnt + 48U));
       inPtr = inPtr + 6;
     }
-    else if (BRANCH_EXPECT((inPtr + 2) <= inBufEnd, true))
+    else if (BRANCH_LIKELY((inPtr + 2) <= inBufEnd))
     {
       const std::uint32_t *p =
           reinterpret_cast< const std::uint32_t * >(inPtr - 2);
@@ -58,7 +58,7 @@ inline void ZLibDecompressor::srLoad(unsigned long long& sr)
       throw errorMessage("end of ZLib compressed data");
     }
 #else
-    if (BRANCH_EXPECT((inPtr + 2) > inBufEnd, false))
+    if (BRANCH_UNLIKELY((inPtr + 2) > inBufEnd))
       throw errorMessage("end of ZLib compressed data");
     sr &= ~(1ULL << bitCnt);
     do
@@ -357,7 +357,7 @@ inline unsigned int ZLibDecompressor::huffmanDecode(
   unsigned int  b = huffTable[sr & 0xFF];
   unsigned char nBits = (unsigned char) (b & 0xFF);
   b = b >> 8;
-  if (BRANCH_EXPECT(nBits < 9, true))
+  if (BRANCH_LIKELY(nBits < 9))
   {
     sr = sr >> nBits;
     return b;
@@ -395,7 +395,7 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
   unsigned long long  sr = srRef;
   while (true)
   {
-    if (BRANCH_EXPECT(s2 & 0x80000000U, false))
+    if (BRANCH_UNLIKELY(s2 & 0x80000000U))
     {
       // update Adler-32 checksum
       s1 = s1 % 65521U;
@@ -415,9 +415,9 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
       continue;
     }
     size_t  lzLen = c - 254;
-    if (BRANCH_EXPECT(!(lzLen >= 3 && lzLen <= 10), false))
+    if (BRANCH_UNLIKELY(!(lzLen >= 3 && lzLen <= 10)))
     {
-      if (BRANCH_EXPECT(!(lzLen >= 11 && lzLen <= 30), false))
+      if (BRANCH_UNLIKELY(!(lzLen >= 11 && lzLen <= 30)))
       {
         if (lzLen == 31)
           lzLen = 258;
@@ -468,14 +468,14 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
       *(wp++) = *(rp++);
       lzLen = lzLen - 3;
     }
-    while (BRANCH_EXPECT(lzLen >= 3, false));
-    if (BRANCH_EXPECT(lzLen == 2, false))
+    while (BRANCH_UNLIKELY(lzLen >= 3));
+    if (BRANCH_UNLIKELY(lzLen == 2))
     {
       s1 = s1 + *rp;
       s2 = s2 + s1;
       *(wp++) = *(rp++);
     }
-    if (BRANCH_EXPECT(lzLen >= 1, false))
+    if (BRANCH_UNLIKELY(lzLen >= 1))
     {
       s1 = s1 + *rp;
       s2 = s2 + s1;
@@ -518,7 +518,7 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
         // update Adler-32 checksum
         s1 = s1 + *wp;
         s2 = s2 + s1;
-        if (BRANCH_EXPECT(s2 & 0x80000000U, false))
+        if (BRANCH_UNLIKELY(s2 & 0x80000000U))
         {
           s1 = s1 % 65521U;
           s2 = s2 % 65521U;

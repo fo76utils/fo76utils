@@ -61,7 +61,7 @@ static const std::uint32_t  fontTextureDecodeTable[16] =
 void SDLDisplay::drawCharacterFG(std::uint32_t *p,
                                  int x, int y, std::uint32_t c, float fgAlpha)
 {
-  if (BRANCH_EXPECT((c & 0x4000U), false))      // underline
+  if (BRANCH_UNLIKELY(c & 0x4000U))     // underline
     drawCharacterFG(p, x, y, (c & 0xFFFF8000U) | 0x005FU, fgAlpha);
   size_t  n0 = 0;
   size_t  n2 = sizeof(courB24CharacterTable) / sizeof(unsigned short);
@@ -182,7 +182,7 @@ std::uint32_t SDLDisplay::decodeUTF8Character()
   int     n = 0;
   do
   {
-    if (BRANCH_EXPECT((c < 0xC0U), false))
+    if (BRANCH_UNLIKELY(c < 0xC0U))
     {
       c = 0xFFFDU;                      // invalid continuation byte
       n = 1;
@@ -192,7 +192,7 @@ std::uint32_t SDLDisplay::decodeUTF8Character()
     {
       if (printBufCnt < 2)
         return 0U;
-      if (BRANCH_EXPECT(((printBuf[1] & 0xC0) != 0x80), false))
+      if (BRANCH_UNLIKELY((printBuf[1] & 0xC0) != 0x80))
       {
         c = 0xFFFDU;                    // unexpected end of sequence
         n = 1;
@@ -209,7 +209,7 @@ std::uint32_t SDLDisplay::decodeUTF8Character()
         return 0U;
       std::uint32_t c1 = printBuf[1];
       std::uint32_t c2 = printBuf[2];
-      if (BRANCH_EXPECT(((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80), false))
+      if (BRANCH_UNLIKELY((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80))
       {
         c = 0xFFFDU;                    // unexpected end of sequence
         n = ((c1 & 0xC0) != 0x80 ? 1 : 2);
@@ -231,7 +231,7 @@ std::uint32_t SDLDisplay::decodeUTF8Character()
       return 0U;
   }
   while (false);
-  if (BRANCH_EXPECT((n < printBufCnt), false))
+  if (BRANCH_UNLIKELY(n < printBufCnt))
   {
     for (int i = n; i < printBufCnt; i++)
       printBuf[i - n] = printBuf[i];
@@ -875,7 +875,7 @@ void SDLDisplay::printString(const char *s)
   for ( ; *s; s++)
   {
     int     bufSize = int(sizeof(printBuf) / sizeof(unsigned char));
-    if (BRANCH_EXPECT((printBufCnt < bufSize), true))
+    if (BRANCH_LIKELY(printBufCnt < bufSize))
     {
       printBuf[printBufCnt] = (unsigned char) *s;
       printBufCnt++;
@@ -903,7 +903,7 @@ void SDLDisplay::printString(const char *s)
         }
         printCharacter(c);
       }
-      while (BRANCH_EXPECT((printBufCnt > 0), false));
+      while (BRANCH_UNLIKELY(printBufCnt > 0));
       continue;
     }
     // control characters

@@ -666,7 +666,7 @@ void MapImage::findMarkers(unsigned int worldID)
   while (r)
   {
     bool    searchChildRecords = bool(r->children);
-    if (BRANCH_EXPECT(*r == "REFR" || *r == "ACHR", true))
+    if (BRANCH_LIKELY(*r == "REFR" || *r == "ACHR"))
     {
       bool    matchFlag = (formIDs.find(r->formID) != formIDs.end());
       ESMField  f(*this, *r);
@@ -678,7 +678,7 @@ void MapImage::findMarkers(unsigned int worldID)
           if (formIDs.find(n) != formIDs.end())
             matchFlag = true;
         }
-        else if (BRANCH_EXPECT(f == "XTEL", false) && f.size() >= 4)
+        else if (BRANCH_UNLIKELY(f == "XTEL") && f.size() >= 4)
         {
           REFRRecord  refr;
           if (getREFRRecord(refr, r->formID))
