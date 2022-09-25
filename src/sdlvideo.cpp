@@ -52,10 +52,10 @@ void SDLDisplay::drawCharacterBG(std::uint32_t *p,
 
 static const std::uint32_t  fontTextureDecodeTable[16] =
 {
-  0x00000000U, 0x000000FFU, 0x0000FF00U, 0x0000FFFFU,
-  0x00FF0000U, 0x00FF00FFU, 0x00FFFF00U, 0x00FFFFFFU,
-  0xFF000000U, 0xFF0000FFU, 0xFF00FF00U, 0xFF00FFFFU,
-  0xFFFF0000U, 0xFFFF00FFU, 0xFFFFFF00U, 0xFFFFFFFFU
+  0x00000000U, 0x00000001U, 0x00000100U, 0x00000101U,
+  0x00010000U, 0x00010001U, 0x00010100U, 0x00010101U,
+  0x01000000U, 0x01000001U, 0x01000100U, 0x01000101U,
+  0x01010000U, 0x01010001U, 0x01010100U, 0x01010101U
 };
 
 void SDLDisplay::drawCharacterFG(std::uint32_t *p,
@@ -117,17 +117,14 @@ void SDLDisplay::drawCharacterFG(std::uint32_t *p,
         continue;
       if (tmp < 0x0F || fgAlpha < 1.0f)
       {
-        float   f3 = u_f * v_f;
-        float   f2 = v_f - f3;
-        float   f1 = u_f - f3;
-        float   f0 = 1.0f - (u_f + f2);
         float   a =
             FloatVector4(&(fontTextureDecodeTable[tmp])).dotProduct(
-                FloatVector4(f0, f1, f2, f3)) * fgAlpha * (1.0f / 255.0f);
+                FloatVector4(1.0f - u_f, u_f, 1.0f - u_f, u_f)
+                * FloatVector4(1.0f - v_f, 1.0f - v_f, v_f, v_f)) * fgAlpha;
         FloatVector4  c0(p + i);
         c0 *= c0;
         c0 = (c0 + ((c1l - c0) * FloatVector4(a))).squareRootFast();
-        p[i] = (std::uint32_t) c0;
+        p[i] = std::uint32_t(c0);
       }
       else
       {
@@ -305,10 +302,12 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
       SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
       SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
       SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, int(bool(flags & 2U)));
-      SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 32);
-      SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
+      SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+      SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
                           SDL_GL_CONTEXT_PROFILE_CORE);
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
       SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
     }
     sdlWindow = SDL_CreateWindow(
@@ -386,7 +385,7 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
       if (i < 16)
       {
         // standard and high intensity colors
-        c = fontTextureDecodeTable[c & 7U];
+        c = fontTextureDecodeTable[c & 7U] * 0xFFU;
         if (i < 7)
           c = c & 0x00808080U;
         else if (i < 9)
