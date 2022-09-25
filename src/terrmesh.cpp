@@ -89,7 +89,7 @@ void TerrainMesh::createMesh(
       FloatVector4  v_w(-xyScale, 0.0f, z[3] - z[4], 0.0f);
       FloatVector4  v_s(0.0f, -xyScale, z[7] - z[4], 0.0f);
       FloatVector4  v_e(xyScale, 0.0f, z[5] - z[4], 0.0f);
-      FloatVector4  normal(0.0f);
+      FloatVector4  normal;
       if ((x ^ y) & 1)
       {
         //    0 1 2

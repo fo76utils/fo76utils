@@ -218,22 +218,22 @@ struct FloatVector4
     __asm__ ("bsr %0, %0" : "+r" (tmp) : : "cc");
     return tmp;
   }
+  // ((x * p[0] + p[1]) * x + p[2]) * x + p[3]
+  static inline float polynomial3(const float *p, float x)
+  {
+    return ((x * p[0] + p[1]) * (x * x) + (x * p[2] + p[3]));
+  }
   static inline float exp2Fast(float x)
   {
+    static const float  exp2Polynomial[4] =
+    {
+      0.00825060f, 0.05924474f, 0.34671664f, 1.0f
+    };
     float   e = float(std::floor(x));
     float   m = x - e;
     __asm__ ("vcvtps2dq %0, %0" : "+x" (e));
     __asm__ ("vpslld $0x17, %0, %0" : "+x" (e));
-    float   m2 __attribute__ ((__vector_size__ (16)));
-    float   m3 __attribute__ ((__vector_size__ (16)));
-    // m2 = { m, m, 1, 1 }
-    __asm__ ("vshufps $0x00, %2, %1, %0" : "=x" (m2) : "x" (m), "xm" (1.0f));
-    // m3 = { m, 1, m, 1 }
-    __asm__ ("vshufps $0x88, %1, %1, %0" : "=x" (m3) : "x" (m2));
-    m3 *= m2;
-    m3 *= m2;
-    m = FloatVector4(m3[0], m3[1], m3[2], m3[3]).dotProduct(
-            FloatVector4(0.00825060f, 0.05924474f, 0.34671664f, 1.0f));
+    m = polynomial3(exp2Polynomial, m);
     m = m * m;
     __asm__ ("vpaddd %1, %0, %0" : "+x" (m) : "x" (e));
     return m;
@@ -496,6 +496,10 @@ struct FloatVector4
     r = r | int(bool(n & (0x02U << r)));
     return r;
   }
+  static inline float polynomial3(const float *p, float x)
+  {
+    return (((x * p[0] + p[1]) * x + p[2]) * x + p[3]);
+  }
   static inline float exp2Fast(float x)
   {
     return float(std::exp2(x));
@@ -570,6 +574,9 @@ struct FloatVector4
             | (std::uint32_t(c2) << 16) | (std::uint32_t(c3) << 24));
   }
 #endif
+  inline FloatVector4()
+  {
+  }
   inline FloatVector4(unsigned int c0, unsigned int c1,
                       unsigned int c2, unsigned int c3,
                       float xf, float yf, bool isSRGB = false)

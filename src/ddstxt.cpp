@@ -968,21 +968,21 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
 struct Downsample2xTable
 {
   static const float  filterTable[12];
-  static inline void getPixelFast(FloatVector4& c, const std::uint32_t *buf,
-                                  int w, int x, int y)
+  static inline FloatVector4 getPixelFast(const std::uint32_t *buf,
+                                          int w, int x, int y)
   {
     FloatVector4  tmp(buf + (y * w + x));
     tmp *= tmp;
-    c += tmp;
+    return tmp;
   }
-  static inline void getPixel(FloatVector4& c, const std::uint32_t *buf,
-                              int w, int h, int x, int y)
+  static inline FloatVector4 getPixel(const std::uint32_t *buf,
+                                      int w, int h, int x, int y)
   {
     x = (x > 0 ? (x < (w - 1) ? x : (w - 1)) : 0);
     y = (y > 0 ? (y < (h - 1) ? y : (h - 1)) : 0);
     FloatVector4  tmp(buf + (size_t(y) * size_t(w) + size_t(x)));
     tmp *= tmp;
-    c += tmp;
+    return tmp;
   }
 };
 
@@ -998,24 +998,23 @@ std::uint32_t downsample2xFilter(const std::uint32_t *buf,
                                  int imageWidth, int imageHeight, int x, int y)
 {
   static const Downsample2xTable  t;
+  FloatVector4  c;
   const float *p = t.filterTable;
-  FloatVector4  c(0.0f);
   if (BRANCH_LIKELY(x >= 5 && x < (imageWidth - 5) &&
                     y >= 5 && y < (imageHeight - 5)))
   {
     buf = buf + (size_t(y) * size_t(imageWidth) + size_t(x));
-    t.getPixelFast(c, buf, imageWidth, 0, 0);
+    c = t.getPixelFast(buf, imageWidth, 0, 0);
     for (int i = 0; i < 3; i++, p = p + 4)
     {
       int     yOffs = (i << 1) + 1;
       for (int j = 0; j < 4; j++)
       {
-        FloatVector4  tmp(0.0f);
         int     xOffs = (j << 1) - int(bool(j));
-        t.getPixelFast(tmp, buf, imageWidth, xOffs, yOffs);
-        t.getPixelFast(tmp, buf, imageWidth, yOffs, -xOffs);
-        t.getPixelFast(tmp, buf, imageWidth, -xOffs, -yOffs);
-        t.getPixelFast(tmp, buf, imageWidth, -yOffs, xOffs);
+        FloatVector4  tmp(t.getPixelFast(buf, imageWidth, xOffs, yOffs));
+        tmp += t.getPixelFast(buf, imageWidth, yOffs, -xOffs);
+        tmp += t.getPixelFast(buf, imageWidth, -xOffs, -yOffs);
+        tmp += t.getPixelFast(buf, imageWidth, -yOffs, xOffs);
         tmp *= p[j];
         c += tmp;
       }
@@ -1023,18 +1022,18 @@ std::uint32_t downsample2xFilter(const std::uint32_t *buf,
   }
   else
   {
-    t.getPixel(c, buf, imageWidth, imageHeight, x, y);
+    c = t.getPixel(buf, imageWidth, imageHeight, x, y);
     for (int i = 0; i < 3; i++, p = p + 4)
     {
       int     yOffs = (i << 1) + 1;
       for (int j = 0; j < 4; j++)
       {
-        FloatVector4  tmp(0.0f);
+        FloatVector4  tmp;
         int     xOffs = (j << 1) - int(bool(j));
-        t.getPixel(tmp, buf, imageWidth, imageHeight, x + xOffs, y + yOffs);
-        t.getPixel(tmp, buf, imageWidth, imageHeight, x + yOffs, y - xOffs);
-        t.getPixel(tmp, buf, imageWidth, imageHeight, x - xOffs, y - yOffs);
-        t.getPixel(tmp, buf, imageWidth, imageHeight, x - yOffs, y + xOffs);
+        tmp = t.getPixel(buf, imageWidth, imageHeight, x + xOffs, y + yOffs);
+        tmp += t.getPixel(buf, imageWidth, imageHeight, x + yOffs, y - xOffs);
+        tmp += t.getPixel(buf, imageWidth, imageHeight, x - xOffs, y - yOffs);
+        tmp += t.getPixel(buf, imageWidth, imageHeight, x - yOffs, y + xOffs);
         tmp *= p[j];
         c += tmp;
       }

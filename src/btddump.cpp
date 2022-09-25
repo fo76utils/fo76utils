@@ -71,7 +71,7 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
       FloatVector4  v_n(0.0f, xyScale2, z[1] - z[0], 0.0f);
       FloatVector4  v_s(0.0f, -xyScale2, z[2] - z[0], 0.0f);
       FloatVector4  v_e(xyScale2, 0.0f, z[3] - z[0], 0.0f);
-      FloatVector4  normal(0.0f);
+      FloatVector4  normal;
       if ((x ^ y) & 1)
       {
         //    0 1 2
