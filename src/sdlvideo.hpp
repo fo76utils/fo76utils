@@ -255,6 +255,10 @@ class SDLDisplay
       return -1;
     return (textBuf[n] ? int(textBuf[n] & 0x3FFFU) : -1);
   }
+  inline int getTextBufferLines() const
+  {
+    return int(textBuf.size() / size_t(textWidth));
+  }
 };
 
 #endif
