@@ -5,9 +5,8 @@
 #include "ddstxt.hpp"
 #include "plot3d.hpp"
 #include "sdlvideo.hpp"
+#include "nif_view.hpp"
 
-#include <thread>
-#include <mutex>
 #include <algorithm>
 #include <ctime>
 
@@ -183,10 +182,11 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
   nifFile.getMesh(meshData);
   for (size_t i = 0; i < meshData.size(); i++)
   {
-    std::fprintf(f, "TriShape %3d (%s):\n", int(i), meshData[i].name);
-    std::fprintf(f, "  Vertex count: %u\n", meshData[i].vertexCnt);
-    std::fprintf(f, "  Triangle count: %u\n", meshData[i].triangleCnt);
-    if (meshData[i].flags)
+    const NIFFile::NIFTriShape& ts = meshData[i];
+    std::fprintf(f, "TriShape %3d (%s):\n", int(i), ts.name);
+    std::fprintf(f, "  Vertex count: %u\n", ts.vertexCnt);
+    std::fprintf(f, "  Triangle count: %u\n", ts.triangleCnt);
+    if (ts.flags)
     {
       static const char *flagNames[8] =
       {
@@ -198,59 +198,52 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
       unsigned char mPrv = 0x01;
       for (int j = 0; j < 8; j++, m = m << 1, mPrv = (mPrv << 1) | 1)
       {
-        if ((meshData[i].flags & mPrv) > m)
+        if ((ts.flags & mPrv) > m)
           std::fprintf(f, ", ");
-        if (meshData[i].flags & m)
+        if (ts.flags & m)
           std::fprintf(f, "%s", flagNames[j]);
       }
       std::fputc('\n', f);
     }
-    if (meshData[i].alphaThreshold)
-    {
-      std::fprintf(f, "  Alpha threshold: %d\n",
-                   int(meshData[i].alphaThreshold));
-    }
-    if (meshData[i].alphaBlendScale)
+    if (ts.alphaThreshold)
+      std::fprintf(f, "  Alpha threshold: %d\n", int(ts.alphaThreshold));
+    if (ts.alphaBlendScale)
     {
       std::fprintf(f, "  Alpha blend scale: %.3f\n",
-                   double(int(meshData[i].alphaBlendScale)) / 128.0);
+                   double(int(ts.alphaBlendScale)) / 128.0);
     }
-    printVertexTransform(f, meshData[i].vertexTransform);
-    if (meshData[i].materialPath)
-      std::fprintf(f, "  Material: %s\n", meshData[i].materialPath->c_str());
+    printVertexTransform(f, ts.vertexTransform);
+    if (ts.materialPath)
+      std::fprintf(f, "  Material: %s\n", ts.materialPath->c_str());
     std::fprintf(f, "  Texture UV offset, scale: (%f, %f), (%f, %f)\n",
-                 meshData[i].textureOffsetU, meshData[i].textureOffsetV,
-                 meshData[i].textureScaleU, meshData[i].textureScaleV);
-    unsigned int  m = meshData[i].texturePathMask;
+                 ts.textureOffsetU, ts.textureOffsetV,
+                 ts.textureScaleU, ts.textureScaleV);
+    unsigned int  m = ts.texturePathMask;
     for (int j = 0; m; j++, m = m >> 1)
     {
       if (m & 1U)
       {
         std::fprintf(f, "  Texture %2d: %s\n",
-                     j, meshData[i].texturePaths[j]->c_str());
+                     j, ts.texturePaths[j]->c_str());
       }
     }
     std::fprintf(f, "  Vertex list:\n");
-    for (size_t j = 0; j < meshData[i].vertexCnt; j++)
+    for (size_t j = 0; j < ts.vertexCnt; j++)
     {
-      NIFFile::NIFVertex  v = meshData[i].vertexData[j];
-      meshData[i].vertexTransform.transformXYZ(v.x, v.y, v.z);
-      float   normalX, normalY, normalZ;
-      v.getNormal(normalX, normalY, normalZ);
-      meshData[i].vertexTransform.rotateXYZ(normalX, normalY, normalZ);
+      NIFFile::NIFVertex  v = ts.vertexData[j];
+      ts.vertexTransform.transformXYZ(v.x, v.y, v.z);
+      FloatVector4  normal(ts.vertexTransform.rotateXYZ(v.getNormal()));
       std::fprintf(f, "    %4d: XYZ: (%f, %f, %f), normals: (%f, %f, %f), "
                    "UV: (%f, %f), color: 0x%08X\n",
-                   int(j), v.x, v.y, v.z, normalX, normalY, normalZ,
+                   int(j), v.x, v.y, v.z, normal[0], normal[1], normal[2],
                    v.getU(), v.getV(), (unsigned int) v.vertexColor);
     }
     std::fprintf(f, "  Triangle list:\n");
-    for (size_t j = 0; j < meshData[i].triangleCnt; j++)
+    for (size_t j = 0; j < ts.triangleCnt; j++)
     {
       std::fprintf(f, "    %4d: %4u, %4u, %4u\n",
-                   int(j),
-                   meshData[i].triangleData[j].v0,
-                   meshData[i].triangleData[j].v1,
-                   meshData[i].triangleData[j].v2);
+                   int(j), ts.triangleData[j].v0,
+                   ts.triangleData[j].v1, ts.triangleData[j].v2);
     }
   }
 }
@@ -264,35 +257,35 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
   std::fprintf(f, "mtllib %s\n\n", mtlFileName);
   for (size_t i = 0; i < meshData.size(); i++)
   {
-    std::fprintf(f, "# %s\n\ng %s\n", meshData[i].name, meshData[i].name);
+    const NIFFile::NIFTriShape& ts = meshData[i];
+    std::fprintf(f, "# %s\n\ng %s\n", ts.name, ts.name);
     std::fprintf(f, "usemtl Material%06u\n\n", (unsigned int) (i + 1));
-    for (size_t j = 0; j < meshData[i].vertexCnt; j++)
+    for (size_t j = 0; j < ts.vertexCnt; j++)
     {
-      NIFFile::NIFVertex  v = meshData[i].vertexData[j];
-      meshData[i].vertexTransform.transformXYZ(v.x, v.y, v.z);
+      NIFFile::NIFVertex  v = ts.vertexData[j];
+      ts.vertexTransform.transformXYZ(v.x, v.y, v.z);
       std::fprintf(f, "v %.8f %.8f %.8f\n", v.x, v.y, v.z);
     }
-    for (size_t j = 0; j < meshData[i].vertexCnt; j++)
+    for (size_t j = 0; j < ts.vertexCnt; j++)
     {
-      NIFFile::NIFVertex  v = meshData[i].vertexData[j];
+      NIFFile::NIFVertex  v = ts.vertexData[j];
       std::fprintf(f, "vt %.8f %.8f\n", v.getU(), 1.0 - v.getV());
     }
-    for (size_t j = 0; j < meshData[i].vertexCnt; j++)
+    for (size_t j = 0; j < ts.vertexCnt; j++)
     {
-      float   normalX, normalY, normalZ;
-      meshData[i].vertexData[j].getNormal(normalX, normalY, normalZ);
-      meshData[i].vertexTransform.rotateXYZ(normalX, normalY, normalZ);
-      std::fprintf(f, "vn %.8f %.8f %.8f\n", normalX, normalY, normalZ);
+      FloatVector4  normal(ts.vertexTransform.rotateXYZ(
+                               ts.vertexData[j].getNormal()));
+      std::fprintf(f, "vn %.8f %.8f %.8f\n", normal[0], normal[1], normal[2]);
     }
-    for (size_t j = 0; j < meshData[i].triangleCnt; j++)
+    for (size_t j = 0; j < ts.triangleCnt; j++)
     {
-      unsigned int  v0 = meshData[i].triangleData[j].v0 + vertexNumBase;
-      unsigned int  v1 = meshData[i].triangleData[j].v1 + vertexNumBase;
-      unsigned int  v2 = meshData[i].triangleData[j].v2 + vertexNumBase;
+      unsigned int  v0 = ts.triangleData[j].v0 + vertexNumBase;
+      unsigned int  v1 = ts.triangleData[j].v1 + vertexNumBase;
+      unsigned int  v2 = ts.triangleData[j].v2 + vertexNumBase;
       std::fprintf(f, "f %u/%u/%u %u/%u/%u %u/%u/%u\n",
                    v0, v0, v0, v1, v1, v1, v2, v2, v2);
     }
-    vertexNumBase = vertexNumBase + meshData[i].vertexCnt;
+    vertexNumBase = vertexNumBase + ts.vertexCnt;
     std::fprintf(f, "\n");
   }
 }
@@ -303,14 +296,14 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
   nifFile.getMesh(meshData);
   for (size_t i = 0; i < meshData.size(); i++)
   {
+    const NIFFile::NIFTriShape& ts = meshData[i];
     std::fprintf(f, "newmtl Material%06u\n", (unsigned int) (i + 1));
     std::fprintf(f, "Ka 1.0 1.0 1.0\n");
     std::fprintf(f, "Kd 1.0 1.0 1.0\n");
-    FloatVector4  specularColor(meshData[i].specularColor);
+    FloatVector4  specularColor(ts.specularColor);
     float   specularScale = specularColor[3] / (128.0f * 255.0f);
-    float   specularGlossiness = float(int(meshData[i].specularSmoothness));
-    if ((meshData[i].texturePathMask & 0x0040) ||
-        (meshData[i].texturePathMask & 0x0200))
+    float   specularGlossiness = float(int(ts.specularSmoothness));
+    if (ts.texturePathMask & 0x0240)
     {
       specularScale *= 0.5f;
       specularGlossiness *= 0.5f;
@@ -324,11 +317,10 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "Ns %.1f\n", specularGlossiness);
     for (size_t j = 0; j < 2; j++)
     {
-      if (meshData[i].texturePathMask & (1U << (unsigned int) j))
+      if (ts.texturePathMask & (1U << (unsigned int) j))
       {
         std::fprintf(f, "%s %s\n",
-                     (!j ? "map_Kd" : "map_Kn"),
-                     meshData[i].texturePaths[j]->c_str());
+                     (!j ? "map_Kd" : "map_Kn"), ts.texturePaths[j]->c_str());
       }
     }
     std::fprintf(f, "\n");
@@ -379,304 +371,6 @@ static float viewRotations[27] =
 static inline float degreesToRadians(float x)
 {
   return float(double(x) * (std::atan(1.0) / 45.0));
-}
-
-struct Renderer
-{
-  struct TriShapeSortObject
-  {
-    NIFFile::NIFTriShape  *ts;
-    double  z;
-    inline bool operator<(const TriShapeSortObject& r) const
-    {
-      return (z < r.z);
-    }
-  };
-  std::vector< Plot3D_TriShape * >  renderers;
-  std::vector< std::string >  threadErrMsg;
-  std::vector< int >  viewOffsetY;
-  std::vector< NIFFile::NIFTriShape > meshData;
-  std::map< std::string, DDSTexture * > textureSet;
-  std::mutex  textureSetMutex;
-  NIFFile::NIFVertexTransform modelTransform;
-  NIFFile::NIFVertexTransform viewTransform;
-  float   lightX;
-  float   lightY;
-  float   lightZ;
-  float   waterEnvMapLevel;
-  std::uint32_t waterColor;
-  int     threadCnt;
-  const BA2File *ba2File;
-  std::vector< unsigned char >  fileBuf;
-  std::string defaultEnvMap;
-  std::string waterTexture;
-  DDSTexture  whiteTexture;
-  Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
-           int imageWidth, int imageHeight, unsigned int nifVersion);
-  ~Renderer();
-  void setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
-                  int imageWidth, int imageHeight, float envMapScale);
-  const DDSTexture *loadTexture(const std::string *texturePath);
-  static void threadFunction(Renderer *p, size_t n);
-  void renderModel();
-};
-
-Renderer::Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
-                   int imageWidth, int imageHeight, unsigned int nifVersion)
-  : lightX(0.0f),
-    lightY(0.0f),
-    lightZ(1.0f),
-    waterEnvMapLevel(1.0f),
-    waterColor(0xC0804000U),
-    whiteTexture(0xFFFFFFFFU)
-{
-  threadCnt = int(std::thread::hardware_concurrency());
-  if (threadCnt < 1 || imageHeight < 64)
-    threadCnt = 1;
-  else if (threadCnt > 8)
-    threadCnt = 8;
-  ba2File = (BA2File *) 0;
-  renderers.resize(size_t(threadCnt), (Plot3D_TriShape *) 0);
-  threadErrMsg.resize(size_t(threadCnt));
-  viewOffsetY.resize(size_t(threadCnt + 1), 0);
-  unsigned int  renderMode =
-      (nifVersion < 0x80U ? 7U : (nifVersion < 0x90U ? 11U : 15U));
-  try
-  {
-    for (size_t i = 0; i < renderers.size(); i++)
-    {
-      renderers[i] = new Plot3D_TriShape(outBufRGBA, outBufZ,
-                                         imageWidth, imageHeight, renderMode);
-    }
-  }
-  catch (...)
-  {
-    for (size_t i = 0; i < renderers.size(); i++)
-    {
-      if (renderers[i])
-      {
-        delete renderers[i];
-        renderers[i] = (Plot3D_TriShape *) 0;
-      }
-    }
-    throw;
-  }
-  if (outBufRGBA && outBufZ)
-    setBuffers(outBufRGBA, outBufZ, imageWidth, imageHeight, 1.0f);
-}
-
-Renderer::~Renderer()
-{
-  for (size_t i = 0; i < renderers.size(); i++)
-  {
-    if (renderers[i])
-      delete renderers[i];
-  }
-  for (std::map< std::string, DDSTexture * >::iterator
-           i = textureSet.begin(); i != textureSet.end(); i++)
-  {
-    if (i->second)
-      delete i->second;
-  }
-}
-
-void Renderer::setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
-                          int imageWidth, int imageHeight, float envMapScale)
-{
-  float   y0 = 0.0f;
-  for (size_t i = 0; i < renderers.size(); i++)
-  {
-    int     y0i = roundFloat(y0);
-    int     y1i = imageHeight;
-    if ((i + 1) < renderers.size())
-    {
-      float   y1 = float(int(i + 1)) / float(int(renderers.size()));
-      y1 = (y1 - 0.5f) * (y1 - 0.5f) * 2.0f;
-      if (i < (renderers.size() >> 1))
-        y1 = 0.5f - y1;
-      else
-        y1 = 0.5f + y1;
-      y1 = y1 * float(imageHeight);
-      y1i = roundFloat(y1);
-      y0 = y1;
-    }
-    viewOffsetY[i] = y0i;
-    size_t  offs = size_t(y0i) * size_t(imageWidth);
-    renderers[i]->setBuffers(outBufRGBA + offs, outBufZ + offs,
-                             imageWidth, y1i - y0i);
-    renderers[i]->setEnvMapOffset(float(imageWidth) * -0.5f,
-                                  float(imageHeight) * -0.5f + float(y0i),
-                                  float(imageHeight) * envMapScale);
-  }
-  viewOffsetY[renderers.size()] = imageHeight;
-}
-
-const DDSTexture * Renderer::loadTexture(const std::string *texturePath)
-{
-  if (!texturePath || texturePath->empty() || !ba2File)
-    return (DDSTexture *) 0;
-  DDSTexture  *t = (DDSTexture *) 0;
-  textureSetMutex.lock();
-  try
-  {
-    std::map< std::string, DDSTexture * >::iterator i =
-        textureSet.find(*texturePath);
-    if (i == textureSet.end())
-    {
-      try
-      {
-        ba2File->extractFile(fileBuf, *texturePath);
-        t = new DDSTexture(&(fileBuf.front()), fileBuf.size());
-      }
-      catch (std::runtime_error& e)
-      {
-        std::fprintf(stderr, "Warning: failed to load texture '%s': %s\n",
-                     texturePath->c_str(), e.what());
-        t = (DDSTexture *) 0;
-      }
-      i = textureSet.insert(std::pair< std::string, DDSTexture * >(
-                                *texturePath, t)).first;
-    }
-    t = i->second;
-  }
-  catch (...)
-  {
-    textureSetMutex.unlock();
-    if (t)
-      delete t;
-    return (DDSTexture *) 0;
-  }
-  textureSetMutex.unlock();
-  return t;
-}
-
-void Renderer::threadFunction(Renderer *p, size_t n)
-{
-  p->threadErrMsg[n].clear();
-  try
-  {
-    std::vector< TriShapeSortObject > sortBuf;
-    sortBuf.reserve(p->meshData.size());
-    NIFFile::NIFVertexTransform vt(p->viewTransform);
-    NIFFile::NIFVertexTransform mt(p->modelTransform);
-    mt *= vt;
-    vt.offsY = vt.offsY - float(p->viewOffsetY[n]);
-    bool    haveWater = false;
-    for (size_t i = 0; i < p->meshData.size(); i++)
-    {
-      if (p->meshData[i].flags & 0x05)          // ignore if hidden or effect
-        continue;
-      if (p->meshData[i].flags & 0x02)
-        haveWater = true;
-      NIFFile::NIFBounds  b;
-      p->meshData[i].calculateBounds(b, &mt);
-      if (roundFloat(b.xMax()) < 0 ||
-          roundFloat(b.yMin()) > p->viewOffsetY[n + 1] ||
-          roundFloat(b.yMax()) < p->viewOffsetY[n] ||
-          b.zMax() < 0.0f)
-      {
-        continue;
-      }
-      TriShapeSortObject  tmp;
-      tmp.ts = &(p->meshData.front()) + i;
-      tmp.z = double(b.zMin());
-      if (tmp.ts->alphaBlendScale)
-        tmp.z = double(0x02000000) - tmp.z;
-      sortBuf.push_back(tmp);
-    }
-    if (sortBuf.size() < 1)
-      return;
-    std::stable_sort(sortBuf.begin(), sortBuf.end());
-    for (size_t i = 0; i < sortBuf.size(); i++)
-    {
-      const NIFFile::NIFTriShape& ts = *(sortBuf[i].ts);
-      *(p->renderers[n]) = ts;
-      const DDSTexture  *textures[10];
-      unsigned int  texturePathMask = (!(ts.flags & 0x80) ? 0x037BU : 0x037FU)
-                                      & (unsigned int) ts.texturePathMask;
-      unsigned int  textureMask = 0U;
-      for (size_t j = 0; j < 10; j++, texturePathMask >>= 1)
-      {
-        if (texturePathMask & 1)
-        {
-          if (bool(textures[j] = p->loadTexture(ts.texturePaths[j])))
-            textureMask |= (1U << (unsigned char) j);
-        }
-      }
-      if (!(textureMask & 0x0001U))
-      {
-        textures[0] = &(p->whiteTexture);
-        textureMask |= 0x0001U;
-      }
-      if (!(textureMask & 0x0010U) && ts.envMapScale > 0)
-      {
-        if (bool(textures[4] = p->loadTexture(&(p->defaultEnvMap))))
-          textureMask |= 0x0010U;
-      }
-      p->renderers[n]->drawTriShape(p->modelTransform, vt,
-                                    p->lightX, p->lightY, p->lightZ,
-                                    textures, textureMask);
-    }
-    if (haveWater)
-    {
-      for (size_t i = 0; i < sortBuf.size(); i++)
-      {
-        const NIFFile::NIFTriShape& ts = *(sortBuf[i].ts);
-        if ((ts.flags & 0x07) != 0x02)          // ignore if not water
-          continue;
-        *(p->renderers[n]) = ts;
-        const DDSTexture  *textures[5];
-        unsigned int  textureMask = 0U;
-        if (bool(textures[1] = p->loadTexture(&(p->waterTexture))))
-          textureMask |= 0x0002U;
-        if (bool(textures[4] = p->loadTexture(&(p->defaultEnvMap))))
-          textureMask |= 0x0010U;
-        p->renderers[n]->drawWater(p->modelTransform, vt,
-                                   p->lightX, p->lightY, p->lightZ,
-                                   textures, textureMask,
-                                   p->waterColor, p->waterEnvMapLevel);
-      }
-    }
-  }
-  catch (std::exception& e)
-  {
-    p->threadErrMsg[n] = e.what();
-    if (p->threadErrMsg[n].empty())
-      p->threadErrMsg[n] = "unknown error in render thread";
-  }
-}
-
-void Renderer::renderModel()
-{
-  std::vector< std::thread * >  threads(renderers.size(), (std::thread *) 0);
-  try
-  {
-    for (size_t i = 0; i < threads.size(); i++)
-      threads[i] = new std::thread(threadFunction, this, i);
-    for (size_t i = 0; i < threads.size(); i++)
-    {
-      if (threads[i])
-      {
-        threads[i]->join();
-        delete threads[i];
-        threads[i] = (std::thread *) 0;
-      }
-      if (!threadErrMsg[i].empty())
-        throw errorMessage("%s", threadErrMsg[i].c_str());
-    }
-  }
-  catch (...)
-  {
-    for (size_t i = 0; i < threads.size(); i++)
-    {
-      if (threads[i])
-      {
-        threads[i]->join();
-        delete threads[i];
-      }
-    }
-    throw;
-  }
 }
 
 static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
@@ -730,8 +424,8 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       NIFFile::NIFBounds  b;
       for (size_t i = 0; i < renderer.meshData.size(); i++)
       {
-        // ignore if hidden or effect
-        if (!(renderer.meshData[i].flags & 0x05))
+        // ignore if hidden
+        if (!(renderer.meshData[i].flags & 0x01))
           renderer.meshData[i].calculateBounds(b, &t);
       }
       float   xScale = float(imageWidth) * 0.96875f;
@@ -1031,8 +725,8 @@ static void viewMeshes(const BA2File& ba2File,
           NIFFile::NIFBounds  b;
           for (size_t i = 0; i < renderer.meshData.size(); i++)
           {
-            // ignore if hidden or effect
-            if (!(renderer.meshData[i].flags & 0x05))
+            // ignore if hidden
+            if (!(renderer.meshData[i].flags & 0x01))
               renderer.meshData[i].calculateBounds(b, &t);
           }
           float   xScale = float(imageWidth) * 0.96875f;
@@ -1503,6 +1197,7 @@ int main(int argc, char **argv)
     std::vector< std::string >  fileNames;
     for (int i = 2; i < argc; i++)
       fileNames.push_back(argv[i]);
+    fileNames.push_back(".bgem");
     fileNames.push_back(".bgsm");
     if (outFmt >= 5)
       fileNames.push_back(".dds");

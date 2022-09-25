@@ -39,7 +39,9 @@ class Renderer
   struct RenderObject
   {
     // 1: terrain, 2: solid object, 4: water cell, 6: water mesh
-    // 0x40: high quality model, 0x80: upper byte is gradient map V from MODC
+    // 0x08: uses effect shader
+    // 0x40: high quality model
+    // 0x80: upper byte is gradient map V from MODC
     unsigned short  flags;
     // -1:        not rendered
     // 0 to 63:   single tile, N = Y * 8 + X
@@ -146,7 +148,8 @@ class Renderer
   bool    enableTextures;
   unsigned char renderMode;
   unsigned char debugMode;
-  bool    waterSecondPass;
+  // 1: terrain, 2: objects, 4: effects, 8: water pass 1, 16: water pass 2
+  unsigned char renderPass;
   int     threadCnt;
   size_t  textureDataSize;
   size_t  textureCacheSize;

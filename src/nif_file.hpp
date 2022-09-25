@@ -43,32 +43,26 @@ class NIFFile : public FileBuffer
       u_f = tmp[0];
       v_f = tmp[1];
     }
-    inline void getBitangent(float& btngX, float& btngY, float& btngZ) const
+    inline FloatVector4 getBitangent() const
     {
-      FloatVector4  tmp(bitangent);
+      FloatVector4  tmp(&bitangent);
       tmp *= (1.0f / 127.5f);
       tmp -= 1.0f;
-      btngX = tmp[0];
-      btngY = tmp[1];
-      btngZ = tmp[2];
+      return tmp;
     }
-    inline void getTangent(float& tangX, float& tangY, float& tangZ) const
+    inline FloatVector4 getTangent() const
     {
-      FloatVector4  tmp(tangent);
+      FloatVector4  tmp(&tangent);
       tmp *= (1.0f / 127.5f);
       tmp -= 1.0f;
-      tangX = tmp[0];
-      tangY = tmp[1];
-      tangZ = tmp[2];
+      return tmp;
     }
-    inline void getNormal(float& normX, float& normY, float& normZ) const
+    inline FloatVector4 getNormal() const
     {
-      FloatVector4  tmp(normal);
+      FloatVector4  tmp(&normal);
       tmp *= (1.0f / 127.5f);
       tmp -= 1.0f;
-      normX = tmp[0];
-      normY = tmp[1];
-      normZ = tmp[2];
+      return tmp;
     }
   };
   struct NIFTriangle
@@ -299,16 +293,20 @@ class NIFFile : public FileBuffer
   };
   struct NIFBlkBSLightingShaderProperty : public NIFBlock
   {
+    // 0xFFFFFFFF: effect shader
+    // 0: default
+    // 1: environment map
+    // 2: glow
     unsigned int  shaderType;
     const std::string *materialName;
     std::vector< unsigned int > extraData;
     int     controller;
     int     textureSet;
     unsigned long long  flags;
-    BGSMFile  material;
+    BGSMFile  material; // (material.flags & 4) != 0 if this is an effect shader
     std::vector< const std::string * >  texturePaths;
     NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType,
-                                   const BA2File *ba2File);
+                                   bool isEffect, const BA2File *ba2File);
     virtual ~NIFBlkBSLightingShaderProperty();
   };
   struct NIFBlkBSShaderTextureSet : public NIFBlock

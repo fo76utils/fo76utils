@@ -437,7 +437,7 @@ void Renderer::getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r)
     {
       if (!(f2 == "DNAM" && f2.size() >= 64))
         continue;
-      FloatVector4  c(0.0f);
+      FloatVector4  c;
       float   d = 0.0f;
       if (esmFile.getESMVersion() < 0x80)       // Skyrim
       {
@@ -456,10 +456,7 @@ void Renderer::getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r)
       {
         d = f2.readFloat();
         f2.setPosition(16);
-        c[0] = f2.readFloat();
-        c[1] = f2.readFloat();
-        c[2] = f2.readFloat();
-        c.srgbCompress();
+        c = f2.readFloatVector4().srgbCompress();
       }
       d = (d > 0.125f ? (d < 8128.0f ? d : 8128.0f) : 0.125f);
       c[3] = 256.0f - float(std::sqrt(d * 8.0f));
@@ -875,6 +872,23 @@ void Renderer::findObjects(unsigned int formID, int type)
 
 void Renderer::sortObjectList()
 {
+  if (renderPass & 4)
+  {
+    for (size_t i = 0; i < objectList.size(); )
+    {
+      if (!(objectList[i].flags & 0x08))
+      {
+        objectList[i] = objectList[objectList.size() - 1];
+        objectList.resize(objectList.size() - 1);
+      }
+      else
+      {
+        if (debugMode != 1)
+          objectList[i].z = 0x70000000 - objectList[i].z;       // reverse sort
+        i++;
+      }
+    }
+  }
   std::map< std::string, unsigned int > modelPathsUsed;
   for (size_t i = 0; i < objectList.size(); i++)
   {
@@ -928,7 +942,10 @@ void Renderer::clear(unsigned int flags)
     landTexturesN.clear();
   }
   if (flags & 0x08)
+  {
     objectList.clear();
+    renderPass = 0;
+  }
   if (flags & 0x10)
   {
     for (size_t i = 0; i < renderThreads.size(); i++)
@@ -1108,6 +1125,11 @@ void Renderer::loadModels(unsigned int t, unsigned long long modelIDMask)
     nifFiles[n].clear();
     if (o.modelID == 0xFFFFFFFFU || o.modelPath.empty())
       continue;
+    if (renderPass & 4)
+    {
+      if (std::strncmp(o.modelPath.c_str(), "meshes/sky/", 11) == 0)
+        continue;
+    }
     try
     {
       ba2File.extractFile(nifFiles[t].fileBuf, o.modelPath);
@@ -1121,7 +1143,8 @@ void Renderer::loadModels(unsigned int t, unsigned long long modelIDMask)
       for (size_t i = 0; i < meshCnt; i++)
       {
         const NIFFile::NIFTriShape& ts = nifFiles[n].meshData[i];
-        if (ts.flags & 0x05)            // ignore if hidden or effect
+        // ignore if hidden, or wrong shader type for the current render pass
+        if ((ts.flags & 0x05) != (renderPass & 0x04))
           continue;
         nifFiles[n].totalTriangleCnt += size_t(ts.triangleCnt);
       }
@@ -1426,8 +1449,8 @@ void Renderer::materialSwap(Plot3D_TriShape& t, unsigned int formID)
     if (!(*(t.materialPath) == i->second[j].materialPath))
       continue;
     const BGSMFile& bgsmFile = i->second[j].bgsmFile;
-    // add decal, two sided, tree, and glow map flags from new material
-    t.flags = (t.flags & 0x47) | (bgsmFile.flags & 0xB8);
+    // add effect, decal, two sided, tree, and glow map flags from new material
+    t.flags = (t.flags & 0x43) | (bgsmFile.flags & 0xBC);
     t.flags = t.flags | ((t.flags & 0x02) << 3);
     t.gradientMapV = bgsmFile.gradientMapV;
     t.setAlphaProperties(bgsmFile.alphaFlags,
@@ -1459,19 +1482,52 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     t.sortBuf.reserve(nifFiles[n].meshData.size());
     for (size_t j = 0; j < nifFiles[n].meshData.size(); j++)
     {
-      if (nifFiles[n].meshData[j].flags & 0x05) // hidden or effect
+      if ((nifFiles[n].meshData[j].flags & 0x05) != (renderPass & 0x04))
+      {
+        // hidden or not the expected shader type
+        if ((nifFiles[n].meshData[j].flags & 0x05) == 0x04 &&
+            nifFiles[n].meshData[j].texturePathMask)
+        {
+          objectList[i].flags |= (unsigned short) 0x08; // uses effect shader
+        }
         continue;
+      }
       if (!nifFiles[n].meshData[j].triangleCnt)
         continue;
       NIFFile::NIFBounds  b;
       nifFiles[n].meshData[j].calculateBounds(b, &vt);
-      unsigned long long  m =
-          calculateTileMask(roundFloat(b.xMin()), roundFloat(b.yMin()),
-                            roundFloat(b.xMax()), roundFloat(b.yMax()));
+      int     x0 = roundFloat(b.xMin());
+      int     y0 = roundFloat(b.yMin());
+      int     x1 = roundFloat(b.xMax());
+      int     y1 = roundFloat(b.yMax());
+      unsigned long long  m = calculateTileMask(x0, y0, x1, y1);
       if (!m)
         continue;
       if (m & ~tileMask)
         return false;
+      x0 = (x0 > 0 ? x0 : 0);
+      y0 = (y0 > 0 ? y0 : 0);
+      x1 = (x1 < (width - 1) ? x1 : (width - 1)) + 1;
+      y1 = (y1 < (height - 1) ? y1 : (height - 1)) + 1;
+      bool    isVisible = false;
+      for (int y = y0; y < y1; y++)
+      {
+        FloatVector4  zMax(0.0f);
+        const float *zPtr = outBufZ + (size_t(y) * size_t(width) + size_t(x0));
+        int     w = x1 - x0;
+        for ( ; w >= 4; w = w - 4, zPtr = zPtr + 4)
+          zMax.maxValues(FloatVector4(zPtr[0], zPtr[1], zPtr[2], zPtr[3]));
+        zMax.maxValues(FloatVector4(zMax[1], zMax[0], zMax[3], zMax[2]));
+        float   tmp = (zMax[0] > zMax[2] ? zMax[0] : zMax[2]);
+        for ( ; w > 0; w--, zPtr++)
+          tmp = (*zPtr > tmp ? *zPtr : tmp);
+        if (tmp < b.zMin())
+          continue;
+        isVisible = true;
+        break;
+      }
+      if (!isVisible)
+        continue;
       RenderThread::TriShapeSortObject  tmp;
       tmp.ts = &(nifFiles[n].meshData.front()) + j;
       tmp.z = double(b.zMin());
@@ -1491,7 +1547,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (BRANCH_UNLIKELY(t.renderer->flags & 0x02))
       {
         t.renderer->setRenderMode(3U | renderMode);
-        if (!waterSecondPass)
+        if (!(renderPass & 16))
         {
           t.renderer->drawTriShape(
               p.modelTransform, viewTransform, lightX, lightY, lightZ,
@@ -1633,7 +1689,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     tmp.texturePaths = (std::string **) 0;
     t.renderer->setRenderMode(3U | renderMode);
     *(t.renderer) = tmp;
-    if (!waterSecondPass)
+    if (!(renderPass & 16))
     {
       t.renderer->drawTriShape(
           p.modelTransform, viewTransform, lightX, lightY, lightZ,
@@ -1758,7 +1814,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     enableTextures(true),
     renderMode((unsigned char) ((masterFiles.getESMVersion() >> 4) & 0x0CU)),
     debugMode(0),
-    waterSecondPass(false),
+    renderPass(0),
     threadCnt(0),
     textureDataSize(0),
     textureCacheSize(0x40000000),
@@ -2014,9 +2070,9 @@ void Renderer::renderTerrain(unsigned int worldID)
   if (!worldID)
     worldID = getDefaultWorldID();
   clear(0x38);
+  renderPass = 1;
   findObjects(worldID, 0);
   sortObjectList();
-  waterSecondPass = false;
   renderObjectList();
 }
 
@@ -2027,10 +2083,15 @@ void Renderer::renderObjects(unsigned int formID)
   if (!formID)
     formID = getDefaultWorldID();
   clear(0x38);
+  renderPass = 2;
   baseObjects.clear();
   findObjects(formID, 1);
   sortObjectList();
-  waterSecondPass = false;
+  renderObjectList();
+  if (verboseMode)
+    std::fprintf(stderr, "Rendering effects\n");
+  renderPass = 4;
+  sortObjectList();
   renderObjectList();
 }
 
@@ -2043,13 +2104,13 @@ void Renderer::renderWater(unsigned int formID)
   if (useESMWaterColors && waterColor == 0xFFFFFFFFU)
     waterColor = 0xC0302010U;           // default water color
   clear(0x38);
+  renderPass = 8;
   findObjects(formID, 2);
   sortObjectList();
   bool    savedVerboseMode = verboseMode;
   try
   {
     verboseMode = false;
-    waterSecondPass = false;
     renderObjectList();
   }
   catch (...)
@@ -2058,9 +2119,8 @@ void Renderer::renderWater(unsigned int formID)
     throw;
   }
   verboseMode = savedVerboseMode;
-  waterSecondPass = true;
+  renderPass = 16;
   renderObjectList();
-  waterSecondPass = false;
 }
 
 static const char *usageStrings[] =

@@ -10,7 +10,13 @@ struct BGSMFile
 {
   unsigned char version;                // 2: Fallout 4, 20: Fallout 76
   unsigned char gradientMapV;           // 255 = 1.0
-  // 1: tile U, 2: tile V, 8: is decal, 16: two sided, 32: tree, 128: glow map
+  //   1: tile U
+  //   2: tile V
+  //   4: is effect
+  //   8: is decal
+  //  16: two sided
+  //  32: tree
+  // 128: glow map
   std::uint16_t flags;
   // bit 0 = blending enabled
   // bits 1-4 = source blend mode
@@ -45,6 +51,9 @@ struct BGSMFile
   BGSMFile(std::vector< std::string >& texturePaths, FileBuffer& buf);
   BGSMFile(std::vector< std::string >& texturePaths,
            const BA2File& ba2File, const std::string& fileName);
+  void readTexturePaths(std::vector< std::string >& texturePaths,
+                        FileBuffer& buf, unsigned long long texturePathMap);
+  void loadBGEMFile(std::vector< std::string >& texturePaths, FileBuffer& buf);
   void loadBGSMFile(std::vector< std::string >& texturePaths, FileBuffer& buf);
   void loadBGSMFile(std::vector< std::string >& texturePaths,
                     const BA2File& ba2File, const std::string& fileName);
