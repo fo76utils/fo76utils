@@ -30,9 +30,7 @@ size_t Plot3D_TriShape::transformVertexData(
     const NIFFile::NIFVertexTransform& modelTransform,
     const NIFFile::NIFVertexTransform& viewTransform)
 {
-  vertexBuf.clear();
-  if (vertexBuf.capacity() < vertexCnt)
-    vertexBuf.reserve(vertexCnt);
+  vertexBuf.resize(vertexCnt);
   triangleBuf.clear();
   if (triangleBuf.capacity() < triangleCnt)
     triangleBuf.reserve(triangleCnt);
@@ -53,11 +51,11 @@ size_t Plot3D_TriShape::transformVertexData(
     scale[3] = 0.0f;
     for (size_t i = 0; i < vertexCnt; i++)
     {
-      Vertex  v(vertexData[i]);
-      v.xyz = ((FloatVector4(v.xyz[0]) * rX) + (FloatVector4(v.xyz[1]) * rY)
-               + (FloatVector4(v.xyz[2]) * rZ)) * scale + offsXYZ;
-      b += v.xyz;
-      vertexBuf.push_back(v);
+      vertexBuf[i].xyz =
+          ((FloatVector4(vertexData[i].x) * rX)
+          + (FloatVector4(vertexData[i].y) * rY)
+          + (FloatVector4(vertexData[i].z) * rZ)) * scale + offsXYZ;
+      b += vertexBuf[i].xyz;
     }
     if (b.xMin() >= (float(width) - 0.5f) || b.xMax() < -0.5f ||
         b.yMin() >= (float(height) - 0.5f) || b.yMax() < -0.5f ||
@@ -70,6 +68,7 @@ size_t Plot3D_TriShape::transformVertexData(
   lightVector.normalize();
   for (size_t i = 0; i < vertexCnt; i++)
   {
+    const NIFFile::NIFVertex& r = vertexData[i];
     Vertex& v = vertexBuf[i];
 #ifdef VERTEX_XY_SNAP
     float   x = float(roundFloat(v.xyz[0]));
@@ -79,40 +78,43 @@ size_t Plot3D_TriShape::transformVertexData(
     if (float(std::fabs(v.xyz[1] - y)) < VERTEX_XY_SNAP)
       v.xyz[1] = y;
 #endif
-    if (flags & 0x20)                   // tree: ignore vertex alpha
-      v.vertexColor[3] = 1.0f;
-    float   txtU = v.u();
-    float   txtV = v.v();
+    FloatVector4  normal(r.getNormal());
+    float   txtU, txtV;
     if (BRANCH_UNLIKELY(flags & 0x02))  // water
     {
-      FloatVector4  tmp(vertexData[i].x, vertexData[i].y, vertexData[i].z,
-                        0.0f);
+      FloatVector4  tmp(r.x, r.y, r.z, 0.0f);
       tmp = mt.transformXYZ(tmp);
-      const float waterUVScale = 2.0f / 4096.0f;
-      txtU = tmp[0] * waterUVScale;
-      txtV = tmp[1] * waterUVScale;
-      v.normal = FloatVector4(vertexData[i].normal);
-      v.normal *= (1.0f / 127.5f);
-      v.normal -= 1.0f;
-      v.normal = mt.rotateXYZ(v.normal);
-      tmp = FloatVector4(v.normal[2], 0.0f, -(v.normal[0]), 0.0f);
+      tmp *= (float(int(waterUVScale)) * (1.0f / 32768.0f));
+      txtU = tmp[0];
+      txtV = tmp[1];
+      normal = mt.rotateXYZ(normal);
+      tmp = FloatVector4(normal[2], 0.0f, -(normal[0]), 0.0f);
       tmp.normalize3Fast();
       v.bitangent = vt.rotateXYZ(tmp);
-      tmp = FloatVector4(0.0f, v.normal[2], -(v.normal[1]), 0.0f);
+      v.bitangent[3] = txtU;
+      tmp = FloatVector4(0.0f, normal[2], -(normal[1]), 0.0f);
       tmp.normalize3Fast();
       v.tangent = vt.rotateXYZ(tmp);
-      v.normal = vt.rotateXYZ(v.normal);
+      v.tangent[3] = txtV;
+      v.normal = vt.rotateXYZ(normal);
     }
     else
     {
-      txtU = txtU * textureScaleU + textureOffsetU;
-      txtV = txtV * textureScaleV + textureOffsetV;
-      v.bitangent = xt.rotateXYZ(v.bitangent);
-      v.tangent = xt.rotateXYZ(v.tangent);
-      v.normal = xt.rotateXYZ(v.normal);
+      r.getUV(txtU, txtV);
+      v.bitangent = xt.rotateXYZ(r.getBitangent());
+      v.bitangent[3] = txtU * textureScaleU + textureOffsetU;
+      v.tangent = xt.rotateXYZ(r.getTangent());
+      v.tangent[3] = txtV * textureScaleV + textureOffsetV;
+      v.normal = xt.rotateXYZ(normal);
     }
-    v.bitangent[3] = txtU;
-    v.tangent[3] = txtV;
+    v.vertexColor = FloatVector4(&(r.vertexColor));
+    // tree: ignore vertex alpha
+    float   a = (!(flags & 0x20) ? (v.vertexColor[3] * (1.0f / 255.0f)) : 1.0f);
+    if (usingSRGBColorSpace)
+      v.vertexColor *= (1.0f / 255.0f);
+    else
+      v.vertexColor.srgbExpand();
+    v.vertexColor[3] = a;
   }
   for (size_t i = 0; i < triangleCnt; i++)
   {
@@ -124,16 +126,14 @@ size_t Plot3D_TriShape::transformVertexData(
     Vertex& v0 = vertexBuf[n0];
     Vertex& v1 = vertexBuf[n1];
     Vertex& v2 = vertexBuf[n2];
-    float   x0 = v0.xyz[0];
-    float   y0 = v0.xyz[1];
-    float   x1 = v1.xyz[0];
-    float   y1 = v1.xyz[1];
-    float   x2 = v2.xyz[0];
-    float   y2 = v2.xyz[1];
     if (!(flags & 0x10))
     {
-      if (((x1 - x0) * (y2 - y0)) > ((x2 - x0) * (y1 - y0)))
-        continue;               // cull if vertices are not in CCW order
+      // cull if vertices are not in CCW order
+      FloatVector4  d1(v1.xyz - v0.xyz);
+      FloatVector4  d2(v2.xyz - v0.xyz);
+      d1 = FloatVector4(d1[1], d1[0], d1[3], d1[2]) * d2;
+      if (d1[1] > d1[0])
+        continue;
     }
     FloatVector4  boundsMin(v0.xyz);
     FloatVector4  boundsMax(v0.xyz);
@@ -210,10 +210,8 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   if (BRANCH_UNLIKELY(alphaBlendScale))
     c = alphaBlend(c, a, z);
   // Fresnel (coefficients are optimized for glass) with roughness
-  float   v2 = v * v;
   const float *p = &(fresnelRoughTable[0]) + (s_i << 2);
-  float   f = FloatVector4(v * v2, v2, v, 1.0f).dotProduct(
-                  FloatVector4(p[0], p[1], p[2], p[3]));
+  float   f = FloatVector4::polynomial3(p, v);
   FloatVector4  f2(f0 + ((FloatVector4(1.0f) - f0) * FloatVector4(f * f)));
   c += (((e + s) - c) * f2);
   if (BRANCH_UNLIKELY(textureGlow))
@@ -247,11 +245,9 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO4(
   c += (e * g);
   s /= ((l * (1.0f - kSpec) + kSpec) * (v * (1.0f - kSpec) + kSpec));
   // Fresnel (coefficients are optimized for glass) with roughness
-  float   v2 = v * v;
   const float *p =
       &(fresnelRoughTable[0]) + ((roundFloat(smoothness * 255.0f) & 0xFF) << 2);
-  float   f = FloatVector4(v * v2, v2, v, 1.0f).dotProduct(
-                  FloatVector4(p[0], p[1], p[2], p[3]));
+  float   f = FloatVector4::polynomial3(p, v);
   float   f0 = 0.25f;
   f = f0 + ((1.0f - f0) * f);   // f is not squared because of the color space
   c += (s * FloatVector4(l * v * f));
@@ -1070,6 +1066,7 @@ Plot3D_TriShape::Plot3D_TriShape(
     invNormals(false),
     renderMode((unsigned char) (mode & 15U)),
     usingSRGBColorSpace(renderMode < 12),
+    waterUVScale(16),
     lightVector(0.0f, 0.0f, 1.0f, 0.0f),
     lightColor(1.0f),
     ambientLight(renderMode < 12 ? 0.2497363f : 0.05f),

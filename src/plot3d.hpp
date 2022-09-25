@@ -296,27 +296,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     FloatVector4  normal;
     FloatVector4  vertexColor;
     Vertex()
-      : xyz(0.0f),
-        bitangent(0.0f),
-        tangent(0.0f),
-        normal(0.0f),
-        vertexColor(1.0f)
     {
-    }
-    Vertex(const NIFFile::NIFVertex& r)
-      : xyz(r.x, r.y, r.z, 0.0f),
-        bitangent(&(r.bitangent)), tangent(&(r.tangent)), normal(&(r.normal)),
-        vertexColor(&(r.vertexColor))
-    {
-      bitangent *= (1.0f / 127.5f);
-      tangent *= (1.0f / 127.5f);
-      normal *= (1.0f / 127.5f);
-      bitangent -= 1.0f;
-      tangent -= 1.0f;
-      normal -= 1.0f;
-      r.getUV(bitangent[3], tangent[3]);
-      normal[3] = 0.0f;
-      vertexColor *= (1.0f / 255.0f);
     }
     inline const float& u() const
     {
@@ -361,6 +341,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   bool    invNormals;
   unsigned char renderMode;
   bool    usingSRGBColorSpace;
+  unsigned char waterUVScale;
   FloatVector4  lightVector;
   FloatVector4  lightColor;             // lightColor[3] = overall RGB scale
   FloatVector4  ambientLight;
@@ -469,6 +450,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   inline void setEnvMapOffset(float x, float y, float z)
   {
     envMapOffs = FloatVector4(x, y, z, 0.0f);
+  }
+  // water U, V = world X, Y * n / 32768.0 (default: n = 16)
+  inline void setWaterUVScale(int n)
+  {
+    waterUVScale = (unsigned char) n;
   }
   // c = light source (multiplies diffuse and specular, but not glow/cube maps)
   // a = ambient light (added to diffuse light level after multiplying with c)
