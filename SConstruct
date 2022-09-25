@@ -34,21 +34,22 @@ try:
     nifViewEnv.Append(CXXFLAGS = ["-DHAVE_SDL2=1"])
 except:
     buildCubeView = False
+sdlVideoLib = nifViewEnv.StaticLibrary("sdlvideo",
+                                       ["src/nif_view.cpp", "src/sdlvideo.cpp"])
+nifViewEnv.Prepend(LIBS = [sdlVideoLib])
 
 baunpack = env.Program("baunpack", ["src/baunpack.cpp"])
 bcdecode = env.Program("bcdecode", ["src/bcdecode.cpp"])
 btddump = env.Program("btddump", ["src/btddump.cpp"])
 esmdump = env.Program("esmdump", ["src/esmdump.cpp"])
-esmview = env.Program("esmview", ["src/esmview.cpp"])
 findwater = env.Program("findwater", ["src/findwater.cpp"])
 fo4land = env.Program("fo4land", ["src/fo4land.cpp"])
 landtxt = env.Program("landtxt", ["src/ltxtmain.cpp"])
 markers = env.Program("markers", ["src/markers.cpp"])
-nif_info = nifViewEnv.Program("nif_info",
-                              ["src/nif_info.cpp", "src/sdlvideo.cpp"])
+nif_info = nifViewEnv.Program("nif_info", ["src/nif_info.cpp"])
+esmview = nifViewEnv.Program("esmview", ["src/esmview.cpp"])
 if buildCubeView:
-    cubeview = nifViewEnv.Program("cubeview",
-                                  ["src/cubeview.cpp", "src/sdlvideo.cpp"])
+    cubeview = nifViewEnv.Program("cubeview", ["src/cubeview.cpp"])
 render = env.Program("render", ["src/render.cpp"])
 terrain = env.Program("terrain", ["src/terrain.cpp"])
 
