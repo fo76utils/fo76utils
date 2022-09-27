@@ -77,19 +77,15 @@ NIFFile::NIFVertexTransform& NIFFile::NIFVertexTransform::operator*=(
   FloatVector4  r_x(r.rotateXX, r.rotateYX, r.rotateZX, r.rotateXY);
   FloatVector4  r_y(r.rotateXY, r.rotateYY, r.rotateZY, r.rotateXZ);
   FloatVector4  r_z(r.rotateXZ, r.rotateYZ, r.rotateZZ, r.scale);
-  FloatVector4  tmp((FloatVector4(rotateXX) * r_x)
-                    + (FloatVector4(rotateYX) * r_y)
-                    + (FloatVector4(rotateZX) * r_z));
+  FloatVector4  tmp((r_x * rotateXX) + (r_y * rotateYX) + (r_z * rotateZX));
   rotateXX = tmp[0];
   rotateYX = tmp[1];
   rotateZX = tmp[2];
-  tmp = (FloatVector4(rotateXY) * r_x) + (FloatVector4(rotateYY) * r_y)
-        + (FloatVector4(rotateZY) * r_z);
+  tmp = (r_x * rotateXY) + (r_y * rotateYY) + (r_z * rotateZY);
   rotateXY = tmp[0];
   rotateYY = tmp[1];
   rotateZY = tmp[2];
-  tmp = (FloatVector4(rotateXZ) * r_x) + (FloatVector4(rotateYZ) * r_y)
-        + (FloatVector4(rotateZZ) * r_z);
+  tmp = (r_x * rotateXZ) + (r_y * rotateYZ) + (r_z * rotateZZ);
   rotateXZ = tmp[0];
   rotateYZ = tmp[1];
   rotateZZ = tmp[2];
@@ -106,8 +102,7 @@ FloatVector4 NIFFile::NIFVertexTransform::rotateXYZ(FloatVector4 v) const
   FloatVector4  tmpZ(rotateXZ, rotateYZ, rotateZZ, scale);
   tmpZ *= v[2];
   tmpX = tmpX + tmpY + tmpZ;
-  tmpX[3] = 0.0f;
-  return tmpX;
+  return tmpX.clearV3();
 }
 
 FloatVector4 NIFFile::NIFVertexTransform::transformXYZ(FloatVector4 v) const
@@ -121,8 +116,7 @@ FloatVector4 NIFFile::NIFVertexTransform::transformXYZ(FloatVector4 v) const
   tmpX = tmpX + tmpY + tmpZ;
   tmpX *= scale;
   tmpX += FloatVector4(offsX, offsY, offsZ, rotateXX);
-  tmpX[3] = 0.0f;
-  return tmpX;
+  return tmpX.clearV3();
 }
 
 void NIFFile::NIFVertexTransform::rotateXYZ(float& x, float& y, float& z) const
@@ -172,9 +166,8 @@ void NIFFile::NIFTriShape::calculateBounds(NIFBounds& b,
   NIFBounds bTmp(b);
   for (size_t i = 0; i < vertexCnt; i++)
   {
-    bTmp += ((FloatVector4(vertexData[i].x) * rotateX)
-             + (FloatVector4(vertexData[i].y) * rotateY)
-             + (FloatVector4(vertexData[i].z) * rotateZ) + offsXYZ);
+    bTmp += ((rotateX * vertexData[i].x) + (rotateY * vertexData[i].y)
+             + (rotateZ * vertexData[i].z) + offsXYZ);
   }
   b = bTmp;
 }
@@ -442,7 +435,7 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
       FloatVector4  specColor(f.readFloatVector4());
       s = specColor[3] * 128.0f;
       specColor[3] = specColor[3] * (128.0f / 255.0f);
-      material.specularColor = std::uint32_t(specColor * FloatVector4(255.0f));
+      material.specularColor = std::uint32_t(specColor * 255.0f);
       if (f.bsVersion < 0x80)
       {
         f.setPosition(f.getPosition() + 8);

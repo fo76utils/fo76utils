@@ -70,7 +70,7 @@ static void createIcon256(std::vector< unsigned char >& buf, unsigned int c)
         else if (d > 108.0f)
           cTmp = c0;
         else if (d > 92.0f)
-          cTmp += ((c0 - cTmp) * FloatVector4((d - 92.0f) * (1.0f / 16.0f)));
+          cTmp += ((c0 - cTmp) * ((d - 92.0f) * (1.0f / 16.0f)));
         break;
     }
     cTmp[3] = (cTmp[3] > 0.0f ? (cTmp[3] < 255.0f ? cTmp[3] : 255.0f) : 0.0f);
@@ -620,8 +620,7 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
       {
         a *= (1.0f / 255.0f);
         a0 *= (1.0f / 255.0f);
-        c = (c0 * FloatVector4(a0 * (1.0f - a)))
-            + (c * FloatVector4(1.0f - (a0 * (1.0f - a))));
+        c = (c0 * (a0 * (1.0f - a))) + (c * (1.0f - (a0 * (1.0f - a))));
         a = (1.0f - ((1.0f - a0) * (1.0f - a))) * 255.0f;
       }
       c[3] = a;

@@ -1516,7 +1516,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         const float *zPtr = outBufZ + (size_t(y) * size_t(width) + size_t(x0));
         int     w = x1 - x0;
         for ( ; w >= 4; w = w - 4, zPtr = zPtr + 4)
-          zMax.maxValues(FloatVector4(zPtr[0], zPtr[1], zPtr[2], zPtr[3]));
+          zMax.maxValues(FloatVector4(zPtr));
         zMax.maxValues(FloatVector4(zMax[1], zMax[0], zMax[3], zMax[2]));
         float   tmp = (zMax[0] > zMax[2] ? zMax[0] : zMax[2]);
         for ( ; w > 0; w--, zPtr++)
@@ -1983,8 +1983,8 @@ void Renderer::setLighting(int lightColor, int ambientColor, int envColor,
   FloatVector4  l(lightLevel, envLevel, rgbScale, 0.0f);
   l *= 255.0f;
   l.srgbExpand();
-  c = c.srgbExpand() * FloatVector4(l[0]);
-  e = e.srgbExpand() * FloatVector4(l[1]);
+  c = c.srgbExpand() * l[0];
+  e = e.srgbExpand() * l[1];
   if (ambientColor >= 0)
   {
     a.srgbExpand();

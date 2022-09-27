@@ -209,7 +209,7 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   tmp = roundFloat(envScale * specColor[3] * 128.0f);
   envMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
   specColor[3] = specColor[3] * (specularEnabled ? (128.0f / 255.0f) : 0.0f);
-  specularColor = std::uint32_t(specColor * FloatVector4(255.0f));
+  specularColor = std::uint32_t(specColor * 255.0f);
   tmp = roundFloat(buf.readFloat() * 255.0f);
   specularSmoothness = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
   if (version == 2)

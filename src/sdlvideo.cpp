@@ -29,7 +29,7 @@ void SDLDisplay::drawCharacterBG(std::uint32_t *p,
   {
     FloatVector4  a0(1.0f - bgAlpha);
     FloatVector4  c1(&(ansiColor256Table.front()) + ((c >> 16) & 0xFFU));
-    c1 = c1 * c1 * FloatVector4(bgAlpha);
+    c1 = c1 * c1 * bgAlpha;
     for ( ; y0 < y1; y0++, p = p + imageWidth)
     {
       for (int i = x0; i < x1; i++)
@@ -123,7 +123,7 @@ void SDLDisplay::drawCharacterFG(std::uint32_t *p,
                 * FloatVector4(1.0f - v_f, 1.0f - v_f, v_f, v_f)) * fgAlpha;
         FloatVector4  c0(p + i);
         c0 *= c0;
-        c0 = (c0 + ((c1l - c0) * FloatVector4(a))).squareRootFast();
+        c0 = (c0 + ((c1l - c0) * a)).squareRootFast();
         p[i] = std::uint32_t(c0);
       }
       else
