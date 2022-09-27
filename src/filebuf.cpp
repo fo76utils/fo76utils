@@ -91,8 +91,8 @@ FloatVector4 FileBuffer::readFloatVector4()
     throw errorMessage("end of input file");
   union
   {
-    std::int32_t  i __attribute__ ((__vector_size__ (16)));
-    float   f __attribute__ ((__vector_size__ (16)));
+    XMM_Int32 i;
+    XMM_Float f;
   }
   tmp;
   const std::int32_t  *p =
@@ -520,6 +520,11 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
       }
       switch (fourCC)
       {
+        case 0x18:                      // DXGI_FORMAT_R10G10B10A2_UNORM
+        case 0x19:                      // DXGI_FORMAT_R10G10B10A2_UINT
+          if (bitsPerPixel == 32)
+            pixelFormat = pixelFormatR10G10B10A2;
+          break;
         case 0x3D:                      // DXGI_FORMAT_R8_UNORM
         case 0x3E:                      // DXGI_FORMAT_R8_UINT
           if (bitsPerPixel == 8)
@@ -591,6 +596,8 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
             pixelFormat = pixelFormatA32;
           else if (hdrBuf[23] == 0xFFFFFFFFU)
             pixelFormat = pixelFormatR32;
+          if (rgMask == 0x0FFC00000003FFULL && baMask == 0xC00000003FF00000ULL)
+            pixelFormat = pixelFormatR10G10B10A2;
           break;
       }
     }
@@ -717,6 +724,13 @@ DDSOutputFile::DDSOutputFile(const char *fileName,
       break;
     case DDSInputFile::pixelFormatR32:
       rMask = 0xFFFFFFFFU;
+      bitsPerPixel = 32;
+      break;
+    case DDSInputFile::pixelFormatR10G10B10A2:
+      rMask = 0x000003FFU;
+      gMask = 0x000FFC00U;
+      bMask = 0x3FF00000U;
+      aMask = 0xC0000000U;
       bitsPerPixel = 32;
       break;
     default:

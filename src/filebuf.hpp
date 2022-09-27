@@ -187,6 +187,7 @@ class DDSInputFile : public FileBuffer
     pixelFormatR8 = 11,
     // Similar to pixelFormatR8, but with 32-bit texture form IDs.
     pixelFormatR32 = 12,
+    pixelFormatR10G10B10A2 = 13,
     pixelFormatUnknown = 0x40000000
   };
   // If the input file is in an uncompressed format that is not one of the
