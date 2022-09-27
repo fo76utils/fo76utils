@@ -57,12 +57,12 @@ static inline std::uint32_t decodeBC1Colors(std::uint32_t *c,
   c[1] = std::uint32_t(c1_f);
   if (BRANCH_LIKELY(c0 > c1))
   {
-    c[2] = std::uint32_t((c0_f + c0_f + c1_f) * FloatVector4(1.0f / 3.0f));
-    c[3] = std::uint32_t((c0_f + c1_f + c1_f) * FloatVector4(1.0f / 3.0f));
+    c[2] = std::uint32_t((c0_f + c0_f + c1_f) * (1.0f / 3.0f));
+    c[3] = std::uint32_t((c0_f + c1_f + c1_f) * (1.0f / 3.0f));
   }
   else
   {
-    c[2] = std::uint32_t((c0_f + c1_f) * FloatVector4(0.5f));
+    c[2] = std::uint32_t((c0_f + c1_f) * 0.5f);
     c[3] = c[2] & ~a;
   }
   return FileBuffer::readUInt32Fast(src + 4);
@@ -333,7 +333,7 @@ void DDSTexture::loadTextureData(
           c += FloatVector4(p2 + (offsY2 + offsX2p1));
           c += FloatVector4(p2 + (offsY2p1 + offsX2));
           c += FloatVector4(p2 + (offsY2p1 + offsX2p1));
-          p[y * w + x] = std::uint32_t(c * FloatVector4(0.25f));
+          p[y * w + x] = std::uint32_t(c * 0.25f);
         }
 #else
         size_t  offsY2m1 = size_t(((y << 1) - 1U) & yMask) * w2;
@@ -351,9 +351,8 @@ void DDSTexture::loadTextureData(
           c2 += FloatVector4(p2 + (offsY2m1 + offsX2m1));
           c1 += FloatVector4(p2 + (offsY2m1 + offsX2));
           c2 += FloatVector4(p2 + (offsY2m1 + offsX2p1));
-          p[y * w + x] = std::uint32_t((c0 * FloatVector4(0.23031584f))
-                                       + (c1 * FloatVector4(0.12479824f))
-                                       + (c2 * FloatVector4(0.06762280f)));
+          p[y * w + x] = std::uint32_t((c0 * 0.23031584f) + (c1 * 0.12479824f)
+                                       + (c2 * 0.06762280f));
         }
 #endif
       }
@@ -722,7 +721,7 @@ FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
     y0 = int((unsigned int) y0 >> 1);
     FloatVector4  c1(getPixelB(textureData[m0 + 1], x0, y0, xf, yf,
                                xMask >> 1, yMask >> 1));
-    c0 = (c0 * FloatVector4(1.0f - mf)) + (c1 * FloatVector4(mf));
+    c0 = (c0 * (1.0f - mf)) + (c1 * mf);
   }
   return c0;
 }
@@ -770,7 +769,7 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
     y0 = int((unsigned int) y0 >> 1);
     FloatVector4  c1(getPixelB_2(t1[1], t2[1], x0, y0, xf, yf,
                                  xMask >> 1, yMask >> 1));
-    c0 = (c0 * FloatVector4(1.0f - mf)) + (c1 * FloatVector4(mf));
+    c0 = (c0 * (1.0f - mf)) + (c1 * mf);
   }
   return c0;
 }
@@ -799,7 +798,7 @@ FloatVector4 DDSTexture::getPixelT_N(float x, float y, float mipLevel) const
     y0 = int((unsigned int) y0 >> 1);
     FloatVector4  c1(getPixelB(textureData[m0 + 1], x0, y0, xf, yf,
                                xMask >> 1, yMask >> 1));
-    c0 = (c0 * FloatVector4(1.0f - mf)) + (c1 * FloatVector4(mf));
+    c0 = (c0 * (1.0f - mf)) + (c1 * mf);
   }
   return c0;
 }
@@ -843,7 +842,7 @@ FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
     (void) convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0 + 1, true);
     FloatVector4  c1(getPixelB(textureData[m0 + 1], x0, y0, xf, yf,
                                xMask, yMask));
-    c0 = (c0 * FloatVector4(1.0f - mf)) + (c1 * FloatVector4(mf));
+    c0 = (c0 * (1.0f - mf)) + (c1 * mf);
   }
   return c0;
 }
@@ -881,7 +880,7 @@ FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
     (void) convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0 + 1, true);
     FloatVector4  c1(getPixelB(textureData[m0 + 1], x0, y0, xf, yf,
                                xMask, yMask));
-    c0 = (c0 * FloatVector4(1.0f - mf)) + (c1 * FloatVector4(mf));
+    c0 = (c0 * (1.0f - mf)) + (c1 * mf);
   }
   return c0;
 }
@@ -948,115 +947,129 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
     (void) convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0 + 1, true);
     p = textureData[m0 + 1] + n;
     FloatVector4  c1(getPixelB(p, x0, y0, xf, yf, xMask, yMask));
-    c0 = (c0 * FloatVector4(1.0f - mf)) + (c1 * FloatVector4(mf));
+    c0 = (c0 * (1.0f - mf)) + (c1 * mf);
   }
   return c0;
 }
 
-//  0.003  0.000 -0.009  0.000  0.033  0.054  0.033  0.000 -0.009  0.000  0.003
-//  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
-// -0.009  0.000  0.030  0.000 -0.108 -0.174 -0.108  0.000  0.030  0.000 -0.009
-//  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
-//  0.033  0.000 -0.108  0.000  0.385  0.620  0.385  0.000 -0.108  0.000  0.033
-//  0.054  0.000 -0.174  0.000  0.620  1.000  0.620  0.000 -0.174  0.000  0.054
-//  0.033  0.000 -0.108  0.000  0.385  0.620  0.385  0.000 -0.108  0.000  0.033
-//  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
-// -0.009  0.000  0.030  0.000 -0.108 -0.174 -0.108  0.000  0.030  0.000 -0.009
-//  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000  0.000
-//  0.003  0.000 -0.009  0.000  0.033  0.054  0.033  0.000 -0.009  0.000  0.003
-
-struct Downsample2xTable
+static const float  downsample2xFilterTable[5] =
 {
-  static const float  filterTable[12];
-  static inline FloatVector4 getPixelFast(const std::uint32_t *buf,
-                                          int w, int x, int y)
-  {
-    FloatVector4  tmp(buf + (y * w + x));
-    tmp *= tmp;
-    return tmp;
-  }
-  static inline FloatVector4 getPixel(const std::uint32_t *buf,
-                                      int w, int h, int x, int y)
-  {
-    x = (x > 0 ? (x < (w - 1) ? x : (w - 1)) : 0);
-    y = (y > 0 ? (y < (h - 1) ? y : (h - 1)) : 0);
-    FloatVector4  tmp(buf + (size_t(y) * size_t(w) + size_t(x)));
-    tmp *= tmp;
-    return tmp;
-  }
+  // x = 0, 1, 3, 5, 7
+  // pow(cos(x * PI / 18.0), 1.87795546) * sin(x * PI / 2.0) / (x * PI / 2.0)
+  1.00000000f, 0.61857799f, -0.16197358f, 0.05552255f, -0.01212696f
 };
 
-const float Downsample2xTable::filterTable[12] =
+static inline FloatVector4 downsample2xFunc_R8G8B8A8(
+    const std::uint32_t * const *inBufPtrs, int x)
 {
-  // X + 0, 1, 3, 5
-   0.62039170f,  0.38488586f, -0.10814215f,  0.03345214f,       // Y + 1
-  -0.17431270f, -0.10814215f,  0.03038492f, -0.00939912f,       // Y + 3
-   0.05392100f,  0.03345214f, -0.00939912f,  0.00290747f        // Y + 5
-};
-
-std::uint32_t downsample2xFilter(const std::uint32_t *buf,
-                                 int imageWidth, int imageHeight, int x, int y)
-{
-  static const Downsample2xTable  t;
-  FloatVector4  c;
-  const float *p = t.filterTable;
-  if (BRANCH_LIKELY(x >= 5 && x < (imageWidth - 5) &&
-                    y >= 5 && y < (imageHeight - 5)))
-  {
-    buf = buf + (size_t(y) * size_t(imageWidth) + size_t(x));
-    c = t.getPixelFast(buf, imageWidth, 0, 0);
-    for (int i = 0; i < 3; i++, p = p + 4)
-    {
-      int     yOffs = (i << 1) + 1;
-      for (int j = 0; j < 4; j++)
-      {
-        int     xOffs = (j << 1) - int(bool(j));
-        FloatVector4  tmp(t.getPixelFast(buf, imageWidth, xOffs, yOffs));
-        tmp += t.getPixelFast(buf, imageWidth, yOffs, -xOffs);
-        tmp += t.getPixelFast(buf, imageWidth, -xOffs, -yOffs);
-        tmp += t.getPixelFast(buf, imageWidth, -yOffs, xOffs);
-        tmp *= p[j];
-        c += tmp;
-      }
-    }
-  }
-  else
-  {
-    c = t.getPixel(buf, imageWidth, imageHeight, x, y);
-    for (int i = 0; i < 3; i++, p = p + 4)
-    {
-      int     yOffs = (i << 1) + 1;
-      for (int j = 0; j < 4; j++)
-      {
-        FloatVector4  tmp;
-        int     xOffs = (j << 1) - int(bool(j));
-        tmp = t.getPixel(buf, imageWidth, imageHeight, x + xOffs, y + yOffs);
-        tmp += t.getPixel(buf, imageWidth, imageHeight, x + yOffs, y - xOffs);
-        tmp += t.getPixel(buf, imageWidth, imageHeight, x - xOffs, y - yOffs);
-        tmp += t.getPixel(buf, imageWidth, imageHeight, x - yOffs, y + xOffs);
-        tmp *= p[j];
-        c += tmp;
-      }
-    }
-  }
-  c *= 0.25f;
-  return std::uint32_t(c.squareRootFast());
+  FloatVector4  c, c1, c2;
+  c = FloatVector4(inBufPtrs[0] + x).srgbExpand();
+  c1 = FloatVector4(inBufPtrs[1] + x);
+  c2 = FloatVector4(inBufPtrs[2] + x);
+  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[1]);
+  c1 = FloatVector4(inBufPtrs[3] + x);
+  c2 = FloatVector4(inBufPtrs[4] + x);
+  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[2]);
+  c1 = FloatVector4(inBufPtrs[5] + x);
+  c2 = FloatVector4(inBufPtrs[6] + x);
+  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[3]);
+  c1 = FloatVector4(inBufPtrs[7] + x);
+  c2 = FloatVector4(inBufPtrs[8] + x);
+  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[4]);
+  return c;
 }
 
-static void downsample2xThread(std::uint32_t *outBuf,
-                               const std::uint32_t *inBuf,
-                               int w, int h, int y0, int y1, int pitch)
+static inline FloatVector4 downsample2xFunc_R10G10B10A2(
+    const std::uint32_t * const *inBufPtrs, int x)
+{
+  FloatVector4  c, c1, c2;
+  c = FloatVector4::convertR10G10B10A2(inBufPtrs[0][x]).srgbExpand();
+  c1 = FloatVector4::convertR10G10B10A2(inBufPtrs[1][x]);
+  c2 = FloatVector4::convertR10G10B10A2(inBufPtrs[2][x]);
+  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[1]);
+  c1 = FloatVector4::convertR10G10B10A2(inBufPtrs[3][x]);
+  c2 = FloatVector4::convertR10G10B10A2(inBufPtrs[4][x]);
+  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[2]);
+  c1 = FloatVector4::convertR10G10B10A2(inBufPtrs[5][x]);
+  c2 = FloatVector4::convertR10G10B10A2(inBufPtrs[6][x]);
+  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[3]);
+  c1 = FloatVector4::convertR10G10B10A2(inBufPtrs[7][x]);
+  c2 = FloatVector4::convertR10G10B10A2(inBufPtrs[8][x]);
+  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[4]);
+  return c;
+}
+
+void downsample2xFilter_Line(std::uint32_t *linePtr, const std::uint32_t *inBuf,
+                             int imageWidth, int imageHeight, int y,
+                             unsigned char fmtFlags)
+{
+  // ring buffer for vertically filtered image data
+  FloatVector4  tmpBuf[16];
+  const std::uint32_t *inBufPtrs[9];
+  inBufPtrs[0] = inBuf + (size_t(y) * size_t(imageWidth));
+  for (int i = 0; i < 8; i = i + 2)
+  {
+    int     yc = y - (i + 1);
+    yc = (yc > 0 ? yc : 0);
+    inBufPtrs[i + 1] = inBuf + (size_t(yc) * size_t(imageWidth));
+    yc = y + (i + 1);
+    yc = (yc < (imageHeight - 1) ? yc : (imageHeight - 1));
+    inBufPtrs[i + 2] = inBuf + (size_t(yc) * size_t(imageWidth));
+  }
+  int     xc = 0;
+  for (int i = 0; i < 8; i++, xc += int(xc < (imageWidth - 1)))
+  {
+    if (!(fmtFlags & 1))
+      tmpBuf[i] = downsample2xFunc_R8G8B8A8(inBufPtrs, xc);
+    else
+      tmpBuf[i] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
+  }
+  for (int i = 8; i < 16; i++)
+    tmpBuf[i] = tmpBuf[0];
+  for (int i = 0; i < imageWidth; i = i + 2, linePtr++)
+  {
+    FloatVector4  c(tmpBuf[i & 15]);
+    c += ((tmpBuf[(i - 1) & 15] + tmpBuf[(i + 1) & 15])
+          * downsample2xFilterTable[1]);
+    c += ((tmpBuf[(i - 3) & 15] + tmpBuf[(i + 3) & 15])
+          * downsample2xFilterTable[2]);
+    c += ((tmpBuf[(i - 5) & 15] + tmpBuf[(i + 5) & 15])
+          * downsample2xFilterTable[3]);
+    c += ((tmpBuf[(i - 7) & 15] + tmpBuf[(i + 7) & 15])
+          * downsample2xFilterTable[4]);
+    c = (c * 0.25f).srgbCompress();     // clamps to 0.0 - 255.0
+    if (!(fmtFlags & 2))
+      *linePtr = std::uint32_t(c);
+    else
+      *linePtr = c.convertToR10G10B10A2(true);
+    if (!(fmtFlags & 1))
+    {
+      tmpBuf[(i + 8) & 15] = downsample2xFunc_R8G8B8A8(inBufPtrs, xc);
+      xc += int(xc < (imageWidth - 1));
+      tmpBuf[(i + 9) & 15] = downsample2xFunc_R8G8B8A8(inBufPtrs, xc);
+    }
+    else
+    {
+      tmpBuf[(i + 8) & 15] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
+      xc += int(xc < (imageWidth - 1));
+      tmpBuf[(i + 9) & 15] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
+    }
+    xc += int(xc < (imageWidth - 1));
+  }
+}
+
+static void downsample2xThread(
+    std::uint32_t *outBuf, const std::uint32_t *inBuf,
+    int w, int h, int y0, int y1, int pitch, unsigned char fmtFlags)
 {
   std::uint32_t *p = outBuf + ((size_t(y0) >> 1) * size_t(pitch));
-  for (int y = y0; y < y1; y = y + 2, p = p + (pitch - (w >> 1)))
-  {
-    for (int x = 0; x < w; x = x + 2, p++)
-      *p = downsample2xFilter(inBuf, w, h, x, y);
-  }
+  for (int y = y0; y < y1; y = y + 2, p = p + pitch)
+    downsample2xFilter_Line(p, inBuf, w, h, y, fmtFlags);
 }
 
 void downsample2xFilter(std::uint32_t *outBuf, const std::uint32_t *inBuf,
-                        int imageWidth, int imageHeight, int pitch)
+                        int imageWidth, int imageHeight, int pitch,
+                        unsigned char fmtFlags)
 {
   std::thread *threads[32];
   int     threadCnt = int(std::thread::hardware_concurrency());
@@ -1070,12 +1083,13 @@ void downsample2xFilter(std::uint32_t *outBuf, const std::uint32_t *inBuf,
     {
       threads[i] = new std::thread(downsample2xThread,
                                    outBuf, inBuf, imageWidth, imageHeight,
-                                   y0, y1, pitch);
+                                   y0, y1, pitch, fmtFlags);
     }
     catch (...)
     {
       threads[i] = (std::thread *) 0;
-      downsample2xThread(outBuf, inBuf, imageWidth, imageHeight, y0, y1, pitch);
+      downsample2xThread(outBuf, inBuf, imageWidth, imageHeight,
+                         y0, y1, pitch, fmtFlags);
     }
     y0 = y1;
   }

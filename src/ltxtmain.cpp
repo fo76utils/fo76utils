@@ -544,10 +544,14 @@ int main(int argc, char **argv)
       threads[i]->xyScale = xyScale;
     }
     std::vector< std::uint32_t >  downsampleBuf;
+    std::uint32_t *lineBuf = (std::uint32_t *) 0;
     int     h = 1 << xyScale;
     h = (h > 16 ? h : 16);
     if (enableDownscale)
-      downsampleBuf.resize(size_t(width) * size_t(h * 3));
+    {
+      downsampleBuf.resize(size_t(width) * size_t(h * 3) + size_t(width >> 1));
+      lineBuf = &(downsampleBuf.front()) + (size_t(width) * size_t(h * 3));
+    }
     int     downsampleY0 = 0;
     int     downsampleY1 = 0;
     for (int y = 0; y < height; )
@@ -592,10 +596,10 @@ int main(int argc, char **argv)
             int     yc = downsampleY0;
             for ( ; yc < (downsampleY1 - (!endFlag ? 8 : 0)); yc = yc + 2)
             {
-              for (int xc = 0; xc < width; xc = xc + 2)
+              downsample2xFilter_Line(lineBuf, p, width, downsampleY1, yc, 0);
+              for (int xc = 0; xc < (width >> 1); xc++)
               {
-                std::uint32_t c =
-                    downsample2xFilter(p, width, downsampleY1, xc, yc);
+                std::uint32_t c = lineBuf[xc];
                 outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
                 outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
                 outFile.writeByte((unsigned char) (c & 0xFF));

@@ -153,13 +153,20 @@ class DDSTexture
   FloatVector4 cubeMap(float x, float y, float z, float mipLevel) const;
 };
 
-std::uint32_t downsample2xFilter(const std::uint32_t *buf,
-                                 int imageWidth, int imageHeight, int x, int y);
+// linePtr: line pointer in output buffer
+// imageWidth, imageHeight: dimensions of input image
+// y: line number on input image
+// fmtFlags & 1: input pixel format (0: R8G8B8A8, 1: R10G10B10A2)
+// fmtFlags & 2: output pixel format
+void downsample2xFilter_Line(std::uint32_t *linePtr, const std::uint32_t *inBuf,
+                             int imageWidth, int imageHeight, int y,
+                             unsigned char fmtFlags = 0);
 
 // imageWidth, imageHeight: dimensions of input image
 // pitch: number of elements per line in outBuf
 void downsample2xFilter(std::uint32_t *outBuf, const std::uint32_t *inBuf,
-                        int imageWidth, int imageHeight, int pitch);
+                        int imageWidth, int imageHeight, int pitch,
+                        unsigned char fmtFlags = 0);
 
 #endif
 
