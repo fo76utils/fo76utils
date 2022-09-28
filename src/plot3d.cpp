@@ -177,7 +177,8 @@ FloatVector4 Plot3D_TriShape::alphaBlend(
     return c;
   if (BRANCH_UNLIKELY((unsigned int) y >= (unsigned int) height))
     return c;
-  FloatVector4  c0(bufRGBA + (size_t(y) * size_t(width) + size_t(x)));
+  FloatVector4  c0(FloatVector4::convertRGBA32(
+                       bufRGBA[size_t(y) * size_t(width) + size_t(x)]));
   if (usingSRGBColorSpace)
     c0 *= (1.0f / 255.0f);
   else
@@ -492,23 +493,10 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_Water(
 void Plot3D_TriShape::drawPixel_Water(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
-  // first pass: only write depth and alpha
-  float   d = float(int(~(p.bufRGBA[offs] >> 24) & 0xFFU));
-  d = (d * d) + ((p.bufZ[offs] - z.xyz[2]) * (16.0f / p.viewScale));
-  d = FloatVector4::squareRootFast(d < 65025.0f ? d : 65025.0f);
-  p.bufZ[offs] = z.xyz[2] * 1.00000025f + 0.00000025f;
-  // alpha channel = 255 - sqrt(waterDepth*16)
-  p.bufRGBA[offs] = (p.bufRGBA[offs] & 0x00FFFFFFU)
-                    | (std::uint32_t(255 - roundFloat(d)) << 24);
-}
-
-void Plot3D_TriShape::drawPixel_Water_2(
-    Plot3D_TriShape& p, size_t offs, Vertex& z)
-{
+  float   a = p.bufZ[offs] - z.xyz[2];          // water depth in pixels
   p.bufZ[offs] = z.xyz[2];
-  FloatVector4  c0(p.bufRGBA[offs]);
-  float   a = 255.0f - c0[3];
-  a = (a * a) * p.specularColorFloat[3];
+  FloatVector4  c0(FloatVector4::convertRGBA32(p.bufRGBA[offs]));
+  a = a * p.specularColorFloat[3];
   if (a > -3.0f && a < 0.0f)
     a = FloatVector4::exp2Fast(a - 1.0f);
   else
@@ -517,16 +505,16 @@ void Plot3D_TriShape::drawPixel_Water_2(
                       z, p.textureN->getPixelT(z.u(), z.v(), p.mipLevel)));
   FloatVector4  reflectedView(p.calculateReflection(z));
   FloatVector4  c(p.calculateLighting_Water(c0, n, reflectedView, a, false));
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true);
 }
 
-void Plot3D_TriShape::drawPixel_Water_2G(
+void Plot3D_TriShape::drawPixel_Water_G(
     Plot3D_TriShape& p, size_t offs, Vertex& z)
 {
+  float   a = p.bufZ[offs] - z.xyz[2];          // water depth in pixels
   p.bufZ[offs] = z.xyz[2];
-  FloatVector4  c0(p.bufRGBA[offs]);
-  float   a = 255.0f - c0[3];
-  a = (a * a) * p.specularColorFloat[3];
+  FloatVector4  c0(FloatVector4::convertRGBA32(p.bufRGBA[offs]));
+  a = a * p.specularColorFloat[3];
   if (a > -3.0f && a < 0.0f)
     a = FloatVector4::exp2Fast(a - 1.0f);
   else
@@ -535,7 +523,7 @@ void Plot3D_TriShape::drawPixel_Water_2G(
                       z, p.textureN->getPixelT(z.u(), z.v(), p.mipLevel)));
   FloatVector4  reflectedView(p.calculateReflection(z));
   FloatVector4  c(p.calculateLighting_Water(c0, n, reflectedView, a, true));
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true, true);
 }
 
 inline FloatVector4 Plot3D_TriShape::getDiffuseColor(
@@ -585,24 +573,41 @@ void Plot3D_TriShape::drawPixel_Debug(
       c = FloatVector4(1.0f);
   }
   p.bufZ[offs] = z.xyz[2];
-  if (!(p.debugMode == 0 || p.debugMode == 3 || p.debugMode == 5))
+  if (!(p.debugMode == 3 || p.debugMode == 5))
   {
     std::uint32_t tmp = std::uint32_t(p.debugMode);
     if (p.debugMode != 4)
     {
+#if USE_PIXELFMT_RGB10A2
       if (!(tmp & 0x80000000U))
+      {
+        tmp = std::uint32_t(roundFloat(z.xyz[2] * 64.0f));
+        tmp = tmp | (tmp < 0x3FFFFFFFU ? 0xC0000000U : 0xFFFFFFFFU);
+      }
+      else
+      {
+        tmp = ((tmp & 0x00FFU) << 22) | ((tmp & 0xFF00U) << 4)
+              | ((tmp >> 14) & 0x03FCU) | 0xC0100401U;
+      }
+#else
+      if (!(tmp & 0x80000000U))
+      {
         tmp = std::uint32_t(roundFloat(z.xyz[2] * 16.0f));
-      tmp = (tmp & 0xFF00FF00U) | ((tmp & 0xFFU) << 16) | ((tmp >> 16) & 0xFFU);
+        tmp = (tmp < 0x00FFFFFFU ? tmp : 0x00FFFFFFU);
+      }
+      tmp = ((tmp & 0x00FFU) << 16) | ((tmp >> 16) & 0x00FFU)
+            | (tmp & 0x0000FF00U) | 0xFF000000U;
+#endif
     }
     else if (p.renderMode >= 12)
     {
-      tmp = std::uint32_t(c.srgbCompress());
+      tmp = c.srgbCompress().convertToRGBA32(true, true);
     }
     else
     {
-      tmp = std::uint32_t(c * 255.0f);
+      tmp = (c * 255.0f).convertToRGBA32(true);
     }
-    p.bufRGBA[offs] = tmp | 0xFF000000U;
+    p.bufRGBA[offs] = tmp;
     return;
   }
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
@@ -621,7 +626,7 @@ void Plot3D_TriShape::drawPixel_Debug(
     else
       c = p.calculateLighting_TES5(c, z);
   }
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true);
 }
 
 void Plot3D_TriShape::drawPixel_D_TES5(
@@ -635,7 +640,7 @@ void Plot3D_TriShape::drawPixel_D_TES5(
   p.bufZ[offs] = z.xyz[2];
   z.normal.normalize(p.invNormals);
   c = p.calculateLighting_TES5(c, z);
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true);
 }
 
 void Plot3D_TriShape::drawPixel_N_TES5(
@@ -652,7 +657,7 @@ void Plot3D_TriShape::drawPixel_N_TES5(
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
   (void) p.normalMap(z, n);
   c = p.calculateLighting_TES5(c, z);
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true);
 }
 
 void Plot3D_TriShape::drawPixel_TES5(Plot3D_TriShape& p, size_t offs, Vertex& z)
@@ -680,7 +685,7 @@ void Plot3D_TriShape::drawPixel_TES5(Plot3D_TriShape& p, size_t offs, Vertex& z)
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, false);
   c = p.calculateLighting_TES5(c, e, specular, envLevel,
                                specLevel, z, nDotL, nDotV);
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true);
 }
 
 void Plot3D_TriShape::drawPixel_D_FO4(
@@ -694,7 +699,7 @@ void Plot3D_TriShape::drawPixel_D_FO4(
   p.bufZ[offs] = z.xyz[2];
   z.normal.normalize(p.invNormals);
   c = p.calculateLighting_FO4(c, z);
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true);
 }
 
 void Plot3D_TriShape::drawPixel_N_FO4(
@@ -711,7 +716,7 @@ void Plot3D_TriShape::drawPixel_N_FO4(
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
   (void) p.normalMap(z, n);
   c = p.calculateLighting_FO4(c, z);
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true);
 }
 
 void Plot3D_TriShape::drawPixel_FO4(Plot3D_TriShape& p, size_t offs, Vertex& z)
@@ -735,7 +740,7 @@ void Plot3D_TriShape::drawPixel_FO4(Plot3D_TriShape& p, size_t offs, Vertex& z)
   float   specular = p.specularPhong(reflectedView, smoothness, nDotL, true);
   c = p.calculateLighting_FO4(c, e, specular, specLevel,
                               z, nDotL, nDotV, smoothness);
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true);
 }
 
 void Plot3D_TriShape::drawPixel_D_FO76(
@@ -749,7 +754,7 @@ void Plot3D_TriShape::drawPixel_D_FO76(
   p.bufZ[offs] = z.xyz[2];
   z.normal.normalize(p.invNormals);
   c = p.calculateLighting_FO76(c, z);
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true, true);
 }
 
 void Plot3D_TriShape::drawPixel_N_FO76(
@@ -766,7 +771,7 @@ void Plot3D_TriShape::drawPixel_N_FO76(
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, p.mipLevel + p.mipOffsetN));
   (void) p.normalMap(z, n);
   c = p.calculateLighting_FO76(c, z);
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true, true);
 }
 
 void Plot3D_TriShape::drawPixel_FO76(Plot3D_TriShape& p, size_t offs, Vertex& z)
@@ -795,7 +800,7 @@ void Plot3D_TriShape::drawPixel_FO76(Plot3D_TriShape& p, size_t offs, Vertex& z)
   float   specular = p.specularGGX(reflectedView, roughness, nDotL);
   c = p.calculateLighting_FO76(c, e, specular, ao, r,
                                z, nDotL, nDotV, roughness, s_i);
-  p.bufRGBA[offs] = std::uint32_t(c) | 0xFF000000U;
+  p.bufRGBA[offs] = c.convertToRGBA32(true, true);
 }
 
 inline void Plot3D_TriShape::drawPixel(
@@ -1074,7 +1079,6 @@ Plot3D_TriShape::Plot3D_TriShape(
     viewTransformInvY(0.0f, 1.0f, 0.0f, 0.0f),
     viewTransformInvZ(0.0f, 0.0f, 1.0f, 0.0f),
     specularColorFloat(1.0f),
-    viewScale(1.0f),
     debugMode(0U),
     drawPixelFunction(&drawPixel_Water)
 {
@@ -1124,20 +1128,13 @@ void Plot3D_TriShape::drawTriShape(
     float lightX, float lightY, float lightZ,
     const DDSTexture * const *textures, unsigned int textureMask)
 {
-  if (!((textureMask & 1U) | (flags & 0x02U)))
-    return;
+  if (BRANCH_UNLIKELY((textureMask & 1U) <= (flags & 0x02U)))
+    return;                     // water, or no diffuse texture
   lightVector = FloatVector4(lightX, lightY, lightZ, 0.0f);
   size_t  triangleCntRendered =
       transformVertexData(modelTransform, viewTransform);
   if (!triangleCntRendered)
     return;
-  viewScale = viewTransform.scale;
-  if (BRANCH_UNLIKELY(flags & 0x02))
-  {
-    drawPixelFunction = &drawPixel_Water;
-    drawTriangles();
-    return;
-  }
   textureD = textures[0];
   alphaThresholdFloat = float(int(alphaThreshold)) * 0.999999f;
   viewTransformInvX =
@@ -1247,7 +1244,6 @@ void Plot3D_TriShape::drawWater(
     return;
   mipOffsetN = 0.0f;
   alphaThresholdFloat = 0.0f;
-  viewScale = viewTransform.scale;
   viewTransformInvX =
       FloatVector4(viewTransform.rotateXX, viewTransform.rotateXY,
                    viewTransform.rotateXZ, 0.0f);
@@ -1269,10 +1265,11 @@ void Plot3D_TriShape::drawWater(
     specularColorFloat *= (1.0f / 255.0f);
   else
     specularColorFloat.srgbExpand();
-  specularColorFloat[3] = -1.5f / (a * a);      // = -3.0 / (maxDepth * 16.0)
+  // -3.0 / maximum depth in pixels
+  specularColorFloat[3] = -24.0f / (a * a * viewTransform.scale);
   reflectionLevel = envMapLevel;
   drawPixelFunction =
-      (usingSRGBColorSpace ? &drawPixel_Water_2 : &drawPixel_Water_2G);
+      (usingSRGBColorSpace ? &drawPixel_Water : &drawPixel_Water_G);
   textureE = (DDSTexture *) 0;
   if (textureMask & 16U)
     textureE = textures[4];

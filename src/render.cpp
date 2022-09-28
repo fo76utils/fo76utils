@@ -7,8 +7,8 @@
 
 bool Renderer::RenderObject::operator<(const RenderObject& r) const
 {
-  if ((flags & 7) != (r.flags & 7))
-    return ((flags & 7) < (r.flags & 7));
+  if ((flags & 2) != (r.flags & 2))
+    return bool(r.flags & 2);
   if (flags & 2)
   {
     unsigned int  modelID1 = model.o->modelID;
@@ -695,7 +695,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
       {
         if (type == 0)
           addTerrainCell(*r);
-        else if (type == 2)
+        else
           addWaterCell(*r);
       }
       if (!isRecursive)
@@ -749,18 +749,15 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
       continue;
     if (*r2 == "SCOL" && !enableSCOL)
     {
-      if (type == 1)
-      {
-        addSCOLObjects(*r2, scale, rX, rY, rZ, offsX, offsY, offsZ,
-                       refrMSWPFormID);
-      }
+      addSCOLObjects(*r2, scale, rX, rY, rZ, offsX, offsY, offsZ,
+                     refrMSWPFormID);
       continue;
     }
     RenderObject  tmp;
     tmp.tileIndex = -1;
     tmp.z = 0;
     const BaseObject  *o = readModelProperties(tmp, *r2);
-    if (!o || (type & 2) != int((tmp.flags >> 1) & 2))
+    if (!o)
       continue;
     tmp.modelTransform = NIFFile::NIFVertexTransform(scale, rX, rY, rZ,
                                                      offsX, offsY, offsZ);
@@ -772,7 +769,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
       tmp.mswpFormID = loadMaterialSwap(o->mswpFormID);
     if (refrMSWPFormID)
       tmp.mswpFormID = loadMaterialSwap(refrMSWPFormID);
-    if (type == 2)
+    if (tmp.flags & 4)
       getWaterColor(tmp, *r2);
     objectList.push_back(tmp);
   }
@@ -1323,8 +1320,8 @@ void Renderer::renderObjectList()
       for (size_t j = i; j < objectList.size(); j++)
       {
         const RenderObject& p = objectList[j];
-        if ((o.flags ^ p.flags) & 7)
-          break;
+        if (!(p.flags & 0x02))
+          continue;
         if ((p.model.o->modelID & ~modelIDMask) != modelIDBase)
           break;
         unsigned int  n = p.model.o->modelID & modelIDMask;
@@ -1362,13 +1359,10 @@ void Renderer::renderObjectList()
     while (j < objectList.size())
     {
       const RenderObject& p = objectList[j];
-      if (((o.tileIndex ^ p.tileIndex) & ~63) || ((o.flags ^ p.flags) & 7))
+      if ((o.tileIndex ^ p.tileIndex) & ~63)
         break;
-      if ((o.flags & 2) &&
-          ((o.model.o->modelID ^ p.model.o->modelID) & ~modelIDMask))
-      {
+      if ((p.flags & 2) && (p.model.o->modelID & ~modelIDMask) != modelIDBase)
         break;
-      }
       size_t  triangleCnt = 2;
       if (p.flags & 0x02)
       {
@@ -1486,7 +1480,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       {
         // hidden or not the expected shader type
         if ((nifFiles[n].meshData[j].flags & 0x05) == 0x04 &&
-            nifFiles[n].meshData[j].texturePathMask)
+            (nifFiles[n].meshData[j].texturePathMask
+             | (nifFiles[n].meshData[j].flags & 0x02)))
         {
           objectList[i].flags |= (unsigned short) 0x08; // uses effect shader
         }
@@ -1547,28 +1542,19 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (BRANCH_UNLIKELY(t.renderer->flags & 0x02))
       {
         t.renderer->setRenderMode(3U | renderMode);
-        if (!(renderPass & 16))
+        if (!defaultWaterTexture.empty() &&
+            bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf)))
         {
-          t.renderer->drawTriShape(
-              p.modelTransform, viewTransform, lightX, lightY, lightZ,
-              (DDSTexture **) 0, 0);
+          textureMask |= 0x0002U;
         }
-        else
+        if (!defaultEnvMap.empty() &&
+            bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
         {
-          if (!defaultWaterTexture.empty() &&
-              bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf)))
-          {
-            textureMask |= 0x0002U;
-          }
-          if (!defaultEnvMap.empty() &&
-              bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
-          {
-            textureMask |= 0x0010U;
-          }
-          t.renderer->drawWater(
-              p.modelTransform, viewTransform, lightX, lightY, lightZ,
-              textures, textureMask, p.mswpFormID, waterReflectionLevel);
+          textureMask |= 0x0010U;
         }
+        t.renderer->drawWater(
+            p.modelTransform, viewTransform, lightX, lightY, lightZ,
+            textures, textureMask, p.mswpFormID, waterReflectionLevel);
       }
       else
       {
@@ -1684,35 +1670,27 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     tmp.triangleCnt = 2;
     tmp.vertexData = vTmp;
     tmp.triangleData = tTmp;
-    tmp.flags = 0x12;                   // water
+    tmp.flags = 0x16;                   // water, effect
+    tmp.alphaBlendScale = 128;
     tmp.texturePathMask = 0;
     tmp.texturePaths = (std::string **) 0;
     t.renderer->setRenderMode(3U | renderMode);
     *(t.renderer) = tmp;
-    if (!(renderPass & 16))
+    const DDSTexture  *textures[5];
+    unsigned int  textureMask = 0U;
+    if (!defaultWaterTexture.empty() &&
+        bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf)))
     {
-      t.renderer->drawTriShape(
-          p.modelTransform, viewTransform, lightX, lightY, lightZ,
-          (DDSTexture **) 0, 0);
+      textureMask |= 0x0002U;
     }
-    else
+    if (!defaultEnvMap.empty() &&
+        bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
     {
-      const DDSTexture  *textures[5];
-      unsigned int  textureMask = 0U;
-      if (!defaultWaterTexture.empty() &&
-          bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf)))
-      {
-        textureMask |= 0x0002U;
-      }
-      if (!defaultEnvMap.empty() &&
-          bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
-      {
-        textureMask |= 0x0010U;
-      }
-      t.renderer->drawWater(
-          p.modelTransform, viewTransform, lightX, lightY, lightZ,
-          textures, textureMask, p.mswpFormID, waterReflectionLevel);
+      textureMask |= 0x0010U;
     }
+    t.renderer->drawWater(
+        p.modelTransform, viewTransform, lightX, lightY, lightZ,
+        textures, textureMask, p.mswpFormID, waterReflectionLevel);
   }
   return true;
 }
@@ -2082,6 +2060,8 @@ void Renderer::renderObjects(unsigned int formID)
     std::fprintf(stderr, "Rendering objects\n");
   if (!formID)
     formID = getDefaultWorldID();
+  if (useESMWaterColors && waterColor == 0xFFFFFFFFU)
+    waterColor = 0xC0302010U;           // default water color
   clear(0x38);
   renderPass = 2;
   baseObjects.clear();
@@ -2089,37 +2069,9 @@ void Renderer::renderObjects(unsigned int formID)
   sortObjectList();
   renderObjectList();
   if (verboseMode)
-    std::fprintf(stderr, "Rendering effects\n");
+    std::fprintf(stderr, "Rendering water and effects\n");
   renderPass = 4;
   sortObjectList();
-  renderObjectList();
-}
-
-void Renderer::renderWater(unsigned int formID)
-{
-  if (verboseMode)
-    std::fprintf(stderr, "Rendering water\n");
-  if (!formID)
-    formID = getDefaultWorldID();
-  if (useESMWaterColors && waterColor == 0xFFFFFFFFU)
-    waterColor = 0xC0302010U;           // default water color
-  clear(0x38);
-  renderPass = 8;
-  findObjects(formID, 2);
-  sortObjectList();
-  bool    savedVerboseMode = verboseMode;
-  try
-  {
-    verboseMode = false;
-    renderObjectList();
-  }
-  catch (...)
-  {
-    verboseMode = savedVerboseMode;
-    throw;
-  }
-  verboseMode = savedVerboseMode;
-  renderPass = 16;
   renderObjectList();
 }
 
@@ -2691,8 +2643,6 @@ int main(int argc, char **argv)
       renderer.clear();
     }
     renderer.renderObjects(formID);
-    if (waterColor)
-      renderer.renderWater(formID);
     if (verboseMode)
     {
       const NIFFile::NIFBounds& b = renderer.getBounds();
@@ -2711,7 +2661,12 @@ int main(int argc, char **argv)
     width = width >> int(enableDownscale);
     height = height >> int(enableDownscale);
     DDSOutputFile outFile(args[1], width, height,
-                          DDSInputFile::pixelFormatRGB24);
+#if USE_PIXELFMT_RGB10A2
+                          DDSInputFile::pixelFormatR10G10B10A2
+#else
+                          DDSInputFile::pixelFormatRGB24
+#endif
+                          );
     const std::uint32_t *imageDataPtr = renderer.getImageData();
     size_t  imageDataSize = size_t(width) * size_t(height);
     std::vector< std::uint32_t >  downsampleBuf;
@@ -2722,13 +2677,13 @@ int main(int argc, char **argv)
                          width << 1, height << 1, width);
       imageDataPtr = &(downsampleBuf.front());
     }
-    for (size_t i = 0; i < imageDataSize; i++)
-    {
-      std::uint32_t c = imageDataPtr[i];
-      outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
-      outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
-      outFile.writeByte((unsigned char) (c & 0xFF));
-    }
+    outFile.writeImageData(imageDataPtr, imageDataSize,
+#if USE_PIXELFMT_RGB10A2
+                           DDSInputFile::pixelFormatR10G10B10A2
+#else
+                           DDSInputFile::pixelFormatRGB24
+#endif
+                           );
     err = 0;
   }
   catch (std::exception& e)

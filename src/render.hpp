@@ -148,7 +148,7 @@ class Renderer
   bool    enableTextures;
   unsigned char renderMode;
   unsigned char debugMode;
-  // 1: terrain, 2: objects, 4: effects, 8: water pass 1, 16: water pass 2
+  // 1: terrain, 2: objects, 4: effects
   unsigned char renderPass;
   int     threadCnt;
   size_t  textureDataSize;
@@ -194,7 +194,7 @@ class Renderer
                       float scale, float rX, float rY, float rZ,
                       float offsX, float offsY, float offsZ,
                       unsigned int refrMSWPFormID);
-  // type = 0: terrain, type = 1: solid objects, type = 2: water
+  // type = 0: terrain, type = 1: objects
   void findObjects(unsigned int formID, int type, bool isRecursive);
   void findObjects(unsigned int formID, int type);
   void sortObjectList();
@@ -357,7 +357,6 @@ class Renderer
                    int xMax = 32767, int yMax = 32767);
   void renderTerrain(unsigned int worldID = 0U);
   void renderObjects(unsigned int formID = 0U);
-  void renderWater(unsigned int formID = 0U);
   inline const NIFFile::NIFBounds& getBounds() const
   {
     return worldBounds;

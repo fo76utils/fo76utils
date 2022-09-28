@@ -351,7 +351,6 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   FloatVector4  viewTransformInvY;
   FloatVector4  viewTransformInvZ;
   FloatVector4  specularColorFloat;     // water color for drawWater()
-  float   viewScale;
   unsigned int  debugMode;
   // offs = frame buffer offset (y * width + x)
   void    (*drawPixelFunction)(Plot3D_TriShape& p, size_t offs, Vertex& z);
@@ -396,11 +395,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   inline FloatVector4 calculateLighting_Water(
       FloatVector4 c0, FloatVector4 n, FloatVector4 reflectedView, float a,
       bool isFO76) const;
-  // fill with water (first and second pass)
+  // fill with water
   static void drawPixel_Water(Plot3D_TriShape& p, size_t offs, Vertex& z);
-  static void drawPixel_Water_2(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // with GGX
-  static void drawPixel_Water_2G(Plot3D_TriShape& p, size_t offs, Vertex& z);
+  static void drawPixel_Water_G(Plot3D_TriShape& p, size_t offs, Vertex& z);
   // alphaFlag is set to true if the pixel is visible (alpha >= threshold)
   inline FloatVector4 getDiffuseColor(
       float txtU, float txtV, const Vertex& z, bool& alphaFlag,
@@ -423,7 +421,6 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   void drawLine(Vertex& v, const Vertex& v0, const Vertex& v1);
   void drawTriangles();
  public:
-  // alpha = 255 - sqrt(waterDepth*16) after first pass water rendering.
   // mode =  4: Skyrim
   // mode =  8: Fallout 4
   // mode = 12: Fallout 76
@@ -478,7 +475,6 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                     float lightX, float lightY, float lightZ,
                     const DDSTexture * const *textures,
                     unsigned int textureMask);
-  // drawWater() should be called to render water meshes in a second pass.
   // waterColor is in 0xAABBGGRR format, the alpha channel contains the depth
   // beyond which the water has maximum opacity, as alpha = 256 - sqrt(depth*8).
   void drawWater(const NIFFile::NIFVertexTransform& modelTransform,
@@ -487,14 +483,14 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                  const DDSTexture * const *textures, unsigned int textureMask,
                  std::uint32_t waterColor, float envMapLevel = 1.0f);
   // n = 0: default mode
-  // n = 1: render c as a solid color (0x00RRGGBB)
-  // n = 2: Z * 16 (blue = LSB, red = MSB)
+  // n = 1: render c as a solid color (0xRRGGBB)
+  // n = 2: Z * 16 (blue = LSB), or Z * 64 (red = LSB) if USE_PIXELFMT_RGB10A2=1
   // n = 3: normal map
   // n = 4: disable lighting and reflections
   // n = 5: lighting only (white texture)
   void setDebugMode(unsigned int n, std::uint32_t c)
   {
-    debugMode = (n <= 5U ? (n != 1U ? n : (0xFF000000U | c)) : 0U);
+    debugMode = (n <= 5U ? (n != 1U ? n : (0x80000000U | c)) : 0U);
   }
   // Calculate ambient light from the average color of a cube map.
   FloatVector4 cubeMapToAmbient(const DDSTexture *e) const;
