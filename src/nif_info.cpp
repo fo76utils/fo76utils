@@ -467,14 +467,16 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
   std::vector< std::uint32_t >  downsampleBuf(imageDataSize);
   downsample2xFilter(&(downsampleBuf.front()), &(outBufRGBA.front()),
                      imageWidth, imageHeight, w);
+#if USE_PIXELFMT_RGB10A2
+  DDSOutputFile outFile(outFileName, w, h,
+                        DDSInputFile::pixelFormatR10G10B10A2);
+  outFile.writeImageData(&(downsampleBuf.front()), imageDataSize,
+                         DDSInputFile::pixelFormatR10G10B10A2);
+#else
   DDSOutputFile outFile(outFileName, w, h, DDSInputFile::pixelFormatRGB24);
-  for (size_t i = 0; i < imageDataSize; i++)
-  {
-    std::uint32_t c = downsampleBuf[i];
-    outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
-    outFile.writeByte((unsigned char) ((c >> 8) & 0xFF));
-    outFile.writeByte((unsigned char) (c & 0xFF));
-  }
+  outFile.writeImageData(&(downsampleBuf.front()), imageDataSize,
+                         DDSInputFile::pixelFormatRGB24);
+#endif
 }
 
 static void updateRotation(float& rx, float& ry, float& rz,

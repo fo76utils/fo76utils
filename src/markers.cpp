@@ -75,7 +75,7 @@ static void createIcon256(std::vector< unsigned char >& buf, unsigned int c)
     }
     cTmp[3] = (cTmp[3] > 0.0f ? (cTmp[3] < 255.0f ? cTmp[3] : 255.0f) : 0.0f);
     cTmp[3] = cTmp[3] * a0;
-    unsigned int  n = (unsigned int) cTmp;
+    std::uint32_t n = std::uint32_t(cTmp);
     unsigned char *p = &(buf.front()) + ((i << 2) + 128);
     p[0] = (unsigned char) (n & 0xFFU);
     p[1] = (unsigned char) ((n >> 8) & 0xFFU);
@@ -265,7 +265,7 @@ class MapImage : public ESMFile
   };
  protected:
   const std::vector< MarkerDef >& markerDefs;
-  std::vector< unsigned int > buf;
+  std::vector< std::uint32_t >  buf;
   size_t  imageWidth;
   size_t  imageHeight;
   NIFFile::NIFVertexTransform viewTransform;
@@ -298,7 +298,7 @@ class MapImage : public ESMFile
   bool getREFRRecord(REFRRecord& r, unsigned int formID);
   void drawIcon(size_t n, float x, float y, float z);
   void findMarkers(unsigned int worldID = 0U);
-  inline const std::vector< unsigned int >& getImageData() const
+  inline const std::vector< std::uint32_t >& getImageData() const
   {
     return buf;
   }
@@ -584,7 +584,7 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
     }
     if ((yi + yy) < 0 || (yi + yy) >= int(imageHeight))
       continue;
-    unsigned int  *p = &(buf.front()) + (size_t(yi + yy) * imageWidth);
+    std::uint32_t *p = &(buf.front()) + (size_t(yi + yy) * imageWidth);
     int     xx = 0;
     if (xi < 0)
       xx = -xi;
@@ -624,7 +624,7 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
         a = (1.0f - ((1.0f - a0) * (1.0f - a))) * 255.0f;
       }
       c[3] = a;
-      *p = (unsigned int) c;
+      *p = std::uint32_t(c);
     }
   }
 }
@@ -926,14 +926,10 @@ int main(int argc, char **argv)
 
     DDSOutputFile outFile(argv[2], imageWidth, imageHeight,
                           DDSInputFile::pixelFormatRGBA32);
-    const std::vector< unsigned int >&  buf = mapImage.getImageData();
-    for (size_t i = 0; i < buf.size(); i++)
-    {
-      outFile.writeByte((unsigned char) ((buf[i] >> 16) & 0xFF));
-      outFile.writeByte((unsigned char) ((buf[i] >> 8) & 0xFF));
-      outFile.writeByte((unsigned char) (buf[i] & 0xFF));
-      outFile.writeByte((unsigned char) ((buf[i] >> 24) & 0xFF));
-    }
+    const std::vector< std::uint32_t >& buf = mapImage.getImageData();
+    outFile.writeImageData(&(buf.front()), buf.size(),
+                           DDSInputFile::pixelFormatRGBA32,
+                           DDSInputFile::pixelFormatRGBA32);
     outFile.flush();
 
     for (size_t i = 0; i < markerDefs.size(); i++)
