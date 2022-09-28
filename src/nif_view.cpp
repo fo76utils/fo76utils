@@ -144,13 +144,10 @@ void Renderer::threadFunction(Renderer *p, size_t n)
     NIFFile::NIFVertexTransform mt(p->modelTransform);
     mt *= vt;
     vt.offsY = vt.offsY - float(p->viewOffsetY[n]);
-    bool    haveWater = false;
     for (size_t i = 0; i < p->meshData.size(); i++)
     {
       if (p->meshData[i].flags & 0x01)          // ignore if hidden
         continue;
-      if (p->meshData[i].flags & 0x02)
-        haveWater = true;
       NIFFile::NIFBounds  b;
       p->meshData[i].calculateBounds(b, &mt);
       if (roundFloat(b.xMax()) < 0 ||
@@ -174,40 +171,8 @@ void Renderer::threadFunction(Renderer *p, size_t n)
     {
       const NIFFile::NIFTriShape& ts = *(sortBuf[i].ts);
       *(p->renderers[n]) = ts;
-      const DDSTexture  *textures[10];
-      unsigned int  texturePathMask = (!(ts.flags & 0x80) ? 0x037BU : 0x037FU)
-                                      & (unsigned int) ts.texturePathMask;
-      unsigned int  textureMask = 0U;
-      for (size_t j = 0; j < 10; j++, texturePathMask >>= 1)
+      if (BRANCH_UNLIKELY(ts.flags & 0x02))
       {
-        if (texturePathMask & 1)
-        {
-          if (bool(textures[j] = p->loadTexture(ts.texturePaths[j])))
-            textureMask |= (1U << (unsigned char) j);
-        }
-      }
-      if (!(textureMask & 0x0001U))
-      {
-        textures[0] = &(p->whiteTexture);
-        textureMask |= 0x0001U;
-      }
-      if (!(textureMask & 0x0010U) && ts.envMapScale > 0)
-      {
-        if (bool(textures[4] = p->loadTexture(&(p->defaultEnvMap))))
-          textureMask |= 0x0010U;
-      }
-      p->renderers[n]->drawTriShape(p->modelTransform, vt,
-                                    p->lightX, p->lightY, p->lightZ,
-                                    textures, textureMask);
-    }
-    if (haveWater)
-    {
-      for (size_t i = 0; i < sortBuf.size(); i++)
-      {
-        const NIFFile::NIFTriShape& ts = *(sortBuf[i].ts);
-        if ((ts.flags & 0x07) != 0x02)          // ignore if not water
-          continue;
-        *(p->renderers[n]) = ts;
         const DDSTexture  *textures[5];
         unsigned int  textureMask = 0U;
         if (bool(textures[1] = p->loadTexture(&(p->waterTexture))))
@@ -218,6 +183,34 @@ void Renderer::threadFunction(Renderer *p, size_t n)
                                    p->lightX, p->lightY, p->lightZ,
                                    textures, textureMask,
                                    p->waterColor, p->waterEnvMapLevel);
+      }
+      else
+      {
+        const DDSTexture  *textures[10];
+        unsigned int  texturePathMask = (!(ts.flags & 0x80) ? 0x037BU : 0x037FU)
+                                        & (unsigned int) ts.texturePathMask;
+        unsigned int  textureMask = 0U;
+        for (size_t j = 0; j < 10; j++, texturePathMask >>= 1)
+        {
+          if (texturePathMask & 1)
+          {
+            if (bool(textures[j] = p->loadTexture(ts.texturePaths[j])))
+              textureMask |= (1U << (unsigned char) j);
+          }
+        }
+        if (!(textureMask & 0x0001U))
+        {
+          textures[0] = &(p->whiteTexture);
+          textureMask |= 0x0001U;
+        }
+        if (!(textureMask & 0x0010U) && ts.envMapScale > 0)
+        {
+          if (bool(textures[4] = p->loadTexture(&(p->defaultEnvMap))))
+            textureMask |= 0x0010U;
+        }
+        p->renderers[n]->drawTriShape(p->modelTransform, vt,
+                                      p->lightX, p->lightY, p->lightZ,
+                                      textures, textureMask);
       }
     }
   }
