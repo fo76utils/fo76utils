@@ -401,20 +401,27 @@ void OutputFile::flushBuffer()
 {
   unsigned int  n = bufWritePos;
   bufWritePos = 0;
-  writeData(&(buf.front()), sizeof(unsigned char) * n);
+  writeData(buf, sizeof(unsigned char) * n);
 }
 
 OutputFile::OutputFile(const char *fileName, size_t bufSize)
-  : bufWritePos(0),
-    buf(bufSize)
+  : buf((unsigned char *) 0),
+    bufferSize(bufSize),
+    bufWritePos(0)
 {
+  if (bufSize > 0)
+    buf = new unsigned char[bufSize];
 #if defined(_WIN32) || defined(_WIN64)
   f = fopen64(fileName, "wb");
 #else
   f = std::fopen(fileName, "wb");
 #endif
   if (!f)
+  {
+    if (buf)
+      delete[] buf;
     throw errorMessage("error opening output file \"%s\"", fileName);
+  }
 #if defined(_WIN32) || defined(_WIN64)
   fileDesc = _fileno(f);
 #else
@@ -435,6 +442,8 @@ OutputFile::~OutputFile()
     }
   }
   (void) std::fclose(f);
+  if (buf)
+    delete[] buf;
 }
 
 void OutputFile::writeData(const void *p, size_t n)
@@ -803,5 +812,91 @@ DDSOutputFile::DDSOutputFile(const char *fileName,
 
 DDSOutputFile::~DDSOutputFile()
 {
+}
+
+void DDSOutputFile::writeImageData(
+    const std::uint32_t *p, size_t n, int pixelFormatOut, int pixelFormatIn)
+{
+  if (pixelFormatIn == DDSInputFile::pixelFormatR10G10B10A2)
+  {
+    if (pixelFormatOut == DDSInputFile::pixelFormatR10G10B10A2)
+    {
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+      writeData(p, n * sizeof(std::uint32_t));
+#else
+      for ( ; n > 0; p++, n--)
+      {
+        std::uint32_t c = *p;
+        writeByte((unsigned char) (c & 0xFF));
+        writeByte((unsigned char) ((c >> 8) & 0xFF));
+        writeByte((unsigned char) ((c >> 16) & 0xFF));
+        writeByte((unsigned char) ((c >> 24) & 0xFF));
+      }
+#endif
+      return;
+    }
+  }
+  else if (pixelFormatOut == DDSInputFile::pixelFormatRGB24)
+  {
+    for ( ; n > 0; p++, n--)
+    {
+      std::uint32_t c = *p;
+      writeByte((unsigned char) ((c >> 16) & 0xFF));    // B
+      writeByte((unsigned char) ((c >> 8) & 0xFF));     // G
+      writeByte((unsigned char) (c & 0xFF));            // R
+    }
+    return;
+  }
+  else if (pixelFormatOut == DDSInputFile::pixelFormatRGBA32)
+  {
+    for ( ; n > 0; p++, n--)
+    {
+      std::uint32_t c = *p;
+      writeByte((unsigned char) ((c >> 16) & 0xFF));    // B
+      writeByte((unsigned char) ((c >> 8) & 0xFF));     // G
+      writeByte((unsigned char) (c & 0xFF));            // R
+      writeByte((unsigned char) ((c >> 24) & 0xFF));    // A
+    }
+    return;
+  }
+  for ( ; n > 0; p++, n--)
+  {
+    FloatVector4  tmp;
+    if (pixelFormatIn == DDSInputFile::pixelFormatR10G10B10A2)
+      tmp = FloatVector4::convertR10G10B10A2(*p);
+    else
+      tmp = FloatVector4(p);
+    if (pixelFormatOut == DDSInputFile::pixelFormatRGB24)
+    {
+      std::uint32_t c = std::uint32_t(tmp);
+      writeByte((unsigned char) ((c >> 16) & 0xFF));
+      writeByte((unsigned char) ((c >> 8) & 0xFF));
+      writeByte((unsigned char) (c & 0xFF));
+    }
+    else if (pixelFormatOut == DDSInputFile::pixelFormatRGBA32)
+    {
+      std::uint32_t c = std::uint32_t(tmp);
+      writeByte((unsigned char) ((c >> 16) & 0xFF));
+      writeByte((unsigned char) ((c >> 8) & 0xFF));
+      writeByte((unsigned char) (c & 0xFF));
+      writeByte((unsigned char) ((c >> 24) & 0xFF));
+    }
+    else if (pixelFormatOut == DDSInputFile::pixelFormatR10G10B10A2)
+    {
+      std::uint32_t c = tmp.convertToR10G10B10A2(true);
+      writeByte((unsigned char) (c & 0xFF));
+      writeByte((unsigned char) ((c >> 8) & 0xFF));
+      writeByte((unsigned char) ((c >> 16) & 0xFF));
+      writeByte((unsigned char) ((c >> 24) & 0xFF));
+    }
+    else if (pixelFormatOut == DDSInputFile::pixelFormatRGBA16)
+    {
+      tmp *= FloatVector4(31.0f / 255.0f, 31.0f / 255.0f, 31.0f / 255.0f, 1.0f);
+      std::uint32_t c = std::uint32_t(tmp);
+      c = ((c << 10) & 0x7C00U) | ((c >> 3) & 0x03E0U) | ((c >> 16) & 0x801FU);
+      writeByte((unsigned char) (c & 0xFF));
+      writeByte((unsigned char) ((c >> 8) & 0xFF));
+    }
+  }
 }
 

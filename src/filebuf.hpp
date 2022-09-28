@@ -132,10 +132,11 @@ inline bool FileBuffer::checkType(unsigned int id, const char *s)
 class OutputFile
 {
  protected:
-  std::FILE     *f;
-  int           fileDesc;
+  unsigned char *buf;
+  size_t        bufferSize;
   unsigned int  bufWritePos;
-  std::vector< unsigned char >  buf;
+  int           fileDesc;
+  std::FILE     *f;
   void flushBuffer();
  public:
   OutputFile(const char *fileName, size_t bufSize = 4096);
@@ -144,7 +145,7 @@ class OutputFile
   inline void writeByte(unsigned char c)
   {
     buf[bufWritePos] = c;
-    if (++bufWritePos >= buf.size())
+    if (++bufWritePos >= bufferSize)
       flushBuffer();
   }
   void flush();
@@ -230,6 +231,15 @@ class DDSOutputFile : public OutputFile
                 const unsigned int *hdrReserved = (unsigned int *) 0,
                 size_t bufSize = 16384);
   virtual ~DDSOutputFile();
+  // pixelFormatIn must be either pixelFormatRGBA32 or pixelFormatR10G10B10A2
+  void writeImageData(const std::uint32_t *p, size_t n, int pixelFormatOut,
+                      int pixelFormatIn =
+#if USE_PIXELFMT_RGB10A2
+                          DDSInputFile::pixelFormatR10G10B10A2
+#else
+                          DDSInputFile::pixelFormatRGBA32
+#endif
+                      );
 };
 
 #endif
