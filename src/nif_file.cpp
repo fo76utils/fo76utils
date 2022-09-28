@@ -816,18 +816,19 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
     }
     else if (baseBlockType == BlkTypeBSWaterShaderProperty)
     {
-      t.flags = t.flags | 0x12;
+      t.flags = t.flags | 0x16;
+      t.alphaBlendScale = 128;
     }
     else
     {
       // unknown shader type
+      t.flags = t.flags | 0x01;
       return;
     }
   }
-  if ((t.texturePathMask & 1) &&
-      t.texturePaths[0]->find("/fxwater") != std::string::npos)
+  else
   {
-    t.flags = t.flags | 0x12;
+    t.flags = t.flags | 0x01;
   }
   v.push_back(t);
 }

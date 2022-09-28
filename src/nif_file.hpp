@@ -150,7 +150,7 @@ class NIFFile : public FileBuffer
     NIFVertexTransform  vertexTransform;
     // bit 0: hidden
     // bit 1: is water
-    // bit 2: is effect
+    // bit 2: is effect (also set for water)
     // bit 3: is decal
     // bit 4: two sided (disables culling)
     // bit 5: tree (disables vertex alpha)
