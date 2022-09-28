@@ -1003,8 +1003,8 @@ void downsample2xFilter_Line(std::uint32_t *linePtr, const std::uint32_t *inBuf,
                              int imageWidth, int imageHeight, int y,
                              unsigned char fmtFlags)
 {
-  // ring buffer for vertically filtered image data
-  FloatVector4  tmpBuf[16];
+  // buffer for vertically filtered line data
+  FloatVector4  tmpBuf[15];
   const std::uint32_t *inBufPtrs[9];
   inBufPtrs[0] = inBuf + (size_t(y) * size_t(imageWidth));
   for (int i = 0; i < 8; i = i + 2)
@@ -1017,42 +1017,52 @@ void downsample2xFilter_Line(std::uint32_t *linePtr, const std::uint32_t *inBuf,
     inBufPtrs[i + 2] = inBuf + (size_t(yc) * size_t(imageWidth));
   }
   int     xc = 0;
-  for (int i = 0; i < 8; i++, xc += int(xc < (imageWidth - 1)))
+  for (int i = 7; i < 15; i++, xc += int(xc < (imageWidth - 1)))
   {
     if (!(fmtFlags & 1))
       tmpBuf[i] = downsample2xFunc_R8G8B8A8(inBufPtrs, xc);
     else
       tmpBuf[i] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
   }
-  for (int i = 8; i < 16; i++)
-    tmpBuf[i] = tmpBuf[0];
+  for (int i = 0; i < 7; i++)
+    tmpBuf[i] = tmpBuf[7];
   for (int i = 0; i < imageWidth; i = i + 2, linePtr++)
   {
-    FloatVector4  c(tmpBuf[i & 15]);
-    c += ((tmpBuf[(i - 1) & 15] + tmpBuf[(i + 1) & 15])
-          * downsample2xFilterTable[1]);
-    c += ((tmpBuf[(i - 3) & 15] + tmpBuf[(i + 3) & 15])
-          * downsample2xFilterTable[2]);
-    c += ((tmpBuf[(i - 5) & 15] + tmpBuf[(i + 5) & 15])
-          * downsample2xFilterTable[3]);
-    c += ((tmpBuf[(i - 7) & 15] + tmpBuf[(i + 7) & 15])
-          * downsample2xFilterTable[4]);
-    c = (c * 0.25f).srgbCompress();     // clamps to 0.0 - 255.0
+    FloatVector4  c(tmpBuf[7]);
+    c += ((tmpBuf[6] + tmpBuf[8]) * downsample2xFilterTable[1]);
+    c += ((tmpBuf[4] + tmpBuf[10]) * downsample2xFilterTable[2]);
+    c += ((tmpBuf[2] + tmpBuf[12]) * downsample2xFilterTable[3]);
+    c += ((tmpBuf[0] + tmpBuf[14]) * downsample2xFilterTable[4]);
+    c.maxValues(FloatVector4(1.0f / (float(1LL << 42) * float(1LL << 42))));
+    for (int j = 0; j < 12; j = j + 4)
+    {
+      tmpBuf[j] = tmpBuf[j + 2];
+      tmpBuf[j + 1] = tmpBuf[j + 3];
+      tmpBuf[j + 2] = tmpBuf[j + 4];
+      tmpBuf[j + 3] = tmpBuf[j + 5];
+    }
+    tmpBuf[12] = tmpBuf[14];
+    // convert to sRGB color space
+    FloatVector4  tmp1(c * (0.03876962f * (255.0f / 8.0f))
+                       + (1.15864660f * (255.0f / 2.0f)));
+    FloatVector4  tmp2(c);
+    tmp2.rsqrtFast();
+    c = c * (tmp1 * tmp2 - (0.19741622f * (255.0f / 4.0f)));
     if (!(fmtFlags & 2))
       *linePtr = std::uint32_t(c);
     else
-      *linePtr = c.convertToR10G10B10A2(true);
+      *linePtr = c.convertToR10G10B10A2();
     if (!(fmtFlags & 1))
     {
-      tmpBuf[(i + 8) & 15] = downsample2xFunc_R8G8B8A8(inBufPtrs, xc);
+      tmpBuf[13] = downsample2xFunc_R8G8B8A8(inBufPtrs, xc);
       xc += int(xc < (imageWidth - 1));
-      tmpBuf[(i + 9) & 15] = downsample2xFunc_R8G8B8A8(inBufPtrs, xc);
+      tmpBuf[14] = downsample2xFunc_R8G8B8A8(inBufPtrs, xc);
     }
     else
     {
-      tmpBuf[(i + 8) & 15] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
+      tmpBuf[13] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
       xc += int(xc < (imageWidth - 1));
-      tmpBuf[(i + 9) & 15] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
+      tmpBuf[14] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
     }
     xc += int(xc < (imageWidth - 1));
   }
