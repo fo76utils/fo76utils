@@ -29,6 +29,10 @@ typedef std::int64_t  YMM_Int64 __attribute__ ((__vector_size__ (32)));
 #  endif
 #endif
 
+#ifndef USE_PIXELFMT_RGB10A2
+#  define USE_PIXELFMT_RGB10A2  0
+#endif
+
 struct FloatVector4
 {
 #if ENABLE_X86_64_AVX
@@ -54,7 +58,7 @@ struct FloatVector4
   inline FloatVector4(const std::uint32_t *p1, const std::uint32_t *p2);
   inline FloatVector4(float v0, float v1, float v2, float v3);
   inline FloatVector4(const float *p);
-  // construct from 4 R8G8B8A8 colors with bilinear filtering
+  // construct from 4 R8G8B8A8 colors with bilinear interpolation
   inline FloatVector4(unsigned int c0, unsigned int c1,
                       unsigned int c2, unsigned int c3,
                       float xf, float yf, bool isSRGB = false);
@@ -68,6 +72,8 @@ struct FloatVector4
                       float xf, float yf, bool isSRGB = false);
   static inline FloatVector4 convertFloat16(std::uint64_t n);
   static inline FloatVector4 convertR10G10B10A2(const std::uint32_t& c);
+  // convert from the pixel format selected with USE_PIXELFMT_RGB10A2
+  static inline FloatVector4 convertRGBA32(const std::uint32_t& c);
   inline float& operator[](size_t n)
   {
     return v[n];
@@ -93,6 +99,8 @@ struct FloatVector4
   inline FloatVector4 operator*(const float& r) const;
   inline FloatVector4 operator/(const float& r) const;
   inline FloatVector4& clearV3();
+  inline FloatVector4& minValues(const FloatVector4& r);
+  inline FloatVector4& maxValues(const FloatVector4& r);
   inline float dotProduct(const FloatVector4& r) const;
   // dot product of first three elements
   inline float dotProduct3(const FloatVector4& r) const;
@@ -100,6 +108,7 @@ struct FloatVector4
   inline float dotProduct2(const FloatVector4& r) const;
   inline FloatVector4& squareRoot();
   inline FloatVector4& squareRootFast();
+  inline FloatVector4& rsqrtFast();     // elements must be positive
   static inline float squareRootFast(float x);
   static inline float log2Fast(float x);
   static inline int log2Int(int x);
@@ -110,14 +119,15 @@ struct FloatVector4
   inline FloatVector4& normalizeFast();
   // normalize first three elements
   inline FloatVector4& normalize3Fast();
-  inline FloatVector4& minValues(const FloatVector4& r);
-  inline FloatVector4& maxValues(const FloatVector4& r);
   // 0.0 - 255.0 sRGB -> 0.0 - 1.0 linear
   inline FloatVector4& srgbExpand();
   // 0.0 - 1.0 linear -> 0.0 - 255.0 sRGB
   inline FloatVector4& srgbCompress();
   inline operator std::uint32_t() const;
   inline std::uint32_t convertToR10G10B10A2(bool noClamp = false) const;
+  // convert to the pixel format selected with USE_PIXELFMT_RGB10A2
+  inline std::uint32_t convertToRGBA32(bool noAlpha = false,
+                                       bool noClamp = false) const;
 };
 
 #if ENABLE_X86_64_AVX
@@ -311,6 +321,18 @@ inline FloatVector4& FloatVector4::clearV3()
   return (*this);
 }
 
+inline FloatVector4& FloatVector4::minValues(const FloatVector4& r)
+{
+  __asm__ ("vminps %1, %0, %0" : "+x" (v) : "xm" (r.v));
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::maxValues(const FloatVector4& r)
+{
+  __asm__ ("vmaxps %1, %0, %0" : "+x" (v) : "xm" (r.v));
+  return (*this);
+}
+
 inline float FloatVector4::dotProduct(const FloatVector4& r) const
 {
   XMM_Float tmp1;
@@ -360,6 +382,12 @@ inline FloatVector4& FloatVector4::squareRootFast()
   __asm__ ("vmaxps %1, %0, %0" : "+x" (tmp1) : "xm" (tmp2));
   __asm__ ("vrsqrtps %1, %0" : "=x" (v) : "x" (tmp1));
   v *= tmp1;
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::rsqrtFast()
+{
+  __asm__ ("vrsqrtps %0, %0" : "+x" (v));
   return (*this);
 }
 
@@ -453,18 +481,6 @@ inline FloatVector4& FloatVector4::normalize3Fast()
   __asm__ ("vaddps %1, %0, %0" : "+x" (tmp2) : "x" (tmp3));
   __asm__ ("vrsqrtps %0, %0" : "+x" (tmp2));
   v = tmp * tmp2;
-  return (*this);
-}
-
-inline FloatVector4& FloatVector4::minValues(const FloatVector4& r)
-{
-  __asm__ ("vminps %1, %0, %0" : "+x" (v) : "xm" (r.v));
-  return (*this);
-}
-
-inline FloatVector4& FloatVector4::maxValues(const FloatVector4& r)
-{
-  __asm__ ("vmaxps %1, %0, %0" : "+x" (v) : "xm" (r.v));
   return (*this);
 }
 
@@ -721,6 +737,24 @@ inline FloatVector4& FloatVector4::clearV3()
   return (*this);
 }
 
+inline FloatVector4& FloatVector4::minValues(const FloatVector4& r)
+{
+  v[0] = (r.v[0] < v[0] ? r.v[0] : v[0]);
+  v[1] = (r.v[1] < v[1] ? r.v[1] : v[1]);
+  v[2] = (r.v[2] < v[2] ? r.v[2] : v[2]);
+  v[3] = (r.v[3] < v[3] ? r.v[3] : v[3]);
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::maxValues(const FloatVector4& r)
+{
+  v[0] = (r.v[0] > v[0] ? r.v[0] : v[0]);
+  v[1] = (r.v[1] > v[1] ? r.v[1] : v[1]);
+  v[2] = (r.v[2] > v[2] ? r.v[2] : v[2]);
+  v[3] = (r.v[3] > v[3] ? r.v[3] : v[3]);
+  return (*this);
+}
+
 inline float FloatVector4::dotProduct(const FloatVector4& r) const
 {
   FloatVector4  tmp(*this);
@@ -742,19 +776,30 @@ inline float FloatVector4::dotProduct2(const FloatVector4& r) const
 
 inline FloatVector4& FloatVector4::squareRoot()
 {
-  v[0] = (v[0] > 0.0f ? float(std::sqrt(v[0])) : 0.0f);
-  v[1] = (v[1] > 0.0f ? float(std::sqrt(v[1])) : 0.0f);
-  v[2] = (v[2] > 0.0f ? float(std::sqrt(v[2])) : 0.0f);
-  v[3] = (v[3] > 0.0f ? float(std::sqrt(v[3])) : 0.0f);
+  maxValues(FloatVector4(0.0f));
+  v[0] = float(std::sqrt(v[0]));
+  v[1] = float(std::sqrt(v[1]));
+  v[2] = float(std::sqrt(v[2]));
+  v[3] = float(std::sqrt(v[3]));
   return (*this);
 }
 
 inline FloatVector4& FloatVector4::squareRootFast()
 {
-  v[0] = (v[0] > 0.0f ? float(std::sqrt(v[0])) : 0.0f);
-  v[1] = (v[1] > 0.0f ? float(std::sqrt(v[1])) : 0.0f);
-  v[2] = (v[2] > 0.0f ? float(std::sqrt(v[2])) : 0.0f);
-  v[3] = (v[3] > 0.0f ? float(std::sqrt(v[3])) : 0.0f);
+  maxValues(FloatVector4(0.0f));
+  v[0] = float(std::sqrt(v[0]));
+  v[1] = float(std::sqrt(v[1]));
+  v[2] = float(std::sqrt(v[2]));
+  v[3] = float(std::sqrt(v[3]));
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::rsqrtFast()
+{
+  v[0] = 1.0f / float(std::sqrt(v[0]));
+  v[1] = 1.0f / float(std::sqrt(v[1]));
+  v[2] = 1.0f / float(std::sqrt(v[2]));
+  v[3] = 1.0f / float(std::sqrt(v[3]));
   return (*this);
 }
 
@@ -815,24 +860,6 @@ inline FloatVector4& FloatVector4::normalize3Fast()
   v[3] = 1.0f / float(0x0000040000000000LL);
   float   tmp = dotProduct(*this);
   *this *= (1.0f / float(std::sqrt(tmp)));
-  return (*this);
-}
-
-inline FloatVector4& FloatVector4::minValues(const FloatVector4& r)
-{
-  v[0] = (r.v[0] < v[0] ? r.v[0] : v[0]);
-  v[1] = (r.v[1] < v[1] ? r.v[1] : v[1]);
-  v[2] = (r.v[2] < v[2] ? r.v[2] : v[2]);
-  v[3] = (r.v[3] < v[3] ? r.v[3] : v[3]);
-  return (*this);
-}
-
-inline FloatVector4& FloatVector4::maxValues(const FloatVector4& r)
-{
-  v[0] = (r.v[0] > v[0] ? r.v[0] : v[0]);
-  v[1] = (r.v[1] > v[1] ? r.v[1] : v[1]);
-  v[2] = (r.v[2] > v[2] ? r.v[2] : v[2]);
-  v[3] = (r.v[3] > v[3] ? r.v[3] : v[3]);
   return (*this);
 }
 
@@ -973,6 +1000,26 @@ inline FloatVector4::FloatVector4(
            + float(0.83083428 / 65025.0));
   }
   *this = v0;
+}
+
+inline FloatVector4 FloatVector4::convertRGBA32(const std::uint32_t& c)
+{
+#if USE_PIXELFMT_RGB10A2
+  return FloatVector4::convertR10G10B10A2(c);
+#else
+  return FloatVector4(&c);
+#endif
+}
+
+inline std::uint32_t FloatVector4::convertToRGBA32(
+    bool noAlpha, bool noClamp) const
+{
+#if USE_PIXELFMT_RGB10A2
+  return (convertToR10G10B10A2(noClamp) | (!noAlpha ? 0U : 0xC0000000U));
+#else
+  (void) noClamp;
+  return (std::uint32_t(*this) | (!noAlpha ? 0U : 0xFF000000U));
+#endif
 }
 
 #endif
