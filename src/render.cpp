@@ -693,10 +693,15 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     {
       if (*r == "CELL")
       {
-        if (type == 0)
-          addTerrainCell(*r);
-        else
-          addWaterCell(*r);
+        const ESMFile::ESMRecord  *r2;
+        if (!(r->parent && bool(r2 = esmFile.getRecordPtr(r->parent)) &&
+              r2->formID == 1U))        // ignore starting cell at 0, 0
+        {
+          if (type == 0)
+            addTerrainCell(*r);
+          else
+            addWaterCell(*r);
+        }
       }
       if (!isRecursive)
         break;
@@ -803,27 +808,7 @@ void Renderer::findObjects(unsigned int formID, int type)
               r2->children)
           {
             // world children
-            if (type == 0)
-            {
-              unsigned int  cellBlockID = r2->children;
-              while (cellBlockID)
-              {
-                const ESMFile::ESMRecord  *r3 =
-                    esmFile.getRecordPtr(cellBlockID);
-                if (!r3)
-                  break;
-                if (*r3 == "GRUP" && r3->formID == 4 && r3->children)
-                {
-                  // exterior cell block
-                  findObjects(r3->children, type, true);
-                }
-                cellBlockID = r3->next;
-              }
-            }
-            else
-            {
-              findObjects(r2->children, type, true);
-            }
+            findObjects(r2->children, type, true);
           }
           groupID = r2->next;
         }
@@ -2662,7 +2647,7 @@ int main(int argc, char **argv)
     height = height >> int(enableDownscale);
     DDSOutputFile outFile(args[1], width, height,
 #if USE_PIXELFMT_RGB10A2
-                          DDSInputFile::pixelFormatR10G10B10A2
+                          DDSInputFile::pixelFormatA2R10G10B10
 #else
                           DDSInputFile::pixelFormatRGB24
 #endif
@@ -2679,7 +2664,7 @@ int main(int argc, char **argv)
     }
     outFile.writeImageData(imageDataPtr, imageDataSize,
 #if USE_PIXELFMT_RGB10A2
-                           DDSInputFile::pixelFormatR10G10B10A2
+                           DDSInputFile::pixelFormatA2R10G10B10
 #else
                            DDSInputFile::pixelFormatRGB24
 #endif
