@@ -18,6 +18,8 @@ elif ARGUMENTS.get("profile", 0):
 else:
     env.Append(CXXFLAGS = Split("-O3 -fomit-frame-pointer -ffast-math"))
     env.Append(LINKFLAGS = ["-s"])
+if ARGUMENTS.get("rgb10a2", 0):
+    env.Append(CXXFLAGS = ["-DUSE_PIXELFMT_RGB10A2=1"])
 
 libSources = ["src/common.cpp", "src/filebuf.cpp", "src/zlib.cpp"]
 libSources += ["src/ba2file.cpp", "src/esmfile.cpp", "src/stringdb.cpp"]
