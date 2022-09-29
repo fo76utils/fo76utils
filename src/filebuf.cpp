@@ -529,11 +529,6 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
       }
       switch (fourCC)
       {
-        case 0x18:                      // DXGI_FORMAT_R10G10B10A2_UNORM
-        case 0x19:                      // DXGI_FORMAT_R10G10B10A2_UINT
-          if (bitsPerPixel == 32)
-            pixelFormat = pixelFormatR10G10B10A2;
-          break;
         case 0x3D:                      // DXGI_FORMAT_R8_UNORM
         case 0x3E:                      // DXGI_FORMAT_R8_UINT
           if (bitsPerPixel == 8)
@@ -605,8 +600,8 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
             pixelFormat = pixelFormatA32;
           else if (hdrBuf[23] == 0xFFFFFFFFU)
             pixelFormat = pixelFormatR32;
-          if (rgMask == 0x0FFC00000003FFULL && baMask == 0xC00000003FF00000ULL)
-            pixelFormat = pixelFormatR10G10B10A2;
+          if (rgMask == 0x0FFC003FF00000ULL && baMask == 0xC0000000000003FFULL)
+            pixelFormat = pixelFormatA2R10G10B10;
           break;
       }
     }
@@ -735,10 +730,10 @@ DDSOutputFile::DDSOutputFile(const char *fileName,
       rMask = 0xFFFFFFFFU;
       bitsPerPixel = 32;
       break;
-    case DDSInputFile::pixelFormatR10G10B10A2:
-      rMask = 0x000003FFU;
+    case DDSInputFile::pixelFormatA2R10G10B10:
+      rMask = 0x3FF00000U;
       gMask = 0x000FFC00U;
-      bMask = 0x3FF00000U;
+      bMask = 0x000003FFU;
       aMask = 0xC0000000U;
       bitsPerPixel = 32;
       break;
@@ -817,9 +812,9 @@ DDSOutputFile::~DDSOutputFile()
 void DDSOutputFile::writeImageData(
     const std::uint32_t *p, size_t n, int pixelFormatOut, int pixelFormatIn)
 {
-  if (pixelFormatIn == DDSInputFile::pixelFormatR10G10B10A2)
+  if (pixelFormatIn == DDSInputFile::pixelFormatA2R10G10B10)
   {
-    if (pixelFormatOut == DDSInputFile::pixelFormatR10G10B10A2)
+    if (pixelFormatOut == DDSInputFile::pixelFormatA2R10G10B10)
     {
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
       writeData(p, n * sizeof(std::uint32_t));
@@ -862,8 +857,8 @@ void DDSOutputFile::writeImageData(
   for ( ; n > 0; p++, n--)
   {
     FloatVector4  tmp;
-    if (pixelFormatIn == DDSInputFile::pixelFormatR10G10B10A2)
-      tmp = FloatVector4::convertR10G10B10A2(*p);
+    if (pixelFormatIn == DDSInputFile::pixelFormatA2R10G10B10)
+      tmp = FloatVector4::convertA2R10G10B10(*p);
     else
       tmp = FloatVector4(p);
     if (pixelFormatOut == DDSInputFile::pixelFormatRGB24)
@@ -881,9 +876,9 @@ void DDSOutputFile::writeImageData(
       writeByte((unsigned char) (c & 0xFF));
       writeByte((unsigned char) ((c >> 24) & 0xFF));
     }
-    else if (pixelFormatOut == DDSInputFile::pixelFormatR10G10B10A2)
+    else if (pixelFormatOut == DDSInputFile::pixelFormatA2R10G10B10)
     {
-      std::uint32_t c = tmp.convertToR10G10B10A2(true);
+      std::uint32_t c = tmp.convertToA2R10G10B10(true);
       writeByte((unsigned char) (c & 0xFF));
       writeByte((unsigned char) ((c >> 8) & 0xFF));
       writeByte((unsigned char) ((c >> 16) & 0xFF));

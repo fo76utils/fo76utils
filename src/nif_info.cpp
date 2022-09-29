@@ -469,9 +469,9 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
                      imageWidth, imageHeight, w);
 #if USE_PIXELFMT_RGB10A2
   DDSOutputFile outFile(outFileName, w, h,
-                        DDSInputFile::pixelFormatR10G10B10A2);
+                        DDSInputFile::pixelFormatA2R10G10B10);
   outFile.writeImageData(&(downsampleBuf.front()), imageDataSize,
-                         DDSInputFile::pixelFormatR10G10B10A2);
+                         DDSInputFile::pixelFormatA2R10G10B10);
 #else
   DDSOutputFile outFile(outFileName, w, h, DDSInputFile::pixelFormatRGB24);
   outFile.writeImageData(&(downsampleBuf.front()), imageDataSize,
@@ -558,17 +558,21 @@ static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName)
     const std::uint32_t *p = display.lockScreenSurface();
     int     w = display.getWidth() >> int(display.getIsDownsampled());
     int     h = display.getHeight() >> int(display.getIsDownsampled());
-    DDSOutputFile f(fileName.c_str(), w, h, DDSInputFile::pixelFormatRGB24);
+    DDSOutputFile f(fileName.c_str(), w, h,
+#if USE_PIXELFMT_RGB10A2
+                    DDSInputFile::pixelFormatA2R10G10B10
+#else
+                    DDSInputFile::pixelFormatRGB24
+#endif
+                    );
     size_t  pitch = display.getPitch();
     for (int y = 0; y < h; y++, p = p + pitch)
     {
-      for (int x = 0; x < w; x++)
-      {
-        std::uint32_t c = p[x];
-        f.writeByte((unsigned char) ((c >> 16) & 0xFF));
-        f.writeByte((unsigned char) ((c >> 8) & 0xFF));
-        f.writeByte((unsigned char) (c & 0xFF));
-      }
+#if USE_PIXELFMT_RGB10A2
+      f.writeImageData(p, size_t(w), DDSInputFile::pixelFormatA2R10G10B10);
+#else
+      f.writeImageData(p, size_t(w), DDSInputFile::pixelFormatRGB24);
+#endif
     }
     display.unlockScreenSurface();
   }
@@ -895,11 +899,11 @@ static void viewMeshes(const BA2File& ba2File,
                                0, d, 0, messageBuf, "Model rotation");
                 break;
               case 'k':
-                updateValueLogScale(lightLevel, -d, 0.25f, 4.0f, messageBuf,
+                updateValueLogScale(lightLevel, -d, 0.0625f, 16.0f, messageBuf,
                                     "Brightness (linear color space)");
                 break;
               case 'l':
-                updateValueLogScale(lightLevel, d, 0.25f, 4.0f, messageBuf,
+                updateValueLogScale(lightLevel, d, 0.0625f, 16.0f, messageBuf,
                                     "Brightness (linear color space)");
                 break;
               case SDLDisplay::SDLKeySymLeft:
@@ -937,11 +941,11 @@ static void viewMeshes(const BA2File& ba2File,
                 updateLightColor(lightColor, 0, 0, -d, messageBuf);
                 break;
               case SDLDisplay::SDLKeySymInsert:
-                updateValueLogScale(envMapScale, d, 0.5f, 4.0f, messageBuf,
+                updateValueLogScale(envMapScale, d, 0.5f, 8.0f, messageBuf,
                                     "Reflection f scale");
                 break;
               case SDLDisplay::SDLKeySymDelete:
-                updateValueLogScale(envMapScale, -d, 0.5f, 4.0f, messageBuf,
+                updateValueLogScale(envMapScale, -d, 0.5f, 8.0f, messageBuf,
                                     "Reflection f scale");
                 break;
               case SDLDisplay::SDLKeySymCapsLock:

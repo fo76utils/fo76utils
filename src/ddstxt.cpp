@@ -979,22 +979,22 @@ static inline FloatVector4 downsample2xFunc_R8G8B8A8(
   return c;
 }
 
-static inline FloatVector4 downsample2xFunc_R10G10B10A2(
+static inline FloatVector4 downsample2xFunc_A2R10G10B10(
     const std::uint32_t * const *inBufPtrs, int x)
 {
   FloatVector4  c, c1, c2;
-  c = FloatVector4::convertR10G10B10A2(inBufPtrs[0][x]).srgbExpand();
-  c1 = FloatVector4::convertR10G10B10A2(inBufPtrs[1][x]);
-  c2 = FloatVector4::convertR10G10B10A2(inBufPtrs[2][x]);
+  c = FloatVector4::convertA2R10G10B10(inBufPtrs[0][x]).srgbExpand();
+  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[1][x]);
+  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[2][x]);
   c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[1]);
-  c1 = FloatVector4::convertR10G10B10A2(inBufPtrs[3][x]);
-  c2 = FloatVector4::convertR10G10B10A2(inBufPtrs[4][x]);
+  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[3][x]);
+  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[4][x]);
   c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[2]);
-  c1 = FloatVector4::convertR10G10B10A2(inBufPtrs[5][x]);
-  c2 = FloatVector4::convertR10G10B10A2(inBufPtrs[6][x]);
+  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[5][x]);
+  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[6][x]);
   c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[3]);
-  c1 = FloatVector4::convertR10G10B10A2(inBufPtrs[7][x]);
-  c2 = FloatVector4::convertR10G10B10A2(inBufPtrs[8][x]);
+  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[7][x]);
+  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[8][x]);
   c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[4]);
   return c;
 }
@@ -1022,7 +1022,7 @@ void downsample2xFilter_Line(std::uint32_t *linePtr, const std::uint32_t *inBuf,
     if (!(fmtFlags & 1))
       tmpBuf[i] = downsample2xFunc_R8G8B8A8(inBufPtrs, xc);
     else
-      tmpBuf[i] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
+      tmpBuf[i] = downsample2xFunc_A2R10G10B10(inBufPtrs, xc);
   }
   for (int i = 0; i < 7; i++)
     tmpBuf[i] = tmpBuf[7];
@@ -1051,7 +1051,7 @@ void downsample2xFilter_Line(std::uint32_t *linePtr, const std::uint32_t *inBuf,
     if (!(fmtFlags & 2))
       *linePtr = std::uint32_t(c);
     else
-      *linePtr = c.convertToR10G10B10A2();
+      *linePtr = c.convertToA2R10G10B10();
     if (!(fmtFlags & 1))
     {
       tmpBuf[13] = downsample2xFunc_R8G8B8A8(inBufPtrs, xc);
@@ -1060,9 +1060,9 @@ void downsample2xFilter_Line(std::uint32_t *linePtr, const std::uint32_t *inBuf,
     }
     else
     {
-      tmpBuf[13] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
+      tmpBuf[13] = downsample2xFunc_A2R10G10B10(inBufPtrs, xc);
       xc += int(xc < (imageWidth - 1));
-      tmpBuf[14] = downsample2xFunc_R10G10B10A2(inBufPtrs, xc);
+      tmpBuf[14] = downsample2xFunc_A2R10G10B10(inBufPtrs, xc);
     }
     xc += int(xc < (imageWidth - 1));
   }

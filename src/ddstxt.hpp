@@ -156,7 +156,7 @@ class DDSTexture
 // linePtr: line pointer in output buffer
 // imageWidth, imageHeight: dimensions of input image
 // y: line number on input image
-// fmtFlags & 1: input pixel format (0: R8G8B8A8, 1: R10G10B10A2)
+// fmtFlags & 1: input pixel format (0: R8G8B8A8, 1: A2R10G10B10)
 // fmtFlags & 2: output pixel format
 void downsample2xFilter_Line(
     std::uint32_t *linePtr, const std::uint32_t *inBuf,

@@ -188,7 +188,7 @@ class DDSInputFile : public FileBuffer
     pixelFormatR8 = 11,
     // Similar to pixelFormatR8, but with 32-bit texture form IDs.
     pixelFormatR32 = 12,
-    pixelFormatR10G10B10A2 = 13,
+    pixelFormatA2R10G10B10 = 13,
     pixelFormatUnknown = 0x40000000
   };
   // If the input file is in an uncompressed format that is not one of the
@@ -231,11 +231,11 @@ class DDSOutputFile : public OutputFile
                 const unsigned int *hdrReserved = (unsigned int *) 0,
                 size_t bufSize = 16384);
   virtual ~DDSOutputFile();
-  // pixelFormatIn must be either pixelFormatRGBA32 or pixelFormatR10G10B10A2
+  // pixelFormatIn must be either pixelFormatRGBA32 or pixelFormatA2R10G10B10
   void writeImageData(const std::uint32_t *p, size_t n, int pixelFormatOut,
                       int pixelFormatIn =
 #if USE_PIXELFMT_RGB10A2
-                          DDSInputFile::pixelFormatR10G10B10A2
+                          DDSInputFile::pixelFormatA2R10G10B10
 #else
                           DDSInputFile::pixelFormatRGBA32
 #endif
