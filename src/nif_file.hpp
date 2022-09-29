@@ -209,7 +209,7 @@ class NIFFile : public FileBuffer
         tmp = (tmp < 255 ? (tmp + 1) : 255);
       }
       int     b = 0;
-      if ((f & 0x01FF) == 0x00ED)
+      if ((f & 0x001F) == 0x000D)
       {
         if (!a)
         {
@@ -305,6 +305,8 @@ class NIFFile : public FileBuffer
     unsigned long long  flags;
     BGSMFile  material; // (material.flags & 4) != 0 if this is an effect shader
     std::vector< const std::string * >  texturePaths;
+    void readEffectShaderProperty(NIFFile& f);
+    void readLightingShaderProperty(NIFFile& f);
     NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType,
                                    bool isEffect, const BA2File *ba2File);
     virtual ~NIFBlkBSLightingShaderProperty();
