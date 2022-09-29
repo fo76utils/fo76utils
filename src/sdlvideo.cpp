@@ -28,14 +28,16 @@ void SDLDisplay::drawCharacterBG(std::uint32_t *p,
   if (bgAlpha < 1.0f)
   {
     FloatVector4  a0(1.0f - bgAlpha);
-    FloatVector4  c1(&(ansiColor256Table.front()) + ((c >> 16) & 0xFFU));
+    FloatVector4  c1(FloatVector4::convertRGBA32(
+                         ansiColor256Table[(c >> 16) & 0xFFU]));
     c1 = c1 * c1 * bgAlpha;
     for ( ; y0 < y1; y0++, p = p + imageWidth)
     {
       for (int i = x0; i < x1; i++)
       {
-        FloatVector4  c0(p + i);
-        p[i] = (std::uint32_t) (c0 * c0 * a0 + c1).squareRootFast();
+        FloatVector4  c0(FloatVector4::convertRGBA32(p[i]));
+        p[i] =
+            (c0 * c0 * a0 + c1).squareRootFast().convertToRGBA32(false, true);
       }
     }
   }
@@ -96,7 +98,8 @@ void SDLDisplay::drawCharacterFG(std::uint32_t *p,
   uOffset = uOffset - (xc * fontUScale);
   vOffset = vOffset - (yc * fontVScale);
   std::uint32_t c1 = ansiColor256Table[(c >> 24) & 0xFFU];
-  FloatVector4  c1l(c1);
+  FloatVector4  c1l(FloatVector4::convertRGBA32(
+                        ansiColor256Table[(c >> 24) & 0xFFU]));
   c1l *= c1l;
   float   v = float(y0) * fontVScale + vOffset;
   for ( ; y0 < y1; y0++, p = p + imageWidth, v = v + fontVScale)
@@ -121,10 +124,9 @@ void SDLDisplay::drawCharacterFG(std::uint32_t *p,
             FloatVector4(&(fontTextureDecodeTable[tmp])).dotProduct(
                 FloatVector4(1.0f - u_f, u_f, 1.0f - u_f, u_f)
                 * FloatVector4(1.0f - v_f, 1.0f - v_f, v_f, v_f)) * fgAlpha;
-        FloatVector4  c0(p + i);
-        c0 *= c0;
-        c0 = (c0 + ((c1l - c0) * a)).squareRootFast();
-        p[i] = std::uint32_t(c0);
+        FloatVector4  c0(FloatVector4::convertRGBA32(p[i]));
+        p[i] = (c0 * c0 + ((c1l - c0) * a)).squareRootFast().convertToRGBA32(
+                                                                 false, true);
       }
       else
       {
@@ -318,7 +320,12 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
       throw errorMessage("error creating SDL window");
     sdlScreen = SDL_CreateRGBSurface(
                     0, w, h, 32,
-                    0x000000FFU, 0x0000FF00U, 0x00FF0000U, 0xFF000000U);
+#if USE_PIXELFMT_RGB10A2
+                    0x3FF00000U, 0x000FFC00U, 0x000003FFU, 0xC0000000U
+#else
+                    0x000000FFU, 0x0000FF00U, 0x00FF0000U, 0xFF000000U
+#endif
+                    );
     if (!sdlScreen)
       throw errorMessage("error setting SDL video mode");
     SDL_SetSurfaceBlendMode(sdlScreen, SDL_BLENDMODE_NONE);
@@ -381,7 +388,7 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
     ansiColor256Table.resize(256);
     for (int i = 0; i < 256; i++)
     {
-      std::uint32_t c = (std::uint32_t) i;
+      std::uint32_t c = std::uint32_t(i);
       if (i < 16)
       {
         // standard and high intensity colors
@@ -404,7 +411,11 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
         // grayscale colors
         c = (c - 232U) * 0x000A0A0AU + 0x00080808U;
       }
+#if USE_PIXELFMT_RGB10A2
+      ansiColor256Table[i] = FloatVector4(c).convertToRGBA32(true, true);
+#else
       ansiColor256Table[i] = c | 0xFF000000U;
+#endif
     }
   }
 #ifdef HAVE_SDL2
