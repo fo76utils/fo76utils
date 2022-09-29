@@ -71,7 +71,7 @@ struct FloatVector4
                       const std::uint32_t *p1_3, const std::uint32_t *p2_3,
                       float xf, float yf, bool isSRGB = false);
   static inline FloatVector4 convertFloat16(std::uint64_t n);
-  static inline FloatVector4 convertR10G10B10A2(const std::uint32_t& c);
+  static inline FloatVector4 convertA2R10G10B10(const std::uint32_t& c);
   // convert from the pixel format selected with USE_PIXELFMT_RGB10A2
   static inline FloatVector4 convertRGBA32(const std::uint32_t& c);
   inline float& operator[](size_t n)
@@ -121,10 +121,10 @@ struct FloatVector4
   inline FloatVector4& normalize3Fast();
   // 0.0 - 255.0 sRGB -> 0.0 - 1.0 linear
   inline FloatVector4& srgbExpand();
-  // 0.0 - 1.0 linear -> 0.0 - 255.0 sRGB
+  // 0.0 - 1.0 linear -> 0.0 - 255.0 sRGB (clamps input to 0.0 - 1.0)
   inline FloatVector4& srgbCompress();
   inline operator std::uint32_t() const;
-  inline std::uint32_t convertToR10G10B10A2(bool noClamp = false) const;
+  inline std::uint32_t convertToA2R10G10B10(bool noClamp = false) const;
   // convert to the pixel format selected with USE_PIXELFMT_RGB10A2
   inline std::uint32_t convertToRGBA32(bool noAlpha = false,
                                        bool noClamp = false) const;
@@ -195,19 +195,19 @@ inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n)
   return FloatVector4(v);
 }
 
-inline FloatVector4 FloatVector4::convertR10G10B10A2(const std::uint32_t& c)
+inline FloatVector4 FloatVector4::convertA2R10G10B10(const std::uint32_t& c)
 {
   static const XMM_UInt8  shufTbl =
   {
-    0, 1, 0x80, 0x80, 1, 2, 0x80, 0x80, 2, 3, 0x80, 0x80, 3, 0x80, 0x80, 0x80
+    2, 3, 0x80, 0x80, 1, 2, 0x80, 0x80, 0, 1, 0x80, 0x80, 3, 0x80, 0x80, 0x80
   };
   static const XMM_UInt32 maskTbl =
   {
-    0x000003FFU, 0x00000FFCU, 0x00003FF0U, 0x000000C0U
+    0x00003FF0U, 0x00000FFCU, 0x000003FFU, 0x000000C0U
   };
   static const XMM_Float  multTbl =
   {
-    255.0f / 1023.0f, 255.0f / 4092.0f, 255.0f / 16368.0f, 255.0f / 192.0f
+    255.0f / 16368.0f, 255.0f / 4092.0f, 255.0f / 1023.0f, 255.0f / 192.0f
   };
   XMM_Float v;
   __asm__ ("vmovd %1, %0" : "=x" (v) : "rm" (c));
@@ -496,8 +496,16 @@ inline FloatVector4& FloatVector4::srgbCompress()
   minValues(FloatVector4(1.0f));
   maxValues(FloatVector4(1.0f / float(0x40000000)));
   XMM_Float tmp;
+#if USE_PIXELFMT_RGB10A2
+  // more accurate inverse function of srgbExpand() in 10 bits per channel mode
+  XMM_Float tmp2 = v * float(0.03876962 * 255.0) + float(1.15864660 * 255.0);
+#endif
   __asm__ ("vrsqrtps %1, %0" : "=x" (tmp) : "x" (v));
+#if USE_PIXELFMT_RGB10A2
+  v *= (tmp * tmp2 - float(0.19741622 * 255.0));
+#else
   v *= (float(-0.13942692 * 255.0) + (tmp * float(1.13942692 * 255.0)));
+#endif
   return (*this);
 }
 
@@ -512,14 +520,19 @@ inline FloatVector4::operator std::uint32_t() const
   return c;
 }
 
-inline std::uint32_t FloatVector4::convertToR10G10B10A2(bool noClamp) const
+inline std::uint32_t FloatVector4::convertToA2R10G10B10(bool noClamp) const
 {
   static const XMM_Float  multTbl1 =
   {
     1023.0f / 255.0f, 1023.0f / 255.0f, 1023.0f / 255.0f, 3.0f / 255.0f
   };
-  static const XMM_Int16  multTbl2 = { 64, 1, 64, 1, 0, 0, 0, 0 };
-  XMM_Float tmp1;
+  static const XMM_UInt8  shufTbl =
+  {
+    4, 5, 0, 1, 8, 9, 12, 13, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80
+  };
+  static const XMM_Int16  multTbl2 = { 64, 1, 1, 16384, 0, 0, 0, 0 };
+  XMM_Float   tmp1;
+  XMM_UInt32  tmp2;
   if (noClamp)
   {
     __asm__ ("vmulps %2, %1, %0" : "=x" (tmp1) : "x" (v), "xm" (multTbl1));
@@ -527,16 +540,16 @@ inline std::uint32_t FloatVector4::convertToR10G10B10A2(bool noClamp) const
   else
   {
     static const XMM_Float  maxTbl = { 255.0f, 255.0f, 255.0f, 255.0f };
+    __asm__ ("vxorps %0, %0, %0" : "=x" (tmp2));
     __asm__ ("vminps %2, %1, %0" : "=x" (tmp1) : "x" (v), "xm" (maxTbl));
+    __asm__ ("vmaxps %1, %0, %0" : "+x" (tmp1) : "x" (tmp2));
     __asm__ ("vmulps %1, %0, %0" : "+x" (tmp1) : "xm" (multTbl1));
   }
   __asm__ ("vcvtps2dq %0, %0" : "+x" (tmp1));
-  __asm__ ("vpackusdw %0, %0, %0" : "+x" (tmp1));
+  __asm__ ("vpshufb %1, %0, %0" : "+x" (tmp1) : "xm" (shufTbl));
   __asm__ ("vpmullw %1, %0, %0" : "+x" (tmp1) : "xm" (multTbl2));
-  XMM_UInt32  tmp2;
-  __asm__ ("vpsrld $0x06, %1, %0" : "=x" (tmp2) : "x" (tmp1));
-  __asm__ ("vpslld $0x0e, %0, %0" : "+x" (tmp1));
-  __asm__ ("vpsrlq $0x20, %0, %0" : "+x" (tmp1));
+  __asm__ ("vpsrlq $0x20, %1, %0" : "=x" (tmp2) : "x" (tmp1));
+  __asm__ ("vpslld $0x04, %0, %0" : "+x" (tmp1));
   __asm__ ("vpor %1, %0, %0" : "+x" (tmp2) : "x" (tmp1));
   return tmp2[0];
 }
@@ -603,11 +616,11 @@ inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n)
                       ::convertFloat16(std::uint16_t((n >> 48) & 0xFFFFU)));
 }
 
-inline FloatVector4 FloatVector4::convertR10G10B10A2(const std::uint32_t& c)
+inline FloatVector4 FloatVector4::convertA2R10G10B10(const std::uint32_t& c)
 {
-  float   r = float(int(c & 0x03FF));
+  float   r = float(int((c >> 20) & 0x03FF));
   float   g = float(int((c >> 10) & 0x03FF));
-  float   b = float(int((c >> 20) & 0x03FF));
+  float   b = float(int(c & 0x03FF));
   float   a = float(int((c >> 30) & 0x0003));
   FloatVector4  tmp(r, g, b, a);
   tmp *= FloatVector4(255.0f / 1023.0f, 255.0f / 1023.0f,
@@ -874,9 +887,18 @@ inline FloatVector4& FloatVector4::srgbCompress()
 {
   minValues(FloatVector4(1.0f));
   FloatVector4  tmp(*this);
+#if USE_PIXELFMT_RGB10A2
+  // more accurate inverse function of srgbExpand() in 10 bits per channel mode
+  FloatVector4  tmp2 =
+      *this * float(0.03876962 * 255.0) + float(1.15864660 * 255.0);
+#endif
   tmp.squareRootFast();
+#if USE_PIXELFMT_RGB10A2
+  *this = (*this * float(-0.19741622 * 255.0)) + (tmp * tmp2);
+#else
   *this = (*this * float(-0.13942692 * 255.0))
           + (tmp * float(1.13942692 * 255.0));
+#endif
   return (*this);
 }
 
@@ -894,7 +916,7 @@ inline FloatVector4::operator std::uint32_t() const
           | (std::uint32_t(c2) << 16) | (std::uint32_t(c3) << 24));
 }
 
-inline std::uint32_t FloatVector4::convertToR10G10B10A2(bool noClamp) const
+inline std::uint32_t FloatVector4::convertToA2R10G10B10(bool noClamp) const
 {
   FloatVector4  tmp(*this);
   if (!noClamp)
@@ -906,7 +928,7 @@ inline std::uint32_t FloatVector4::convertToR10G10B10A2(bool noClamp) const
   std::uint32_t g = std::uint32_t(roundFloat(tmp[1]));
   std::uint32_t b = std::uint32_t(roundFloat(tmp[2]));
   std::uint32_t a = std::uint32_t(roundFloat(tmp[3]));
-  return (r | (g << 10) | (b << 20) | (a << 30));
+  return ((r << 20) | (g << 10) | b | (a << 30));
 }
 
 #endif                                  // ENABLE_X86_64_AVX
@@ -1005,7 +1027,7 @@ inline FloatVector4::FloatVector4(
 inline FloatVector4 FloatVector4::convertRGBA32(const std::uint32_t& c)
 {
 #if USE_PIXELFMT_RGB10A2
-  return FloatVector4::convertR10G10B10A2(c);
+  return FloatVector4::convertA2R10G10B10(c);
 #else
   return FloatVector4(&c);
 #endif
@@ -1015,7 +1037,7 @@ inline std::uint32_t FloatVector4::convertToRGBA32(
     bool noAlpha, bool noClamp) const
 {
 #if USE_PIXELFMT_RGB10A2
-  return (convertToR10G10B10A2(noClamp) | (!noAlpha ? 0U : 0xC0000000U));
+  return (convertToA2R10G10B10(noClamp) | (!noAlpha ? 0U : 0xC0000000U));
 #else
   (void) noClamp;
   return (std::uint32_t(*this) | (!noAlpha ? 0U : 0xFF000000U));
