@@ -25,7 +25,7 @@ int main(int argc, char **argv)
       if (std::strcmp(argv[i], "-d") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for -d");
+          errorMessage("missing argument for -d");
         ba2Path = argv[i];
       }
       else
