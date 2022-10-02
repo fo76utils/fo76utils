@@ -29,14 +29,14 @@ class ZLibDecompressor
   inline unsigned char readU8()
   {
     if (inPtr >= inBufEnd)
-      throw errorMessage("end of ZLib compressed data");
+      errorMessage("end of ZLib compressed data");
     unsigned char c = *(inPtr++);
     return c;
   }
   inline unsigned short readU16LE()
   {
     if ((inPtr + 1) >= inBufEnd)
-      throw errorMessage("end of ZLib compressed data");
+      errorMessage("end of ZLib compressed data");
     unsigned short  w = *(inPtr++);
     w = w | ((unsigned short) *(inPtr++) << 8);
     return w;

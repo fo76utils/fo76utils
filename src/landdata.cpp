@@ -102,7 +102,7 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
                                 unsigned int formatMask, unsigned char mipLevel)
 {
   if (mipLevel < (formatMask == 0x08 ? 2 : 0) || mipLevel > 4)
-    throw errorMessage("LandscapeData: invalid mip level");
+    errorMessage("LandscapeData: invalid mip level");
   cellResolution = 128 >> mipLevel;
   cellOffset = 64 >> mipLevel;
   BTDFile btdFile(btdFileName);
@@ -294,7 +294,7 @@ unsigned char LandscapeData::findTextureID(unsigned int formID)
       return (unsigned char) i;
   }
   if (ltexFormIDs.size() >= 255)
-    throw errorMessage("LandscapeData: number of unique land textures > 255");
+    errorMessage("LandscapeData: number of unique land textures > 255");
   ltexFormIDs.push_back(formID);
   return (unsigned char) (ltexFormIDs.size() - 1);
 }
@@ -304,7 +304,7 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
                                 unsigned int defTxtID, unsigned char mipLevel)
 {
   if (mipLevel != 2)
-    throw errorMessage("LandscapeData: invalid mip level");
+    errorMessage("LandscapeData: invalid mip level");
   std::vector< unsigned long long > landList;
   {
     const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(worldID);
@@ -329,7 +329,7 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
     cellMaxY = (y > cellMaxY ? y : cellMaxY);
   }
   if (!(cellMaxX >= cellMinX && cellMaxY >= cellMinY))
-    throw errorMessage("LandscapeData: world not found in ESM file");
+    errorMessage("LandscapeData: world not found in ESM file");
   allocateDataBuf(formatMask, false);
   std::map< unsigned int, unsigned int >  emptyCells;
   std::map< unsigned int, float > cellHeightOffsets;
@@ -621,7 +621,7 @@ void LandscapeData::loadWorldInfo(ESMFile& esmFile, unsigned int worldID)
 {
   const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(worldID);
   if (!(r && *r == "WRLD"))
-    throw errorMessage("LandscapeData: world not found in ESM file");
+    errorMessage("LandscapeData: world not found in ESM file");
   ESMFile::ESMField f(esmFile, *r);
   while (f.next())
   {
@@ -681,7 +681,7 @@ LandscapeData::LandscapeData(
   else if (esmFile)
     loadESMFile(*esmFile, formatMask & 0x0F, worldID, defTxtID, l);
   else
-    throw errorMessage("LandscapeData: no input file");
+    errorMessage("LandscapeData: no input file");
   if (esmFile)
   {
     for (size_t i = 0; i < ltexFormIDs.size(); i++)

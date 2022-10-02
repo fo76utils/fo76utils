@@ -95,14 +95,14 @@ void BTDFile::loadBlock(TileData& tileData, size_t dataOffs,
   size_t  offs = blockBuf.readUInt32() + zlibBlocksDataOffs;
   size_t  compressedSize = blockBuf.readUInt32();
   if ((offs + compressedSize) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   unsigned char *p = reinterpret_cast< unsigned char * >(&(zlibBuf.front()));
   if (ZLibDecompressor::decompressData(p,
                                        zlibBuf.size() * sizeof(std::uint16_t),
                                        fileBuf + offs, compressedSize)
       != ((l == 0 && b != 0) ? 16384 : ((l >= 2 && b != 0) ? 32768 : 49152)))
   {
-    throw errorMessage("error in compressed landscape data");
+    errorMessage("error in compressed landscape data");
   }
   size_t  xd = 1 << (b == 0 || l == 0 ? l : (l - 2));
   size_t  yd = (b == 0 || l == 0 ? (1024 - 128) : ((256 - 128) >> 2)) << l;
@@ -286,7 +286,7 @@ const BTDFile::TileData& BTDFile::loadTile(int cellX, int cellY,
   for (size_t i = 0; i < threadCnt; i++)
   {
     if (!errMsgs[i].empty())
-      throw errorMessage("%s", errMsgs[i].c_str());
+      throw FO76UtilsError(1, errMsgs[i].c_str());
   }
   tileData.blockMask = tileData.blockMask | blockMask;
   return tileData;
@@ -296,9 +296,9 @@ BTDFile::BTDFile(const char *fileName)
   : FileBuffer(fileName)
 {
   if (!checkType(readUInt32(), "BTDB"))
-    throw errorMessage("input file format is not BTD");
+    errorMessage("input file format is not BTD");
   if (readUInt32() != 6U)
-    throw errorMessage("unsupported BTD format version");
+    errorMessage("unsupported BTD format version");
   tileCacheIndex = 0;
   // TODO: check header data for errors
   worldHeightMin = readFloat();

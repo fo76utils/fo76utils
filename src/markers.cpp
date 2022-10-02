@@ -190,8 +190,8 @@ void loadTextures(std::vector< MarkerDef >& textures, const char *listFileName)
         }
         else if (v.size() > 0)
         {
-          throw errorMessage("invalid marker definition file format at line %d",
-                             lineNumber);
+          throw FO76UtilsError("invalid marker definition file format "
+                               "at line %d", lineNumber);
         }
         v.clear();
         s.clear();
@@ -840,7 +840,7 @@ int main(int argc, char **argv)
         DDSInputFile  landFile(s, imageWidth, imageHeight, pixelFormat, hdrBuf);
         // "FO", "LAND"
         if ((hdrBuf[0] & 0xFFFF) != 0x4F46 || hdrBuf[1] != 0x444E414C)
-          throw errorMessage("invalid landscape image file");
+          errorMessage("invalid landscape image file");
         int     xMin = uint32ToSigned(hdrBuf[2]);
         int     yMax = uint32ToSigned(hdrBuf[6]);
         int     cellSize = int(hdrBuf[9]);
@@ -869,21 +869,21 @@ int main(int argc, char **argv)
             tmp2 = std::strtod(s, &endp);
           if (!endp || endp == s || *endp != (i < 8 ? ',' : '\0'))
           {
-            throw errorMessage("invalid view transform, "
-                               "must be 9 comma separated numbers");
+            errorMessage("invalid view transform, "
+                         "must be 9 comma separated numbers");
           }
           if (i < 2 && (tmp1 < 2L || tmp1 > 65536L))
-            throw errorMessage("invalid image dimensions");
+            errorMessage("invalid image dimensions");
           if (i == 2 && !(tmp2 >= (1.0 / 512.0) && tmp2 <= 16.0))
-            throw errorMessage("invalid view scale");
+            errorMessage("invalid view scale");
           if (i >= 3 && i < 6)
           {
             if (!(tmp2 >= -360.0 && tmp2 <= 360.0))
-              throw errorMessage("invalid view rotation");
+              errorMessage("invalid view rotation");
             tmp2 = tmp2 * (std::atan(1.0) / 45.0);
           }
           if (i >= 6 && !(tmp2 >= -1048576.0 && tmp2 <= 1048576.0))
-            throw errorMessage("invalid view offset");
+            errorMessage("invalid view offset");
           if (i < 8)
             s = endp + 1;
           if (i == 0)

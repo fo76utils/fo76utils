@@ -58,7 +58,7 @@ bool StringDB::loadFile(const char *fileName, const char *stringsPrefix)
     size_t  stringCnt = readUInt32();
     size_t  dataSize = readUInt32();
     if (fileBufSize < dataSize || ((fileBufSize - dataSize) >> 3) <= stringCnt)
-      throw errorMessage("invalid strings file");
+      errorMessage("invalid strings file");
     size_t  dataOffs = (stringCnt << 3) + 8;
     std::string s;
     for (size_t i = 0; i < stringCnt; i++)
@@ -66,7 +66,7 @@ bool StringDB::loadFile(const char *fileName, const char *stringsPrefix)
       unsigned int  id = readUInt32();
       size_t  offs = dataOffs + readUInt32();
       if (offs >= fileBufSize)
-        throw errorMessage("invalid offset in strings file");
+        errorMessage("invalid offset in strings file");
       size_t  savedPos = filePos;
       filePos = offs;
       s.clear();

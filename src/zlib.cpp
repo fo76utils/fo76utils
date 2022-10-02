@@ -55,11 +55,11 @@ inline void ZLibDecompressor::srLoad(unsigned long long& sr)
     }
     else
     {
-      throw errorMessage("end of ZLib compressed data");
+      errorMessage("end of ZLib compressed data");
     }
 #else
     if (BRANCH_UNLIKELY((inPtr + 2) > inBufEnd))
-      throw errorMessage("end of ZLib compressed data");
+      errorMessage("end of ZLib compressed data");
     sr &= ~(1ULL << bitCnt);
     do
     {
@@ -97,10 +97,10 @@ size_t ZLibDecompressor::decompressLZ4(unsigned char *buf,
                                        size_t uncompressedSize)
 {
   if (readU16BE() != 0x4D18)
-    throw errorMessage("invalid LZ4 frame header");
+    errorMessage("invalid LZ4 frame header");
   unsigned char flags = readU8();
   if ((flags & 0xC3) != 0x40)
-    throw errorMessage("unsupported LZ4 version or format flags");
+    errorMessage("unsupported LZ4 version or format flags");
   (void) readU8();                      // block maximum size
   size_t  contentSize = uncompressedSize;
   if (flags & 0x08)
@@ -122,7 +122,7 @@ size_t ZLibDecompressor::decompressLZ4(unsigned char *buf,
       blockSize = blockSize & 0x7FFFFFFF;
       if (blockSize > bytesLeft)
       {
-        throw errorMessage("uncompressed LZ4 data larger than output buffer");
+        errorMessage("uncompressed LZ4 data larger than output buffer");
       }
       bytesLeft = bytesLeft - blockSize;
       for ( ; blockSize; wp++, blockSize--)
@@ -144,16 +144,16 @@ size_t ZLibDecompressor::decompressLZ4(unsigned char *buf,
         do
         {
           if (!(blockSize--))
-            throw errorMessage("invalid or corrupt LZ4 compressed data");
+            errorMessage("invalid or corrupt LZ4 compressed data");
           c = readU8();
           litLen = litLen + c;
         }
         while (c == 0xFF);
       }
       if (litLen > blockSize)
-        throw errorMessage("invalid or corrupt LZ4 compressed data");
+        errorMessage("invalid or corrupt LZ4 compressed data");
       if (litLen > bytesLeft)
-        throw errorMessage("uncompressed LZ4 data larger than output buffer");
+        errorMessage("uncompressed LZ4 data larger than output buffer");
       blockSize = blockSize - litLen;
       bytesLeft = bytesLeft - litLen;
       for ( ; litLen; wp++, litLen--)
@@ -162,18 +162,18 @@ size_t ZLibDecompressor::decompressLZ4(unsigned char *buf,
       if (!blockSize && !lzLen)
         break;
       if (blockSize < 2)
-        throw errorMessage("invalid or corrupt LZ4 compressed data");
+        errorMessage("invalid or corrupt LZ4 compressed data");
       blockSize = blockSize - 2;
       size_t  offs = readU16LE();
       if (offs < 1 || offs > size_t(wp - buf))
-        throw errorMessage("invalid or corrupt LZ4 compressed data");
+        errorMessage("invalid or corrupt LZ4 compressed data");
       if (lzLen == 15)
       {
         unsigned char c;
         do
         {
           if (!(blockSize--))
-            throw errorMessage("invalid or corrupt LZ4 compressed data");
+            errorMessage("invalid or corrupt LZ4 compressed data");
           c = readU8();
           lzLen = lzLen + c;
         }
@@ -181,7 +181,7 @@ size_t ZLibDecompressor::decompressLZ4(unsigned char *buf,
       }
       lzLen = lzLen + 4;
       if (lzLen > bytesLeft)
-        throw errorMessage("uncompressed LZ4 data larger than output buffer");
+        errorMessage("uncompressed LZ4 data larger than output buffer");
       bytesLeft = bytesLeft - lzLen;
       const unsigned char *rp = wp - offs;
       for ( ; lzLen; rp++, wp++, lzLen--)
@@ -200,7 +200,7 @@ size_t ZLibDecompressor::decompressLZ4(unsigned char *buf,
   if (bytesLeft)
     uncompressedSize = uncompressedSize - bytesLeft;
   if ((flags & 0x08) != 0 && uncompressedSize != contentSize)
-    throw errorMessage("invalid or corrupt LZ4 compressed data");
+    errorMessage("invalid or corrupt LZ4 compressed data");
 
   return uncompressedSize;
 }
@@ -364,7 +364,7 @@ inline unsigned int ZLibDecompressor::huffmanDecode(
   }
   if (nBits > 16)
   {
-    throw errorMessage("invalid Huffman code in ZLib compressed data");
+    errorMessage("invalid Huffman code in ZLib compressed data");
   }
   sr = sr >> 8;
   const unsigned int  *t = huffTable + (256 + 8 - 1);
@@ -378,7 +378,7 @@ inline unsigned int ZLibDecompressor::huffmanDecode(
   b = b + t[32];
   if (b & 0x80000000U)
   {
-    throw errorMessage("invalid Huffman code in ZLib compressed data");
+    errorMessage("invalid Huffman code in ZLib compressed data");
   }
   return huffTable[b];
 }
@@ -406,7 +406,7 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
     {
       if (wp >= bufEnd)
       {
-        throw errorMessage("uncompressed ZLib data larger than output buffer");
+        errorMessage("uncompressed ZLib data larger than output buffer");
       }
       *wp = (unsigned char) c;
       s1 = s1 + c;
@@ -424,7 +424,7 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
         else if (c == 256)
           break;
         else
-          throw errorMessage("invalid or corrupt ZLib compressed data");
+          errorMessage("invalid or corrupt ZLib compressed data");
       }
       else
       {
@@ -438,7 +438,7 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
     {
       if (offs >= 30)
       {
-        throw errorMessage("invalid or corrupt ZLib compressed data");
+        errorMessage("invalid or corrupt ZLib compressed data");
       }
       offs = offs - 2;
       unsigned char nBits = (unsigned char) (offs >> 1);
@@ -447,12 +447,12 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
     offs++;
     if (offs > size_t(wp - buf))
     {
-      throw errorMessage("invalid LZ77 offset in ZLib compressed data");
+      errorMessage("invalid LZ77 offset in ZLib compressed data");
     }
     const unsigned char *rp = wp - offs;
     if ((wp + lzLen) > bufEnd)
     {
-      throw errorMessage("uncompressed ZLib data larger than output buffer");
+      errorMessage("uncompressed ZLib data larger than output buffer");
     }
     // copy LZ77 sequence
     do
@@ -506,11 +506,11 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
       size_t  len = readU16LE();
       if ((len ^ readU16LE()) != 0xFFFF)
       {
-        throw errorMessage("invalid or corrupt ZLib compressed data");
+        errorMessage("invalid or corrupt ZLib compressed data");
       }
       if ((wp + len) > bufEnd)
       {
-        throw errorMessage("uncompressed ZLib data larger than output buffer");
+        errorMessage("uncompressed ZLib data larger than output buffer");
       }
       for ( ; len; wp++, len--)
       {
@@ -527,7 +527,7 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
     }
     else if ((bhdr & 6) == 6)           // reserved (invalid)
     {
-      throw errorMessage("invalid Deflate block type in ZLib compressed data");
+      errorMessage("invalid Deflate block type in ZLib compressed data");
     }
     else                                // compressed block
     {
@@ -546,7 +546,7 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
   // verify Adler-32 checksum
   if (readU32BE() != ((s2 << 16) | s1))
   {
-    throw errorMessage("checksum error in ZLib compressed data");
+    errorMessage("checksum error in ZLib compressed data");
   }
 
   return size_t(wp - buf);
@@ -563,7 +563,7 @@ size_t ZLibDecompressor::decompressData(unsigned char *buf,
   if (h == 0x0422)
     return zlibDecompressor.decompressLZ4(buf, uncompressedSize);
   if ((h & 0x8F20) != 0x0800 || (h % 31) != 0)
-    throw errorMessage("invalid or unsupported ZLib compression method");
+    errorMessage("invalid or unsupported ZLib compression method");
   return zlibDecompressor.decompressZLib(buf, uncompressedSize);
 }
 

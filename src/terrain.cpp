@@ -399,7 +399,7 @@ int main(int argc, char **argv)
     int           pixelFormat = 0;
     DDSInputFile  hmapFile(argv[1], landWidth, landHeight, pixelFormat, hdrBuf);
     if (pixelFormat != DDSInputFile::pixelFormatGRAY16)
-      throw errorMessage("invalid height map file pixel format, must be L16");
+      errorMessage("invalid height map file pixel format, must be L16");
     // "FO", "LAND"
     if ((hdrBuf[0] & 0xFFFF) == 0x4F46 && hdrBuf[1] == 0x444E414C)
     {
@@ -442,39 +442,39 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-ltex") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing file name");
+          errorMessage("missing file name");
         ltexFileName = argv[i];
       }
       else if (std::strcmp(argv[i], "-ltxpal") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing file name");
+          errorMessage("missing file name");
         ltexPalFileName = argv[i];
       }
       else if (std::strcmp(argv[i], "-lod") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing integer argument");
+          errorMessage("missing integer argument");
         renderScale = int(parseInteger(argv[i], 0, (char *) 0, -5, 4)) + 8;
       }
       else if (std::strcmp(argv[i], "-xoffs") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing integer argument");
+          errorMessage("missing integer argument");
         xOffset = int(parseInteger(argv[i], 0, "invalid X offset",
                                    1 - landWidth, landWidth - 1));
       }
       else if (std::strcmp(argv[i], "-yoffs") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing integer argument");
+          errorMessage("missing integer argument");
         yOffset = int(parseInteger(argv[i], 0, "invalid Y offset",
                                    1 - landHeight, landHeight - 1));
       }
       else if (std::strcmp(argv[i], "-zrange") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing integer argument");
+          errorMessage("missing integer argument");
         unsigned int  tmp =
             (unsigned int) parseInteger(argv[i], 0, "invalid Z range",
                                         0, 1000000);
@@ -483,7 +483,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-waterlevel") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing integer argument");
+          errorMessage("missing integer argument");
         waterLevel =
             (unsigned int) parseInteger(argv[i], 0, "invalid water level",
                                         0, 65536) << 2;
@@ -491,7 +491,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-watercolor") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing integer argument");
+          errorMessage("missing integer argument");
         waterColor =
             (unsigned int) parseInteger(argv[i], 0, "invalid water color",
                                         0, 0x7FFFFFFF);
@@ -499,7 +499,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-wmap") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing file name");
+          errorMessage("missing file name");
         wmapFileName = argv[i];
       }
       else if (std::strncmp(argv[i], "-light", 6) == 0)
@@ -517,7 +517,7 @@ int main(int argc, char **argv)
           else if (*p == 'E' || *p == 'e')
             lightOffsX = -256;
           else if (*p != '_')
-            throw errorMessage("invalid light direction");
+            errorMessage("invalid light direction");
         }
         if (lightOffsX == 0 && lightOffsY == 0)
         {
@@ -525,25 +525,25 @@ int main(int argc, char **argv)
           lightOffsY = 256;
         }
         if (++i >= argc)
-          throw errorMessage("missing integer argument");
+          errorMessage("missing integer argument");
         lightMultL = int(parseInteger(argv[i], 0, (char *) 0, 25, 400));
         if (++i >= argc)
-          throw errorMessage("missing integer argument");
+          errorMessage("missing integer argument");
         lightMultZ = int(parseInteger(argv[i], 0, (char *) 0, -4096, 4096));
         if (++i >= argc)
-          throw errorMessage("missing integer argument");
+          errorMessage("missing integer argument");
         lightPow = int(parseInteger(argv[i], 0, (char *) 0, 6, 100));
       }
       else if (std::strcmp(argv[i], "-threads") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing integer argument");
+          errorMessage("missing integer argument");
         threadCnt =
             int(parseInteger(argv[i], 0, "invalid thread count", 1, 64));
       }
       else
       {
-        throw errorMessage("invalid command line option: \"%s\"", argv[i]);
+        throw FO76UtilsError("invalid command line option: \"%s\"", argv[i]);
       }
     }
 
@@ -560,7 +560,7 @@ int main(int argc, char **argv)
       textureWidth = (unsigned int) landWidth << textureScale;
       textureHeight = (unsigned int) landHeight << textureScale;
       if (tmpWidth != int(textureWidth) || tmpHeight != int(textureHeight))
-        throw errorMessage("land texture dimensions do not match input file");
+        errorMessage("land texture dimensions do not match input file");
       if (tmpPixelFormat == DDSInputFile::pixelFormatRGB24)
       {
         ltexRGBFormat = true;
@@ -572,7 +572,7 @@ int main(int argc, char **argv)
       }
       else
       {
-        throw errorMessage("invalid land texture file pixel format");
+        errorMessage("invalid land texture file pixel format");
       }
       ltexBuf = ltexFile->getDataPtr();
     }
@@ -585,12 +585,9 @@ int main(int argc, char **argv)
       wmapFile = new DDSInputFile(wmapFileName,
                                   tmpWidth, tmpHeight, tmpPixelFormat);
       if (tmpWidth != landWidth || tmpHeight != landHeight)
-      {
-        throw errorMessage("water height map dimensions "
-                           "do not match input file");
-      }
+        errorMessage("water height map dimensions do not match input file");
       if (tmpPixelFormat != DDSInputFile::pixelFormatGRAY16)
-        throw errorMessage("invalid water height map file pixel format");
+        errorMessage("invalid water height map file pixel format");
       wmapBuf = wmapFile->getDataPtr();
     }
     renderWidth = (imageWidth << renderScale) >> 6;
@@ -598,7 +595,7 @@ int main(int argc, char **argv)
     if (((renderWidth << 6) >> renderScale) != imageWidth ||
         ((renderHeight << 6) >> renderScale) != imageHeight)
     {
-      throw errorMessage("invalid output image dimensions");
+      errorMessage("invalid output image dimensions");
     }
 
     zDiffColorMult.resize(262144);

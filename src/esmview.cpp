@@ -452,7 +452,7 @@ int main(int argc, char **argv)
               return 0;
             case 'F':
               if (++i >= argc)
-                throw errorMessage("-F: missing file name");
+                errorMessage("-F: missing file name");
               fldDefFileName = argv[i];
               continue;
             default:
@@ -460,7 +460,7 @@ int main(int argc, char **argv)
           }
         }
         printUsage();
-        throw errorMessage("\ninvalid option: %s", argv[i]);
+        throw FO76UtilsError("\ninvalid option: %s", argv[i]);
       }
       if (!inputFileName)
       {
@@ -476,7 +476,7 @@ int main(int argc, char **argv)
       }
       else
       {
-        throw errorMessage("too many file names");
+        errorMessage("too many file names");
       }
     }
 
@@ -624,7 +624,7 @@ int main(int argc, char **argv)
             else if (c >= 'a' && c <= 'f')
               c = c - 'W';
             else
-              throw errorMessage("Invalid hexadecimal floating point value");
+              errorMessage("Invalid hexadecimal floating point value");
             if (!(j & 1))
               tmpBuf[j >> 1] = (unsigned char) c << 4;
             else
@@ -638,7 +638,7 @@ int main(int argc, char **argv)
             }
           }
           if (j != 0)
-            throw errorMessage("Invalid hexadecimal floating point value");
+            errorMessage("Invalid hexadecimal floating point value");
         }
         catch (std::exception& e)
         {

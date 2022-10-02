@@ -87,8 +87,8 @@ void ESMDump::loadFieldDefFile(FileBuffer& inFile)
     {
       if (!(tabCnt == 3 || (tabCnt == 0 && recordTypes.size() == 0)))
       {
-        throw errorMessage("invalid field definition file format at line %d",
-                           lineNumber);
+        throw FO76UtilsError("invalid field definition file format at line %d",
+                             lineNumber);
       }
       for (size_t i = 0; i < recordTypes.size(); i++)
       {
@@ -169,8 +169,8 @@ void ESMDump::loadFieldDefFile(FileBuffer& inFile)
     }
     if (errorFlag)
     {
-      throw errorMessage("invalid field definition file format at line %d",
-                         lineNumber);
+      throw FO76UtilsError("invalid field definition file format at line %d",
+                           lineNumber);
     }
   }
   while (!eofFlag);
@@ -372,7 +372,7 @@ void ESMDump::convertField(std::string& s,
         (void) f.readUInt8Fast();
         break;
       default:
-        throw errorMessage("invalid data type in field definition");
+        errorMessage("invalid data type in field definition");
     }
     if (s.length() != prvLen)
       haveData = true;

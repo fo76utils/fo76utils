@@ -262,7 +262,7 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
   if (!windowTitle)
     windowTitle = "";
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) != 0)
-    throw errorMessage("error initializing SDL");
+    errorMessage("error initializing SDL");
   sdlWindow = (SDL_Window *) 0;
   sdlScreen = (SDL_Surface *) 0;
   try
@@ -287,7 +287,7 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
       h = h >> 1;
     }
     if (w < 8 || w > (displayWidth << 1) || h < 8 || h > (displayHeight << 1))
-      throw errorMessage("invalid window dimensions");
+      errorMessage("invalid window dimensions");
     if (!(w == displayWidth && h == displayHeight))
       isFullScreen = false;
     imageWidth = w << int(isDownsampled);
@@ -317,7 +317,7 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
                     SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                     w, h, windowFlags);
     if (!sdlWindow)
-      throw errorMessage("error creating SDL window");
+      errorMessage("error creating SDL window");
     sdlScreen = SDL_CreateRGBSurface(
                     0, w, h, 32,
 #if USE_PIXELFMT_RGB10A2
@@ -327,7 +327,7 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
 #endif
                     );
     if (!sdlScreen)
-      throw errorMessage("error setting SDL video mode");
+      errorMessage("error setting SDL video mode");
     SDL_SetSurfaceBlendMode(sdlScreen, SDL_BLENDMODE_NONE);
     surfaceLockCnt = 0;
     usingImageBuf = (isDownsampled || int(sdlScreen->pitch >> 2) != imageWidth);
@@ -341,7 +341,7 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
       h = h >> 1;
     }
     if (w < 8 || w > 32768 || h < 8 || h > 32768)
-      throw errorMessage("invalid image dimensions");
+      errorMessage("invalid image dimensions");
     imageWidth = w << int(isDownsampled);
     imageHeight = h << int(isDownsampled);
     screenBuf.resize(size_t(w) * size_t(h), 0U);

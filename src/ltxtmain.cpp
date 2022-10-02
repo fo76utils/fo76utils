@@ -69,7 +69,7 @@ static void loadTextures(
       fileNames.push_back(landData->getTextureDiffuse(i));
   }
   if (fileNames.size() < 1)
-    throw errorMessage("texture file list is empty");
+    errorMessage("texture file list is empty");
   textures.resize(fileNames.size(), (DDSTexture *) 0);
   std::vector< unsigned char >  tmpBuf;
   for (size_t i = 0; i < fileNames.size(); i++)
@@ -265,26 +265,26 @@ int main(int argc, char **argv)
       if (std::strcmp(argv[i], "-d") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         archivePath = argv[i];
       }
       else if (std::strcmp(argv[i], "-mip") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         mipLevel = float(parseFloat(argv[i], "invalid mip level", 0.0, 16.0));
       }
       else if (std::strcmp(argv[i], "-mult") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         rgbScale = float(parseFloat(argv[i], "invalid RGB output multiplier",
                                     0.5, 8.0));
       }
       else if (std::strcmp(argv[i], "-defclr") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         defaultColor =
             (std::uint32_t) parseInteger(argv[i], 0, "invalid default color",
                                          0L, 0x00FFFFFFL);
@@ -292,20 +292,20 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-scale") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         xyScale = int(parseInteger(argv[i], 10, "invalid scale", 0, 6));
       }
       else if (std::strcmp(argv[i], "-threads") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         threadCnt =
             int(parseInteger(argv[i], 10, "invalid thread count", 1, 64));
       }
       else if (std::strcmp(argv[i], "-ssaa") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         enableDownscale =
             bool(parseInteger(argv[i], 0, "invalid argument for -ssaa", 0, 1));
       }
@@ -316,25 +316,25 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-vclr") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         vclrFileName = argv[i];
       }
       else if (std::strcmp(argv[i], "-gcvr") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         gcvrFileName = argv[i];
       }
       else if (std::strcmp(argv[i], "-btd") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         btdFileName = argv[i];
       }
       else if (std::strcmp(argv[i], "-w") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         worldFormID =
             (unsigned int) parseInteger(argv[i], 0, "invalid world form ID",
                                         0L, 0x0FFFFFFFL);
@@ -342,7 +342,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-r") == 0)
       {
         if ((i + 4) >= argc)
-          throw errorMessage("missing argument for %s", argv[i]);
+          throw FO76UtilsError("missing argument for %s", argv[i]);
         xMin = int(parseInteger(argv[++i], 10, "invalid xMin", -32768, 32767));
         yMin = int(parseInteger(argv[++i], 10, "invalid yMin", -32768, 32767));
         xMax = int(parseInteger(argv[++i], 10, "invalid xMax", xMin, 32767));
@@ -351,7 +351,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-l") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         btdLOD =
             (unsigned char) parseInteger(argv[i], 10, "invalid level of detail",
                                          0, 4);
@@ -359,7 +359,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-deftxt") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         defTxtID =
             (unsigned int) parseInteger(argv[i], 0, "invalid default texture",
                                         0L, 0x0FFFFFFFL);
@@ -374,7 +374,7 @@ int main(int argc, char **argv)
       }
       else
       {
-        throw errorMessage("invalid command line option: %s", argv[i]);
+        throw FO76UtilsError("invalid command line option: %s", argv[i]);
       }
     }
     if (args.size() < 1 ||
@@ -408,7 +408,7 @@ int main(int argc, char **argv)
                  pixelFormat == DDSInputFile::pixelFormatRGBA32 ||
                  pixelFormat == (DDSInputFile::pixelFormatUnknown + 32)))
       {
-        throw errorMessage("invalid input file pixel format");
+        errorMessage("invalid input file pixel format");
       }
       int     tmpWidth = 0;
       int     tmpHeight = 0;
@@ -418,13 +418,13 @@ int main(int argc, char **argv)
       if (!(tmpPixelFormat == DDSInputFile::pixelFormatR8 ||
             tmpPixelFormat == DDSInputFile::pixelFormatGRAY8))
       {
-        throw errorMessage("invalid texture set file pixel format");
+        errorMessage("invalid texture set file pixel format");
       }
       while (!((width << 4) == (tmpWidth << txtSetMip) &&
                height == (tmpHeight << txtSetMip)))
       {
         if (++txtSetMip >= 8)
-          throw errorMessage("texture set dimensions do not match input file");
+          errorMessage("texture set dimensions do not match input file");
       }
       if (vclrFileName && !disableVCLR)
       {
@@ -433,7 +433,7 @@ int main(int argc, char **argv)
         if (!((tmpPixelFormat == DDSInputFile::pixelFormatRGBA16 && isFO76) ||
               (tmpPixelFormat == DDSInputFile::pixelFormatRGB24 && !isFO76)))
         {
-          throw errorMessage("invalid vertex color file pixel format");
+          errorMessage("invalid vertex color file pixel format");
         }
         while (fo76VClrMip < 4 &&
                !(width == (tmpWidth << fo76VClrMip) &&
@@ -442,16 +442,16 @@ int main(int argc, char **argv)
           fo76VClrMip++;
         }
         if (fo76VClrMip >= (unsigned char) (!isFO76 ? 1 : 4))
-          throw errorMessage("vertex color dimensions do not match input file");
+          errorMessage("vertex color dimensions do not match input file");
       }
       if (gcvrFileName && !disableGCVR)
       {
         gcvrFile = new DDSInputFile(gcvrFileName,
                                     tmpWidth, tmpHeight, tmpPixelFormat);
         if (tmpPixelFormat != DDSInputFile::pixelFormatA8)
-          throw errorMessage("invalid ground cover file pixel format");
+          errorMessage("invalid ground cover file pixel format");
         if (tmpWidth != width || tmpHeight != height)
-          throw errorMessage("ground cover dimensions do not match input file");
+          errorMessage("ground cover dimensions do not match input file");
       }
       loadTextures(landTextures, args[3], (LandscapeData *) 0, verboseMode,
                    int(mipLevel), ba2File);

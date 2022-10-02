@@ -70,25 +70,25 @@ int main(int argc, char **argv)
               continue;
             case 'F':
               if (++i >= argc)
-                throw errorMessage("-F: missing file name");
+                errorMessage("-F: missing file name");
               fldDefFileName = argv[i];
               continue;
             case 'd':
               if (++i >= argc)
-                throw errorMessage("-d: no field type");
+                errorMessage("-d: no field type");
               if (fieldsExcluded.find(argv[i]) == fieldsExcluded.end())
                 fieldsExcluded.insert(argv[i]);
               continue;
             case 'e':
               if (++i >= argc)
-                throw errorMessage("-e: missing flags mask");
+                errorMessage("-e: missing flags mask");
               flagsExcluded =
                   (unsigned int) parseInteger(argv[i], 0,
                                               "-e: number required");
               continue;
             case 'f':
               if (++i >= argc)
-                throw errorMessage("-f: missing flags mask");
+                errorMessage("-f: missing flags mask");
               flagsIncluded =
                   (unsigned int) parseInteger(argv[i], 0,
                                               "-f: number required");
@@ -98,7 +98,7 @@ int main(int argc, char **argv)
               return 0;
             case 'i':
               if (++i >= argc)
-                throw errorMessage("-i: no record type");
+                errorMessage("-i: no record type");
               if (recordsIncluded.find(argv[i]) == recordsIncluded.end())
                 recordsIncluded.insert(argv[i]);
               continue;
@@ -108,7 +108,7 @@ int main(int argc, char **argv)
               continue;
             case 'o':
               if (++i >= argc)
-                throw errorMessage("-o: missing file name");
+                errorMessage("-o: missing file name");
               outputFileName = argv[i];
               continue;
             case 's':
@@ -126,7 +126,7 @@ int main(int argc, char **argv)
               continue;
             case 'x':
               if (++i >= argc)
-                throw errorMessage("-x: no record type");
+                errorMessage("-x: no record type");
               if (recordsExcluded.find(argv[i]) == recordsExcluded.end())
                 recordsExcluded.insert(argv[i]);
               continue;
@@ -140,7 +140,7 @@ int main(int argc, char **argv)
           continue;
         }
         printUsage();
-        throw errorMessage("\ninvalid option: %s", argv[i]);
+        throw FO76UtilsError("\ninvalid option: %s", argv[i]);
       }
       if (!inputFileName)
       {
@@ -156,7 +156,7 @@ int main(int argc, char **argv)
       }
       else
       {
-        throw errorMessage("too many file names");
+        errorMessage("too many file names");
       }
     }
 
@@ -164,7 +164,7 @@ int main(int argc, char **argv)
     {
       outputFile = std::fopen(outputFileName, "w");
       if (!outputFile)
-        throw errorMessage("error opening output file");
+        errorMessage("error opening output file");
     }
 
     ESMDump esmFile(inputFileName, outputFile);
