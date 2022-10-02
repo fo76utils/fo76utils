@@ -364,12 +364,12 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
 {
   buf.setPosition(0);
   if (buf.size() < 148 || !FileBuffer::checkType(buf.readUInt32(), "DDS "))
-    throw errorMessage("unsupported texture file format");
+    errorMessage("unsupported texture file format");
   if (buf.readUInt32() != 0x7C)         // size of DDS_HEADER
-    throw errorMessage("unsupported texture file format");
+    errorMessage("unsupported texture file format");
   unsigned int  flags = buf.readUInt32();
   if ((flags & 0x1006) != 0x1006)       // height, width, pixel format required
-    throw errorMessage("unsupported texture file format");
+    errorMessage("unsupported texture file format");
   mipLevelCnt = 1;
   haveAlpha = false;
   isCubeMap = false;
@@ -380,7 +380,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       xSizeMip0 < 1 || xSizeMip0 > 32768 ||
       (ySizeMip0 & (ySizeMip0 - 1)) != 0 || (xSizeMip0 & (xSizeMip0 - 1)) != 0)
   {
-    throw errorMessage("invalid or unsupported texture dimensions");
+    errorMessage("invalid or unsupported texture dimensions");
   }
   (void) buf.readUInt32();              // dwPitchOrLinearSize
   (void) buf.readUInt32();              // dwDepth
@@ -388,11 +388,11 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   {
     mipLevelCnt = buf.readInt32();
     if (mipLevelCnt < 1 || mipLevelCnt > 16)
-      throw errorMessage("invalid mipmap count");
+      errorMessage("invalid mipmap count");
   }
   buf.setPosition(0x4C);                // ddspf
   if (buf.readUInt32() != 0x20)         // size of DDS_PIXELFORMAT
-    throw errorMessage("unsupported texture file format");
+    errorMessage("unsupported texture file format");
   unsigned int  dataOffs = 128;
   size_t  blockSize = 8;
   size_t  (*decodeFunction)(std::uint32_t *, const unsigned char *,
@@ -453,7 +453,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
           decodeFunction = &decodeLine_BGRA;
           break;
         default:
-          throw errorMessage("unsupported DXGI_FORMAT: 0x%08X", tmp);
+          throw FO76UtilsError("unsupported DXGI_FORMAT: 0x%08X", tmp);
       }
     }
     else
@@ -489,18 +489,18 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
           decodeFunction = &decodeBlock_BC3;
           break;
         default:
-          throw errorMessage("unsupported DDS fourCC: 0x%08X",
-                             FileBuffer::swapUInt32(fourCC));
+          throw FO76UtilsError("unsupported DDS fourCC: 0x%08X",
+                               FileBuffer::swapUInt32(fourCC));
       }
     }
   }
   if (!(formatFlags & 0x04))            // DDPF_FOURCC
   {
     if (!(formatFlags & 0x40))          // DDPF_RGB
-      throw errorMessage("unsupported texture file format");
+      errorMessage("unsupported texture file format");
     blockSize = buf.readUInt32();
     if (blockSize != 16 && blockSize != 24 && blockSize != 32)
-      throw errorMessage("unsupported texture file format");
+      errorMessage("unsupported texture file format");
     blockSize = blockSize << 1;
     unsigned long long  rgMask = buf.readUInt64();
     unsigned long long  baMask = buf.readUInt64();
@@ -519,7 +519,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     else if (rgMask == 0x0000FF00000000FFULL && !baMask)
       decodeFunction = &decodeLine_R8G8;
     else
-      throw errorMessage("unsupported texture file format");
+      errorMessage("unsupported texture file format");
   }
   size_t  sizeRequired = 0;
   if (blockSize > 16)
@@ -558,7 +558,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   }
   else if (buf.size() < (dataOffs + sizeRequired))
   {
-    throw errorMessage("DDS file is shorter than expected");
+    errorMessage("DDS file is shorter than expected");
   }
   size_t  dataOffsets[20];
   size_t  bufSize = 0;
@@ -601,39 +601,6 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     for (int i = 0; (i + 1) < 20; i++)
       textureData[i] = textureData[i + 1];
   }
-}
-
-inline bool DDSTexture::convertTexCoord(
-    int& x0, int& y0, float& xf, float& yf,
-    unsigned int& xMask, unsigned int& yMask,
-    float x, float y, int mipLevel, bool m) const
-{
-  xMask = (xSizeMip0 - 1U) >> (unsigned char) mipLevel;
-  yMask = (ySizeMip0 - 1U) >> (unsigned char) mipLevel;
-  xf = x * float(int(xMask + (!m ? 1U : 0U)));
-  yf = y * float(int(yMask + (!m ? 1U : 0U)));
-  float   xi = float(std::floor(xf));
-  float   yi = float(std::floor(yf));
-  x0 = int(xi);
-  y0 = int(yi);
-  xf -= xi;
-  yf -= yi;
-  return bool(xMask | yMask);
-}
-
-inline FloatVector4 DDSTexture::getPixelB(
-    const std::uint32_t *p, int x0, int y0,
-    float xf, float yf, unsigned int xMask, unsigned int yMask)
-{
-  unsigned int  w = xMask + 1U;
-  unsigned int  x0u = (unsigned int) x0;
-  unsigned int  y0u = (unsigned int) y0;
-  unsigned int  x1 = (x0u + 1U) & xMask;
-  unsigned int  y1 = (y0u + 1U) & yMask;
-  x0u = x0u & xMask;
-  y0u = y0u & yMask;
-  return FloatVector4(p + (y0u * w + x0u), p + (y0u * w + x1),
-                      p + (y1 * w + x0u), p + (y1 * w + x1), xf, yf);
 }
 
 inline FloatVector4 DDSTexture::getPixelB_2(
@@ -694,36 +661,12 @@ DDSTexture::~DDSTexture()
 
 FloatVector4 DDSTexture::getPixelB(float x, float y, int mipLevel) const
 {
-  mipLevel = (mipLevel > 0 ? mipLevel : 0);
-  int     x0, y0;
-  float   xf, yf;
-  unsigned int  xMask, yMask;
-  (void) convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, mipLevel);
-  return getPixelB(textureData[mipLevel], x0, y0, xf, yf, xMask, yMask);
+  return getPixelB_Inline(x, y, mipLevel);
 }
 
 FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
 {
-  mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
-  int     m0 = int(mipLevel);
-  float   mf = mipLevel - float(m0);
-  int     x0, y0;
-  float   xf, yf;
-  unsigned int  xMask, yMask;
-  if (BRANCH_UNLIKELY(!convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0)))
-    return FloatVector4(textureData[m0]);
-  FloatVector4  c0(getPixelB(textureData[m0], x0, y0, xf, yf, xMask, yMask));
-  if (BRANCH_LIKELY(mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)))
-  {
-    xf = (xf + float(x0 & 1)) * 0.5f;
-    yf = (yf + float(y0 & 1)) * 0.5f;
-    x0 = int((unsigned int) x0 >> 1);
-    y0 = int((unsigned int) y0 >> 1);
-    FloatVector4  c1(getPixelB(textureData[m0 + 1], x0, y0, xf, yf,
-                               xMask >> 1, yMask >> 1));
-    c0 = (c0 * (1.0f - mf)) + (c1 * mf);
-  }
-  return c0;
+  return getPixelT_Inline(x, y, mipLevel);
 }
 
 FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
@@ -805,17 +748,7 @@ FloatVector4 DDSTexture::getPixelT_N(float x, float y, float mipLevel) const
 
 FloatVector4 DDSTexture::getPixelBM(float x, float y, int mipLevel) const
 {
-  mipLevel = (mipLevel > 0 ? mipLevel : 0);
-  int     x0, y0;
-  float   xf = float(std::floor(x));
-  float   yf = float(std::floor(y));
-  x = x - xf;
-  y = y - yf;
-  x = (!(int(xf) & 1) ? x : (1.0f - x));
-  y = (!(int(yf) & 1) ? y : (1.0f - y));
-  unsigned int  xMask, yMask;
-  (void) convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, mipLevel, true);
-  return getPixelB(textureData[mipLevel], x0, y0, xf, yf, xMask, yMask);
+  return getPixelBM_Inline(x, y, mipLevel);
 }
 
 FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
@@ -849,14 +782,7 @@ FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
 
 FloatVector4 DDSTexture::getPixelBC(float x, float y, int mipLevel) const
 {
-  mipLevel = (mipLevel > 0 ? mipLevel : 0);
-  x = (x > 0.0f ? (x < 1.0f ? x : 1.0f) : 0.0f);
-  y = (y > 0.0f ? (y < 1.0f ? y : 1.0f) : 0.0f);
-  int     x0, y0;
-  float   xf, yf;
-  unsigned int  xMask, yMask;
-  (void) convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, mipLevel, true);
-  return getPixelB(textureData[mipLevel], x0, y0, xf, yf, xMask, yMask);
+  return getPixelBC_Inline(x, y, mipLevel);
 }
 
 FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
