@@ -1,15 +1,51 @@
 
 #include "common.hpp"
 
-std::runtime_error errorMessage(const char *fmt, ...)
+const char * FO76UtilsError::defaultErrorMessage = "unknown error";
+
+void FO76UtilsError::storeMessage(const char *msg, bool copyFlag) noexcept
 {
-  char    buf[512];
+  if (!msg || msg[0] == '\0')
+  {
+    s = defaultErrorMessage;
+    buf = (char *) 0;
+  }
+  else if (!copyFlag)
+  {
+    s = msg;
+    buf = (char *) 0;
+  }
+  else
+  {
+    size_t  n = std::strlen(msg) + 1;
+    buf = reinterpret_cast< char * >(std::malloc(n));
+    if (!buf)
+    {
+      s = "memory allocation error";
+    }
+    else
+    {
+      std::memcpy(buf, msg, n * sizeof(char));
+      s = buf;
+    }
+  }
+}
+
+FO76UtilsError::FO76UtilsError(const char *fmt, ...) noexcept
+{
+  char    tmpBuf[512];
   std::va_list  ap;
   va_start(ap, fmt);
-  std::vsnprintf(buf, 512, fmt, ap);
+  std::vsnprintf(tmpBuf, 512, fmt, ap);
   va_end(ap);
-  buf[511] = '\0';
-  return std::runtime_error(std::string(buf));
+  tmpBuf[511] = '\0';
+  storeMessage(tmpBuf, true);
+}
+
+FO76UtilsError::~FO76UtilsError() noexcept
+{
+  if (buf)
+    std::free(buf);
 }
 
 std::uint16_t convertToFloat16(float x)
@@ -56,7 +92,7 @@ long parseInteger(const char *s, int base, const char *errMsg,
   {
     if (!errMsg)
       errMsg = "invalid integer argument";
-    throw errorMessage("%s: %s", errMsg, s);
+    throw FO76UtilsError("%s: %s", errMsg, s);
   }
   return tmp;
 }
@@ -70,7 +106,7 @@ double parseFloat(const char *s, const char *errMsg,
   {
     if (!errMsg)
       errMsg = "invalid floating point argument";
-    throw errorMessage("%s: %s", errMsg, s);
+    throw FO76UtilsError("%s: %s", errMsg, s);
   }
   return tmp;
 }

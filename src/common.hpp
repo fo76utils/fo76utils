@@ -25,7 +25,47 @@
 #  define ENABLE_X86_64_AVX     0
 #endif
 
-std::runtime_error errorMessage(const char *fmt, ...);
+class FO76UtilsError : public std::exception
+{
+ protected:
+  static const char *defaultErrorMessage;
+  const char  *s;
+  char    *buf;
+  void storeMessage(const char *msg, bool copyFlag) noexcept;
+ public:
+  FO76UtilsError() noexcept
+  {
+    s = defaultErrorMessage;
+    buf = (char *) 0;
+  }
+  FO76UtilsError(const FO76UtilsError& r) noexcept
+  {
+    storeMessage(r.s, bool(r.buf));
+  }
+  FO76UtilsError(int copyFlag, const char *msg) noexcept
+  {
+    storeMessage(msg, bool(copyFlag));
+  }
+  FO76UtilsError(const char *fmt, ...) noexcept;
+  virtual ~FO76UtilsError() noexcept;
+  FO76UtilsError& operator=(const FO76UtilsError& r) noexcept
+  {
+    storeMessage(r.s, bool(r.buf));
+    return (*this);
+  }
+  virtual const char *what() const noexcept
+  {
+    return s;
+  }
+};
+
+#ifdef __GNUC__
+__attribute__ ((__noreturn__))
+#endif
+inline void errorMessage(const char *msg)
+{
+  throw FO76UtilsError(0, msg);
+}
 
 #if defined(__GNUC__)
 #  define BRANCH_EXPECT(x, y)   (__builtin_expect(long(bool(x)), long(y)))
@@ -57,6 +97,13 @@ inline int roundDouble(double x)
 #else
   return int(std::rint(x));
 #endif
+}
+
+inline unsigned char floatToUInt8Clamped(float x, float scale)
+{
+  float   tmp = x * scale;
+  tmp = (tmp > 0.0f ? (tmp < 255.0f ? tmp : 255.0f) : 0.0f);
+  return (unsigned char) roundFloat(tmp);
 }
 
 inline std::int16_t uint16ToSigned(unsigned short x)
