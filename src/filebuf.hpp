@@ -13,7 +13,7 @@ class FileBuffer
   size_t  filePos;
   std::FILE *fileStream;
  public:
-  static std::uint32_t swapUInt32(unsigned int n);
+  static inline std::uint32_t swapUInt32(unsigned int n);
   // the fast versions of the functions are inline
   // and do not check if the read position is valid
   inline unsigned char readUInt8Fast()
@@ -74,6 +74,18 @@ class FileBuffer
   static bool getDefaultDataPath(std::string& dataPath);
   static std::FILE *openFileInDataPath(const char *fileName, const char *mode);
 };
+
+inline std::uint32_t FileBuffer::swapUInt32(unsigned int n)
+{
+  std::uint32_t tmp = std::uint32_t(n);
+#if ENABLE_X86_64_AVX
+  __asm__ ("bswap %0" : "+r" (tmp));
+#else
+  tmp = ((tmp & 0x000000FFU) << 24) | ((tmp & 0x0000FF00U) << 8)
+        | ((tmp & 0x00FF0000U) >> 8) | ((tmp & 0xFF000000U) >> 24);
+#endif
+  return tmp;
+}
 
 inline std::uint16_t FileBuffer::readUInt16Fast()
 {

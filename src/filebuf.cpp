@@ -14,59 +14,52 @@ extern "C"
 #  include <sys/mman.h>
 #endif
 
-std::uint32_t FileBuffer::swapUInt32(unsigned int n)
-{
-  n = ((n & 0xFF00FF00U) >> 8) | ((n & 0x00FF00FFU) << 8);
-  n = ((n & 0xFFFF0000U) >> 16) | ((n & 0x0000FFFFU) << 16);
-  return (std::uint32_t) n;
-}
-
 unsigned char FileBuffer::readUInt8()
 {
   if ((filePos + 1) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   return readUInt8Fast();
 }
 
 signed char FileBuffer::readInt8()
 {
   if ((filePos + 1) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   return (signed char) ((int(readUInt8Fast()) ^ 0x80) - 0x80);
 }
 
 std::uint16_t FileBuffer::readUInt16()
 {
   if ((filePos + 2) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   return readUInt16Fast();
 }
 
 std::int16_t FileBuffer::readInt16()
 {
   if ((filePos + 2) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   return uint16ToSigned(readUInt16Fast());
 }
 
 std::uint32_t FileBuffer::readUInt32()
 {
   if ((filePos + 4) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   return readUInt32Fast();
 }
 
 std::int32_t FileBuffer::readInt32()
 {
   if ((filePos + 4) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   return uint32ToSigned(readUInt32Fast());
 }
 
 float FileBuffer::readFloat()
 {
   if ((filePos + 4) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   std::uint32_t tmp = readUInt32Fast();
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   if (!((tmp + 0x00800000U) & 0x7F000000U))
@@ -88,7 +81,7 @@ FloatVector4 FileBuffer::readFloatVector4()
 {
 #if defined(__GNUC__) && (defined(__x86_64__) || defined(__x86_64))
   if ((filePos + 16) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   union
   {
     XMM_Int32 i;
@@ -103,7 +96,7 @@ FloatVector4 FileBuffer::readFloatVector4()
   tmp.i[2] = p[2];
   tmp.i[3] = p[3];
   tmp.i &= (((tmp.i + 0x00800000) & 0x7F000000) != 0);
-  return FloatVector4(tmp.f[0], tmp.f[1], tmp.f[2], tmp.f[3]);
+  return FloatVector4(tmp.f);
 #else
   float   v0 = readFloat();
   float   v1 = readFloat();
@@ -116,7 +109,7 @@ FloatVector4 FileBuffer::readFloatVector4()
 FloatVector4 FileBuffer::readFloat16Vector4()
 {
   if ((filePos + 8) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   std::uint64_t tmp;
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   tmp = *(reinterpret_cast< const std::uint64_t * >(fileBuf + filePos));
@@ -131,7 +124,7 @@ FloatVector4 FileBuffer::readFloat16Vector4()
 std::uint64_t FileBuffer::readUInt64()
 {
   if ((filePos + 8) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   filePos = filePos + 8;
   return *(reinterpret_cast< const std::uint64_t * >(fileBuf + (filePos - 8)));
@@ -145,7 +138,7 @@ std::uint64_t FileBuffer::readUInt64()
 float FileBuffer::readFloat16()
 {
   if ((filePos + 2) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   return convertFloat16(readUInt16Fast());
 }
 
@@ -166,7 +159,7 @@ void FileBuffer::readString(std::string& s, size_t n)
     return;
   }
   if (((unsigned long long) filePos + n) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   for (size_t i = 0; i < n; i++)
   {
     char    c = char(fileBuf[filePos + i]);
@@ -231,21 +224,21 @@ void FileBuffer::readPath(std::string& s, size_t n,
 unsigned char FileBuffer::readUInt8(size_t offs) const
 {
   if ((offs + 1) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   return fileBuf[offs];
 }
 
 std::uint16_t FileBuffer::readUInt16(size_t offs) const
 {
   if ((offs + 2) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   return readUInt16Fast(fileBuf + offs);
 }
 
 std::uint32_t FileBuffer::readUInt32(size_t offs) const
 {
   if ((offs + 4) > fileBufSize)
-    throw errorMessage("end of input file");
+    errorMessage("end of input file");
   return readUInt32Fast(fileBuf + offs);
 }
 
@@ -283,33 +276,33 @@ FileBuffer::FileBuffer(const char *fileName)
     fileStream((std::FILE *) 0)
 {
   if (!fileName || *fileName == '\0')
-    throw errorMessage("empty input file name");
+    errorMessage("empty input file name");
   try
   {
     fileStream = openFileInDataPath(fileName, "rb");
     if (!fileStream)
-      throw errorMessage("error loading input file");
+      throw FO76UtilsError("error opening input file \"%s\"", fileName);
 #if defined(_WIN32) || defined(_WIN64)
     if (_fseeki64(fileStream, 0LL, SEEK_END) < 0)
-      throw errorMessage("error loading input file");
+      throw FO76UtilsError("error seeking input file \"%s\"", fileName);
     long long fsize = _ftelli64(fileStream);
     if (fsize < 0LL || _fseeki64(fileStream, 0LL, SEEK_SET) < 0)
-      throw errorMessage("error loading input file");
+      throw FO76UtilsError("error seeking input file \"%s\"", fileName);
     fileBufSize = size_t(fsize);
     int     fileDesc = _fileno(fileStream);
 #else
     if (std::fseek(fileStream, 0L, SEEK_END) < 0)
-      throw errorMessage("error loading input file");
+      throw FO76UtilsError("error seeking input file \"%s\"", fileName);
     long    fsize = std::ftell(fileStream);
     if (fsize < 0L || std::fseek(fileStream, 0L, SEEK_SET) < 0)
-      throw errorMessage("error loading input file");
+      throw FO76UtilsError("error seeking input file \"%s\"", fileName);
     fileBufSize = size_t(fsize);
     int     fileDesc = fileno(fileStream);
 #endif
     fileBuf = (unsigned char *) mmap(0, fileBufSize, PROT_READ, MAP_PRIVATE,
                                      fileDesc, 0);
     if ((void *) fileBuf == MAP_FAILED)
-      throw errorMessage("error loading input file");
+      throw FO76UtilsError("error mapping input file \"%s\"", fileName);
   }
   catch (...)
   {
@@ -420,7 +413,7 @@ OutputFile::OutputFile(const char *fileName, size_t bufSize)
   {
     if (buf)
       delete[] buf;
-    throw errorMessage("error opening output file \"%s\"", fileName);
+    throw FO76UtilsError("error opening output file \"%s\"", fileName);
   }
 #if defined(_WIN32) || defined(_WIN64)
   fileDesc = _fileno(f);
@@ -462,7 +455,7 @@ void OutputFile::writeData(const void *p, size_t n)
     if (size_t(write(fileDesc, bufp, tmp)) != tmp)
 #endif
     {
-      throw errorMessage("error writing output file");
+      errorMessage("error writing output file");
     }
     bufp = bufp + tmp;
     n = n - tmp;
@@ -484,7 +477,7 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
   try
   {
     if (fileBufSize < 148)
-      throw errorMessage("invalid DDS input file size");
+      errorMessage("invalid DDS input file size");
     unsigned int  hdrBuf[37];
     unsigned int  tmp = 0;
     for (unsigned int i = 0; i < 148; i++)
@@ -498,24 +491,24 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
       }
     }
     if (hdrBuf[0] != 0x20534444)        // "DDS "
-      throw errorMessage("input file is not in DDS format");
+      errorMessage("input file is not in DDS format");
     if (hdrBuf[1] != 0x7C)              // size of DDS_HEADER
-      throw errorMessage("invalid DDS header size");
+      errorMessage("invalid DDS header size");
     if ((hdrBuf[2] & 0x100F) != 0x100F) // caps, height, width, pitch, pixelfmt
-      throw errorMessage("invalid or unsupported DDS format");
+      errorMessage("invalid or unsupported DDS format");
     height = int(hdrBuf[3]);
     width = int(hdrBuf[4]);
     if (height < 1 || height > 65536 || width < 8 || width > 65536 ||
         (width & 7) != 0 || (hdrBuf[5] % (unsigned int) width) != 0)
     {
-      throw errorMessage("invalid or unsupported DDS image dimensions");
+      errorMessage("invalid or unsupported DDS image dimensions");
     }
     int     bitsPerPixel = int((hdrBuf[5] / (unsigned int) width) << 3);
     if (bitsPerPixel < 8 || bitsPerPixel > 32)
-      throw errorMessage("invalid or unsupported DDS image bits per pixel");
+      errorMessage("invalid or unsupported DDS image bits per pixel");
     pixelFormat = pixelFormatUnknown | bitsPerPixel;
     if (hdrBuf[19] != 0x20)
-      throw errorMessage("invalid DDS_PIXELFORMAT size");
+      errorMessage("invalid DDS_PIXELFORMAT size");
     ddsHeaderSize = 128;
     if (hdrBuf[20] & 0x04)              // DDPF_FOURCC
     {
@@ -523,7 +516,7 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
       if (fourCC == 0x30315844)         // "DX10"
       {
         if (hdrBuf[33] != 3)            // D3D10_RESOURCE_DIMENSION_TEXTURE2D
-          throw errorMessage("invalid or unsupported DDS format");
+          errorMessage("invalid or unsupported DDS format");
         ddsHeaderSize = 148;
         fourCC = hdrBuf[32];
       }
@@ -561,11 +554,11 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
     else
     {
       if (!(hdrBuf[20] & 0x00020243))   // RGB, YUV, luminance, alpha
-        throw errorMessage("invalid or unsupported DDS format");
+        errorMessage("invalid or unsupported DDS format");
       if (!(hdrBuf[20] & 0x03))         // no alpha channel
         hdrBuf[26] = 0;
       if (hdrBuf[22] != (unsigned int) bitsPerPixel)
-        throw errorMessage("DDS_PIXELFORMAT bit count inconsistent with pitch");
+        errorMessage("DDS_PIXELFORMAT bit count inconsistent with pitch");
       unsigned long long  rgMask, baMask;
       rgMask = ((unsigned long long) hdrBuf[24] << 32) | hdrBuf[23];
       baMask = ((unsigned long long) hdrBuf[26] << 32) | hdrBuf[25];
@@ -606,9 +599,9 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
       }
     }
     if (fileBufSize < (ddsHeaderSize + (size_t(height) * hdrBuf[5])))
-      throw errorMessage("DDS file is shorter than expected");
+      errorMessage("DDS file is shorter than expected");
     if (!(hdrBuf[27] & 0x1000))         // DDSCAPS_TEXTURE
-      throw errorMessage("invalid or unsupported DDS format");
+      errorMessage("invalid or unsupported DDS format");
     if (pixelFormat == pixelFormatGRAY8 &&
         hdrBuf[9] == 0x444E414C && hdrBuf[17] == 2)     // "LAND"
     {
@@ -738,7 +731,7 @@ DDSOutputFile::DDSOutputFile(const char *fileName,
       bitsPerPixel = 32;
       break;
     default:
-      throw errorMessage("DDSOutputFile: invalid pixel format");
+      errorMessage("DDSOutputFile: invalid pixel format");
   }
   for (int i = 0; i < 32; i++)
   {
