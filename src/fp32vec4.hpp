@@ -904,16 +904,11 @@ inline FloatVector4& FloatVector4::srgbCompress()
 
 inline FloatVector4::operator std::uint32_t() const
 {
-  int     c0 = roundFloat(v[0]);
-  int     c1 = roundFloat(v[1]);
-  int     c2 = roundFloat(v[2]);
-  int     c3 = roundFloat(v[3]);
-  c0 = (c0 > 0 ? (c0 < 255 ? c0 : 255) : 0);
-  c1 = (c1 > 0 ? (c1 < 255 ? c1 : 255) : 0);
-  c2 = (c2 > 0 ? (c2 < 255 ? c2 : 255) : 0);
-  c3 = (c3 > 0 ? (c3 < 255 ? c3 : 255) : 0);
-  return (std::uint32_t(c0) | (std::uint32_t(c1) << 8)
-          | (std::uint32_t(c2) << 16) | (std::uint32_t(c3) << 24));
+  std::uint32_t c0 = floatToUInt8Clamped(v[0], 1.0f);
+  std::uint32_t c1 = floatToUInt8Clamped(v[1], 1.0f);
+  std::uint32_t c2 = floatToUInt8Clamped(v[2], 1.0f);
+  std::uint32_t c3 = floatToUInt8Clamped(v[3], 1.0f);
+  return (c0 | (c1 << 8) | (c2 << 16) | (c3 << 24));
 }
 
 inline std::uint32_t FloatVector4::convertToA2R10G10B10(bool noClamp) const
