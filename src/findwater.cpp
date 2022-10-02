@@ -146,7 +146,8 @@ static void createMeshFromOBND(std::vector< NIFFile::NIFTriShape >& meshData,
   meshData[0].triangleCnt = (unsigned int) obndTriangleBuf.size();
   meshData[0].vertexData = &(vertexData.front());
   meshData[0].triangleData = &(obndTriangleBuf.front());
-  meshData[0].flags = 0x16;             // is water, is effect, two sided
+  meshData[0].m.flags = BGSMFile::Flag_TSWater | BGSMFile::Flag_TSAlphaBlending
+                        | BGSMFile::Flag_TwoSided;
 }
 
 static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
@@ -419,7 +420,7 @@ int main(int argc, char **argv)
     if (worldID)
     {
       if (worldID & ~0x0FFFFFFFU)
-        throw errorMessage("invalid world form ID");
+        errorMessage("invalid world form ID");
       worldFormID = worldID;
     }
     hdrBuf[1] = 0x444E414C;             // "LAND"

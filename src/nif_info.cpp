@@ -23,7 +23,7 @@ static void printAuthorName(std::FILE *f,
   }
   size_t  nameLen = fileBuf[56];
   if ((nameLen + 57) > fileBuf.size())
-    throw errorMessage("%s: end of input file", nifFileName);
+    throw FO76UtilsError("%s: end of input file", nifFileName);
   std::string authorName;
   for (size_t i = 0; i < nameLen; i++)
   {
@@ -121,9 +121,9 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
         std::fprintf(f, "    Controller: %3d\n", lspBlock->controller);
       if (lspBlock->textureSet >= 0)
         std::fprintf(f, "    Texture set: %3d\n", lspBlock->textureSet);
-      std::fprintf(f, "    Material version: 0x%02X\n",
+      std::fprintf(f, "    Material version: %2u\n",
                    (unsigned int) lspBlock->material.version);
-      std::fprintf(f, "    Material flags: 0x%02X\n",
+      std::fprintf(f, "    Material flags: 0x%04X\n",
                    (unsigned int) lspBlock->material.flags);
       std::fprintf(f, "    Material alpha flags: 0x%04X\n",
                    (unsigned int) lspBlock->material.alphaFlags);
@@ -141,9 +141,32 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
                    double(int(lspBlock->material.specularColor >> 24)) / 128.0);
       std::fprintf(f, "    Material specular smoothness: %.3f\n",
                    double(int(lspBlock->material.specularSmoothness)) / 255.0);
-      for (size_t j = 0; j < lspBlock->texturePaths.size(); j++)
+      unsigned int  emissiveColor = lspBlock->material.emissiveColor;
+      double  emissiveScale = double(int(emissiveColor >> 24)) / 128.0;
+      emissiveColor = emissiveColor & 0x00FFFFFFU;
+      if (lspBlock->material.flags & BGSMFile::Flag_TSWater)
       {
-        if (lspBlock->material.texturePathMask & (1U << (unsigned int) j))
+        std::fprintf(f, "    Material water color (0xBBGGRR): 0x%06X\n",
+                     emissiveColor);
+        std::fprintf(f, "    Material water depth: %.3f\n",
+                     (2.0 - emissiveScale) * (2.0 - emissiveScale) * 2048.0);
+      }
+      else if (lspBlock->material.flags & BGSMFile::Flag_IsEffect)
+      {
+        std::fprintf(f, "    Material base color (0xBBGGRR): 0x%06X\n",
+                     emissiveColor);
+        std::fprintf(f, "    Material base color scale: %.3f\n", emissiveScale);
+      }
+      else
+      {
+        std::fprintf(f, "    Material emissive color (0xBBGGRR): 0x%06X\n",
+                     emissiveColor);
+        std::fprintf(f, "    Material emissive scale: %.3f\n", emissiveScale);
+      }
+      unsigned int  m = lspBlock->material.texturePathMask;
+      for (size_t j = 0; m; j++, m = m >> 1)
+      {
+        if (m & 1U)
         {
           std::fprintf(f, "    Material texture %d: %s\n",
                        int(j), lspBlock->texturePaths[j]->c_str());
@@ -152,9 +175,10 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile)
     }
     else if (shaderTextureSetBlock)
     {
-      for (size_t j = 0; j < shaderTextureSetBlock->texturePaths.size(); j++)
+      unsigned int  m = shaderTextureSetBlock->texturePathMask;
+      for (size_t j = 0; m; j++, m = m >> 1)
       {
-        if (shaderTextureSetBlock->texturePathMask & (1U << (unsigned int) j))
+        if (m & 1U)
         {
           std::fprintf(f, "    Texture %2d: %s\n",
                        int(j), shaderTextureSetBlock->texturePaths[j]->c_str());
@@ -186,39 +210,42 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "TriShape %3d (%s):\n", int(i), ts.name);
     std::fprintf(f, "  Vertex count: %u\n", ts.vertexCnt);
     std::fprintf(f, "  Triangle count: %u\n", ts.triangleCnt);
-    if (ts.flags)
+    if (ts.m.flags)
     {
-      static const char *flagNames[8] =
+      static const char *flagNames[16] =
       {
-        "hidden", "is water", "is effect", "decal", "two sided", "tree",
-        "has vertex colors", "uses glow map"
+        "tile U", "tile V", "is effect", "decal", "two sided", "tree",
+        "grayscale to alpha", "glow", "", "", "", "",
+        "alpha blending", "has vertex colors", "is water", "hidden"
       };
       std::fprintf(f, "  Flags: ");
-      unsigned char m = 0x01;
-      unsigned char mPrv = 0x01;
+      std::uint16_t m = 0x0001;
+      std::uint16_t mPrv = 0x0001;
       for (int j = 0; j < 8; j++, m = m << 1, mPrv = (mPrv << 1) | 1)
       {
-        if ((ts.flags & mPrv) > m)
+        if ((ts.m.flags & mPrv) > m)
           std::fprintf(f, ", ");
-        if (ts.flags & m)
+        if (ts.m.flags & m)
           std::fprintf(f, "%s", flagNames[j]);
       }
       std::fputc('\n', f);
     }
-    if (ts.alphaThreshold)
-      std::fprintf(f, "  Alpha threshold: %d\n", int(ts.alphaThreshold));
-    if (ts.alphaBlendScale)
+    float   alphaThreshold = ts.m.getAlphaThreshold();
+    alphaThreshold = (alphaThreshold < 256.0f ? alphaThreshold : 256.0f);
+    if (alphaThreshold > 0.0f)
+      std::fprintf(f, "  Alpha threshold: %.3f\n", alphaThreshold);
+    if (ts.m.flags & BGSMFile::Flag_TSAlphaBlending)
     {
       std::fprintf(f, "  Alpha blend scale: %.3f\n",
-                   double(int(ts.alphaBlendScale)) / 128.0);
+                   double(int(ts.m.alpha)) / 128.0);
     }
     printVertexTransform(f, ts.vertexTransform);
-    if (ts.materialPath)
-      std::fprintf(f, "  Material: %s\n", ts.materialPath->c_str());
+    if (ts.haveMaterialPath())
+      std::fprintf(f, "  Material: %s\n", ts.materialPath().c_str());
     std::fprintf(f, "  Texture UV offset, scale: (%f, %f), (%f, %f)\n",
-                 ts.textureOffsetU, ts.textureOffsetV,
-                 ts.textureScaleU, ts.textureScaleV);
-    unsigned int  m = ts.texturePathMask;
+                 ts.m.textureOffsetU, ts.m.textureOffsetV,
+                 ts.m.textureScaleU, ts.m.textureScaleV);
+    unsigned int  m = ts.m.texturePathMask;
     for (int j = 0; m; j++, m = m >> 1)
     {
       if (m & 1U)
@@ -300,10 +327,10 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "newmtl Material%06u\n", (unsigned int) (i + 1));
     std::fprintf(f, "Ka 1.0 1.0 1.0\n");
     std::fprintf(f, "Kd 1.0 1.0 1.0\n");
-    FloatVector4  specularColor(ts.specularColor);
+    FloatVector4  specularColor(ts.m.specularColor);
     float   specularScale = specularColor[3] / (128.0f * 255.0f);
-    float   specularGlossiness = float(int(ts.specularSmoothness));
-    if (ts.texturePathMask & 0x0240)
+    float   specularGlossiness = float(int(ts.m.specularSmoothness));
+    if (ts.m.texturePathMask & 0x0240)
     {
       specularScale *= 0.5f;
       specularGlossiness *= 0.5f;
@@ -317,7 +344,7 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "Ns %.1f\n", specularGlossiness);
     for (size_t j = 0; j < 2; j++)
     {
-      if (ts.texturePathMask & (1U << (unsigned int) j))
+      if (ts.m.texturePathMask & (1U << (unsigned int) j))
       {
         std::fprintf(f, "%s %s\n",
                      (!j ? "map_Kd" : "map_Kn"), ts.texturePaths[j]->c_str());
@@ -425,7 +452,7 @@ static void renderMeshToFile(const char *outFileName, const NIFFile& nifFile,
       for (size_t i = 0; i < renderer.meshData.size(); i++)
       {
         // ignore if hidden
-        if (!(renderer.meshData[i].flags & 0x01))
+        if (!(renderer.meshData[i].m.flags & BGSMFile::Flag_TSHidden))
           renderer.meshData[i].calculateBounds(b, &t);
       }
       float   xScale = float(imageWidth) * 0.96875f;
@@ -732,7 +759,7 @@ static void viewMeshes(const BA2File& ba2File,
           for (size_t i = 0; i < renderer.meshData.size(); i++)
           {
             // ignore if hidden
-            if (!(renderer.meshData[i].flags & 0x01))
+            if (!(renderer.meshData[i].m.flags & BGSMFile::Flag_TSHidden))
               renderer.meshData[i].calculateBounds(b, &t);
           }
           float   xScale = float(imageWidth) * 0.96875f;
@@ -1145,12 +1172,12 @@ int main(int argc, char **argv)
         }
         else if (!tmp.empty())
         {
-          throw errorMessage("invalid image dimensions");
+          errorMessage("invalid image dimensions");
         }
         if (outFmt == 5)
         {
           if (argc < 3)
-            throw errorMessage("missing output file name for -render");
+            errorMessage("missing output file name for -render");
           outFileName = argv[2];
           argc--;
           argv++;
@@ -1159,7 +1186,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[1], "-o") == 0)
       {
         if (argc < 3)
-          throw errorMessage("missing output file name");
+          errorMessage("missing output file name");
         outFileName = argv[2];
         argc--;
         argv++;
@@ -1173,7 +1200,7 @@ int main(int argc, char **argv)
       }
       else
       {
-        throw errorMessage("invalid option: %s", argv[1]);
+        throw FO76UtilsError("invalid option: %s", argv[1]);
       }
     }
     consoleFlag = false;
@@ -1237,7 +1264,7 @@ int main(int argc, char **argv)
     {
       outFile = std::fopen(outFileName, (outFmt != 5 ? "w" : "wb"));
       if (!outFile)
-        throw errorMessage("error opening output file");
+        errorMessage("error opening output file");
     }
     else
     {

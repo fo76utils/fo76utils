@@ -3,6 +3,25 @@
 #include "bgsmfile.hpp"
 #include "fp32vec4.hpp"
 
+inline void BGSMFile::clear()
+{
+  version = 0;
+  gradientMapV = 128;
+  flags = 0;
+  alphaFlags = 0x00EC;
+  alphaThreshold = 0;
+  alpha = 128;
+  specularColor = 0x00FFFFFFU;
+  specularSmoothness = 128;
+  envMapScale = 128;
+  texturePathMask = 0;
+  textureOffsetU = 0.0f;
+  textureOffsetV = 0.0f;
+  textureScaleU = 1.0f;
+  textureScaleV = 1.0f;
+  emissiveColor = 0x80FFFFFFU;
+}
+
 BGSMFile::BGSMFile()
 {
   clear();
@@ -42,7 +61,7 @@ void BGSMFile::readTexturePaths(
   {
     size_t  n = size_t(texturePathMap & 15U);
     if ((buf.getPosition() + 4) > buf.size())
-      throw errorMessage("end of input file");
+      errorMessage("end of input file");
     size_t  len = buf.readUInt32Fast();
     if (n >= texturePathCnt)
     {
@@ -63,21 +82,19 @@ void BGSMFile::loadBGEMFile(std::vector< std::string >& texturePaths,
     texturePaths[i].clear();
   buf.setPosition(0);
   if (buf.size() < 68)
-    throw errorMessage("material file is shorter than expected");
+    errorMessage("material file is shorter than expected");
   if (buf.readUInt32Fast() != 0x4D454742)       // "BGEM"
-    throw errorMessage("invalid material file header");
-  int     tmp = uint32ToSigned(buf.readUInt32Fast());
-  if (tmp != 2 && tmp != 20)
-    throw errorMessage("unsupported BGEM file version");
-  version = (unsigned char) tmp;
+    errorMessage("invalid material file header");
+  if (buf.readUInt32Fast() > 0xFFU || (buf[4] != 2 && buf[4] != 20))
+    errorMessage("unsupported BGEM file version");
+  version = buf[4];
   gradientMapV = 255;
   flags = std::uint16_t((buf.readUInt32Fast() & 3U) | 4U);      // is effect
-  offsetU = buf.readFloat();
-  offsetV = buf.readFloat();
-  scaleU = buf.readFloat();
-  scaleV = buf.readFloat();
-  tmp = roundFloat(buf.readFloat() * 128.0f);
-  alpha = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+  textureOffsetU = buf.readFloat();
+  textureOffsetV = buf.readFloat();
+  textureScaleU = buf.readFloat();
+  textureScaleV = buf.readFloat();
+  alpha = floatToUInt8Clamped(buf.readFloat(), 128.0f);
   // blending enabled
   alphaFlags = std::uint16_t(bool(buf.readUInt8Fast()));
   // source blend mode
@@ -125,14 +142,25 @@ void BGSMFile::loadBGEMFile(std::vector< std::string >& texturePaths,
         texturePathMask = texturePathMask | 0x0200;
       }
     }
+    else
+    {
+      buf.setPosition(buf.getPosition() + 4);
+    }
     if (buf[buf.size() - 2] && (texturePathMask & 0x0004))
-      flags = flags | 0x80;             // enable glow map
+      flags = flags | Flag_Glow;        // enable glow map
     if (buf[buf.size() - 1] || (texturePathMask & 0x0200))
       specularColor = 0x80FFFFFFU;      // enable specular
     specularSmoothness = 255;
   }
-  tmp = roundFloat(envScale * 128.0f);
-  envMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+  if (!(texturePathMask & 0x0310))
+    specularSmoothness = 0;
+  envMapScale = floatToUInt8Clamped(envScale, 128.0f);
+  buf.setPosition(buf.getPosition() + 6);
+  // grayscale to alpha mapping
+  if ((texturePathMask & 0x0008) && buf.getPosition() < buf.size())
+    flags = flags | (std::uint16_t(bool(buf[buf.getPosition() - 2])) << 6);
+  emissiveColor = std::uint32_t(buf.readFloatVector4()
+                                * FloatVector4(255.0f, 255.0f, 255.0f, 128.0f));
 }
 
 void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
@@ -148,20 +176,18 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
     texturePaths[i].clear();
   buf.setPosition(0);
   if (buf.size() < 68)
-    throw errorMessage("material file is shorter than expected");
+    errorMessage("material file is shorter than expected");
   if (buf.readUInt32Fast() != 0x4D534742)       // "BGSM"
-    throw errorMessage("invalid material file header");
-  int     tmp = uint32ToSigned(buf.readUInt32Fast());
-  if (tmp != 2 && tmp != 20)
-    throw errorMessage("unsupported BGSM file version");
-  version = (unsigned char) tmp;
+    errorMessage("invalid material file header");
+  if (buf.readUInt32Fast() > 0xFFU || (buf[4] != 2 && buf[4] != 20))
+    errorMessage("unsupported BGSM file version");
+  version = buf[4];
   flags = std::uint16_t(buf.readUInt32Fast() & 3U);
-  offsetU = buf.readFloat();
-  offsetV = buf.readFloat();
-  scaleU = buf.readFloat();
-  scaleV = buf.readFloat();
-  tmp = roundFloat(buf.readFloat() * 128.0f);
-  alpha = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+  textureOffsetU = buf.readFloat();
+  textureOffsetV = buf.readFloat();
+  textureScaleU = buf.readFloat();
+  textureScaleV = buf.readFloat();
+  alpha = floatToUInt8Clamped(buf.readFloat(), 128.0f);
   // blending enabled
   alphaFlags = std::uint16_t(bool(buf.readUInt8Fast()));
   // source blend mode
@@ -206,20 +232,32 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   buf.setPosition(buf.getPosition() + (version == 2 ? 15 : 24));
   bool    specularEnabled = bool(buf.readUInt8());
   FloatVector4  specColor(buf.readFloatVector4());
-  tmp = roundFloat(envScale * specColor[3] * 128.0f);
-  envMapScale = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
+  envMapScale = floatToUInt8Clamped(envScale, specColor[3] * 128.0f);
   specColor[3] = specColor[3] * (specularEnabled ? (128.0f / 255.0f) : 0.0f);
   specularColor = std::uint32_t(specColor * 255.0f);
-  tmp = roundFloat(buf.readFloat() * 255.0f);
-  specularSmoothness = (unsigned char) (tmp > 0 ? (tmp < 255 ? tmp : 255) : 0);
-  if (version == 2)
+  specularSmoothness = floatToUInt8Clamped(buf.readFloat(), 255.0f);
+  buf.setPosition(buf.getPosition() + (version == 2 ? 28 : 30));
+  size_t  len = buf.readUInt32();                       // root material,
+  buf.setPosition(buf.getPosition() + (len + 1));       // anisotropic lighting
+  if ((buf.getPosition() + 17) <= buf.size())
   {
-    buf.setPosition(buf.getPosition() + 28);
-    size_t  len = buf.readUInt32();             // root material
-    buf.setPosition(buf.getPosition() + len);
-    buf.setPosition(buf.getPosition() + 1);
-    if (buf.getPosition() < buf.size())         // emit enabled
-      flags = flags & ~(std::uint16_t(buf.readUInt8Fast() == 0) << 7);
+    if (buf.readUInt8Fast())                    // emit enabled
+    {
+      emissiveColor =
+          std::uint32_t(buf.readFloatVector4()
+                        * FloatVector4(255.0f, 255.0f, 255.0f, 128.0f));
+    }
+    else if (version != 2 && (texturePathMask & 0x0004))
+    {
+      emissiveColor =
+          (std::uint32_t(floatToUInt8Clamped(buf.readFloat(), 128.0f)) << 24)
+          | 0x00FFFFFFU;
+    }
+    else
+    {
+      flags = flags & ~(std::uint16_t(Flag_Glow));
+      emissiveColor = 0U;
+    }
   }
   if (!texturePaths[3].empty())
   {
@@ -236,23 +274,5 @@ void BGSMFile::loadBGSMFile(std::vector< std::string >& texturePaths,
   ba2File.extractFile(tmpBuf, fileName);
   FileBuffer  buf(&(tmpBuf.front()), tmpBuf.size());
   loadBGSMFile(texturePaths, buf);
-}
-
-void BGSMFile::clear()
-{
-  version = 0;
-  gradientMapV = 128;
-  flags = 0;
-  alphaFlags = 0x00EC;
-  alphaThreshold = 0;
-  alpha = 128;
-  specularColor = 0x00FFFFFFU;
-  specularSmoothness = 128;
-  envMapScale = 0;
-  texturePathMask = 0;
-  offsetU = 0.0f;
-  offsetV = 0.0f;
-  scaleU = 1.0f;
-  scaleV = 1.0f;
 }
 

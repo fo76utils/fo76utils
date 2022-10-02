@@ -141,29 +141,28 @@ class NIFFile : public FileBuffer
       return boundsMax[2];
     }
   };
+  struct NIFTextureSet
+  {
+    // texturePaths[-1] = material path
+    const std::string **texturePaths;
+    NIFTextureSet(size_t n);
+    ~NIFTextureSet();
+    inline const std::string*& operator[](long n)
+    {
+      return *(texturePaths + n);
+    }
+    inline const std::string* const& operator[](long n) const
+    {
+      return *(texturePaths + n);
+    }
+  };
   struct NIFTriShape
   {
     unsigned int  vertexCnt;
     unsigned int  triangleCnt;
     const NIFVertex     *vertexData;
     const NIFTriangle   *triangleData;
-    NIFVertexTransform  vertexTransform;
-    // bit 0: hidden
-    // bit 1: is water
-    // bit 2: is effect (also set for water)
-    // bit 3: is decal
-    // bit 4: two sided (disables culling)
-    // bit 5: tree (disables vertex alpha)
-    // bit 6: has vertex colors
-    // bit 7: uses glow map
-    unsigned char flags;
-    unsigned char gradientMapV;
-    unsigned char alphaThreshold;
-    unsigned char alphaBlendScale;      // 128 = 1.0, 0 = no blending
-    std::uint32_t specularColor;        // alpha channel = specular scale * 128
-    unsigned char specularSmoothness;   // 255 = 1.0, glossiness from 2 to 1024
-    unsigned char envMapScale;          // 128 = 1.0
-    std::uint16_t texturePathMask;      // bit N = 1 if texturePaths[N] is valid
+    // texturePaths[-1] = material path
     // texturePaths[0] = diffuse texture
     // texturePaths[1] = normal map
     // texturePaths[2] = glow texture
@@ -175,54 +174,23 @@ class NIFFile : public FileBuffer
     // texturePaths[8] = Fallout 76 _r
     // texturePaths[9] = Fallout 76 _l
     const std::string * const * texturePaths;
-    // BGSM file name for Fallout 4 and 76
-    const std::string   *materialPath;
-    float   textureOffsetU;
-    float   textureOffsetV;
-    float   textureScaleU;
-    float   textureScaleV;
+    NIFVertexTransform  vertexTransform;
+    BGSMFile    m;
     const char  *name;
-    NIFTriShape()
-      : vertexCnt(0), triangleCnt(0),
-        vertexData((NIFVertex *) 0), triangleData((NIFTriangle *) 0),
-        flags(0x00), gradientMapV(128), alphaThreshold(0), alphaBlendScale(0),
-        specularColor(0x00FFFFFFU), specularSmoothness(128), envMapScale(128),
-        texturePathMask(0), texturePaths((std::string **) 0),
-        materialPath((std::string *) 0), textureOffsetU(0.0f),
-        textureOffsetV(0.0f), textureScaleU(1.0f), textureScaleV(1.0f), name("")
-    {
-    }
+    NIFTriShape();
     void calculateBounds(NIFBounds& b, const NIFVertexTransform *vt = 0) const;
-    // f = alpha flags, t = threshold, a = alpha (see bgsmfile.hpp)
-    inline void setAlphaProperties(
-        std::uint16_t f, unsigned char t, unsigned char a)
+    // materialTexturePaths[-1] = material path
+    // alphaProperties = flags | (threshold << 16) | (alpha << 24)
+    void setMaterial(const BGSMFile& material,
+                     const std::string * const *materialTexturePaths,
+                     std::uint32_t alphaProperties = 0U);
+    inline bool haveMaterialPath() const
     {
-      int     tmp = 0;
-      if (f & 0x0200)
-      {
-        if (!a)
-          tmp = 255;
-        else if (a == 128)
-          tmp = int(t);
-        else
-          tmp = roundFloat(float(int(t)) * 128.0f / float(int(a)));
-        tmp = (tmp < 255 ? (tmp + 1) : 255);
-      }
-      int     b = 0;
-      if ((f & 0x001F) == 0x000D)
-      {
-        if (!a)
-        {
-          tmp = 255;
-        }
-        else
-        {
-          b = int(a);
-          tmp = tmp + int(tmp == 0);
-        }
-      }
-      alphaThreshold = (unsigned char) tmp;
-      alphaBlendScale = (unsigned char) b;
+      return (texturePaths && *(texturePaths - 1));
+    }
+    inline const std::string& materialPath() const
+    {
+      return *(*(texturePaths - 1));
     }
   };
   enum
@@ -298,22 +266,25 @@ class NIFFile : public FileBuffer
     // 1: environment map
     // 2: glow
     unsigned int  shaderType;
-    const std::string *materialName;
     std::vector< unsigned int > extraData;
     int     controller;
     int     textureSet;
     unsigned long long  flags;
     BGSMFile  material; // (material.flags & 4) != 0 if this is an effect shader
-    std::vector< const std::string * >  texturePaths;
+    NIFTextureSet texturePaths;
     void readEffectShaderProperty(NIFFile& f);
     void readLightingShaderProperty(NIFFile& f);
     NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType,
                                    bool isEffect, const BA2File *ba2File);
     virtual ~NIFBlkBSLightingShaderProperty();
+    inline const std::string *materialName() const
+    {
+      return texturePaths[-1];
+    }
   };
   struct NIFBlkBSShaderTextureSet : public NIFBlock
   {
-    std::vector< const std::string * >  texturePaths;
+    NIFTextureSet texturePaths;
     std::uint16_t texturePathMask;
     NIFBlkBSShaderTextureSet(NIFFile& f);
     virtual ~NIFBlkBSShaderTextureSet();

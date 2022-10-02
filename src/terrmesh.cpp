@@ -52,20 +52,20 @@ void TerrainMesh::createMesh(
   // create vertex and triangle data
   vertexCnt = (unsigned int) w * (unsigned int) h;
   if (vertexCnt > 65536U)
-    throw errorMessage("TerrainMesh: vertex count is out of range");
+    errorMessage("TerrainMesh: vertex count is out of range");
   triangleCnt = ((unsigned int) (w - 1) * (unsigned int) (h - 1)) << 1;
   vertexDataBuf.resize(vertexCnt);
   triangleDataBuf.resize(triangleCnt);
   vertexData = &(vertexDataBuf.front());
   triangleData = &(triangleDataBuf.front());
-  specularColor = 0x80FFFFFFU;
-  specularSmoothness = 0;
+  m.specularColor = 0x80FFFFFFU;
+  m.specularSmoothness = 0;
   NIFFile::NIFVertex    *vertexPtr = &(vertexDataBuf.front());
   NIFFile::NIFTriangle  *trianglePtr = &(triangleDataBuf.front());
   float   xyScale = 4096.0f / float(cellResolution);
   float   zScale = (zMax - zMin) / 65535.0f;
-  textureScaleU = 1.0f / float(txtWP2 >> textureScale);
-  textureScaleV = 1.0f / float(txtHP2 >> textureScale);
+  m.textureScaleU = 1.0f / float(txtWP2 >> textureScale);
+  m.textureScaleV = 1.0f / float(txtHP2 >> textureScale);
   for (int y = y1; y >= y0; y--)
   {
     for (int x = x0; x <= x1; x++, vertexPtr++)

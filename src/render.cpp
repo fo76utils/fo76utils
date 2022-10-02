@@ -532,7 +532,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
           tmp.obndZ1 = (signed short) uint16ToSigned(f.readUInt16Fast());
           haveOBND = true;
         }
-        else if (f == "MODL" && f.size() > 1 &&
+        else if (f == "MODL" && f.size() > 4 &&
                  (!modelLOD || stringBuf.empty()))
         {
           f.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
@@ -1044,7 +1044,7 @@ const DDSTexture * Renderer::loadTexture(const std::string& fileName,
     textureDataSize = textureDataSize + getTextureDataSize(t);
     textureCacheMutex.unlock();
   }
-  catch (std::runtime_error&)
+  catch (FO76UtilsError&)
   {
   }
   catch (...)
@@ -1109,8 +1109,11 @@ void Renderer::loadModels(unsigned int t, unsigned long long modelIDMask)
       continue;
     if (renderPass & 4)
     {
-      if (std::strncmp(o.modelPath.c_str(), "meshes/sky/", 11) == 0)
+      if (std::strncmp(o.modelPath.c_str(), "meshes/sky/", 11) == 0 ||
+          std::strncmp(o.modelPath.c_str(), "meshes/effects/ambient/", 23) == 0)
+      {
         continue;
+      }
     }
     try
     {
@@ -1125,13 +1128,13 @@ void Renderer::loadModels(unsigned int t, unsigned long long modelIDMask)
       for (size_t i = 0; i < meshCnt; i++)
       {
         const NIFFile::NIFTriShape& ts = nifFiles[n].meshData[i];
-        // ignore if hidden, or wrong shader type for the current render pass
-        if ((ts.flags & 0x05) != (renderPass & 0x04))
+        // check hidden (0x8000) and alpha blending (0x1000) flags
+        if (((ts.m.flags >> 10) ^ renderPass) & 0x24U)
           continue;
         nifFiles[n].totalTriangleCnt += size_t(ts.triangleCnt);
       }
     }
-    catch (std::runtime_error&)
+    catch (FO76UtilsError&)
     {
       nifFiles[n].clear();
     }
@@ -1232,12 +1235,12 @@ unsigned int Renderer::loadMaterialSwap(unsigned int formID)
             for (size_t j = 0; txtPathMask; j++, txtPathMask = txtPathMask >> 1)
             {
               if (!(txtPathMask & 1U))
-                p.texturePathPtrs[j] = (std::string *) 0;
+                p.texturePathPtrs[j + 1] = (std::string *) 0;
               else
-                p.texturePathPtrs[j] = &(p.texturePaths.front()) + j;
+                p.texturePathPtrs[j + 1] = &(p.texturePaths.front()) + j;
             }
           }
-          catch (std::runtime_error&)
+          catch (FO76UtilsError&)
           {
           }
           if (n1 == std::string::npos)
@@ -1247,9 +1250,11 @@ unsigned int Renderer::loadMaterialSwap(unsigned int formID)
       m.materialPath.clear();
     }
   }
-  if (v.size() > 0)
-    return formID;
-  return 0U;
+  if (v.size() < 1)
+    return 0U;
+  for (size_t i = 0; i < v.size(); i++)
+    v[i].texturePathPtrs[0] = &(v[i].materialPath);
+  return formID;
 }
 
 struct ThreadSortObject
@@ -1332,7 +1337,7 @@ void Renderer::renderObjectList()
       for (unsigned int k = 0; k < nThreads; k++)
       {
         if (!nifFiles[k].threadErrMsg.empty())
-          throw errorMessage("%s", nifFiles[k].threadErrMsg.c_str());
+          throw FO76UtilsError(1, nifFiles[k].threadErrMsg.c_str());
       }
       for (unsigned int n = 0; n < modelBatchCnt; n++)
       {
@@ -1395,7 +1400,7 @@ void Renderer::renderObjectList()
     for (size_t k = 1; k < threadsUsed; k++)
     {
       if (!renderThreads[k].errMsg.empty())
-        throw errorMessage("%s", renderThreads[k].errMsg.c_str());
+        throw FO76UtilsError(1, renderThreads[k].errMsg.c_str());
     }
     // render any remaining objects that were skipped due to incorrect bounds
     for (size_t k = 0; k < threadsUsed; k++)
@@ -1421,28 +1426,13 @@ void Renderer::materialSwap(Plot3D_TriShape& t, unsigned int formID)
 {
   std::map< unsigned int, std::vector< MaterialSwap > >::const_iterator i =
       materialSwaps.find(formID);
-  if (i == materialSwaps.end() || !t.materialPath)
+  if (i == materialSwaps.end() || !t.haveMaterialPath())
     return;
   for (size_t j = 0; j < i->second.size(); j++)
   {
-    if (!(*(t.materialPath) == i->second[j].materialPath))
+    if (!(i->second[j].materialPath == t.materialPath()))
       continue;
-    const BGSMFile& bgsmFile = i->second[j].bgsmFile;
-    // add effect, decal, two sided, tree, and glow map flags from new material
-    t.flags = (t.flags & 0x43) | (bgsmFile.flags & 0xBC);
-    t.flags = t.flags | ((t.flags & 0x02) << 3);
-    t.gradientMapV = bgsmFile.gradientMapV;
-    t.setAlphaProperties(bgsmFile.alphaFlags,
-                         bgsmFile.alphaThreshold, bgsmFile.alpha);
-    t.specularColor = bgsmFile.specularColor;
-    t.specularSmoothness = bgsmFile.specularSmoothness;
-    t.envMapScale = bgsmFile.envMapScale;
-    t.texturePathMask = bgsmFile.texturePathMask;
-    t.texturePaths = i->second[j].texturePathPtrs;
-    t.textureOffsetU = bgsmFile.offsetU;
-    t.textureOffsetV = bgsmFile.offsetV;
-    t.textureScaleU = bgsmFile.scaleU;
-    t.textureScaleV = bgsmFile.scaleV;
+    t.setMaterial(i->second[j].bgsmFile, &(i->second[j].texturePathPtrs[1]));
     break;
   }
 }
@@ -1461,21 +1451,21 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     t.sortBuf.reserve(nifFiles[n].meshData.size());
     for (size_t j = 0; j < nifFiles[n].meshData.size(); j++)
     {
-      if ((nifFiles[n].meshData[j].flags & 0x05) != (renderPass & 0x04))
+      const NIFFile::NIFTriShape& ts = nifFiles[n].meshData[j];
+      // check hidden (0x8000) and alpha blending (0x1000) flags
+      if (((ts.m.flags >> 10) ^ renderPass) & 0x24U)
       {
-        // hidden or not the expected shader type
-        if ((nifFiles[n].meshData[j].flags & 0x05) == 0x04 &&
-            (nifFiles[n].meshData[j].texturePathMask
-             | (nifFiles[n].meshData[j].flags & 0x02)))
+        if ((ts.m.flags & BGSMFile::Flag_TSAlphaBlending) &&
+            (ts.m.texturePathMask | (ts.m.flags & BGSMFile::Flag_TSWater)))
         {
-          objectList[i].flags |= (unsigned short) 0x08; // uses effect shader
+          objectList[i].flags |= (unsigned short) 0x08; // uses alpha blending
         }
         continue;
       }
-      if (!nifFiles[n].meshData[j].triangleCnt)
+      if (!ts.triangleCnt)
         continue;
       NIFFile::NIFBounds  b;
-      nifFiles[n].meshData[j].calculateBounds(b, &vt);
+      ts.calculateBounds(b, &vt);
       int     x0 = roundFloat(b.xMin());
       int     y0 = roundFloat(b.yMin());
       int     x1 = roundFloat(b.xMax());
@@ -1509,9 +1499,9 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (!isVisible)
         continue;
       RenderThread::TriShapeSortObject  tmp;
-      tmp.ts = &(nifFiles[n].meshData.front()) + j;
+      tmp.ts = &ts;
       tmp.z = double(b.zMin());
-      if (tmp.ts->alphaBlendScale)
+      if (ts.m.flags & BGSMFile::Flag_TSAlphaBlending)
         tmp.z = double(0x02000000) - tmp.z;
       t.sortBuf.push_back(tmp);
     }
@@ -1524,9 +1514,12 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       *(t.renderer) = *(t.sortBuf[j].ts);
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
-      if (BRANCH_UNLIKELY(t.renderer->flags & 0x02))
+      if (BRANCH_UNLIKELY(t.renderer->m.flags & BGSMFile::Flag_TSWater))
       {
         t.renderer->setRenderMode(3U | renderMode);
+        t.renderer->m.envMapScale =
+            floatToUInt8Clamped(waterReflectionLevel, 128.0f);
+        t.renderer->m.emissiveColor = p.mswpFormID;     // water color
         if (!defaultWaterTexture.empty() &&
             bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf)))
         {
@@ -1537,9 +1530,6 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         {
           textureMask |= 0x0010U;
         }
-        t.renderer->drawWater(
-            p.modelTransform, viewTransform, lightX, lightY, lightZ,
-            textures, textureMask, p.mswpFormID, waterReflectionLevel);
       }
       else
       {
@@ -1548,14 +1538,14 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         if (p.mswpFormID)
           materialSwap(*(t.renderer), p.mswpFormID);
         if (p.flags & 0x80)
-          t.renderer->gradientMapV = (unsigned char) (p.flags >> 8);
-        unsigned int  texturePathMask = t.renderer->texturePathMask;
-        texturePathMask &= ((((unsigned int) t.renderer->flags & 0x80U) >> 5)
+          t.renderer->m.gradientMapV = (unsigned char) (p.flags >> 8);
+        unsigned int  texturePathMask = t.renderer->m.texturePathMask;
+        texturePathMask &= ((((unsigned int) t.renderer->m.flags & 0x80U) >> 5)
                             | (!isHDModel ? 0x0009U : 0x037BU));
         t.renderer->setRenderMode((!isHDModel ? 0U : 3U) | renderMode);
         if (BRANCH_UNLIKELY(!enableTextures))
         {
-          if (t.renderer->alphaThreshold || (texturePathMask & 0x0008U))
+          if (t.renderer->m.isAlphaTesting() || (texturePathMask & 0x0008U))
           {
             texturePathMask &= ~0x0008U;
             textures[3] = &whiteTexture;
@@ -1585,16 +1575,16 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
               textureMask |= tmp;
           }
         }
-        if (!(textureMask & 0x0010U) && t.renderer->envMapScale > 0 &&
+        if (!(textureMask & 0x0010U) && t.renderer->m.envMapScale > 0 &&
             isHDModel && !defaultEnvMap.empty())
         {
           if (bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
             textureMask |= 0x0010U;
         }
-        t.renderer->drawTriShape(
-            p.modelTransform, viewTransform, lightX, lightY, lightZ,
-            textures, textureMask);
       }
+      t.renderer->drawTriShape(
+          p.modelTransform, viewTransform, lightX, lightY, lightZ,
+          textures, textureMask);
     }
   }
   else if (p.flags & 0x01)              // terrain
@@ -1655,10 +1645,10 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     tmp.triangleCnt = 2;
     tmp.vertexData = vTmp;
     tmp.triangleData = tTmp;
-    tmp.flags = 0x16;                   // water, effect
-    tmp.alphaBlendScale = 128;
-    tmp.texturePathMask = 0;
-    tmp.texturePaths = (std::string **) 0;
+    tmp.m.flags = BGSMFile::Flag_TSWater | BGSMFile::Flag_TSAlphaBlending
+                  | BGSMFile::Flag_TwoSided;
+    tmp.m.envMapScale = floatToUInt8Clamped(waterReflectionLevel, 128.0f);
+    tmp.m.emissiveColor = p.mswpFormID;         // water color
     t.renderer->setRenderMode(3U | renderMode);
     *(t.renderer) = tmp;
     const DDSTexture  *textures[5];
@@ -1673,9 +1663,9 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     {
       textureMask |= 0x0010U;
     }
-    t.renderer->drawWater(
+    t.renderer->drawTriShape(
         p.modelTransform, viewTransform, lightX, lightY, lightZ,
-        textures, textureMask, p.mswpFormID, waterReflectionLevel);
+        textures, textureMask);
   }
   return true;
 }
@@ -2054,7 +2044,7 @@ void Renderer::renderObjects(unsigned int formID)
   sortObjectList();
   renderObjectList();
   if (verboseMode)
-    std::fprintf(stderr, "Rendering water and effects\n");
+    std::fprintf(stderr, "Rendering water and transparent objects\n");
   renderPass = 4;
   sortObjectList();
   renderObjectList();
@@ -2254,21 +2244,21 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-threads") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         threadCnt = int(parseInteger(argv[i], 10, "invalid number of threads",
                                      1, 16));
       }
       else if (std::strcmp(argv[i], "-debug") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         debugMode = (unsigned char) parseInteger(argv[i], 10,
                                                  "invalid debug mode", 0, 5);
       }
       else if (std::strcmp(argv[i], "-scol") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         enableSCOL =
             bool(parseInteger(argv[i], 0, "invalid argument for -scol", 0, 1));
       }
@@ -2279,7 +2269,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-textures") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         enableTextures =
             bool(parseInteger(argv[i], 0, "invalid argument for -textures",
                               0, 1));
@@ -2287,7 +2277,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-txtcache") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         textureCacheSize =
             int(parseInteger(argv[i], 0, "invalid texture cache size",
                              256, 4095));
@@ -2295,7 +2285,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-ssaa") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         enableDownscale =
             bool(parseInteger(argv[i], 0, "invalid argument for -ssaa", 0, 1));
       }
@@ -2306,20 +2296,20 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-btd") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         btdPath = argv[i];
       }
       else if (std::strcmp(argv[i], "-w") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         formID = (unsigned int) parseInteger(argv[i], 0, "invalid form ID",
                                              0, 0x0FFFFFFF);
       }
       else if (std::strcmp(argv[i], "-r") == 0)
       {
         if ((i + 4) >= argc)
-          throw errorMessage("missing argument for %s", argv[i]);
+          throw FO76UtilsError("missing argument for %s", argv[i]);
         terrainX0 = int(parseInteger(argv[i + 1], 10, "invalid terrain X0",
                                      -32768, 32767));
         terrainY0 = int(parseInteger(argv[i + 2], 10, "invalid terrain Y0",
@@ -2333,21 +2323,21 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-l") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         btdLOD = int(parseInteger(argv[i], 10,
                                   "invalid terrain level of detail", 0, 4));
       }
       else if (std::strcmp(argv[i], "-deftxt") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         defTxtID = (unsigned int) parseInteger(argv[i], 0, "invalid form ID",
                                                0, 0x0FFFFFFF);
       }
       else if (std::strcmp(argv[i], "-defclr") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         ltxtDefColor = (std::uint32_t) parseInteger(
                            argv[i], 0, "invalid land texture color",
                            0, 0x00FFFFFF);
@@ -2355,24 +2345,24 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-ltxtres") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         ltxtResolution = int(parseInteger(argv[i], 0,
                                           "invalid land texture resolution",
                                           8, 4096));
         if (ltxtResolution & (ltxtResolution - 1))
-          throw errorMessage("invalid land texture resolution");
+          errorMessage("invalid land texture resolution");
       }
       else if (std::strcmp(argv[i], "-mip") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         textureMip = int(parseInteger(argv[i], 10, "invalid texture mip level",
                                       0, 15));
       }
       else if (std::strcmp(argv[i], "-lmip") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         landTextureMip = float(parseFloat(argv[i],
                                           "invalid land texture mip level",
                                           0.0, 15.0));
@@ -2380,7 +2370,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-lmult") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         landTextureMult = float(parseFloat(argv[i],
                                            "invalid land texture RGB scale",
                                            0.5, 8.0));
@@ -2389,7 +2379,7 @@ int main(int argc, char **argv)
                std::strcmp(argv[i], "-cam") == 0)
       {
         if ((i + 7) >= argc)
-          throw errorMessage("missing argument for %s", argv[i]);
+          throw FO76UtilsError("missing argument for %s", argv[i]);
         viewScale = float(parseFloat(argv[i + 1], "invalid view scale",
                                      1.0 / 512.0, 16.0));
         viewRotationX = float(parseFloat(argv[i + 2], "invalid view X rotation",
@@ -2425,7 +2415,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-zrange") == 0)
       {
         if ((i + 2) >= argc)
-          throw errorMessage("missing argument for %s", argv[i]);
+          throw FO76UtilsError("missing argument for %s", argv[i]);
         zMin = int(parseInteger(argv[i + 1], 10, "invalid Z range",
                                 0, 1048575));
         zMax = int(parseInteger(argv[i + 2], 10, "invalid Z range",
@@ -2435,7 +2425,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-light") == 0)
       {
         if ((i + 3) >= argc)
-          throw errorMessage("missing argument for %s", argv[i]);
+          throw FO76UtilsError("missing argument for %s", argv[i]);
         rgbScale = float(parseFloat(argv[i + 1], "invalid RGB scale",
                                     0.125, 4.0));
         lightRotationY = float(parseFloat(argv[i + 2],
@@ -2449,7 +2439,7 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-lcolor") == 0)
       {
         if ((i + 5) >= argc)
-          throw errorMessage("missing argument for %s", argv[i]);
+          throw FO76UtilsError("missing argument for %s", argv[i]);
         lightLevel = float(parseFloat(argv[i + 1], "invalid light source level",
                                       0.125, 4.0));
         lightColor = int(parseInteger(argv[i + 2], 0,
@@ -2468,65 +2458,65 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-mlod") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         modelLOD = int(parseInteger(argv[i], 10, "invalid model LOD", 0, 4));
       }
       else if (std::strcmp(argv[i], "-vis") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         distantObjectsOnly =
             bool(parseInteger(argv[i], 0, "invalid argument for -vis", 0, 1));
       }
       else if (std::strcmp(argv[i], "-ndis") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         noDisabledObjects =
             bool(parseInteger(argv[i], 0, "invalid argument for -ndis", 0, 1));
       }
       else if (std::strcmp(argv[i], "-hqm") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         hdModelNamePatterns.push_back(argv[i]);
       }
       else if (std::strcmp(argv[i], "-xm") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         excludeModelPatterns.push_back(argv[i]);
       }
       else if (std::strcmp(argv[i], "-env") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         defaultEnvMap = argv[i];
       }
       else if (std::strcmp(argv[i], "-wtxt") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         waterTexture = argv[i];
       }
       else if (std::strcmp(argv[i], "-watercolor") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         waterColor = (std::uint32_t) parseInteger(
                          argv[i], 0, "invalid water color", 0, 0x7FFFFFFF);
       }
       else if (std::strcmp(argv[i], "-wrefl") == 0)
       {
         if (++i >= argc)
-          throw errorMessage("missing argument for %s", argv[i - 1]);
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         waterReflectionLevel =
             float(parseFloat(argv[i], "invalid water environment map scale",
                              0.0, 2.0));
       }
       else
       {
-        throw errorMessage("invalid option: %s", argv[i]);
+        throw FO76UtilsError("invalid option: %s", argv[i]);
       }
     }
     if (args.size() != 5)
@@ -2576,7 +2566,7 @@ int main(int argc, char **argv)
     ESMFile esmFile(args[0]);
     unsigned int  worldID = Renderer::findParentWorld(esmFile, formID);
     if (worldID == 0xFFFFFFFFU)
-      throw errorMessage("form ID not found in ESM, or invalid record type");
+      errorMessage("form ID not found in ESM, or invalid record type");
 
     Renderer  renderer(width, height, ba2File, esmFile,
                        (std::uint32_t *) 0, (float *) 0, zMax);

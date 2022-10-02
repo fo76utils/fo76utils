@@ -39,7 +39,7 @@ class Renderer
   struct RenderObject
   {
     // 1: terrain, 2: solid object, 4: water cell, 6: water mesh
-    // 0x08: uses effect shader
+    // 0x08: uses alpha blending
     // 0x40: high quality model
     // 0x80: upper byte is gradient map V from MODC
     unsigned short  flags;
@@ -97,13 +97,14 @@ class Renderer
     std::string materialPath;
     BGSMFile    bgsmFile;
     std::vector< std::string >  texturePaths;
-    const std::string *texturePathPtrs[10];
+    // texturePathPtrs[0] = &materialPath
+    const std::string *texturePathPtrs[11];
   };
   struct RenderThread
   {
     struct TriShapeSortObject
     {
-      NIFFile::NIFTriShape  *ts;
+      const NIFFile::NIFTriShape  *ts;
       double  z;
       inline bool operator<(const TriShapeSortObject& r) const
       {
@@ -148,7 +149,7 @@ class Renderer
   bool    enableTextures;
   unsigned char renderMode;
   unsigned char debugMode;
-  // 1: terrain, 2: objects, 4: effects
+  // 1: terrain, 2: objects, 4: objects with alpha blending
   unsigned char renderPass;
   int     threadCnt;
   size_t  textureDataSize;

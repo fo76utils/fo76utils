@@ -15,7 +15,7 @@ struct Renderer
 {
   struct TriShapeSortObject
   {
-    NIFFile::NIFTriShape  *ts;
+    const NIFFile::NIFTriShape  *ts;
     double  z;
     inline bool operator<(const TriShapeSortObject& r) const
     {

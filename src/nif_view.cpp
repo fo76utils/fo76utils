@@ -111,7 +111,7 @@ const DDSTexture * Renderer::loadTexture(const std::string *texturePath)
         ba2File->extractFile(fileBuf, *texturePath);
         t = new DDSTexture(&(fileBuf.front()), fileBuf.size());
       }
-      catch (std::runtime_error& e)
+      catch (FO76UtilsError& e)
       {
         std::fprintf(stderr, "Warning: failed to load texture '%s': %s\n",
                      texturePath->c_str(), e.what());
@@ -146,7 +146,7 @@ void Renderer::threadFunction(Renderer *p, size_t n)
     vt.offsY = vt.offsY - float(p->viewOffsetY[n]);
     for (size_t i = 0; i < p->meshData.size(); i++)
     {
-      if (p->meshData[i].flags & 0x01)          // ignore if hidden
+      if (p->meshData[i].m.flags & BGSMFile::Flag_TSHidden)
         continue;
       NIFFile::NIFBounds  b;
       p->meshData[i].calculateBounds(b, &mt);
@@ -160,7 +160,7 @@ void Renderer::threadFunction(Renderer *p, size_t n)
       TriShapeSortObject  tmp;
       tmp.ts = &(p->meshData.front()) + i;
       tmp.z = double(b.zMin());
-      if (tmp.ts->alphaBlendScale)
+      if (tmp.ts->m.flags & BGSMFile::Flag_TSAlphaBlending)
         tmp.z = double(0x02000000) - tmp.z;
       sortBuf.push_back(tmp);
     }
@@ -171,25 +171,23 @@ void Renderer::threadFunction(Renderer *p, size_t n)
     {
       const NIFFile::NIFTriShape& ts = *(sortBuf[i].ts);
       *(p->renderers[n]) = ts;
-      if (BRANCH_UNLIKELY(ts.flags & 0x02))
+      const DDSTexture  *textures[10];
+      unsigned int  textureMask = 0U;
+      if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSWater))
       {
-        const DDSTexture  *textures[5];
-        unsigned int  textureMask = 0U;
         if (bool(textures[1] = p->loadTexture(&(p->waterTexture))))
           textureMask |= 0x0002U;
         if (bool(textures[4] = p->loadTexture(&(p->defaultEnvMap))))
           textureMask |= 0x0010U;
-        p->renderers[n]->drawWater(p->modelTransform, vt,
-                                   p->lightX, p->lightY, p->lightZ,
-                                   textures, textureMask,
-                                   p->waterColor, p->waterEnvMapLevel);
+        p->renderers[n]->m.envMapScale =
+            floatToUInt8Clamped(p->waterEnvMapLevel, 128.0f);
+        p->renderers[n]->m.emissiveColor = p->waterColor;
       }
       else
       {
-        const DDSTexture  *textures[10];
-        unsigned int  texturePathMask = (!(ts.flags & 0x80) ? 0x037BU : 0x037FU)
-                                        & (unsigned int) ts.texturePathMask;
-        unsigned int  textureMask = 0U;
+        unsigned int  texturePathMask =
+            (!(ts.m.flags & BGSMFile::Flag_Glow) ? 0x037BU : 0x037FU)
+            & (unsigned int) ts.m.texturePathMask;
         for (size_t j = 0; j < 10; j++, texturePathMask >>= 1)
         {
           if (texturePathMask & 1)
@@ -203,15 +201,15 @@ void Renderer::threadFunction(Renderer *p, size_t n)
           textures[0] = &(p->whiteTexture);
           textureMask |= 0x0001U;
         }
-        if (!(textureMask & 0x0010U) && ts.envMapScale > 0)
+        if (!(textureMask & 0x0010U) && ts.m.envMapScale > 0)
         {
           if (bool(textures[4] = p->loadTexture(&(p->defaultEnvMap))))
             textureMask |= 0x0010U;
         }
-        p->renderers[n]->drawTriShape(p->modelTransform, vt,
-                                      p->lightX, p->lightY, p->lightZ,
-                                      textures, textureMask);
       }
+      p->renderers[n]->drawTriShape(p->modelTransform, vt,
+                                    p->lightX, p->lightY, p->lightZ,
+                                    textures, textureMask);
     }
   }
   catch (std::exception& e)
@@ -238,7 +236,7 @@ void Renderer::renderModel()
         threads[i] = (std::thread *) 0;
       }
       if (!threadErrMsg[i].empty())
-        throw errorMessage("%s", threadErrMsg[i].c_str());
+        throw FO76UtilsError(1, threadErrMsg[i].c_str());
     }
   }
   catch (...)
