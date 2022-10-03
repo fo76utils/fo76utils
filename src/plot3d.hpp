@@ -11,6 +11,9 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
 {
  protected:
   static const float  fresnelRoughTable[1024];
+  static const float  fresnelPoly3N_Glass[4];
+  static const float  fresnelPoly3_Water[4];
+  static const float  fresnelPoly3_FO4[4];
   struct Vertex
   {
     FloatVector4  xyz;
@@ -102,8 +105,9 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // r = roughness, s_i = smoothness * 255
   // returns sRGB color
   inline FloatVector4 calculateLighting_FO76(
-      FloatVector4 c, FloatVector4 e, float specular, float ao, FloatVector4 f0,
-      const Fragment& z, float nDotL, float nDotV, float r, int s_i) const;
+      FloatVector4 c, FloatVector4 e, FloatVector4 specular,
+      float ao, FloatVector4 f0, const Fragment& z,
+      float nDotL, float nDotV, float r, int s_i) const;
   inline FloatVector4 calculateLighting_FO4(
       FloatVector4 c, FloatVector4 e, float specular, float specLevel,
       const Fragment& z, float nDotL, float nDotV, float smoothness) const;
@@ -118,18 +122,20 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   inline FloatVector4 calculateLighting_TES5(
       FloatVector4 c, const Fragment& z) const;
   // returns reflected view vector
-  inline FloatVector4 calculateReflection(const Vertex& v) const;
+  inline FloatVector4 calculateReflection(float& vDotL, const Vertex& v) const;
   inline FloatVector4 environmentMap(
       FloatVector4 reflectedView, float smoothness,
       bool isSRGB, bool invZ) const;
-  inline float specularPhong(FloatVector4 reflectedView, float smoothness,
-                             float nDotL, bool isNormalized = false) const;
-  inline float specularGGX(FloatVector4 reflectedView, float roughness,
-                           float nDotL) const;
+  // fresnelPoly != NULL also enables normalization
+  inline float specularPhong(
+      FloatVector4 reflectedView, float smoothness, float nDotL, float vDotL,
+      const float *fresnelPoly = (float *) 0) const;
+  inline FloatVector4 specularGGX(
+      FloatVector4 reflectedView, float roughness, float nDotL, float vDotL,
+      const float *fresnelPoly, FloatVector4 f0) const;
   // c0 = terrain color, a = water transparency
   inline FloatVector4 calculateLighting_Water(
-      FloatVector4 c0, FloatVector4 n, FloatVector4 reflectedView, float a,
-      bool isFO76) const;
+      FloatVector4 c0, float a, Fragment& z, bool isFO76) const;
   // fill with water
   static void drawPixel_Water(Plot3D_TriShape& p, Fragment& z);
   // with GGX
