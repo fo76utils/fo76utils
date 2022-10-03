@@ -968,11 +968,11 @@ static void viewMeshes(const BA2File& ba2File,
                 updateLightColor(lightColor, 0, 0, -d, messageBuf);
                 break;
               case SDLDisplay::SDLKeySymInsert:
-                updateValueLogScale(envMapScale, d, 0.5f, 8.0f, messageBuf,
+                updateValueLogScale(envMapScale, d, 0.25f, 8.0f, messageBuf,
                                     "Reflection f scale");
                 break;
               case SDLDisplay::SDLKeySymDelete:
-                updateValueLogScale(envMapScale, -d, 0.5f, 8.0f, messageBuf,
+                updateValueLogScale(envMapScale, -d, 0.25f, 8.0f, messageBuf,
                                     "Reflection f scale");
                 break;
               case SDLDisplay::SDLKeySymCapsLock:
