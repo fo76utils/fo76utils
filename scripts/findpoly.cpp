@@ -305,17 +305,18 @@ struct FunctionDesc
   double  x1;
 };
 
-static const FunctionDesc functionTable[9] =
+static const FunctionDesc functionTable[10] =
 {
   // name,           type, k,    n,  flags,   x0,  x1
   { "lpoly",            0, 5,  512, 0x00A5, -1.0, 1.0   },
   { "log2",             1, 4,  512, 0x002D,  1.0, 2.0   },
   { "exp2",             2, 3,  512, 0x006D,  0.0, 1.0   },
-  { "fresnel2",         3, 5,  512, 0x0175,  0.0, 1.0   },
-  { "fresnel",          4, 4,  512, 0x0175,  0.0, 1.0   },
-  { "srgb_expand",      5, 2,  512, 0x0160,  0.0, 1.0   },
-  { "srgb_compress",    6, 2,  512, 0x0160,  0.0, 1.0   },
-  { "fresnelggx",       7, 3,  512, 0x0139,  0.0, 1.0   },
+  { "fresnel",          3, 3,  512, 0x0175,  0.0, 1.0   },
+  { "fresnel_n",        4, 3,  512, 0x0175,  0.0, 1.0   },
+  { "fresnelggx",       5, 3,  512, 0x0139,  0.0, 1.0   },
+  { "srgb_expand",      6, 2,  512, 0x0160,  0.0, 1.0   },
+  { "srgb_compress",    7, 2,  512, 0x0160,  0.0, 1.0   },
+  { "srgb_exp_inv",     8, 3,  512, 0x0160,  0.0, 1.0   },
   { (char *) 0,         0, 0,    0,      0,  0.0, 0.0   }
 };
 
@@ -377,15 +378,13 @@ int main(int argc, char **argv)
       case 2:                           // expsqrt2
         y = std::exp2(x / 2.0);
         break;
-      case 3:                           // fresnel gamma 2.0
+      case 3:                           // sqrt(Fresnel)
         {
-          double  f0 = fresnel(1.0, 1.0, arg1);
           double  r = fresnel(x, 1.0, arg1);
-          r = (r - f0) / (1.0 - f0);
-          y = std::pow((r > 0.0 ? (r < 1.0 ? r : 1.0) : 0.0), 2.0 / 2.2);
+          y = std::sqrt(r > 0.0 ? (r < 1.0 ? r : 1.0) : 0.0);
         }
         break;
-      case 4:                           // sqrt(fresnel)
+      case 4:                           // sqrt(Fresnel normalized to 0.0 - 1.0)
         {
           double  f0 = fresnel(1.0, 1.0, arg1);
           double  r = fresnel(x, 1.0, arg1);
@@ -393,15 +392,7 @@ int main(int argc, char **argv)
           y = std::sqrt(r > 0.0 ? (r < 1.0 ? r : 1.0) : 0.0);
         }
         break;
-      case 5:                           // srgb_expand
-        y = std::sqrt(x > 0.04045 ?
-                      std::pow((x + 0.055) / 1.055, 2.4) : (x / 12.92));
-        break;
-      case 6:                           // srgb_compress
-        y = ((x * x) > 0.0031308 ?
-             (std::pow(x * x, 1.0 / 2.4) * 1.055 - 0.055) : (x * x * 12.92));
-        break;
-      case 7:                           // sqrt(fresnelggx)
+      case 5:                           // sqrt(fresnelggx)
         {
           double  f0 = fresnel(1.0, 1.0, arg1);
           double  r = fresnelGGX(x, 1.0, arg1, arg2);
@@ -409,10 +400,23 @@ int main(int argc, char **argv)
           y = std::sqrt(r > 0.0 ? (r < 1.0 ? r : 1.0) : 0.0);
         }
         break;
+      case 6:                           // srgb_expand
+        y = std::sqrt(x > 0.04045 ?
+                      std::pow((x + 0.055) / 1.055, 2.4) : (x / 12.92));
+        break;
+      case 7:                           // srgb_compress
+        y = ((x * x) > 0.0031308 ?
+             (std::pow(x * x, 1.0 / 2.4) * 1.055 - 0.055) : (x * x * 12.92));
+        break;
+      case 8:                           // srgb_exp_inv
+        y = (std::sqrt(0.86054450 * 0.86054450 + (4.0 * 0.13945550 * x))
+             - 0.86054450)
+            / (2.0 * 0.13945550);
+        break;
     }
     f[i] = y;
   }
-  if (funcType == 7)
+  if (funcType == 5)
     findPolynomial(&(a.front()), k, &(f.front()), n, x0, x1, flags, 1000000);
   else
     findPolynomial(&(a.front()), k, &(f.front()), n, x0, x1, flags);
