@@ -9,15 +9,20 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 * **--**: Remaining options are file names.
 * **-q**: Do not print messages other than errors.
 * **-threads INT**: Set the number of threads to use.
-* **-debug INT**: Set debug render mode (0: disabled, 1: reference form IDs as 0xRRGGBB, 2: depth \* 16, 3: normals, 4: diffuse texture only, 5: light only).
+* **-debug INT**: Set debug render mode (0: disabled, 1: reference form IDs as 0xRRGGBB, 2: depth \* 16 or 64, 3: normals, 4: diffuse texture only, 5: light only).
 * **-ssaa BOOL**: Render at double resolution and downsample.
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
+* **-f INT**: Select output format, 0: 24-bit RGB (default), 1: 32-bit A8R8G8B8, 2: 32-bit A2R10G10B10.
+
+##### Note
+
+Compiling with **rgb10a2=1** is required to actually increase frame buffer precision to 10 bits per channel. Format 2 may not be correctly supported by some image editors, The GIMP can open RGB10A2 DDS files, but currently truncates the data to 8 bits per channel.
 
 ### Texture options
 
 * **-textures BOOL**: Make all diffuse textures white if false.
 * **-txtcache INT**: Texture cache size in megabytes.
-* **-mip INT**: Base mip level for all textures other than cube maps. Defaults to 2.
+* **-mip INT**: Base mip level for all textures other than cube maps and the water texture. Defaults to 2.
 * **-env FILENAME.DDS**: Default environment map texture path in archives. Defaults to **textures/shared/cubemaps/mipblur_defaultoutside1.dds**. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures, and [cubeview](cubeview.md) to preview them.
 
 ### Terrain options
@@ -51,6 +56,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 
 * **-light SCALE RY RZ**: Set overall brightness, and light vector Y, Z rotation in degrees (0, 0 = top). The light direction is rotated around the Y axis first (positive = east, negative = west), then around the Z axis (positive = counter-clockwise, from east towards north). The default direction of RY=70.5288 and RZ=135 translates to a light vector of -2/3, 2/3, 1/3.
 * **-lcolor LMULT LCOLOR EMULT ECOLOR ACOLOR**: Set light source, environment, and ambient light colors and levels. LCOLOR, ECOLOR, and ACOLOR are in 0xRRGGBB format (sRGB color space), -1 is interpreted as white for LCOLOR and ECOLOR. LMULT and LCOLOR multiply diffuse and specular lighting, while EMULT and ECOLOR are applied to environment maps and also to ambient light. If ACOLOR is negative, the ambient light color is determined from the default cube map specified with **-env**, if one is available, otherwise it defaults to 0x404040.
+* **-rscale FLOAT**: Scale factor to use when calculating a view vector (X \* -normalZ, Y \* -normalZ, H \* RSCALE) from the pixel coordinates and image height for cube mapping and specular reflections. A higher value simulates a narrower FOV for the purpose of reflections. Defaults to 2.0.
 
 For testing view and light settings, it is recommended to use faster low quality rendering, with no downsampling, low landscape texture resolution, no high quality models, and if necessary, disabling all meshes.
 
@@ -59,6 +65,7 @@ For testing view and light settings, it is recommended to use faster low quality
 * **-wtxt FILENAME.DDS**: Water normal map texture path in archives. Defaults to **textures/water/defaultwater.dds**. Setting the path to an empty string disables normal mapping on water.
 * **-watercolor UINT32**: Water color (A7R8G8B8), 0 disables water, 0x7FFFFFFF (the default) uses values from the ESM file. The alpha channel determines the depth at which water reaches maximum opacity, maxDepth = (128 - a) \* (128 - a) / 2.
 * **-wrefl FLOAT**: Water environment map scale, the default is 1.0.
+* **-wscale INT**: Water texture tile size, defaults to 2048.
 
 ### Examples
 
