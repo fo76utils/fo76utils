@@ -538,6 +538,8 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
     material.flags = material.flags | std::uint16_t((flags >> 32) & 0x10U);
     // glow map
     material.flags = material.flags | std::uint16_t((flags >> 31) & 0x80U);
+    // no Z buffer write
+    material.flags = material.flags | std::uint16_t(~(flags >> 24) & 0x0100U);
   }
   else if (!isEffect && nxtBlkType == NIFFile::BlkTypeBSShaderTextureSet)
   {

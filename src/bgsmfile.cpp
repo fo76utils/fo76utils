@@ -105,7 +105,8 @@ void BGSMFile::loadBGEMFile(std::vector< std::string >& texturePaths,
   if (buf.readUInt8Fast())
     alphaFlags = alphaFlags | 0x1200;   // thresholding enabled, greater mode
   // Z buffer write, Z buffer test, screen space reflections
-  (void) buf.readUInt32Fast();
+  if (!(buf.readUInt32Fast() & 0xFFU))
+    flags = flags | BGSMFile::Flag_NoZWrite;
   // decal
   flags = flags | (std::uint16_t(bool(buf.readUInt8Fast())) << 3);
   // two sided

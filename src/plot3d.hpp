@@ -85,7 +85,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   FloatVector4  specularColorFloat;     // water color for drawWater()
   void    (*drawPixelFunction)(Plot3D_TriShape& p, Fragment& z);
   bool    (*getDiffuseColorFunc)(const Plot3D_TriShape& p,
-                                 FloatVector4& c, const Fragment& z);
+                                 FloatVector4& c, Fragment& z);
   std::vector< Vertex > vertexBuf;
   std::vector< Triangle > triangleBuf;
   static FloatVector4 colorToSRGB(FloatVector4 c);
@@ -143,16 +143,16 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   FloatVector4 glowMap(const Fragment& z) const;
   // returns true if the pixel is visible (alpha >= threshold)
   static bool getDiffuseColor_Effect(
-      const Plot3D_TriShape& p, FloatVector4& c, const Fragment& z);
+      const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
   static bool getDiffuseColor_sRGB_G(
-      const Plot3D_TriShape& p, FloatVector4& c, const Fragment& z);
+      const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
   static bool getDiffuseColor_sRGB(
-      const Plot3D_TriShape& p, FloatVector4& c, const Fragment& z);
+      const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
   static bool getDiffuseColor_Linear_G(
-      const Plot3D_TriShape& p, FloatVector4& c, const Fragment& z);
+      const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
   static bool getDiffuseColor_Linear(
-      const Plot3D_TriShape& p, FloatVector4& c, const Fragment& z);
-  inline bool getDiffuseColor(FloatVector4& c, const Fragment& z) const
+      const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
+  inline bool getDiffuseColor(FloatVector4& c, Fragment& z) const
   {
     return getDiffuseColorFunc(*this, c, z);
   }

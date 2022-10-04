@@ -542,7 +542,7 @@ FloatVector4 Plot3D_TriShape::glowMap(const Fragment& z) const
 }
 
 bool Plot3D_TriShape::getDiffuseColor_Effect(
-    const Plot3D_TriShape& p, FloatVector4& c, const Fragment& z)
+    const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
   FloatVector4  tmp(p.textureD->getPixelT_Inline(z.u(), z.v(), z.mipLevel));
   FloatVector4  vColor(z.vertexColor);
@@ -578,11 +578,13 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
   }
   tmp[3] = a;                   // alpha * 255
   c = tmp;
+  if (BRANCH_UNLIKELY(p.m.flags & BGSMFile::Flag_NoZWrite))
+    z.zPtr = &(z.xyz[2]);
   return true;
 }
 
 bool Plot3D_TriShape::getDiffuseColor_sRGB_G(
-    const Plot3D_TriShape& p, FloatVector4& c, const Fragment& z)
+    const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
   FloatVector4  tmp(p.textureD->getPixelT_Inline(z.u(), z.v(), z.mipLevel));
   FloatVector4  vColor(z.vertexColor);
@@ -599,7 +601,7 @@ bool Plot3D_TriShape::getDiffuseColor_sRGB_G(
 }
 
 bool Plot3D_TriShape::getDiffuseColor_sRGB(
-    const Plot3D_TriShape& p, FloatVector4& c, const Fragment& z)
+    const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
   FloatVector4  tmp(p.textureD->getPixelT_Inline(z.u(), z.v(), z.mipLevel));
   FloatVector4  vColor(z.vertexColor);
@@ -614,7 +616,7 @@ bool Plot3D_TriShape::getDiffuseColor_sRGB(
 }
 
 bool Plot3D_TriShape::getDiffuseColor_Linear_G(
-    const Plot3D_TriShape& p, FloatVector4& c, const Fragment& z)
+    const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
   FloatVector4  tmp(p.textureD->getPixelT_Inline(z.u(), z.v(), z.mipLevel));
   FloatVector4  vColor(z.vertexColor);
@@ -630,7 +632,7 @@ bool Plot3D_TriShape::getDiffuseColor_Linear_G(
 }
 
 bool Plot3D_TriShape::getDiffuseColor_Linear(
-    const Plot3D_TriShape& p, FloatVector4& c, const Fragment& z)
+    const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
   FloatVector4  tmp(p.textureD->getPixelT_Inline(z.u(), z.v(), z.mipLevel));
   FloatVector4  vColor(z.vertexColor);
@@ -646,16 +648,11 @@ bool Plot3D_TriShape::getDiffuseColor_Linear(
 
 void Plot3D_TriShape::drawPixel_Debug(Plot3D_TriShape& p, Fragment& z)
 {
-  float   txtU = z.u();
-  float   txtV = z.v();
-  FloatVector4  c(0.0f);
-  if (BRANCH_LIKELY(p.textureD))
-  {
-    if (BRANCH_UNLIKELY(!p.getDiffuseColor(c, z)))
-      return;
-    if (p.debugMode == 5)
-      c = FloatVector4(1.0f);
-  }
+  FloatVector4  c;
+  if (BRANCH_UNLIKELY(!p.getDiffuseColor(c, z)))
+    return;
+  if (p.debugMode == 5)
+    c = FloatVector4(1.0f);
   *(z.zPtr) = z.xyz[2];
   if (!(p.debugMode == 3 || p.debugMode == 5))
   {
@@ -694,7 +691,8 @@ void Plot3D_TriShape::drawPixel_Debug(Plot3D_TriShape& p, Fragment& z)
     *(z.cPtr) = tmp;
     return;
   }
-  FloatVector4  n(p.textureN->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsetN));
+  FloatVector4  n(p.textureN->getPixelT(z.u(), z.v(),
+                                        z.mipLevel + p.mipOffsetN));
   n = z.normalMap(n);
   if (p.debugMode == 3)
   {

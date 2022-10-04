@@ -20,6 +20,7 @@ struct BGSMFile
     Flag_IsTree = 0x0020,
     Flag_GrayscaleToAlpha = 0x0040,
     Flag_Glow = 0x0080,
+    Flag_NoZWrite = 0x0100,
     // TriShape flags
     Flag_TSAlphaBlending = 0x1000,
     Flag_TSVertexColors = 0x2000,
