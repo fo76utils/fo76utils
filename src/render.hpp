@@ -350,8 +350,9 @@ class Renderer
   }
   // colors are in 0xRRGGBB format, ambientColor < 0 takes the color from
   // the default environment map
-  void setLighting(int lightColor, int ambientColor, int envColor,
-                   float lightLevel, float envLevel, float rgbScale);
+  void setRenderParameters(int lightColor, int ambientColor, int envColor,
+                           float lightLevel, float envLevel, float rgbScale,
+                           float reflZScale = 2.0f, int waterUVScale = 2048);
   void loadTerrain(const char *btdFileName = (char *) 0,
                    unsigned int worldID = 0U, unsigned int defTxtID = 0U,
                    int mipLevel = 2, int xMin = -32768, int yMin = -32768,

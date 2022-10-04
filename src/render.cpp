@@ -1521,7 +1521,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
             floatToUInt8Clamped(waterReflectionLevel, 128.0f);
         t.renderer->m.emissiveColor = p.mswpFormID;     // water color
         if (!defaultWaterTexture.empty() &&
-            bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf)))
+            bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf, 0)))
         {
           textureMask |= 0x0002U;
         }
@@ -1654,7 +1654,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     const DDSTexture  *textures[5];
     unsigned int  textureMask = 0U;
     if (!defaultWaterTexture.empty() &&
-        bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf)))
+        bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf, 0)))
     {
       textureMask |= 0x0002U;
     }
@@ -1925,8 +1925,10 @@ void Renderer::setWaterTexture(const std::string& s)
   defaultWaterTexture = s;
 }
 
-void Renderer::setLighting(int lightColor, int ambientColor, int envColor,
-                           float lightLevel, float envLevel, float rgbScale)
+void Renderer::setRenderParameters(
+    int lightColor, int ambientColor, int envColor,
+    float lightLevel, float envLevel, float rgbScale,
+    float reflZScale, int waterUVScale)
 {
   if (renderThreads.size() < 1)
     return;
@@ -1934,8 +1936,8 @@ void Renderer::setLighting(int lightColor, int ambientColor, int envColor,
   FloatVector4  a(bgraToRGBA((std::uint32_t) ambientColor & 0x00FFFFFFU));
   FloatVector4  e(bgraToRGBA((std::uint32_t) envColor));
   FloatVector4  l(lightLevel, envLevel, rgbScale, 0.0f);
-  l *= 255.0f;
-  l.srgbExpand();
+  l = ((l * -0.01728125f + 0.17087940f) * l + 0.83856107f) * l + 0.00784078f;
+  l *= l;
   c = c.srgbExpand() * l[0];
   e = e.srgbExpand() * l[1];
   if (ambientColor >= 0)
@@ -1951,7 +1953,9 @@ void Renderer::setLighting(int lightColor, int ambientColor, int envColor,
   {
     renderThreads[i].renderer->setLighting(c, a, e, l[2]);
     renderThreads[i].renderer->setEnvMapOffset(
-        float(width) * -0.5f, float(height) * -0.5f, float(height) * 2.0f);
+        float(width) * -0.5f, float(height) * -0.5f,
+        float(height) * reflZScale);
+    renderThreads[i].renderer->setWaterUVScale(1.0f / float(waterUVScale));
   }
 }
 
@@ -2066,6 +2070,7 @@ static const char *usageStrings[] =
   "    -textures BOOL      make all diffuse textures white if false",
   "    -txtcache INT       texture cache size in megabytes",
   "    -ssaa BOOL          render at double resolution and downsample",
+  "    -f INT              output format, 0: RGB24, 1: A8R8G8B8, 2: RGB10A2",
   "    -q                  do not print messages other than errors",
   "",
   "    -btd FILENAME.BTD   read terrain data from Fallout 76 .btd file",
@@ -2089,6 +2094,7 @@ static const char *usageStrings[] =
   "    -lcolor LMULT LCOLOR EMULT ECOLOR ACOLOR",
   "                        set light source, environment, and ambient light",
   "                        colors and levels (colors in 0xRRGGBB format)",
+  "    -rscale FLOAT       reflection view vector Z scale",
   "",
   "    -mlod INT           set level of detail for models, 0 (best) to 4",
   "    -vis BOOL           render only objects visible from distance",
@@ -2100,6 +2106,7 @@ static const char *usageStrings[] =
   "    -wtxt FILENAME.DDS  water normal map texture path in archives",
   "    -watercolor UINT32  water color (A7R8G8B8), 0 disables water",
   "    -wrefl FLOAT        water environment map scale",
+  "    -wscale INT         water texture tile size",
   (char *) 0
 };
 
@@ -2152,6 +2159,9 @@ int main(int argc, char **argv)
     int     envColor = 0x00FFFFFF;
     float   lightLevel = 1.0f;
     float   envLevel = 1.0f;
+    float   reflZScale = 2.0f;
+    int     waterUVScale = 2048;
+    int     outputFormat = 0;
     const char  *defaultEnvMap =
         "textures/shared/cubemaps/mipblur_defaultoutside1.dds";
     const char  *waterTexture = "textures/water/defaultwater.dds";
@@ -2186,6 +2196,7 @@ int main(int argc, char **argv)
         std::printf("-textures %d\n", int(enableTextures));
         std::printf("-txtcache %d\n", textureCacheSize);
         std::printf("-ssaa %d\n", int(enableDownscale));
+        std::printf("-f %d\n", outputFormat);
         std::printf("-w 0x%08X", formID);
         if (!formID)
           std::printf(" (defaults to 0x0000003C or 0x0025DA15)");
@@ -2230,11 +2241,13 @@ int main(int argc, char **argv)
           std::printf("%d (calculated from default cube map)\n", ambientColor);
         else
           std::printf("0x%06X\n", (unsigned int) ambientColor);
+        std::printf("-rscale %.3f\n", reflZScale);
         std::printf("-mlod %d\n", modelLOD);
         std::printf("-vis %d\n", int(distantObjectsOnly));
         std::printf("-ndis %d\n", int(noDisabledObjects));
         std::printf("-watercolor 0x%08X\n", (unsigned int) waterColor);
         std::printf("-wrefl %.3f\n", waterReflectionLevel);
+        std::printf("-wscale %d\n", waterUVScale);
         return 0;
       }
       else if (argv[i][0] != '-')
@@ -2288,6 +2301,13 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         enableDownscale =
             bool(parseInteger(argv[i], 0, "invalid argument for -ssaa", 0, 1));
+      }
+      else if (std::strcmp(argv[i], "-f") == 0)
+      {
+        if (++i >= argc)
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
+        outputFormat =
+            int(parseInteger(argv[i], 10, "invalid output format", 0, 2));
       }
       else if (std::strcmp(argv[i], "-q") == 0)
       {
@@ -2455,6 +2475,14 @@ int main(int argc, char **argv)
                                         -1, 0x00FFFFFF));
         i = i + 5;
       }
+      else if (std::strcmp(argv[i], "-rscale") == 0)
+      {
+        if (++i >= argc)
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
+        reflZScale =
+            float(parseFloat(argv[i], "invalid reflection view vector Z scale",
+                             0.25, 16.0));
+      }
       else if (std::strcmp(argv[i], "-mlod") == 0)
       {
         if (++i >= argc)
@@ -2503,8 +2531,9 @@ int main(int argc, char **argv)
       {
         if (++i >= argc)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        waterColor = (std::uint32_t) parseInteger(
-                         argv[i], 0, "invalid water color", 0, 0x7FFFFFFF);
+        waterColor =
+            std::uint32_t(parseInteger(argv[i], 0, "invalid water color",
+                                       0, 0x7FFFFFFF));
       }
       else if (std::strcmp(argv[i], "-wrefl") == 0)
       {
@@ -2513,6 +2542,14 @@ int main(int argc, char **argv)
         waterReflectionLevel =
             float(parseFloat(argv[i], "invalid water environment map scale",
                              0.0, 2.0));
+      }
+      else if (std::strcmp(argv[i], "-wscale") == 0)
+      {
+        if (++i >= argc)
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
+        waterUVScale =
+            int(parseInteger(argv[i], 0, "invalid water texture tile size",
+                             2, 32768));
       }
       else
       {
@@ -2596,8 +2633,9 @@ int main(int argc, char **argv)
       renderer.setDefaultEnvMap(std::string(defaultEnvMap));
     if (waterColor && waterTexture && *waterTexture)
       renderer.setWaterTexture(std::string(waterTexture));
-    renderer.setLighting(lightColor, ambientColor, envColor,
-                         lightLevel, envLevel, rgbScale);
+    renderer.setRenderParameters(
+        lightColor, ambientColor, envColor, lightLevel, envLevel, rgbScale,
+        reflZScale, waterUVScale);
 
     for (size_t i = 0; i < hdModelNamePatterns.size(); i++)
     {
@@ -2635,30 +2673,25 @@ int main(int argc, char **argv)
 
     width = width >> int(enableDownscale);
     height = height >> int(enableDownscale);
-    DDSOutputFile outFile(args[1], width, height,
-#if USE_PIXELFMT_RGB10A2
-                          DDSInputFile::pixelFormatA2R10G10B10
-#else
-                          DDSInputFile::pixelFormatRGB24
-#endif
-                          );
     const std::uint32_t *imageDataPtr = renderer.getImageData();
     size_t  imageDataSize = size_t(width) * size_t(height);
     std::vector< std::uint32_t >  downsampleBuf;
     if (enableDownscale)
     {
       downsampleBuf.resize(imageDataSize);
-      downsample2xFilter(&(downsampleBuf.front()), imageDataPtr,
-                         width << 1, height << 1, width);
+      downsample2xFilter(
+          &(downsampleBuf.front()), imageDataPtr, width << 1, height << 1,
+          width, (unsigned char) ((outputFormat & 2) | USE_PIXELFMT_RGB10A2));
       imageDataPtr = &(downsampleBuf.front());
     }
-    outFile.writeImageData(imageDataPtr, imageDataSize,
-#if USE_PIXELFMT_RGB10A2
-                           DDSInputFile::pixelFormatA2R10G10B10
-#else
-                           DDSInputFile::pixelFormatRGB24
-#endif
-                           );
+    if (!outputFormat)
+      outputFormat = DDSInputFile::pixelFormatRGB24;
+    else if (outputFormat == 1)
+      outputFormat = DDSInputFile::pixelFormatRGBA32;
+    else
+      outputFormat = DDSInputFile::pixelFormatA2R10G10B10;
+    DDSOutputFile outFile(args[1], width, height, outputFormat);
+    outFile.writeImageData(imageDataPtr, imageDataSize, outputFormat);
     err = 0;
   }
   catch (std::exception& e)
