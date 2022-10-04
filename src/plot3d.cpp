@@ -489,7 +489,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_Water(
   if (!isFO76)
   {
     // polynomial not squared here because of gamma compressed color space
-    return (c + ((e - c) * f) + specular);
+    return ((c + ((e - c) * f) + specular) * 255.0f);
   }
   return (c + ((e - c) * (f * f)) + specular).srgbCompress();
 }
@@ -500,10 +500,10 @@ void Plot3D_TriShape::drawPixel_Water(Plot3D_TriShape& p, Fragment& z)
   *(z.zPtr) = z.xyz[2];
   FloatVector4  c0(FloatVector4::convertRGBA32(*(z.cPtr)));
   a = a * p.specularColorFloat[3];
-  if (a > -3.0f && a < 0.0f)
+  if (a > -3.0f)
     a = FloatVector4::exp2Fast(a - 1.0f);
   else
-    a = (a < -2.0f ? 0.0625f : 0.5f);
+    a = 0.0625f;
   FloatVector4  c(p.calculateLighting_Water(c0, a, z, false));
   *(z.cPtr) = c.convertToRGBA32(true);
 }
@@ -514,10 +514,10 @@ void Plot3D_TriShape::drawPixel_Water_G(Plot3D_TriShape& p, Fragment& z)
   *(z.zPtr) = z.xyz[2];
   FloatVector4  c0(FloatVector4::convertRGBA32(*(z.cPtr)));
   a = a * p.specularColorFloat[3];
-  if (a > -3.0f && a < 0.0f)
+  if (a > -3.0f)
     a = FloatVector4::exp2Fast(a - 1.0f);
   else
-    a = (a < -2.0f ? 0.0625f : 0.5f);
+    a = 0.0625f;
   FloatVector4  c(p.calculateLighting_Water(c0, a, z, true));
   *(z.cPtr) = c.convertToRGBA32(true, true);
 }
