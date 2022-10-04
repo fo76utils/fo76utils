@@ -7,12 +7,14 @@
 #include "ba2file.hpp"
 #include "ddstxt.hpp"
 #include "plot3d.hpp"
+#include "sdlvideo.hpp"
 
 #include <thread>
 #include <mutex>
 
-struct Renderer
+class Renderer
 {
+ protected:
   struct TriShapeSortObject
   {
     const NIFFile::NIFTriShape  *ts;
@@ -41,14 +43,20 @@ struct Renderer
   std::string defaultEnvMap;
   std::string waterTexture;
   DDSTexture  whiteTexture;
+ public:
   Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
            int imageWidth, int imageHeight, unsigned int nifVersion);
-  ~Renderer();
+  virtual ~Renderer();
   void setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
                   int imageWidth, int imageHeight, float envMapScale);
   const DDSTexture *loadTexture(const std::string *texturePath);
   static void threadFunction(Renderer *p, size_t n);
   void renderModel();
+  static void renderMeshToFile(const char *outFileName,
+                               const NIFFile& nifFile, const BA2File& ba2File,
+                               int imageWidth, int imageHeight);
+  static void viewMeshes(SDLDisplay& display, const BA2File& ba2File,
+                         const std::vector< std::string >& nifFileNames);
 };
 
 #endif
