@@ -215,13 +215,14 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
       static const char *flagNames[16] =
       {
         "tile U", "tile V", "is effect", "decal", "two sided", "tree",
-        "grayscale to alpha", "glow", "no Z buffer write", "", "", "",
-        "alpha blending", "has vertex colors", "is water", "hidden"
+        "grayscale to alpha", "glow", "no Z buffer write", "", "",
+        "ordered with previous", "alpha blending", "has vertex colors",
+        "is water", "hidden"
       };
       std::fprintf(f, "  Flags: ");
       std::uint16_t m = 0x0001;
       std::uint16_t mPrv = 0x0001;
-      for (int j = 0; j < 8; j++, m = m << 1, mPrv = (mPrv << 1) | 1)
+      for (int j = 0; j < 16; j++, m = m << 1, mPrv = (mPrv << 1) | 1)
       {
         if ((ts.m.flags & mPrv) > m)
           std::fprintf(f, ", ");
@@ -358,6 +359,7 @@ int main(int argc, char **argv)
 {
   std::FILE   *outFile = (std::FILE *) 0;
   const char  *outFileName = (char *) 0;
+  Renderer    *renderer = (Renderer *) 0;
   bool    consoleFlag = true;
   try
   {
@@ -475,6 +477,8 @@ int main(int argc, char **argv)
       fileNames.push_back(".dds");
     BA2File ba2File(argv[1], &fileNames);
     ba2File.getFileList(fileNames);
+    if (outFmt >= 5)
+      renderer = new Renderer(ba2File);
     if (outFmt == 6)
     {
       for (size_t i = 0; i < fileNames.size(); )
@@ -500,8 +504,9 @@ int main(int argc, char **argv)
         std::sort(fileNames.begin(), fileNames.end());
         SDLDisplay  display(renderWidth, renderHeight, "nif_info", 4U, 48);
         display.setDefaultTextColor(0x00, 0xC1);
-        Renderer::viewMeshes(display, ba2File, fileNames);
+        renderer->viewModels(display, fileNames);
       }
+      delete renderer;
       return 0;
     }
     if (outFileName)
@@ -557,8 +562,8 @@ int main(int argc, char **argv)
       if (outFmt == 5)
       {
         std::fprintf(stderr, "%s\n", fileNames[i].c_str());
-        Renderer::renderMeshToFile(outFileName, nifFile, ba2File,
-                                   renderWidth << 1, renderHeight << 1);
+        renderer->loadModel(fileNames[i]);
+        renderer->renderModelToFile(outFileName, renderWidth, renderHeight);
         break;
       }
     }
@@ -569,11 +574,15 @@ int main(int argc, char **argv)
       SDLDisplay::enableConsole();
     if (outFileName && outFile)
       std::fclose(outFile);
+    if (renderer)
+      delete renderer;
     std::fprintf(stderr, "nif_info: %s\n", e.what());
     return 1;
   }
   if (outFileName && outFile)
     std::fclose(outFile);
+  if (renderer)
+    delete renderer;
   return 0;
 }
 

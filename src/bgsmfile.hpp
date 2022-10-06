@@ -22,6 +22,7 @@ struct BGSMFile
     Flag_Glow = 0x0080,
     Flag_NoZWrite = 0x0100,
     // TriShape flags
+    Flag_TSOrdered = 0x0800,    // for BSOrderedNode children, except the first
     Flag_TSAlphaBlending = 0x1000,
     Flag_TSVertexColors = 0x2000,
     Flag_TSWater = 0x4000,

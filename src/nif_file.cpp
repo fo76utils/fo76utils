@@ -202,7 +202,7 @@ void NIFFile::NIFTriShape::setMaterial(
 {
   texturePaths = materialTexturePaths;
   // keep TriShape flags
-  unsigned int  flags = (m.flags & 0xE000U) | (material.flags & 0x0FFFU);
+  unsigned int  flags = (m.flags & 0xE800U) | (material.flags & 0x07FFU);
   m = material;
   if (BRANCH_UNLIKELY(alphaProperties))
   {
@@ -824,33 +824,47 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
                       std::vector< unsigned int >& parentBlocks,
                       unsigned int switchActive, bool noRootNodeTransform) const
 {
-  if (blockNum >= blocks.size())
-    return;
-  if (blocks[blockNum]->isNode())
+  int     blockType = blocks[blockNum]->type;
+  if (isNodeBlock(blockType))
   {
     parentBlocks.push_back(blockNum);
-    const NIFBlkNiNode& b = *((const NIFBlkNiNode *) blocks[blockNum]);
-    for (size_t i = 0; i < b.children.size(); i++)
+    const std::vector< unsigned int >&  children =
+        ((const NIFBlkNiNode *) blocks[blockNum])->children;
+    size_t  firstTriShape = v.size();
+    for (size_t i = 0; i < children.size(); i++)
     {
-      unsigned int  n = b.children[i];
-      bool    loopFound = false;
-      for (size_t j = 0; j < parentBlocks.size(); j++)
+      if (blockType == BlkTypeNiSwitchNode && i != switchActive)
+        continue;
+      unsigned int  n = children[i];
+      if (n >= blocks.size())
+        continue;
+      if (!blocks[n]->isTriShape())
       {
-        if (parentBlocks[j] == n)
+        if (!blocks[n]->isNode())
+          continue;
+        bool    loopFound = false;
+        for (size_t j = 0; j < parentBlocks.size(); j++)
         {
-          loopFound = true;
-          break;
+          if (parentBlocks[j] == n)
+          {
+            loopFound = true;
+            break;
+          }
         }
+        if (loopFound)
+          continue;
       }
-      if (!(loopFound || (b.type == BlkTypeNiSwitchNode && i != switchActive)))
-        getMesh(v, n, parentBlocks, switchActive, noRootNodeTransform);
+      getMesh(v, n, parentBlocks, switchActive, noRootNodeTransform);
     }
     parentBlocks.resize(parentBlocks.size() - 1);
+    if (BRANCH_UNLIKELY(blockType == BlkTypeBSOrderedNode))
+    {
+      for (size_t i = firstTriShape + 1; i < v.size(); i++)
+        v[i].m.flags = v[i].m.flags | BGSMFile::Flag_TSOrdered;
+    }
     return;
   }
 
-  if (!blocks[blockNum]->isTriShape())
-    return;
   const NIFBlkBSTriShape& b = *((const NIFBlkBSTriShape *) blocks[blockNum]);
   if (b.vertexData.size() < 1 || b.triangleData.size() < 1)
     return;
@@ -945,7 +959,11 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int rootNode,
                       unsigned int switchActive, bool noRootNodeTransform) const
 {
   v.clear();
-  std::vector< unsigned int > parentBlocks;
-  getMesh(v, rootNode, parentBlocks, switchActive, noRootNodeTransform);
+  if (rootNode < blocks.size() &&
+      (blocks[rootNode]->isNode() || blocks[rootNode]->isTriShape()))
+  {
+    std::vector< unsigned int > parentBlocks;
+    getMesh(v, rootNode, parentBlocks, switchActive, noRootNodeTransform);
+  }
 }
 

@@ -208,7 +208,8 @@ class NIFFile : public FileBuffer
     BlkTypeNiAlphaProperty = 60,
     BlkTypeBSLightingShaderProperty = 24,
     BlkTypeBSShaderTextureSet = 47,
-    BlkTypeBSWaterShaderProperty = 57
+    BlkTypeBSWaterShaderProperty = 57,
+    BlkTypeBSOrderedNode = 34
   };
   struct NIFBlock
   {
