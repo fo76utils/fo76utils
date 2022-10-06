@@ -4,254 +4,7 @@
 
 #include <algorithm>
 
-Renderer::Renderer(std::uint32_t *outBufRGBA, float *outBufZ,
-                   int imageWidth, int imageHeight, unsigned int nifVersion)
-  : lightX(0.0f),
-    lightY(0.0f),
-    lightZ(1.0f),
-    waterEnvMapLevel(1.0f),
-    waterColor(0xC0804000U),
-    whiteTexture(0xFFFFFFFFU)
-{
-  threadCnt = int(std::thread::hardware_concurrency());
-  if (threadCnt < 1 || imageHeight < 64)
-    threadCnt = 1;
-  else if (threadCnt > 8)
-    threadCnt = 8;
-  ba2File = (BA2File *) 0;
-  renderers.resize(size_t(threadCnt), (Plot3D_TriShape *) 0);
-  threadErrMsg.resize(size_t(threadCnt));
-  viewOffsetY.resize(size_t(threadCnt + 1), 0);
-  unsigned int  renderMode =
-      (nifVersion < 0x80U ? 7U : (nifVersion < 0x90U ? 11U : 15U));
-  try
-  {
-    for (size_t i = 0; i < renderers.size(); i++)
-    {
-      renderers[i] = new Plot3D_TriShape(outBufRGBA, outBufZ,
-                                         imageWidth, imageHeight, renderMode);
-    }
-  }
-  catch (...)
-  {
-    for (size_t i = 0; i < renderers.size(); i++)
-    {
-      if (renderers[i])
-      {
-        delete renderers[i];
-        renderers[i] = (Plot3D_TriShape *) 0;
-      }
-    }
-    throw;
-  }
-  if (outBufRGBA && outBufZ)
-    setBuffers(outBufRGBA, outBufZ, imageWidth, imageHeight, 1.0f);
-}
-
-Renderer::~Renderer()
-{
-  for (size_t i = 0; i < renderers.size(); i++)
-  {
-    if (renderers[i])
-      delete renderers[i];
-  }
-  for (std::map< std::string, DDSTexture * >::iterator
-           i = textureSet.begin(); i != textureSet.end(); i++)
-  {
-    if (i->second)
-      delete i->second;
-  }
-}
-
-void Renderer::setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
-                          int imageWidth, int imageHeight, float envMapScale)
-{
-  float   y0 = 0.0f;
-  for (size_t i = 0; i < renderers.size(); i++)
-  {
-    int     y0i = roundFloat(y0);
-    int     y1i = imageHeight;
-    if ((i + 1) < renderers.size())
-    {
-      float   y1 = float(int(i + 1)) / float(int(renderers.size()));
-      y1 = (y1 - 0.5f) * (y1 - 0.5f) * 2.0f;
-      if (i < (renderers.size() >> 1))
-        y1 = 0.5f - y1;
-      else
-        y1 = 0.5f + y1;
-      y1 = y1 * float(imageHeight);
-      y1i = roundFloat(y1);
-      y0 = y1;
-    }
-    viewOffsetY[i] = y0i;
-    size_t  offs = size_t(y0i) * size_t(imageWidth);
-    renderers[i]->setBuffers(outBufRGBA + offs, outBufZ + offs,
-                             imageWidth, y1i - y0i);
-    renderers[i]->setEnvMapOffset(float(imageWidth) * -0.5f,
-                                  float(imageHeight) * -0.5f + float(y0i),
-                                  float(imageHeight) * envMapScale);
-  }
-  viewOffsetY[renderers.size()] = imageHeight;
-}
-
-const DDSTexture * Renderer::loadTexture(const std::string *texturePath)
-{
-  if (!texturePath || texturePath->empty() || !ba2File)
-    return (DDSTexture *) 0;
-  DDSTexture  *t = (DDSTexture *) 0;
-  textureSetMutex.lock();
-  try
-  {
-    std::map< std::string, DDSTexture * >::iterator i =
-        textureSet.find(*texturePath);
-    if (i == textureSet.end())
-    {
-      try
-      {
-        ba2File->extractFile(fileBuf, *texturePath);
-        t = new DDSTexture(&(fileBuf.front()), fileBuf.size());
-      }
-      catch (FO76UtilsError& e)
-      {
-        std::fprintf(stderr, "Warning: failed to load texture '%s': %s\n",
-                     texturePath->c_str(), e.what());
-        t = (DDSTexture *) 0;
-      }
-      i = textureSet.insert(std::pair< std::string, DDSTexture * >(
-                                *texturePath, t)).first;
-    }
-    t = i->second;
-  }
-  catch (...)
-  {
-    textureSetMutex.unlock();
-    if (t)
-      delete t;
-    return (DDSTexture *) 0;
-  }
-  textureSetMutex.unlock();
-  return t;
-}
-
-void Renderer::threadFunction(Renderer *p, size_t n)
-{
-  p->threadErrMsg[n].clear();
-  try
-  {
-    std::vector< TriShapeSortObject > sortBuf;
-    sortBuf.reserve(p->meshData.size());
-    NIFFile::NIFVertexTransform vt(p->viewTransform);
-    NIFFile::NIFVertexTransform mt(p->modelTransform);
-    mt *= vt;
-    vt.offsY = vt.offsY - float(p->viewOffsetY[n]);
-    for (size_t i = 0; i < p->meshData.size(); i++)
-    {
-      if (p->meshData[i].m.flags & BGSMFile::Flag_TSHidden)
-        continue;
-      NIFFile::NIFBounds  b;
-      p->meshData[i].calculateBounds(b, &mt);
-      if (roundFloat(b.xMax()) < 0 ||
-          roundFloat(b.yMin()) > p->viewOffsetY[n + 1] ||
-          roundFloat(b.yMax()) < p->viewOffsetY[n] ||
-          b.zMax() < 0.0f)
-      {
-        continue;
-      }
-      TriShapeSortObject  tmp;
-      tmp.ts = &(p->meshData.front()) + i;
-      tmp.z = double(b.zMin());
-      if (tmp.ts->m.flags & BGSMFile::Flag_TSAlphaBlending)
-        tmp.z = double(0x02000000) - tmp.z;
-      sortBuf.push_back(tmp);
-    }
-    if (sortBuf.size() < 1)
-      return;
-    std::stable_sort(sortBuf.begin(), sortBuf.end());
-    for (size_t i = 0; i < sortBuf.size(); i++)
-    {
-      const NIFFile::NIFTriShape& ts = *(sortBuf[i].ts);
-      *(p->renderers[n]) = ts;
-      const DDSTexture  *textures[10];
-      unsigned int  textureMask = 0U;
-      if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSWater))
-      {
-        if (bool(textures[1] = p->loadTexture(&(p->waterTexture))))
-          textureMask |= 0x0002U;
-        if (bool(textures[4] = p->loadTexture(&(p->defaultEnvMap))))
-          textureMask |= 0x0010U;
-        p->renderers[n]->m.envMapScale =
-            floatToUInt8Clamped(p->waterEnvMapLevel, 128.0f);
-        p->renderers[n]->m.emissiveColor = p->waterColor;
-      }
-      else
-      {
-        unsigned int  texturePathMask =
-            (!(ts.m.flags & BGSMFile::Flag_Glow) ? 0x037BU : 0x037FU)
-            & (unsigned int) ts.m.texturePathMask;
-        for (size_t j = 0; j < 10; j++, texturePathMask >>= 1)
-        {
-          if (texturePathMask & 1)
-          {
-            if (bool(textures[j] = p->loadTexture(ts.texturePaths[j])))
-              textureMask |= (1U << (unsigned char) j);
-          }
-        }
-        if (!(textureMask & 0x0001U))
-        {
-          textures[0] = &(p->whiteTexture);
-          textureMask |= 0x0001U;
-        }
-        if (!(textureMask & 0x0010U) && ts.m.envMapScale > 0)
-        {
-          if (bool(textures[4] = p->loadTexture(&(p->defaultEnvMap))))
-            textureMask |= 0x0010U;
-        }
-      }
-      p->renderers[n]->drawTriShape(p->modelTransform, vt,
-                                    p->lightX, p->lightY, p->lightZ,
-                                    textures, textureMask);
-    }
-  }
-  catch (std::exception& e)
-  {
-    p->threadErrMsg[n] = e.what();
-    if (p->threadErrMsg[n].empty())
-      p->threadErrMsg[n] = "unknown error in render thread";
-  }
-}
-
-void Renderer::renderModel()
-{
-  std::vector< std::thread * >  threads(renderers.size(), (std::thread *) 0);
-  try
-  {
-    for (size_t i = 0; i < threads.size(); i++)
-      threads[i] = new std::thread(threadFunction, this, i);
-    for (size_t i = 0; i < threads.size(); i++)
-    {
-      if (threads[i])
-      {
-        threads[i]->join();
-        delete threads[i];
-        threads[i] = (std::thread *) 0;
-      }
-      if (!threadErrMsg[i].empty())
-        throw FO76UtilsError(1, threadErrMsg[i].c_str());
-    }
-  }
-  catch (...)
-  {
-    for (size_t i = 0; i < threads.size(); i++)
-    {
-      if (threads[i])
-      {
-        threads[i]->join();
-        delete threads[i];
-      }
-    }
-    throw;
-  }
-}
+static const std::uint32_t  defaultWaterColor = 0xC0804000U;
 
 static const char *cubeMapPaths[24] =
 {
@@ -294,115 +47,406 @@ static float viewRotations[27] =
   -90.0f,     0.0f,       -90.0f        // left
 };
 
+void Renderer::threadFunction(Renderer *p, size_t n)
+{
+  p->threadErrMsg[n].clear();
+  try
+  {
+    std::vector< TriShapeSortObject > sortBuf;
+    sortBuf.reserve(p->meshData.size());
+    NIFFile::NIFVertexTransform mt(p->modelTransform);
+    NIFFile::NIFVertexTransform vt(p->viewTransform);
+    mt *= vt;
+    vt.offsY = vt.offsY - float(p->viewOffsetY[n]);
+    for (size_t i = 0; i < p->meshData.size(); i++)
+    {
+      if (p->meshData[i].m.flags & BGSMFile::Flag_TSHidden)
+        continue;
+      NIFFile::NIFBounds  b;
+      p->meshData[i].calculateBounds(b, &mt);
+      if (roundFloat(b.xMax()) < 0 ||
+          roundFloat(b.yMin()) > p->viewOffsetY[n + 1] ||
+          roundFloat(b.yMax()) < p->viewOffsetY[n] ||
+          b.zMax() < 0.0f)
+      {
+        continue;
+      }
+      sortBuf.push_back(TriShapeSortObject(p->meshData[i], b.zMin()));
+      if (BRANCH_UNLIKELY(p->meshData[i].m.flags & BGSMFile::Flag_TSOrdered))
+        TriShapeSortObject::orderedNodeFix(sortBuf, p->meshData);
+    }
+    if (sortBuf.size() < 1)
+      return;
+    std::stable_sort(sortBuf.begin(), sortBuf.end());
+    for (size_t i = 0; i < sortBuf.size(); i++)
+    {
+      Plot3D_TriShape&  ts = *(p->renderers[n]);
+      ts = *(sortBuf[i].ts);
+      const DDSTexture  *textures[10];
+      unsigned int  textureMask = 0U;
+      if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSWater))
+      {
+        if (bool(textures[1] = p->loadTexture(p->waterTexture, n)))
+          textureMask |= 0x0002U;
+        if (bool(textures[4] = p->loadTexture(p->defaultEnvMap, n)))
+          textureMask |= 0x0010U;
+        ts.m.envMapScale = floatToUInt8Clamped(p->waterEnvMapLevel, 128.0f);
+        ts.m.emissiveColor = p->waterColor;
+      }
+      else
+      {
+        for (size_t j = 0; BRANCH_UNLIKELY(p->materialSwapTable[j]); j++)
+        {
+          if (p->materialSwapTable[j] & 0x80000000U)
+            ts.m.gradientMapV = std::uint8_t(p->materialSwapTable[j] & 0xFFU);
+          else
+            p->materialSwaps.materialSwap(ts, p->materialSwapTable[j]);
+          if ((j + 1) >= (sizeof(p->materialSwapTable) / sizeof(unsigned int)))
+            break;
+        }
+        unsigned int  texturePathMask =
+            (!(ts.m.flags & BGSMFile::Flag_Glow) ? 0x037BU : 0x037FU)
+            & (unsigned int) ts.m.texturePathMask;
+        for (size_t j = 0; j < 10; j++, texturePathMask >>= 1)
+        {
+          if (texturePathMask & 1)
+          {
+            if (bool(textures[j] = p->loadTexture(*(ts.texturePaths[j]), n)))
+              textureMask |= (1U << (unsigned char) j);
+          }
+        }
+        if (!(textureMask & 0x0001U))
+        {
+          textures[0] = &(p->defaultTexture);
+          textureMask |= 0x0001U;
+        }
+        if (!(textureMask & 0x0010U) && ts.m.envMapScale > 0)
+        {
+          if (bool(textures[4] = p->loadTexture(p->defaultEnvMap, n)))
+            textureMask |= 0x0010U;
+        }
+      }
+      ts.drawTriShape(p->modelTransform, vt, p->lightX, p->lightY, p->lightZ,
+                      textures, textureMask);
+    }
+  }
+  catch (std::exception& e)
+  {
+    p->threadErrMsg[n] = e.what();
+    if (p->threadErrMsg[n].empty())
+      p->threadErrMsg[n] = "unknown error in render thread";
+  }
+}
+
+const DDSTexture * Renderer::loadTexture(const std::string& texturePath,
+                                         size_t threadNum)
+{
+  const DDSTexture  *t =
+      textureSet.loadTexture(ba2File, texturePath,
+                             threadFileBuffers[threadNum], 0);
+#if 0
+  if (!t && !texturePath.empty())
+  {
+    std::fprintf(stderr, "Warning: failed to load texture '%s'\n",
+                 texturePath.c_str());
+  }
+#endif
+  return t;
+}
+
+void Renderer::setDefaultTextures()
+{
+  int     n = 0;
+  if (nifFile && nifFile->getVersion() >= 0x80)
+    n = (nifFile->getVersion() < 0x90 ? 1 : 2);
+  n = n + ((defaultEnvMapNum & 7) * 3);
+  defaultEnvMap = cubeMapPaths[n];
+  waterTexture = "textures/water/defaultwater.dds";
+}
+
+Renderer::Renderer(const BA2File& archiveFiles, ESMFile *esmFilePtr)
+  : ba2File(archiveFiles),
+    esmFile(esmFilePtr),
+    textureSet(0x10000000),
+    lightX(0.0f),
+    lightY(0.0f),
+    lightZ(1.0f),
+    nifFile((NIFFile *) 0),
+    defaultTexture(0xFFFF80C0U),
+    modelRotationX(0.0f),
+    modelRotationY(0.0f),
+    modelRotationZ(0.0f),
+    viewRotationX(54.73561f),
+    viewRotationY(180.0f),
+    viewRotationZ(45.0f),
+    viewOffsX(0.0f),
+    viewOffsY(0.0f),
+    viewOffsZ(0.0f),
+    viewScale(1.0f),
+    lightRotationY(56.25f),
+    lightRotationZ(-135.0f),
+    lightColor(1.0f),
+    envColor(1.0f),
+    rgbScale(1.0f),
+    reflZScale(1.0f),
+    waterEnvMapLevel(1.0f),
+    waterColor(defaultWaterColor),
+    defaultEnvMapNum(0),
+    debugMode(0)
+{
+  threadCnt = int(std::thread::hardware_concurrency());
+  threadCnt = (threadCnt > 1 ? (threadCnt < 8 ? threadCnt : 8) : 1);
+  renderers.resize(size_t(threadCnt), (Plot3D_TriShape *) 0);
+  threadErrMsg.resize(size_t(threadCnt));
+  viewOffsetY.resize(size_t(threadCnt + 1), 0);
+  threadFileBuffers.resize(size_t(threadCnt));
+  clearMaterialSwaps();
+  setDefaultTextures();
+  try
+  {
+    for (size_t i = 0; i < renderers.size(); i++)
+    {
+      renderers[i] =
+          new Plot3D_TriShape((std::uint32_t *) 0, (float *) 0, 0, 0, 4U);
+    }
+  }
+  catch (...)
+  {
+    for (size_t i = 0; i < renderers.size(); i++)
+    {
+      if (renderers[i])
+      {
+        delete renderers[i];
+        renderers[i] = (Plot3D_TriShape *) 0;
+      }
+    }
+    throw;
+  }
+}
+
+Renderer::~Renderer()
+{
+  if (nifFile)
+  {
+    delete nifFile;
+    nifFile = (NIFFile *) 0;
+  }
+  textureSet.clear();
+  for (size_t i = 0; i < renderers.size(); i++)
+  {
+    if (renderers[i])
+      delete renderers[i];
+  }
+}
+
+void Renderer::loadModel(const std::string& fileName)
+{
+  meshData.clear();
+  textureSet.shrinkTextureCache();
+  if (nifFile)
+  {
+    delete nifFile;
+    nifFile = (NIFFile *) 0;
+  }
+  if (fileName.empty())
+    return;
+  std::vector< unsigned char >& fileBuf = threadFileBuffers[0];
+  ba2File.extractFile(fileBuf, fileName);
+  nifFile = new NIFFile(&(fileBuf.front()), fileBuf.size(), &ba2File);
+  try
+  {
+    nifFile->getMesh(meshData);
+  }
+  catch (...)
+  {
+    meshData.clear();
+    delete nifFile;
+    nifFile = (NIFFile *) 0;
+    throw;
+  }
+}
+
 static inline float degreesToRadians(float x)
 {
   return float(double(x) * (std::atan(1.0) / 45.0));
 }
 
-void Renderer::renderMeshToFile(const char *outFileName,
-                                const NIFFile& nifFile, const BA2File& ba2File,
-                                int imageWidth, int imageHeight)
+void Renderer::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
+                           int imageWidth, int imageHeight)
 {
-  float   modelRotationX = 0.0f;
-  float   modelRotationY = 0.0f;
-  float   modelRotationZ = 0.0f;
-  float   lightRotationY = 56.25f;
-  float   lightRotationZ = -135.0f;
-  float   lightLevel = 1.0f;
-  int     viewRotation = 0;     // isometric from NW
-  float   viewScale = 1.0f;
-  int     envMapNum = 0;
-  float   envMapScale = 1.0f;
-  unsigned int  debugMode = 0;
-
-  size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
-  std::vector< std::uint32_t >  outBufRGBA(imageDataSize, 0U);
+  if (!(meshData.size() > 0 &&
+        outBufRGBA && outBufZ && imageWidth > 0 && imageHeight >= threadCnt))
   {
-    std::vector< float >  outBufZ(imageDataSize, 16777216.0f);
-    Renderer  renderer(&(outBufRGBA.front()), &(outBufZ.front()),
-                       imageWidth, imageHeight, nifFile.getVersion());
-    renderer.ba2File = &ba2File;
-    nifFile.getMesh(renderer.meshData);
-    renderer.waterTexture = "textures/water/defaultwater.dds";
-    renderer.modelTransform =
-        NIFFile::NIFVertexTransform(
-            1.0f, degreesToRadians(modelRotationX),
-            degreesToRadians(modelRotationY),
-            degreesToRadians(modelRotationZ), 0.0f, 0.0f, 0.0f);
-    renderer.viewTransform =
-        NIFFile::NIFVertexTransform(
-            1.0f,
-            degreesToRadians(viewRotations[viewRotation * 3]),
-            degreesToRadians(viewRotations[viewRotation * 3 + 1]),
-            degreesToRadians(viewRotations[viewRotation * 3 + 2]),
-            0.0f, 0.0f, 0.0f);
+    return;
+  }
+  unsigned int  renderMode = (nifFile->getVersion() < 0x80U ?
+                              7U : (nifFile->getVersion() < 0x90U ? 11U : 15U));
+  float   y0 = 0.0f;
+  for (size_t i = 0; i < renderers.size(); i++)
+  {
+    int     y0i = roundFloat(y0);
+    int     y1i = imageHeight;
+    if ((i + 1) < renderers.size())
+    {
+      float   y1 = float(int(i + 1)) / float(int(renderers.size()));
+      y1 = (y1 - 0.5f) * (y1 - 0.5f) * 2.0f;
+      if (i < (renderers.size() >> 1))
+        y1 = 0.5f - y1;
+      else
+        y1 = 0.5f + y1;
+      y1 = y1 * float(imageHeight);
+      y1i = roundFloat(y1);
+      y0 = y1;
+    }
+    viewOffsetY[i] = y0i;
+    size_t  offs = size_t(y0i) * size_t(imageWidth);
+    renderers[i]->setRenderMode(renderMode);
+    renderers[i]->setBuffers(outBufRGBA + offs, outBufZ + offs,
+                             imageWidth, y1i - y0i);
+    renderers[i]->setEnvMapOffset(float(imageWidth) * -0.5f,
+                                  float(imageHeight) * -0.5f + float(y0i),
+                                  float(imageHeight) * reflZScale);
+  }
+  viewOffsetY[renderers.size()] = imageHeight;
+  setDefaultTextures();
+  {
+    FloatVector4  ambientLight =
+        renderers[0]->cubeMapToAmbient(loadTexture(defaultEnvMap, 0));
+    for (size_t i = 0; i < renderers.size(); i++)
+    {
+      renderers[i]->setLighting(lightColor, ambientLight, envColor, rgbScale);
+      renderers[i]->setDebugMode((unsigned int) debugMode, 0);
+    }
+  }
+  modelTransform = NIFFile::NIFVertexTransform(
+                       1.0f, degreesToRadians(modelRotationX),
+                       degreesToRadians(modelRotationY),
+                       degreesToRadians(modelRotationZ), 0.0f, 0.0f, 0.0f);
+  viewTransform = NIFFile::NIFVertexTransform(
+                      1.0f, degreesToRadians(viewRotationX),
+                      degreesToRadians(viewRotationY),
+                      degreesToRadians(viewRotationZ), 0.0f, 0.0f, 0.0f);
+  {
     NIFFile::NIFVertexTransform
         lightTransform(1.0f, 0.0f, degreesToRadians(lightRotationY),
                        degreesToRadians(lightRotationZ), 0.0f, 0.0f, 0.0f);
-    renderer.lightX = lightTransform.rotateZX;
-    renderer.lightY = lightTransform.rotateZY;
-    renderer.lightZ = lightTransform.rotateZZ;
-    renderer.waterEnvMapLevel = 1.0f;
-    renderer.waterColor = 0xC0804000U;
-    {
-      NIFFile::NIFVertexTransform t(renderer.modelTransform);
-      t *= renderer.viewTransform;
-      NIFFile::NIFBounds  b;
-      for (size_t i = 0; i < renderer.meshData.size(); i++)
-      {
-        // ignore if hidden
-        if (!(renderer.meshData[i].m.flags & BGSMFile::Flag_TSHidden))
-          renderer.meshData[i].calculateBounds(b, &t);
-      }
-      float   xScale = float(imageWidth) * 0.96875f;
-      if (b.xMax() > b.xMin())
-        xScale = xScale / (b.xMax() - b.xMin());
-      float   yScale = float(imageHeight) * 0.96875f;
-      if (b.yMax() > b.yMin())
-        yScale = yScale / (b.yMax() - b.yMin());
-      float   scale = (xScale < yScale ? xScale : yScale) * viewScale;
-      renderer.viewTransform.scale = scale;
-      renderer.viewTransform.offsX =
-          0.5f * (float(imageWidth) - ((b.xMin() + b.xMax()) * scale));
-      renderer.viewTransform.offsY =
-          0.5f * (float(imageHeight) - ((b.yMin() + b.yMax()) * scale));
-      renderer.viewTransform.offsZ = 1.0f - (b.zMin() * scale);
-    }
-    renderer.defaultEnvMap =
-        std::string(cubeMapPaths[envMapNum * 3
-                                 + int(nifFile.getVersion() >= 0x80)
-                                 + int(nifFile.getVersion() >= 0x90)]);
-    renderer.setBuffers(&(outBufRGBA.front()), &(outBufZ.front()),
-                        imageWidth, imageHeight, envMapScale);
-    {
-      FloatVector4  a(renderer.renderers[0]->cubeMapToAmbient(
-                          renderer.loadTexture(&(renderer.defaultEnvMap))));
-      for (size_t i = 0; i < renderer.renderers.size(); i++)
-      {
-        renderer.renderers[i]->setLighting(
-            FloatVector4(1.0f), a, FloatVector4(1.0f), lightLevel);
-        renderer.renderers[i]->setDebugMode(debugMode, 0);
-      }
-    }
-    renderer.renderModel();
+    lightX = lightTransform.rotateZX;
+    lightY = lightTransform.rotateZY;
+    lightZ = lightTransform.rotateZZ;
   }
+  {
+    NIFFile::NIFVertexTransform t(modelTransform);
+    t *= viewTransform;
+    NIFFile::NIFBounds  b;
+    for (size_t i = 0; i < meshData.size(); i++)
+    {
+      // ignore if hidden
+      if (!(meshData[i].m.flags & BGSMFile::Flag_TSHidden))
+        meshData[i].calculateBounds(b, &t);
+    }
+    float   xScale = float(imageWidth) * 0.96875f;
+    if (b.xMax() > b.xMin())
+      xScale = xScale / (b.xMax() - b.xMin());
+    float   yScale = float(imageHeight) * 0.96875f;
+    if (b.yMax() > b.yMin())
+      yScale = yScale / (b.yMax() - b.yMin());
+    float   scale = (xScale < yScale ? xScale : yScale) * viewScale;
+    viewTransform.scale = scale;
+    viewTransform.offsX = (float(imageWidth) - ((b.xMin() + b.xMax()) * scale))
+                          * 0.5f + viewOffsX;
+    viewTransform.offsY = (float(imageHeight) - ((b.yMin() + b.yMax()) * scale))
+                          * 0.5f + viewOffsY;
+    viewTransform.offsZ = viewOffsZ + 1.0f - (b.zMin() * scale);
+  }
+  std::vector< std::thread * >  threads(renderers.size(), (std::thread *) 0);
+  try
+  {
+    for (size_t i = 0; i < threads.size(); i++)
+      threads[i] = new std::thread(threadFunction, this, i);
+    for (size_t i = 0; i < threads.size(); i++)
+    {
+      if (threads[i])
+      {
+        threads[i]->join();
+        delete threads[i];
+        threads[i] = (std::thread *) 0;
+      }
+      if (!threadErrMsg[i].empty())
+        throw FO76UtilsError(1, threadErrMsg[i].c_str());
+    }
+  }
+  catch (...)
+  {
+    for (size_t i = 0; i < threads.size(); i++)
+    {
+      if (threads[i])
+      {
+        threads[i]->join();
+        delete threads[i];
+      }
+    }
+    throw;
+  }
+}
 
-  int     w = (imageWidth + 1) >> 1;
-  int     h = (imageHeight + 1) >> 1;
-  imageDataSize = size_t(w) * size_t(h);
+void Renderer::addMaterialSwap(unsigned int formID)
+{
+  if (!(formID & 0x80000000U))
+  {
+    unsigned int  n = formID;
+    formID = 0U;
+    if (n && esmFile)
+      formID = materialSwaps.loadMaterialSwap(ba2File, *esmFile, n);
+  }
+  if (!formID)
+    return;
+  size_t  i;
+  for (i = 0; i < (sizeof(materialSwapTable) / sizeof(unsigned int)); i++)
+  {
+    if (!materialSwapTable[i])
+    {
+      materialSwapTable[i] = formID;
+      break;
+    }
+  }
+}
+
+void Renderer::clearMaterialSwaps()
+{
+  size_t  i;
+  for (i = 0; i < (sizeof(materialSwapTable) / sizeof(unsigned int)); i++)
+    materialSwapTable[i] = 0U;
+}
+
+void Renderer::setWaterColor(unsigned int watrFormID)
+{
+  std::uint32_t c = defaultWaterColor;
+  if (watrFormID && esmFile)
+  {
+    const ESMFile::ESMRecord  *r = esmFile->getRecordPtr(watrFormID);
+    if (r && *r == "WATR")
+      c = getWaterColor(*esmFile, *r, c);
+  }
+  waterColor = c;
+}
+
+void Renderer::renderModelToFile(const char *outFileName,
+                                 int imageWidth, int imageHeight)
+{
+  size_t  imageDataSize = size_t(imageWidth << 1) * size_t(imageHeight << 1);
+  std::vector< std::uint32_t >  outBufRGBA(imageDataSize, 0U);
+  std::vector< float >  outBufZ(imageDataSize, 16777216.0f);
+  renderModel(&(outBufRGBA.front()), &(outBufZ.front()),
+              imageWidth << 1, imageHeight << 1);
+  imageDataSize = imageDataSize >> 2;
   std::vector< std::uint32_t >  downsampleBuf(imageDataSize);
   downsample2xFilter(&(downsampleBuf.front()), &(outBufRGBA.front()),
-                     imageWidth, imageHeight, w);
-#if USE_PIXELFMT_RGB10A2
-  DDSOutputFile outFile(outFileName, w, h,
-                        DDSInputFile::pixelFormatA2R10G10B10);
-  outFile.writeImageData(&(downsampleBuf.front()), imageDataSize,
-                         DDSInputFile::pixelFormatA2R10G10B10);
-#else
-  DDSOutputFile outFile(outFileName, w, h, DDSInputFile::pixelFormatRGB24);
-  outFile.writeImageData(&(downsampleBuf.front()), imageDataSize,
-                         DDSInputFile::pixelFormatRGB24);
-#endif
+                     imageWidth << 1, imageHeight << 1, imageWidth);
+  int     pixelFormat =
+      (!USE_PIXELFMT_RGB10A2 ?
+       DDSInputFile::pixelFormatRGBA32 : DDSInputFile::pixelFormatA2R10G10B10);
+  DDSOutputFile outFile(outFileName, imageWidth, imageHeight, pixelFormat);
+  outFile.writeImageData(&(downsampleBuf.front()), imageDataSize, pixelFormat);
 }
 
 static void updateRotation(float& rx, float& ry, float& rz,
@@ -572,7 +616,7 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mEsc\033[m                   "
     "Quit viewer.                                                    \n";
 
-void Renderer::viewMeshes(SDLDisplay& display, const BA2File& ba2File,
+void Renderer::viewModels(SDLDisplay& display,
                           const std::vector< std::string >& nifFileNames)
 {
   if (nifFileNames.size() < 1)
@@ -584,36 +628,18 @@ void Renderer::viewMeshes(SDLDisplay& display, const BA2File& ba2File,
   {
     int     imageWidth = display.getWidth();
     int     imageHeight = display.getHeight();
-    float   modelRotationX = 0.0f;
-    float   modelRotationY = 0.0f;
-    float   modelRotationZ = 0.0f;
-    float   lightRotationX = 0.0f;
-    float   lightRotationY = 56.25f;
-    float   lightRotationZ = -135.0f;
-    FloatVector4  lightColor(1.0f);
-    float   lightLevel = 1.0f;
     int     viewRotation = 0;   // isometric from NW
-    float   viewScale = 1.0f;
-    int     envMapNum = 0;
-    float   envMapScale = 1.0f;
-    unsigned int  debugMode = 0;
+    float   lightRotationX = 0.0f;
     int     fileNum = 0;
     int     d = 4;              // scale of adjusting parameters
 
     size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
     std::vector< float >  outBufZ(imageDataSize);
-    std::vector< unsigned char >  fileBuf;
     while (!quitFlag)
     {
       messageBuf += nifFileNames[fileNum];
       messageBuf += '\n';
-      ba2File.extractFile(fileBuf, nifFileNames[fileNum]);
-      NIFFile   nifFile(&(fileBuf.front()), fileBuf.size(), &ba2File);
-      Renderer  renderer((std::uint32_t *) 0, (float *) 0,
-                         imageWidth, imageHeight, nifFile.getVersion());
-      renderer.ba2File = &ba2File;
-      nifFile.getMesh(renderer.meshData);
-      renderer.waterTexture = "textures/water/defaultwater.dds";
+      loadModel(nifFileNames[fileNum]);
 
       bool    nextFileFlag = false;
       bool    screenshotFlag = false;
@@ -627,69 +653,14 @@ void Renderer::viewMeshes(SDLDisplay& display, const BA2File& ba2File,
         }
         if (redrawFlags & 2)
         {
-          renderer.modelTransform =
-              NIFFile::NIFVertexTransform(
-                  1.0f, degreesToRadians(modelRotationX),
-                  degreesToRadians(modelRotationY),
-                  degreesToRadians(modelRotationZ), 0.0f, 0.0f, 0.0f);
-          renderer.viewTransform =
-              NIFFile::NIFVertexTransform(
-                  1.0f,
-                  degreesToRadians(viewRotations[viewRotation * 3]),
-                  degreesToRadians(viewRotations[viewRotation * 3 + 1]),
-                  degreesToRadians(viewRotations[viewRotation * 3 + 2]),
-                  0.0f, 0.0f, 0.0f);
-          NIFFile::NIFVertexTransform
-              lightTransform(
-                  1.0f, degreesToRadians(lightRotationX),
-                  degreesToRadians(lightRotationY),
-                  degreesToRadians(lightRotationZ), 0.0f, 0.0f, 0.0f);
-          renderer.lightX = lightTransform.rotateZX;
-          renderer.lightY = lightTransform.rotateZY;
-          renderer.lightZ = lightTransform.rotateZZ;
-          renderer.waterEnvMapLevel = 1.0f;
-          renderer.waterColor = 0xC0804000U;
-          NIFFile::NIFVertexTransform t(renderer.modelTransform);
-          t *= renderer.viewTransform;
-          NIFFile::NIFBounds  b;
-          for (size_t i = 0; i < renderer.meshData.size(); i++)
-          {
-            // ignore if hidden
-            if (!(renderer.meshData[i].m.flags & BGSMFile::Flag_TSHidden))
-              renderer.meshData[i].calculateBounds(b, &t);
-          }
-          float   xScale = float(imageWidth) * 0.96875f;
-          if (b.xMax() > b.xMin())
-            xScale = xScale / (b.xMax() - b.xMin());
-          float   yScale = float(imageHeight) * 0.96875f;
-          if (b.yMax() > b.yMin())
-            yScale = yScale / (b.yMax() - b.yMin());
-          float   scale = (xScale < yScale ? xScale : yScale) * viewScale;
-          renderer.viewTransform.scale = scale;
-          renderer.viewTransform.offsX =
-              0.5f * (float(imageWidth) - ((b.xMin() + b.xMax()) * scale));
-          renderer.viewTransform.offsY =
-              0.5f * (float(imageHeight) - ((b.yMin() + b.yMax()) * scale));
-          renderer.viewTransform.offsZ = 1.0f - (b.zMin() * scale);
-          renderer.defaultEnvMap =
-              std::string(cubeMapPaths[envMapNum * 3
-                                       + int(nifFile.getVersion() >= 0x80)
-                                       + int(nifFile.getVersion() >= 0x90)]);
+          viewRotationX = viewRotations[viewRotation * 3];
+          viewRotationY = viewRotations[viewRotation * 3 + 1];
+          viewRotationZ = viewRotations[viewRotation * 3 + 2];
           display.clearSurface();
           for (size_t i = 0; i < imageDataSize; i++)
             outBufZ[i] = 16777216.0f;
           std::uint32_t *outBufRGBA = display.lockDrawSurface();
-          renderer.setBuffers(outBufRGBA, &(outBufZ.front()),
-                              imageWidth, imageHeight, envMapScale);
-          FloatVector4  a(renderer.renderers[0]->cubeMapToAmbient(
-                              renderer.loadTexture(&(renderer.defaultEnvMap))));
-          for (size_t i = 0; i < renderer.renderers.size(); i++)
-          {
-            renderer.renderers[i]->setLighting(
-                lightColor, a, FloatVector4(1.0f), lightLevel);
-            renderer.renderers[i]->setDebugMode(debugMode, 0);
-          }
-          renderer.renderModel();
+          renderModel(outBufRGBA, &(outBufZ.front()), imageWidth, imageHeight);
           display.unlockDrawSurface();
           if (screenshotFlag)
           {
@@ -731,9 +702,9 @@ void Renderer::viewMeshes(SDLDisplay& display, const BA2File& ba2File,
               case '3':
               case '4':
               case '5':
-                debugMode = (unsigned int) (d1 != '1' ? (d1 - '0') : 0);
+                debugMode = int(d1 != '1' ? (d1 - '0') : 0);
                 messageBuf += "Debug mode set to ";
-                messageBuf += char(debugMode | 0x30U);
+                messageBuf += char(debugMode | 0x30);
                 messageBuf += '\n';
                 break;
               case '-':
@@ -790,11 +761,10 @@ void Renderer::viewMeshes(SDLDisplay& display, const BA2File& ba2File,
               case SDLDisplay::SDLKeySymF1 + 5:
               case SDLDisplay::SDLKeySymF1 + 6:
               case SDLDisplay::SDLKeySymF1 + 7:
-                envMapNum = d1 - SDLDisplay::SDLKeySymF1;
+                defaultEnvMapNum = d1 - SDLDisplay::SDLKeySymF1;
+                setDefaultTextures();
                 messageBuf += "Default environment map: ";
-                messageBuf += cubeMapPaths[envMapNum * 3
-                                           + int(nifFile.getVersion() >= 0x80)
-                                           + int(nifFile.getVersion() >= 0x90)];
+                messageBuf += defaultEnvMap;
                 messageBuf += '\n';
                 break;
               case 'a':
@@ -822,11 +792,11 @@ void Renderer::viewMeshes(SDLDisplay& display, const BA2File& ba2File,
                                0, d, 0, messageBuf, "Model rotation");
                 break;
               case 'k':
-                updateValueLogScale(lightLevel, -d, 0.0625f, 16.0f, messageBuf,
+                updateValueLogScale(rgbScale, -d, 0.0625f, 16.0f, messageBuf,
                                     "Brightness (linear color space)");
                 break;
               case 'l':
-                updateValueLogScale(lightLevel, d, 0.0625f, 16.0f, messageBuf,
+                updateValueLogScale(rgbScale, d, 0.0625f, 16.0f, messageBuf,
                                     "Brightness (linear color space)");
                 break;
               case SDLDisplay::SDLKeySymLeft:
@@ -864,11 +834,11 @@ void Renderer::viewMeshes(SDLDisplay& display, const BA2File& ba2File,
                 updateLightColor(lightColor, 0, 0, -d, messageBuf);
                 break;
               case SDLDisplay::SDLKeySymInsert:
-                updateValueLogScale(envMapScale, d, 0.25f, 8.0f, messageBuf,
+                updateValueLogScale(reflZScale, d, 0.25f, 8.0f, messageBuf,
                                     "Reflection f scale");
                 break;
               case SDLDisplay::SDLKeySymDelete:
-                updateValueLogScale(envMapScale, -d, 0.25f, 8.0f, messageBuf,
+                updateValueLogScale(reflZScale, -d, 0.25f, 8.0f, messageBuf,
                                     "Reflection f scale");
                 break;
               case SDLDisplay::SDLKeySymCapsLock:
@@ -918,7 +888,7 @@ void Renderer::viewMeshes(SDLDisplay& display, const BA2File& ba2File,
                 updateRotation(lightRotationX, lightRotationY, lightRotationZ,
                                0, 0, 0, messageBuf, "Light rotation");
                 display.printString(messageBuf.c_str());
-                updateValueLogScale(lightLevel, 0, 0.25f, 4.0f, messageBuf,
+                updateValueLogScale(rgbScale, 0, 0.25f, 4.0f, messageBuf,
                                     "Brightness (linear color space)");
                 display.printString(messageBuf.c_str());
                 updateLightColor(lightColor, 0, 0, 0, messageBuf);
@@ -926,7 +896,7 @@ void Renderer::viewMeshes(SDLDisplay& display, const BA2File& ba2File,
                 updateValueLogScale(viewScale, 0, 0.0625f, 16.0f, messageBuf,
                                     "View scale");
                 display.printString(messageBuf.c_str());
-                updateValueLogScale(envMapScale, 0, 0.5f, 4.0f, messageBuf,
+                updateValueLogScale(reflZScale, 0, 0.5f, 4.0f, messageBuf,
                                     "Reflection f scale");
                 if (d == 1)
                   messageBuf += "Step size: 2.8125\302\260, exp2(1/16)\n";
@@ -937,9 +907,7 @@ void Renderer::viewMeshes(SDLDisplay& display, const BA2File& ba2File,
                 else
                   messageBuf += "Downsampling disabled\n";
                 messageBuf += "Default environment map: ";
-                messageBuf += cubeMapPaths[envMapNum * 3
-                                           + int(nifFile.getVersion() >= 0x80)
-                                           + int(nifFile.getVersion() >= 0x90)];
+                messageBuf += defaultEnvMap;
                 messageBuf += "\nFile list:\n";
                 {
                   int     n0 = 0;
