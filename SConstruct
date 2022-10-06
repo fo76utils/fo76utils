@@ -26,6 +26,7 @@ libSources += ["src/ba2file.cpp", "src/esmfile.cpp", "src/stringdb.cpp"]
 libSources += ["src/btdfile.cpp", "src/ddstxt.cpp", "src/esmdbase.cpp"]
 libSources += ["src/nif_file.cpp", "src/bgsmfile.cpp", "src/landdata.cpp"]
 libSources += ["src/plot3d.cpp", "src/landtxt.cpp", "src/terrmesh.cpp"]
+libSources += ["src/rndrbase.cpp"]
 fo76utilsLib = env.StaticLibrary("fo76utils", libSources)
 env.Prepend(LIBS = [fo76utilsLib])
 nifViewEnv = env.Clone()
