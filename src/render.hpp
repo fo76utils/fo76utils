@@ -13,11 +13,12 @@
 #include "nif_file.hpp"
 #include "terrmesh.hpp"
 #include "plot3d.hpp"
+#include "rndrbase.hpp"
 
 #include <thread>
 #include <mutex>
 
-class Renderer
+class Renderer : protected Renderer_Base
 {
  protected:
   // maximum number of NIF files to keep loaded (must be power of two and <= 64)
@@ -71,14 +72,6 @@ class Renderer
     NIFFile::NIFVertexTransform modelTransform;
     bool operator<(const RenderObject& r) const;
   };
-  struct CachedTexture
-  {
-    DDSTexture    *texture;
-    std::map< std::string, CachedTexture >::iterator  i;
-    CachedTexture *prv;
-    CachedTexture *nxt;
-    std::mutex    *textureLoadMutex;
-  };
   struct ModelData
   {
     NIFFile *nifFile;
@@ -92,25 +85,8 @@ class Renderer
     ~ModelData();
     void clear();
   };
-  struct MaterialSwap
-  {
-    std::string materialPath;
-    BGSMFile    bgsmFile;
-    std::vector< std::string >  texturePaths;
-    // texturePathPtrs[0] = &materialPath
-    const std::string *texturePathPtrs[11];
-  };
   struct RenderThread
   {
-    struct TriShapeSortObject
-    {
-      const NIFFile::NIFTriShape  *ts;
-      double  z;
-      inline bool operator<(const TriShapeSortObject& r) const
-      {
-        return (z < r.z);
-      }
-    };
     std::thread *t;
     std::string errMsg;
     TerrainMesh *terrainMesh;
@@ -118,7 +94,7 @@ class Renderer
     // objects not rendered due to incorrect bounds
     std::vector< unsigned int > objectsRemaining;
     std::vector< unsigned char >  fileBuf;
-    std::vector< TriShapeSortObject > sortBuf;
+    std::vector< Renderer_Base::TriShapeSortObject >  sortBuf;
     RenderThread();
     ~RenderThread();
     void join();
@@ -152,12 +128,7 @@ class Renderer
   // 1: terrain, 2: objects, 4: objects with alpha blending
   unsigned char renderPass;
   int     threadCnt;
-  size_t  textureDataSize;
-  size_t  textureCacheSize;
-  CachedTexture *firstTexture;
-  CachedTexture *lastTexture;
-  std::mutex  textureCacheMutex;
-  std::map< std::string, CachedTexture >  textureCache;
+  TextureCache  textureCache;
   std::vector< const DDSTexture * > landTextures;
   std::vector< const DDSTexture * > landTexturesN;
   std::vector< RenderObject > objectList;
@@ -166,7 +137,7 @@ class Renderer
   std::string defaultEnvMap;
   std::string defaultWaterTexture;
   std::vector< ModelData >    nifFiles;
-  std::map< unsigned int, std::vector< MaterialSwap > > materialSwaps;
+  MaterialSwaps materialSwaps;
   std::vector< RenderThread > renderThreads;
   std::string stringBuf;
   std::uint32_t waterColor;
@@ -187,7 +158,13 @@ class Renderer
   unsigned int getDefaultWorldID() const;
   void addTerrainCell(const ESMFile::ESMRecord& r);
   void addWaterCell(const ESMFile::ESMRecord& r);
-  void getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r);
+  inline void getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r)
+  {
+    if (!useESMWaterColors)
+      p.mswpFormID = waterColor;
+    else
+      p.mswpFormID = Renderer_Base::getWaterColor(esmFile, r, waterColor);
+  }
   // returns NULL on excluded model or invalid object
   const BaseObject *readModelProperties(RenderObject& p,
                                         const ESMFile::ESMRecord& r);
@@ -207,22 +184,12 @@ class Renderer
   // 0x0020: clear model cache
   // 0x0040: clear texture cache
   void clear(unsigned int flags);
-  static size_t getTextureDataSize(const DDSTexture *t);
-  // returns NULL on failure
-  // *waitFlag is set to true if the texture is locked by another thread
-  // m = mip level (< 0: use default)
-  const DDSTexture *loadTexture(const std::string& fileName,
-                                std::vector< unsigned char >& fileBuf,
-                                int m = -1, bool *waitFlag = (bool *) 0);
-  void shrinkTextureCache();
   bool isExcludedModel(const std::string& modelPath) const;
   bool isHighQualityModel(const std::string& modelPath) const;
   void loadModels(unsigned int t, unsigned long long modelIDMask);
   static void loadModelsThread(Renderer *p,
                                unsigned int t, unsigned long long modelIDMask);
-  unsigned int loadMaterialSwap(unsigned int formID);
   void renderObjectList();
-  void materialSwap(Plot3D_TriShape& t, unsigned int formID);
   bool renderObject(RenderThread& t, size_t i,
                     unsigned long long tileMask = ~0ULL);
   void renderThread(size_t threadNum, size_t startPos, size_t endPos,
@@ -230,10 +197,6 @@ class Renderer
   static void threadFunction(Renderer *p, size_t threadNum,
                              size_t startPos, size_t endPos,
                              unsigned long long tileIndexMask);
-  static inline std::uint32_t bgraToRGBA(std::uint32_t c)
-  {
-    return ((c & 0xFF00FF00U) | ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU));
-  }
  public:
   Renderer(int imageWidth, int imageHeight,
            const BA2File& archiveFiles, ESMFile& masterFiles,
@@ -269,7 +232,7 @@ class Renderer
   void setThreadCount(int n);
   void setTextureCacheSize(size_t n)
   {
-    textureCacheSize = n;
+    textureCache.textureCacheSize = n;
   }
   void setTextureMipLevel(int n)
   {

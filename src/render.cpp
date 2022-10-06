@@ -411,60 +411,6 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   }
 }
 
-void Renderer::getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r)
-{
-  p.mswpFormID = waterColor;
-  if (!useESMWaterColors || esmFile.getESMVersion() < 0x28)
-  {
-    // fixed water color, or game older than Skyrim
-    return;
-  }
-  unsigned int  waterFormID = r.formID;
-  ESMFile::ESMField f(esmFile, r);
-  while (f.next())
-  {
-    if (((f == "WNAM" && r == "ACTI") || (f == "XCWT" && r == "CELL") ||
-         (f == "NAM2" && r == "WRLD")) && f.size() >= 4)
-    {
-      waterFormID = f.readUInt32Fast();
-    }
-  }
-  const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(waterFormID);
-  if (r2 && *r2 == "WATR")
-  {
-    ESMFile::ESMField f2(esmFile, *r2);
-    while (f2.next())
-    {
-      if (!(f2 == "DNAM" && f2.size() >= 64))
-        continue;
-      FloatVector4  c;
-      float   d = 0.0f;
-      if (esmFile.getESMVersion() < 0x80)       // Skyrim
-      {
-        f2.setPosition(36);
-        d = f2.readFloat();                     // fog distance (far plane)
-        (void) f2.readUInt32Fast();             // shallow color
-        c = FloatVector4(f2.readUInt32Fast());  // deep color
-      }
-      else if (esmFile.getESMVersion() < 0xC0)  // Fallout 4
-      {
-        d = f2.readFloat();                     // depth amount
-        (void) f2.readUInt32Fast();             // shallow color
-        c = FloatVector4(f2.readUInt32Fast());  // deep color
-      }
-      else                                      // Fallout 76
-      {
-        d = f2.readFloat();
-        f2.setPosition(16);
-        c = f2.readFloatVector4().srgbCompress();
-      }
-      d = (d > 0.125f ? (d < 8128.0f ? d : 8128.0f) : 0.125f);
-      c[3] = 256.0f - float(std::sqrt(d * 8.0f));
-      p.mswpFormID = (std::uint32_t) c;
-    }
-  }
-}
-
 const Renderer::BaseObject * Renderer::readModelProperties(
     RenderObject& p, const ESMFile::ESMRecord& r)
 {
@@ -602,6 +548,11 @@ const Renderer::BaseObject * Renderer::readModelProperties(
   p.flags = i->second.flags;
   p.model.o = &(i->second);
   p.mswpFormID = i->second.mswpFormID;
+  if (p.mswpFormID)
+  {
+    p.mswpFormID =
+        materialSwaps.loadMaterialSwap(ba2File, esmFile, p.mswpFormID);
+  }
   return &(i->second);
 }
 
@@ -665,14 +616,19 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
         {
           if (!tmp.mswpFormID)
           {
-            if (o->mswpFormID)
-              tmp.mswpFormID = loadMaterialSwap(o->mswpFormID);
-            if (refrMSWPFormID && refrMSWPFormID != o->mswpFormID)
-              tmp.mswpFormID = loadMaterialSwap(refrMSWPFormID);
-            else if (mswpFormID_ONAM && mswpFormID_ONAM != o->mswpFormID)
-              tmp.mswpFormID = loadMaterialSwap(mswpFormID_ONAM);
-            else if (mswpFormID_SCOL && mswpFormID_SCOL != o->mswpFormID)
-              tmp.mswpFormID = loadMaterialSwap(mswpFormID_SCOL);
+            if (refrMSWPFormID)
+              tmp.mswpFormID = refrMSWPFormID;
+            else if (mswpFormID_ONAM)
+              tmp.mswpFormID = mswpFormID_ONAM;
+            else if (mswpFormID_SCOL)
+              tmp.mswpFormID = mswpFormID_SCOL;
+            else
+              tmp.mswpFormID = o->mswpFormID;
+            if (tmp.mswpFormID && tmp.mswpFormID != o->mswpFormID)
+            {
+              tmp.mswpFormID = materialSwaps.loadMaterialSwap(
+                                   ba2File, esmFile, tmp.mswpFormID);
+            }
           }
           objectList.push_back(tmp);
         }
@@ -770,12 +726,19 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
       continue;
     if (debugMode == 1)
       tmp.z = int(r->formID);
-    if (o->mswpFormID && refrMSWPFormID != o->mswpFormID)
-      tmp.mswpFormID = loadMaterialSwap(o->mswpFormID);
-    if (refrMSWPFormID)
-      tmp.mswpFormID = loadMaterialSwap(refrMSWPFormID);
     if (tmp.flags & 4)
+    {
       getWaterColor(tmp, *r2);
+    }
+    else if (refrMSWPFormID)
+    {
+      if (refrMSWPFormID != o->mswpFormID)
+      {
+        refrMSWPFormID =
+            materialSwaps.loadMaterialSwap(ba2File, esmFile, refrMSWPFormID);
+      }
+      tmp.mswpFormID = refrMSWPFormID;
+    }
     objectList.push_back(tmp);
   }
   while ((formID = r->next) != 0U && isRecursive);
@@ -939,142 +902,7 @@ void Renderer::clear(unsigned int flags)
       nifFiles[i].clear();
   }
   if (flags & 0x40)
-  {
-    textureDataSize = 0;
-    firstTexture = (CachedTexture *) 0;
-    lastTexture = (CachedTexture *) 0;
-    for (std::map< std::string, CachedTexture >::iterator
-             i = textureCache.begin(); i != textureCache.end(); i++)
-    {
-      if (i->second.texture)
-        delete i->second.texture;
-      delete i->second.textureLoadMutex;
-    }
     textureCache.clear();
-  }
-}
-
-size_t Renderer::getTextureDataSize(const DDSTexture *t)
-{
-  if (!t)
-    return 0;
-  size_t  n =
-      size_t(t->getWidth()) * size_t(t->getHeight()) * sizeof(std::uint32_t);
-  size_t  dataSize = 1024;
-  for ( ; n > 0; n = n >> 2)
-    dataSize = dataSize + n;
-  return dataSize;
-}
-
-const DDSTexture * Renderer::loadTexture(const std::string& fileName,
-                                         std::vector< unsigned char >& fileBuf,
-                                         int m, bool *waitFlag)
-{
-  if (fileName.find("/temp_ground") != std::string::npos)
-    return (DDSTexture *) 0;
-  textureCacheMutex.lock();
-  std::map< std::string, CachedTexture >::iterator  i =
-      textureCache.find(fileName);
-  if (i != textureCache.end())
-  {
-    CachedTexture *cachedTexture = &(i->second);
-    if (cachedTexture->nxt)
-    {
-      if (cachedTexture->prv)
-        cachedTexture->prv->nxt = cachedTexture->nxt;
-      else
-        firstTexture = cachedTexture->nxt;
-      cachedTexture->nxt->prv = cachedTexture->prv;
-      lastTexture->nxt = cachedTexture;
-      cachedTexture->prv = lastTexture;
-      cachedTexture->nxt = (CachedTexture *) 0;
-      lastTexture = cachedTexture;
-    }
-    textureCacheMutex.unlock();
-    if (!waitFlag)
-      cachedTexture->textureLoadMutex->lock();
-    else if ((*waitFlag = !cachedTexture->textureLoadMutex->try_lock()) == true)
-      return (DDSTexture *) 0;
-    const DDSTexture  *t = cachedTexture->texture;
-    cachedTexture->textureLoadMutex->unlock();
-    return t;
-  }
-
-  CachedTexture *cachedTexture = (CachedTexture *) 0;
-  std::mutex  *textureLoadMutex = new std::mutex();
-  try
-  {
-    {
-      CachedTexture tmp;
-      tmp.texture = (DDSTexture *) 0;
-      tmp.i = textureCache.end();
-      tmp.prv = (CachedTexture *) 0;
-      tmp.nxt = (CachedTexture *) 0;
-      tmp.textureLoadMutex = textureLoadMutex;
-      i = textureCache.insert(std::pair< std::string, CachedTexture >(
-                                  fileName, tmp)).first;
-    }
-    textureLoadMutex = (std::mutex *) 0;
-    cachedTexture = &(i->second);
-    cachedTexture->i = i;
-    if (lastTexture)
-      lastTexture->nxt = cachedTexture;
-    else
-      firstTexture = cachedTexture;
-    cachedTexture->prv = lastTexture;
-    cachedTexture->nxt = (CachedTexture *) 0;
-    lastTexture = cachedTexture;
-  }
-  catch (...)
-  {
-    textureCacheMutex.unlock();
-    delete textureLoadMutex;
-    throw;
-  }
-
-  DDSTexture  *t = (DDSTexture *) 0;
-  cachedTexture->textureLoadMutex->lock();
-  textureCacheMutex.unlock();
-  try
-  {
-    m = ba2File.extractTexture(fileBuf, fileName, (m >= 0 ? m : textureMip));
-    t = new DDSTexture(&(fileBuf.front()), fileBuf.size(), m);
-    cachedTexture->texture = t;
-    textureCacheMutex.lock();
-    textureDataSize = textureDataSize + getTextureDataSize(t);
-    textureCacheMutex.unlock();
-  }
-  catch (FO76UtilsError&)
-  {
-  }
-  catch (...)
-  {
-    cachedTexture->textureLoadMutex->unlock();
-    throw;
-  }
-  cachedTexture->textureLoadMutex->unlock();
-  return t;
-}
-
-void Renderer::shrinkTextureCache()
-{
-  while (textureDataSize > textureCacheSize && firstTexture)
-  {
-    size_t  dataSize = getTextureDataSize(firstTexture->texture);
-    if (firstTexture->texture)
-      delete firstTexture->texture;
-    delete firstTexture->textureLoadMutex;
-    std::map< std::string, CachedTexture >::iterator  i = firstTexture->i;
-    if (firstTexture->nxt)
-      firstTexture->nxt->prv = (CachedTexture *) 0;
-    else
-      lastTexture = (CachedTexture *) 0;
-    firstTexture = firstTexture->nxt;
-    textureCache.erase(i);
-    textureDataSize = textureDataSize - dataSize;
-  }
-  if (!firstTexture)
-    textureDataSize = 0;
 }
 
 bool Renderer::isExcludedModel(const std::string& modelPath) const
@@ -1155,106 +983,6 @@ void Renderer::loadModelsThread(Renderer *p,
     if (p->nifFiles[t].threadErrMsg.empty())
       p->nifFiles[t].threadErrMsg = "unknown error in load model thread";
   }
-}
-
-unsigned int Renderer::loadMaterialSwap(unsigned int formID)
-{
-  if (!formID)
-    return 0U;
-  {
-    std::map< unsigned int, std::vector< MaterialSwap > >::const_iterator i =
-        materialSwaps.find(formID);
-    if (i != materialSwaps.end())
-      return (i->second.size() > 0 ? formID : 0U);
-  }
-  std::vector< MaterialSwap >&  v =
-      materialSwaps.insert(
-          std::pair< unsigned int, std::vector< MaterialSwap > >(
-              formID, std::vector< MaterialSwap >())).first->second;
-  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
-  if (!(r && *r == "MSWP"))
-    return 0U;
-  MaterialSwap  m;
-  ESMFile::ESMField f(esmFile, *r);
-  while (f.next())
-  {
-    if (f == "BNAM")
-    {
-      f.readPath(stringBuf, std::string::npos, "materials/", ".bgsm");
-      m.materialPath = stringBuf;
-    }
-    else if (f == "SNAM" && !m.materialPath.empty())
-    {
-      f.readPath(stringBuf, std::string::npos, "materials/", ".bgsm");
-      if (!stringBuf.empty())
-      {
-        int     gradientMapV = -1;
-        if (f.dataRemaining >= 4U &&
-            FileBuffer::readUInt32Fast(f.getDataPtr() + f.size())
-            == 0x4D414E43U)             // "CNAM"
-        {
-          if (f.next() && f.size() >= 4)
-            gradientMapV = roundFloat(f.readFloat() * 255.0f) & 0xFF;
-        }
-        static const char *bgsmNamePatterns[14] =
-        {
-          "*",            "",             "01",           "01decal",
-          "02",           "_2sided",      "_8bit",        "alpha",
-          "alpha_2sided", "_decal",       "decal",        "decal_8bit",
-          "noalpha",      "wet"
-        };
-        size_t  n1 = m.materialPath.find('*');
-        size_t  n2 = std::string::npos;
-        if (n1 != std::string::npos)
-          n2 = stringBuf.find('*');
-        for (size_t i = 1; i < (sizeof(bgsmNamePatterns) / sizeof(char *)); i++)
-        {
-          if (n1 != std::string::npos)
-          {
-            m.materialPath.erase(n1, std::strlen(bgsmNamePatterns[i - 1]));
-            m.materialPath.insert(n1, bgsmNamePatterns[i]);
-            if (n2 != std::string::npos)
-            {
-              stringBuf.erase(n2, std::strlen(bgsmNamePatterns[i - 1]));
-              stringBuf.insert(n2, bgsmNamePatterns[i]);
-            }
-            if (ba2File.getFileSize(m.materialPath, true) < 0L)
-              continue;
-          }
-          try
-          {
-            std::vector< unsigned char >& fileBuf(renderThreads[0].fileBuf);
-            ba2File.extractFile(fileBuf, stringBuf);
-            FileBuffer  tmp(&(fileBuf.front()), fileBuf.size());
-            m.bgsmFile.loadBGSMFile(m.texturePaths, tmp);
-            if (gradientMapV >= 0)
-              m.bgsmFile.gradientMapV = (unsigned char) gradientMapV;
-            v.push_back(m);
-            MaterialSwap& p = v[v.size() - 1];
-            unsigned int  txtPathMask = p.bgsmFile.texturePathMask & 0x03FFU;
-            for (size_t j = 0; txtPathMask; j++, txtPathMask = txtPathMask >> 1)
-            {
-              if (!(txtPathMask & 1U))
-                p.texturePathPtrs[j + 1] = (std::string *) 0;
-              else
-                p.texturePathPtrs[j + 1] = &(p.texturePaths.front()) + j;
-            }
-          }
-          catch (FO76UtilsError&)
-          {
-          }
-          if (n1 == std::string::npos)
-            break;
-        }
-      }
-      m.materialPath.clear();
-    }
-  }
-  if (v.size() < 1)
-    return 0U;
-  for (size_t i = 0; i < v.size(); i++)
-    v[i].texturePathPtrs[0] = &(v[i].materialPath);
-  return formID;
 }
 
 struct ThreadSortObject
@@ -1410,7 +1138,7 @@ void Renderer::renderObjectList()
       renderThreads[k].objectsRemaining.clear();
     }
     i = j;
-    shrinkTextureCache();
+    textureCache.shrinkTextureCache();
     if (verboseMode)
     {
       std::fprintf(stderr, "\r    %7u / %7u  ",
@@ -1420,21 +1148,6 @@ void Renderer::renderObjectList()
   clear(0x20);
   if (verboseMode)
     std::fputc('\n', stderr);
-}
-
-void Renderer::materialSwap(Plot3D_TriShape& t, unsigned int formID)
-{
-  std::map< unsigned int, std::vector< MaterialSwap > >::const_iterator i =
-      materialSwaps.find(formID);
-  if (i == materialSwaps.end() || !t.haveMaterialPath())
-    return;
-  for (size_t j = 0; j < i->second.size(); j++)
-  {
-    if (!(i->second[j].materialPath == t.materialPath()))
-      continue;
-    t.setMaterial(i->second[j].bgsmFile, &(i->second[j].texturePathPtrs[1]));
-    break;
-  }
 }
 
 bool Renderer::renderObject(RenderThread& t, size_t i,
@@ -1498,12 +1211,9 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       }
       if (!isVisible)
         continue;
-      RenderThread::TriShapeSortObject  tmp;
-      tmp.ts = &ts;
-      tmp.z = double(b.zMin());
-      if (ts.m.flags & BGSMFile::Flag_TSAlphaBlending)
-        tmp.z = double(0x02000000) - tmp.z;
-      t.sortBuf.push_back(tmp);
+      t.sortBuf.push_back(TriShapeSortObject(ts, b.zMin()));
+      if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSOrdered))
+        TriShapeSortObject::orderedNodeFix(t.sortBuf, nifFiles[n].meshData);
     }
     if (t.sortBuf.size() < 1)
       return true;
@@ -1520,23 +1230,21 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         t.renderer->m.envMapScale =
             floatToUInt8Clamped(waterReflectionLevel, 128.0f);
         t.renderer->m.emissiveColor = p.mswpFormID;     // water color
-        if (!defaultWaterTexture.empty() &&
-            bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf, 0)))
-        {
+        textures[1] = textureCache.loadTexture(ba2File, defaultWaterTexture,
+                                               t.fileBuf, 0);
+        if (textures[1])
           textureMask |= 0x0002U;
-        }
-        if (!defaultEnvMap.empty() &&
-            bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
-        {
+        textures[4] = textureCache.loadTexture(ba2File, defaultEnvMap,
+                                               t.fileBuf, 0);
+        if (textures[4])
           textureMask |= 0x0010U;
-        }
       }
       else
       {
         if (p.model.o->mswpFormID && p.mswpFormID != p.model.o->mswpFormID)
-          materialSwap(*(t.renderer), p.model.o->mswpFormID);
+          materialSwaps.materialSwap(*(t.renderer), p.model.o->mswpFormID);
         if (p.mswpFormID)
-          materialSwap(*(t.renderer), p.mswpFormID);
+          materialSwaps.materialSwap(*(t.renderer), p.mswpFormID);
         if (p.flags & 0x80)
           t.renderer->m.gradientMapV = (unsigned char) (p.flags >> 8);
         unsigned int  texturePathMask = t.renderer->m.texturePathMask;
@@ -1558,6 +1266,12 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
             textureMask |= 0x0001U;
           }
         }
+        else if (!(texturePathMask & 0x0001U) ||
+                 t.renderer->texturePaths[0]->find("/temp_ground")
+                 != std::string::npos)
+        {
+          continue;
+        }
         for (unsigned int m = 0x00080200U; texturePathMask; m = m >> 1)
         {
           unsigned int  tmp = texturePathMask & m;
@@ -1565,9 +1279,10 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
             continue;
           int     k = FloatVector4::log2Int(int(tmp));
           bool    waitFlag = false;
-          textures[k] = loadTexture(*(t.renderer->texturePaths[k]), t.fileBuf,
-                                    (!(m & 0x0018U) ? -1 : 0),
-                                    (m > 0x03FFU ? &waitFlag : (bool *) 0));
+          textures[k] = textureCache.loadTexture(
+                            ba2File, *(t.renderer->texturePaths[k]), t.fileBuf,
+                            (!(m & 0x0018U) ? textureMip : 0),
+                            (m > 0x03FFU ? &waitFlag : (bool *) 0));
           if (!waitFlag)
           {
             texturePathMask &= ~tmp;
@@ -1576,9 +1291,11 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           }
         }
         if (!(textureMask & 0x0010U) && t.renderer->m.envMapScale > 0 &&
-            isHDModel && !defaultEnvMap.empty())
+            isHDModel)
         {
-          if (bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
+          textures[4] = textureCache.loadTexture(ba2File, defaultEnvMap,
+                                                 t.fileBuf, 0);
+          if (textures[4])
             textureMask |= 0x0010U;
         }
       }
@@ -1653,16 +1370,14 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     *(t.renderer) = tmp;
     const DDSTexture  *textures[5];
     unsigned int  textureMask = 0U;
-    if (!defaultWaterTexture.empty() &&
-        bool(textures[1] = loadTexture(defaultWaterTexture, t.fileBuf, 0)))
-    {
+    textures[1] = textureCache.loadTexture(ba2File, defaultWaterTexture,
+                                           t.fileBuf, 0);
+    if (textures[1])
       textureMask |= 0x0002U;
-    }
-    if (!defaultEnvMap.empty() &&
-        bool(textures[4] = loadTexture(defaultEnvMap, t.fileBuf, 0)))
-    {
+    textures[4] = textureCache.loadTexture(ba2File, defaultEnvMap,
+                                           t.fileBuf, 0);
+    if (textures[4])
       textureMask |= 0x0010U;
-    }
     t.renderer->drawTriShape(
         p.modelTransform, viewTransform, lightX, lightY, lightZ,
         textures, textureMask);
@@ -1769,10 +1484,6 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     debugMode(0),
     renderPass(0),
     threadCnt(0),
-    textureDataSize(0),
-    textureCacheSize(0x40000000),
-    firstTexture((CachedTexture *) 0),
-    lastTexture((CachedTexture *) 0),
     waterColor(0xFFFFFFFFU),
     waterReflectionLevel(1.0f),
     zRangeMax(zMax),
@@ -1947,7 +1658,8 @@ void Renderer::setRenderParameters(
   else
   {
     a = renderThreads[0].renderer->cubeMapToAmbient(
-            loadTexture(defaultEnvMap, renderThreads[0].fileBuf, 0));
+            textureCache.loadTexture(
+                ba2File, defaultEnvMap, renderThreads[0].fileBuf, 0));
   }
   for (size_t i = 0; i < renderThreads.size(); i++)
   {
@@ -1983,11 +1695,7 @@ void Renderer::loadTerrain(const char *btdFileName,
     const ESMFile::ESMRecord  *r =
         esmFile.getRecordPtr(landData->getWaterFormID());
     if (r && *r == "WATR")
-    {
-      RenderObject  tmp;
-      getWaterColor(tmp, *r);
-      waterColor = tmp.mswpFormID;
-    }
+      waterColor = Renderer_Base::getWaterColor(esmFile, *r, waterColor);
   }
   if (verboseMode)
     std::fprintf(stderr, "Loading landscape textures\n");
@@ -2002,10 +1710,11 @@ void Renderer::loadTerrain(const char *btdFileName,
     {
       landTextures[i] = &whiteTexture;
     }
-    else if (!landData->getTextureDiffuse(i).empty())
+    else
     {
-      landTextures[i] = loadTexture(landData->getTextureDiffuse(i), fileBuf,
-                                    mipLevelD);
+      landTextures[i] = textureCache.loadTexture(
+                            ba2File, landData->getTextureDiffuse(i), fileBuf,
+                            mipLevelD);
     }
     if (i < landTexturesN.size())
     {
@@ -2014,8 +1723,9 @@ void Renderer::loadTerrain(const char *btdFileName,
       int     mipLevelN = mipLevelD + calculateLandTxtMip(fileSizeN)
                           - calculateLandTxtMip(fileSizeD);
       mipLevelN = (mipLevelN > 0 ? (mipLevelN < 15 ? mipLevelN : 15) : 0);
-      landTexturesN[i] = loadTexture(landData->getTextureNormal(i), fileBuf,
-                                     mipLevelN);
+      landTexturesN[i] = textureCache.loadTexture(
+                             ba2File, landData->getTextureNormal(i), fileBuf,
+                             mipLevelN);
     }
   }
 }
