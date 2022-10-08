@@ -1,7 +1,8 @@
 
 import os, sys
 
-env = Environment(ENV = { "PATH" : os.environ["PATH"],
+env = Environment(tools = [*filter(None, ARGUMENTS.get('tools','').split(','))] or None,
+                  ENV = { "PATH" : os.environ["PATH"],
                           "HOME" : os.environ["HOME"] })
 env["CXXFLAGS"] = Split("-Wall -std=c++11 -Isrc")
 env.Append(CXXFLAGS = Split("-march=sandybridge -mtune=generic"))
