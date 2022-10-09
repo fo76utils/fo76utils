@@ -68,8 +68,6 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   float   mipOffsetS;
   float   mipOffsetR;
   float   mipOffsetG;                   // for the glow map
-  float   alphaThresholdFloat;
-  float   reflectionLevel;
   unsigned char renderMode;
   bool    usingSRGBColorSpace;
   std::uint16_t waterUVScale;
@@ -82,7 +80,6 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   FloatVector4  viewTransformInvX;
   FloatVector4  viewTransformInvY;
   FloatVector4  viewTransformInvZ;
-  FloatVector4  specularColorFloat;     // water color for drawWater()
   void    (*drawPixelFunction)(Plot3D_TriShape& p, Fragment& z);
   bool    (*getDiffuseColorFunc)(const Plot3D_TriShape& p,
                                  FloatVector4& c, Fragment& z);
@@ -138,8 +135,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       FloatVector4 c0, float a, Fragment& z, bool isFO76) const;
   // fill with water
   static void drawPixel_Water(Plot3D_TriShape& p, Fragment& z);
-  // with GGX
+  static void drawPixel_Effect(Plot3D_TriShape& p, Fragment& z);
+  // for Fallout 76 with GGX specular
   static void drawPixel_Water_G(Plot3D_TriShape& p, Fragment& z);
+  static void drawPixel_Effect_G(Plot3D_TriShape& p, Fragment& z);
   FloatVector4 glowMap(const Fragment& z) const;
   // returns true if the pixel is visible (alpha >= threshold)
   static bool getDiffuseColor_Effect(
@@ -229,6 +228,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                     const DDSTexture * const *textures,
                     unsigned int textureMask);
  protected:
+  void drawEffect(const DDSTexture * const *textures, unsigned int textureMask);
   void drawWater(const DDSTexture * const *textures, unsigned int textureMask,
                  float viewScale);
  public:
