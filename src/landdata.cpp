@@ -603,12 +603,11 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
   {
     try
     {
-      std::vector< std::string >  bgsmTexturePaths;
-      BGSMFile  bgsmFile(bgsmTexturePaths, *ba2File, ltexBGSMPaths[n]);
-      if (bgsmTexturePaths.size() >= 2)
+      BGSMFile  bgsmFile(*ba2File, ltexBGSMPaths[n]);
+      if (bgsmFile.texturePathMask & 0x0003U)
       {
-        ltexDPaths[n] = bgsmTexturePaths[0];
-        ltexNPaths[n] = bgsmTexturePaths[1];
+        ltexDPaths[n] = bgsmFile.texturePaths[0];
+        ltexNPaths[n] = bgsmFile.texturePaths[1];
       }
     }
     catch (...)

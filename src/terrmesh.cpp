@@ -58,8 +58,8 @@ void TerrainMesh::createMesh(
   triangleDataBuf.resize(triangleCnt);
   vertexData = &(vertexDataBuf.front());
   triangleData = &(triangleDataBuf.front());
-  m.specularColor = 0x80FFFFFFU;
-  m.specularSmoothness = 0;
+  m.s.specularColor = FloatVector4(1.0f);
+  m.s.specularSmoothness = 0.0f;
   NIFFile::NIFVertex    *vertexPtr = &(vertexDataBuf.front());
   NIFFile::NIFTriangle  *trianglePtr = &(triangleDataBuf.front());
   float   xyScale = 4096.0f / float(cellResolution);

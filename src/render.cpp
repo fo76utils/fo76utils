@@ -540,6 +540,11 @@ const Renderer::BaseObject * Renderer::readModelProperties(
       tmp.modelPath = stringBuf;
     }
     while (false);
+    if (tmp.mswpFormID)
+    {
+      tmp.mswpFormID =
+          materialSwaps.loadMaterialSwap(ba2File, esmFile, tmp.mswpFormID);
+    }
     i = baseObjects.insert(std::pair< unsigned int, BaseObject >(
                                r.formID, tmp)).first;
   }
@@ -548,11 +553,6 @@ const Renderer::BaseObject * Renderer::readModelProperties(
   p.flags = i->second.flags;
   p.model.o = &(i->second);
   p.mswpFormID = i->second.mswpFormID;
-  if (p.mswpFormID)
-  {
-    p.mswpFormID =
-        materialSwaps.loadMaterialSwap(ba2File, esmFile, p.mswpFormID);
-  }
   return &(i->second);
 }
 
@@ -1227,9 +1227,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (BRANCH_UNLIKELY(t.renderer->m.flags & BGSMFile::Flag_TSWater))
       {
         t.renderer->setRenderMode(3U | renderMode);
-        t.renderer->m.envMapScale =
-            floatToUInt8Clamped(waterReflectionLevel, 128.0f);
-        t.renderer->m.emissiveColor = p.mswpFormID;     // water color
+        t.renderer->m.setWaterColor(p.mswpFormID, waterReflectionLevel);
         textures[1] = textureCache.loadTexture(ba2File, defaultWaterTexture,
                                                t.fileBuf, 0);
         if (textures[1])
@@ -1246,14 +1244,18 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         if (p.mswpFormID)
           materialSwaps.materialSwap(*(t.renderer), p.mswpFormID);
         if (p.flags & 0x80)
-          t.renderer->m.gradientMapV = (unsigned char) (p.flags >> 8);
+        {
+          t.renderer->m.s.gradientMapV =
+              float(int(p.flags >> 8)) * (1.0f / 255.0f);
+        }
         unsigned int  texturePathMask = t.renderer->m.texturePathMask;
         texturePathMask &= ((((unsigned int) t.renderer->m.flags & 0x80U) >> 5)
                             | (!isHDModel ? 0x0009U : 0x037BU));
         t.renderer->setRenderMode((!isHDModel ? 0U : 3U) | renderMode);
         if (BRANCH_UNLIKELY(!enableTextures))
         {
-          if (t.renderer->m.isAlphaTesting() || (texturePathMask & 0x0008U))
+          if (t.renderer->m.alphaThresholdFloat > 0.0f ||
+              (texturePathMask & 0x0008U))
           {
             texturePathMask &= ~0x0008U;
             textures[3] = &whiteTexture;
@@ -1267,7 +1269,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           }
         }
         else if (!(texturePathMask & 0x0001U) ||
-                 t.renderer->texturePaths[0]->find("/temp_ground")
+                 t.renderer->m.texturePaths[0].find("/temp_ground")
                  != std::string::npos)
         {
           continue;
@@ -1280,7 +1282,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           int     k = FloatVector4::log2Int(int(tmp));
           bool    waitFlag = false;
           textures[k] = textureCache.loadTexture(
-                            ba2File, *(t.renderer->texturePaths[k]), t.fileBuf,
+                            ba2File, t.renderer->m.texturePaths[k], t.fileBuf,
                             (!(m & 0x0018U) ? textureMip : 0),
                             (m > 0x03FFU ? &waitFlag : (bool *) 0));
           if (!waitFlag)
@@ -1290,7 +1292,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
               textureMask |= tmp;
           }
         }
-        if (!(textureMask & 0x0010U) && t.renderer->m.envMapScale > 0 &&
+        if (!(textureMask & 0x0010U) && t.renderer->m.s.envMapScale > 0.0f &&
             isHDModel)
         {
           textures[4] = textureCache.loadTexture(ba2File, defaultEnvMap,
@@ -1362,10 +1364,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     tmp.triangleCnt = 2;
     tmp.vertexData = vTmp;
     tmp.triangleData = tTmp;
-    tmp.m.flags = BGSMFile::Flag_TSWater | BGSMFile::Flag_TSAlphaBlending
-                  | BGSMFile::Flag_TwoSided;
-    tmp.m.envMapScale = floatToUInt8Clamped(waterReflectionLevel, 128.0f);
-    tmp.m.emissiveColor = p.mswpFormID;         // water color
+    tmp.m.nifVersion = (esmFile.getESMVersion() < 0xC0U ? 130U : 155U);
+    tmp.m.setWaterColor(p.mswpFormID, waterReflectionLevel);
     t.renderer->setRenderMode(3U | renderMode);
     *(t.renderer) = tmp;
     const DDSTexture  *textures[5];
