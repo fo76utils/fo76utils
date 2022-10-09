@@ -145,31 +145,47 @@ float FileBuffer::readFloat16()
 void FileBuffer::readString(std::string& s, size_t n)
 {
   s.clear();
+  const unsigned char *p, *endPtr;
   if (n == std::string::npos)
   {
-    while (filePos < fileBufSize)
+    if (filePos >= fileBufSize)
+      return;
+    p = fileBuf + filePos;
+    n = fileBufSize - filePos;
+    if (!(n > 0 && *p))
     {
-      char    c = char(fileBuf[filePos++]);
-      if (!c)
-        break;
-      if ((unsigned char) c < 0x20)
-        c = ' ';
-      s += c;
+      filePos += size_t(n > 0);
+      return;
     }
-    return;
+    endPtr = reinterpret_cast< const unsigned char * >(std::memchr(p, '\0', n));
+    if (!endPtr)
+      endPtr = p + n;
+    else
+      n = size_t(endPtr - p) + 1;
+    filePos = filePos + n;
   }
-  if (((unsigned long long) filePos + n) > fileBufSize)
-    errorMessage("end of input file");
-  for (size_t i = 0; i < n; i++)
+  else
   {
-    char    c = char(fileBuf[filePos + i]);
-    if (!c)
-      break;
-    if ((unsigned char) c < 0x20)
-      c = ' ';
-    s += c;
+    if (BRANCH_UNLIKELY(((unsigned long long) filePos + n) > fileBufSize))
+      errorMessage("end of input file");
+    p = fileBuf + filePos;
+    filePos = filePos + n;
+    if (!(n > 0 && *p))
+      return;
+    endPtr = reinterpret_cast< const unsigned char * >(std::memchr(p, '\0', n));
+    if (!endPtr)
+      endPtr = p + n;
   }
-  filePos = filePos + n;
+  s.resize(size_t(endPtr - p), ' ');
+  char    *t = &(s.front());
+  do
+  {
+    unsigned char c = *p;
+    if (BRANCH_LIKELY(c >= 0x20))
+      *t = char(c);
+    t++;
+  }
+  while (++p < endPtr);
 }
 
 void FileBuffer::readPath(std::string& s, size_t n,
