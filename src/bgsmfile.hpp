@@ -6,10 +6,51 @@
 #include "filebuf.hpp"
 #include "ba2file.hpp"
 
+#include <atomic>
+
 struct BGSMFile
 {
-  unsigned char version;                // 2: Fallout 4, 20: Fallout 76
-  unsigned char gradientMapV;           // 255 = 1.0
+  enum
+  {
+    textureNumDiffuse = 0,
+    textureNumNormal = 1,
+    textureNumGlow = 2,
+    textureNumGradient = 3,     // grayscale to color map
+    textureNumEnvMap = 4,
+    textureNumEnvMask = 5,      // Skyrim/Fallout 4 environment map mask
+    textureNumSpecMap = 6,      // Fallout 4 specular (R) and smoothness (G) map
+    textureNumWrinkles = 7,
+    textureNumReflMap = 8,      // Fallout 76 reflectance map
+    textureNumLighting = 9,     // Fallout 76 smoothness (R) and AO (G) map
+    texturePathCnt = 10
+  };
+  class TextureSet
+  {
+   protected:
+    struct TextureSetData
+    {
+      std::string texturePaths[texturePathCnt];
+      std::string materialPath;
+      mutable std::atomic< size_t > refCnt;
+      inline TextureSetData();
+      TextureSetData(const TextureSetData& r);
+    };
+    mutable TextureSetData  *dataPtr;
+    void copyTextureSetData();
+    inline void copyTexturePaths();
+   public:
+    inline TextureSet();
+    inline TextureSet(const TextureSet& r);
+    inline ~TextureSet();
+    TextureSet& operator=(const TextureSet& r);
+    void setMaterialPath(const std::string& s);
+    void setTexturePath(size_t n, const char *s);
+    std::uint32_t readTexturePaths(FileBuffer& f,
+                                   unsigned long long texturePathMap);
+    inline operator bool() const;
+    inline const std::string& materialPath() const;
+    inline const std::string& operator[](size_t n) const;
+  };
   enum
   {
     Flag_TileU = 0x0001,
@@ -21,6 +62,8 @@ struct BGSMFile
     Flag_GrayscaleToAlpha = 0x0040,
     Flag_Glow = 0x0080,
     Flag_NoZWrite = 0x0100,
+    Flag_FalloffEnabled = 0x0200,
+    Flag_EffectLighting = 0x0400,
     // TriShape flags
     Flag_TSOrdered = 0x0800,    // for BSOrderedNode children, except the first
     Flag_TSAlphaBlending = 0x1000,
@@ -28,7 +71,10 @@ struct BGSMFile
     Flag_TSWater = 0x4000,
     Flag_TSHidden = 0x8000
   };
-  std::uint16_t flags;
+  std::uint32_t flags;
+  // 0: material data from NIF file, 2: Fallout 4, 20: Fallout 76
+  unsigned char version;
+  unsigned char alphaThreshold;
   // bit 0 = blending enabled
   // bits 1-4 = source blend mode
   //      0: 1.0
@@ -54,66 +100,112 @@ struct BGSMFile
   //      6: greater or equal
   //      7: never
   std::uint16_t alphaFlags;
-  unsigned char alphaThreshold;
-  unsigned char alpha;                  // 128 = 1.0
-  std::uint32_t specularColor;          // alpha channel = specular scale * 128
-  unsigned char specularSmoothness;     // 255 = 1.0, glossiness from 2 to 1024
-  unsigned char envMapScale;            // 128 = 1.0
-  std::uint16_t texturePathMask;        // bit N = 1 if texture path N is valid
+  float   alpha;
+  float   alphaThresholdFloat;          // calculated from the other variables
+  union
+  {
+    // struct s = shader material,
+    // valid if (flags & (Flag_IsEffect | Flag_TSWater)) == 0
+    struct
+    {
+      float   gradientMapV;             // grayscale to color map V offset
+      float   unused;                   // padding
+      float   envMapScale;              // envMapScale and specularSmoothness
+      float   specularSmoothness;       // are shared between all material types
+      FloatVector4  specularColor;      // specularColor[3] = specular scale
+      FloatVector4  emissiveColor;      // emissiveColor[3] = emissive scale
+    }
+    s;
+    // struct e = effect material, valid if (flags & Flag_IsEffect) != 0
+    struct
+    {
+      float   baseColorScale;
+      float   lightingInfluence;
+      float   envMapScale;
+      float   specularSmoothness;
+      FloatVector4  falloffParams;
+      FloatVector4  baseColor;
+    }
+    e;
+    // struct w = water material, valid if (flags & Flag_TSWater) != 0
+    struct
+    {
+      float   maxDepth;
+      float   unused;
+      float   envMapScale;
+      float   specularSmoothness;
+      FloatVector4  shallowColor;       // shallowColor[3] = alpha at 0 depth
+      FloatVector4  deepColor;          // deepColor[3] = alpha at maximum depth
+    }
+    w;
+  };
   float   textureOffsetU;
   float   textureOffsetV;
   float   textureScaleU;
   float   textureScaleV;
-  // for shader materials: emissive color (alpha channel = emissive scale * 128)
-  // for effect materials: base color and scale * 128
-  // for water: deep color, alpha = 256 - sqrt(maxDepth * 8)
-  std::uint32_t emissiveColor;
+  // 11: Oblivion, 34: Fallout 3, 100: Skyrim, 130: Fallout 4, 155: Fallout 76
+  std::uint32_t nifVersion;
+  std::uint32_t texturePathMask;        // bit N = 1 if texture path N is valid
+  TextureSet    texturePaths;
   inline void clear();
   BGSMFile();
-  // texturePaths[0] = diffuse
-  // texturePaths[1] = normal
-  // texturePaths[2] = glow
-  // texturePaths[3] = gradient map
-  // texturePaths[4] = environment map
-  // texturePaths[5] = unused / Skyrim _em.dds
-  // texturePaths[6] = Fallout 4 _s.dds
-  // texturePaths[7] = wrinkles
-  // texturePaths[8] = Fallout 76 _r.dds
-  // texturePaths[9] = Fallout 76 _l.dds
-  BGSMFile(std::vector< std::string >& texturePaths, const char *fileName);
-  BGSMFile(std::vector< std::string >& texturePaths,
-           const unsigned char *buf, size_t bufSize);
-  BGSMFile(std::vector< std::string >& texturePaths, FileBuffer& buf);
-  BGSMFile(std::vector< std::string >& texturePaths,
-           const BA2File& ba2File, const std::string& fileName);
-  void readTexturePaths(std::vector< std::string >& texturePaths,
-                        FileBuffer& buf, unsigned long long texturePathMap);
-  void loadBGEMFile(std::vector< std::string >& texturePaths, FileBuffer& buf);
-  void loadBGSMFile(std::vector< std::string >& texturePaths, FileBuffer& buf);
-  void loadBGSMFile(std::vector< std::string >& texturePaths,
-                    const BA2File& ba2File, const std::string& fileName);
-  inline bool isAlphaBlending() const
-  {
-    return ((alphaFlags & 0x001F) == 0x000D);
-  }
-  inline bool isAlphaTesting() const
-  {
-    return (!(~alphaFlags & 0x1200));
-  }
-  inline float getAlphaThreshold() const
-  {
-    if (BRANCH_LIKELY(!(isAlphaBlending() || isAlphaTesting())))
-      return 0.0f;
-    if (BRANCH_UNLIKELY(!alpha))
-      return 256.0f;
-    if (!isAlphaTesting())
-      return 0.0f;
-    if (BRANCH_UNLIKELY(alphaFlags & 0x0400))
-      return (!(alphaFlags & 0x0800) ? 0.0f : 256.0f);
-    float   t = float(int(alphaThreshold)) * (128.0f / float(int(alpha)));
-    return (t + (!(alphaFlags & 0x0800) ? (1.0f / 512.0f) : (-1.0f / 512.0f)));
-  }
+  BGSMFile(const char *fileName);
+  BGSMFile(const unsigned char *buf, size_t bufSize);
+  BGSMFile(FileBuffer& buf);
+  BGSMFile(const BA2File& ba2File, const std::string& fileName);
+ protected:
+  void loadBGEMFile(FileBuffer& buf);
+ public:
+  void loadBGSMFile(FileBuffer& buf);
+  void loadBGSMFile(const BA2File& ba2File, const std::string& fileName);
+  void updateAlphaProperties();
+  // alpha channel of c = 256 - sqrt(maxDepth * 8)
+  void setWaterColor(std::uint32_t c, float reflectionLevel);
 };
+
+inline BGSMFile::TextureSet::TextureSetData::TextureSetData()
+  : refCnt(0)
+{
+}
+
+inline void BGSMFile::TextureSet::copyTexturePaths()
+{
+  if (dataPtr->refCnt > 0)
+    copyTextureSetData();
+}
+
+inline BGSMFile::TextureSet::TextureSet()
+  : dataPtr((TextureSetData *) 0)
+{
+}
+
+inline BGSMFile::TextureSet::TextureSet(const TextureSet& r)
+{
+  if (r.dataPtr)
+    r.dataPtr->refCnt++;
+  dataPtr = r.dataPtr;
+}
+
+inline BGSMFile::TextureSet::~TextureSet()
+{
+  if (dataPtr && dataPtr->refCnt-- < 1)
+    delete dataPtr;
+}
+
+inline BGSMFile::TextureSet::operator bool() const
+{
+  return bool(dataPtr);
+}
+
+inline const std::string& BGSMFile::TextureSet::materialPath() const
+{
+  return dataPtr->materialPath;
+}
+
+inline const std::string& BGSMFile::TextureSet::operator[](size_t n) const
+{
+  return dataPtr->texturePaths[n];
+}
 
 #endif
 

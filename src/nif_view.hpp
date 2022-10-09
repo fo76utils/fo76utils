@@ -30,6 +30,7 @@ class Renderer : protected Renderer_Base
   NIFFile *nifFile;
   NIFFile::NIFVertexTransform modelTransform;
   NIFFile::NIFVertexTransform viewTransform;
+  // MSWP form ID or (unsigned int) -1 - (gradientMapV * 16777216.0)
   unsigned int  materialSwapTable[8];
   MaterialSwaps materialSwaps;
   DDSTexture  defaultTexture;
@@ -57,8 +58,12 @@ class Renderer : protected Renderer_Base
   void loadModel(const std::string& fileName);
   void renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
                    int imageWidth, int imageHeight);
-  // if formID & 0x80000000 is set, formID & 0xFF is interpreted as color swap
   void addMaterialSwap(unsigned int formID);
+  inline void addColorSwap(float gradientMapV)
+  {
+    float   tmp = std::min(std::max(gradientMapV, 0.0f), 1.0f) * 16777216.0f;
+    addMaterialSwap(~((unsigned int) roundFloat(tmp)));
+  }
   void clearMaterialSwaps();
   void setWaterColor(unsigned int watrFormID);
   void renderModelToFile(const char *outFileName,

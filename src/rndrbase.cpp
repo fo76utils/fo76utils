@@ -148,7 +148,7 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
     return 0U;
   {
     std::map< unsigned int,
-              std::map< std::string, MaterialSwap > >::const_iterator i =
+              std::map< std::string, BGSMFile > >::const_iterator i =
         materialSwaps.find(formID);
     if (i != materialSwaps.end())
       return (i->second.begin() != i->second.end() ? formID : 0U);
@@ -156,7 +156,7 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
   std::vector< unsigned char >  fileBuf;
   std::string bnamPath;
   std::string snamPath;
-  std::map< std::string, MaterialSwap >&  v = materialSwaps[formID];
+  std::map< std::string, BGSMFile >&  v = materialSwaps[formID];
   const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
   if (!(r && *r == "MSWP"))
     return 0U;
@@ -186,13 +186,16 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
         {
           snamPath += ".bgsm";
         }
-        int     gradientMapV = -1;
+        float   gradientMapV = -1.0f;
         if (f.dataRemaining >= 4U &&
             FileBuffer::readUInt32Fast(f.getDataPtr() + f.size())
             == 0x4D414E43U)             // "CNAM"
         {
           if (f.next() && f.size() >= 4)
-            gradientMapV = roundFloat(f.readFloat() * 255.0f) & 0xFF;
+          {
+            gradientMapV = f.readFloat();
+            gradientMapV = std::min(std::max(gradientMapV, 0.0f), 1.0f);
+          }
         }
         static const char *bgsmNamePatterns[14] =
         {
@@ -221,23 +224,17 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
           }
           try
           {
-            MaterialSwap& m = v[bnamPath];
+            BGSMFile& m = v[bnamPath];
             ba2File.extractFile(fileBuf, snamPath);
             FileBuffer  tmp(&(fileBuf.front()), fileBuf.size());
-            m.bgsmFile.loadBGSMFile(m.texturePaths, tmp);
-            if (gradientMapV >= 0)
-              m.bgsmFile.gradientMapV = (unsigned char) gradientMapV;
-            unsigned int  txtPathMask = m.bgsmFile.texturePathMask & 0x03FFU;
-            for (size_t j = 0; txtPathMask; j++, txtPathMask = txtPathMask >> 1)
-            {
-              if (!(txtPathMask & 1U))
-                m.texturePathPtrs[j + 1] = (std::string *) 0;
-              else
-                m.texturePathPtrs[j + 1] = &(m.texturePaths.front()) + j;
-            }
+            m.loadBGSMFile(tmp);
+            if (gradientMapV >= 0.0f)
+              m.s.gradientMapV = gradientMapV;
+            m.texturePaths.setMaterialPath(bnamPath);   // FIXME: or SNAM path?
           }
           catch (FO76UtilsError&)
           {
+            v.erase(bnamPath);
           }
           if (n1 == std::string::npos)
             break;
@@ -248,11 +245,6 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
   }
   if (v.begin() == v.end())
     return 0U;
-  for (std::map< std::string, MaterialSwap >::iterator
-           i = v.begin(); i != v.end(); i++)
-  {
-    i->second.texturePathPtrs[0] = &(i->first);
-  }
   return formID;
 }
 
@@ -262,14 +254,14 @@ void Renderer_Base::MaterialSwaps::materialSwap(
   if (BRANCH_UNLIKELY(!t.haveMaterialPath()))
     return;
   std::map< unsigned int,
-            std::map< std::string, MaterialSwap > >::const_iterator i =
+            std::map< std::string, BGSMFile > >::const_iterator i =
       materialSwaps.find(formID);
   if (i == materialSwaps.end())
     return;
-  std::map< std::string, MaterialSwap >::const_iterator j =
+  std::map< std::string, BGSMFile >::const_iterator j =
       i->second.find(t.materialPath());
   if (j != i->second.end())
-    t.setMaterial(j->second.bgsmFile, &(j->second.texturePathPtrs[1]));
+    t.setMaterial(j->second);
 }
 
 void Renderer_Base::TriShapeSortObject::orderedNodeFix(

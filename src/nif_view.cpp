@@ -90,17 +90,21 @@ void Renderer::threadFunction(Renderer *p, size_t n)
           textureMask |= 0x0002U;
         if (bool(textures[4] = p->loadTexture(p->defaultEnvMap, n)))
           textureMask |= 0x0010U;
-        ts.m.envMapScale = floatToUInt8Clamped(p->waterEnvMapLevel, 128.0f);
-        ts.m.emissiveColor = p->waterColor;
+        ts.m.setWaterColor(p->waterColor, p->waterEnvMapLevel);
       }
       else
       {
         for (size_t j = 0; BRANCH_UNLIKELY(p->materialSwapTable[j]); j++)
         {
           if (p->materialSwapTable[j] & 0x80000000U)
-            ts.m.gradientMapV = std::uint8_t(p->materialSwapTable[j] & 0xFFU);
+          {
+            ts.m.s.gradientMapV = float(int(~(p->materialSwapTable[j])))
+                                  * (1.0f / 16777216.0f);
+          }
           else
+          {
             p->materialSwaps.materialSwap(ts, p->materialSwapTable[j]);
+          }
           if ((j + 1) >= (sizeof(p->materialSwapTable) / sizeof(unsigned int)))
             break;
         }
@@ -111,7 +115,7 @@ void Renderer::threadFunction(Renderer *p, size_t n)
         {
           if (texturePathMask & 1)
           {
-            if (bool(textures[j] = p->loadTexture(*(ts.texturePaths[j]), n)))
+            if (bool(textures[j] = p->loadTexture(ts.m.texturePaths[j], n)))
               textureMask |= (1U << (unsigned char) j);
           }
         }
@@ -120,7 +124,7 @@ void Renderer::threadFunction(Renderer *p, size_t n)
           textures[0] = &(p->defaultTexture);
           textureMask |= 0x0001U;
         }
-        if (!(textureMask & 0x0010U) && ts.m.envMapScale > 0)
+        if (!(textureMask & 0x0010U) && ts.m.s.envMapScale > 0.0f)
         {
           if (bool(textures[4] = p->loadTexture(p->defaultEnvMap, n)))
             textureMask |= 0x0010U;
@@ -172,7 +176,7 @@ Renderer::Renderer(const BA2File& archiveFiles, ESMFile *esmFilePtr)
     lightY(0.0f),
     lightZ(1.0f),
     nifFile((NIFFile *) 0),
-    defaultTexture(0xFFFF80C0U),
+    defaultTexture(0xFFFFFFFFU),
     modelRotationX(0.0f),
     modelRotationY(0.0f),
     modelRotationZ(0.0f),
@@ -289,11 +293,8 @@ void Renderer::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
     if ((i + 1) < renderers.size())
     {
       float   y1 = float(int(i + 1)) / float(int(renderers.size()));
-      y1 = (y1 - 0.5f) * (y1 - 0.5f) * 2.0f;
-      if (i < (renderers.size() >> 1))
-        y1 = 0.5f - y1;
-      else
-        y1 = 0.5f + y1;
+      if (imageHeight >= 32)
+        y1 = ((y1 * 2.0f - 3.0f) * y1 + 2.0f) * y1;
       y1 = y1 * float(imageHeight);
       y1i = roundFloat(y1);
       y0 = y1;

@@ -52,15 +52,8 @@ struct Renderer_Base
   };
   struct MaterialSwaps
   {
-    struct MaterialSwap
-    {
-      BGSMFile  bgsmFile;
-      std::vector< std::string >  texturePaths;
-      // texturePathPtrs[0] = &materialPath
-      const std::string *texturePathPtrs[11];
-    };
     // materialSwaps[formID][materialPath] = replacement material
-    std::map< unsigned int, std::map< std::string, MaterialSwap > >
+    std::map< unsigned int, std::map< std::string, BGSMFile > >
         materialSwaps;
     unsigned int loadMaterialSwap(const BA2File& ba2File,
                                   ESMFile& esmFile, unsigned int formID);

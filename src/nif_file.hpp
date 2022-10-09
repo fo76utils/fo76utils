@@ -141,56 +141,27 @@ class NIFFile : public FileBuffer
       return boundsMax[2];
     }
   };
-  struct NIFTextureSet
-  {
-    // texturePaths[-1] = material path
-    const std::string **texturePaths;
-    NIFTextureSet(size_t n);
-    ~NIFTextureSet();
-    inline const std::string*& operator[](long n)
-    {
-      return *(texturePaths + n);
-    }
-    inline const std::string* const& operator[](long n) const
-    {
-      return *(texturePaths + n);
-    }
-  };
   struct NIFTriShape
   {
+    BGSMFile  m;
+    NIFVertexTransform  vertexTransform;
+    int       nameID;   // NIFFile::getString(nameID) returns the string
     unsigned int  vertexCnt;
     unsigned int  triangleCnt;
-    const NIFVertex     *vertexData;
-    const NIFTriangle   *triangleData;
-    // texturePaths[-1] = material path
-    // texturePaths[0] = diffuse texture
-    // texturePaths[1] = normal map
-    // texturePaths[2] = glow texture
-    // texturePaths[3] = gradient map
-    // texturePaths[4] = environment map
-    // texturePaths[5] = Skyrim environment mask (_em)
-    // texturePaths[6] = Fallout 4 specular map
-    // texturePaths[7] = wrinkles
-    // texturePaths[8] = Fallout 76 _r
-    // texturePaths[9] = Fallout 76 _l
-    const std::string * const * texturePaths;
-    NIFVertexTransform  vertexTransform;
-    BGSMFile    m;
-    const char  *name;
+    const NIFVertex   *vertexData;
+    const NIFTriangle *triangleData;
     NIFTriShape();
     void calculateBounds(NIFBounds& b, const NIFVertexTransform *vt = 0) const;
-    // materialTexturePaths[-1] = material path
     // alphaProperties = flags | (threshold << 16) | (alpha << 24)
     void setMaterial(const BGSMFile& material,
-                     const std::string * const *materialTexturePaths,
                      std::uint32_t alphaProperties = 0U);
     inline bool haveMaterialPath() const
     {
-      return (texturePaths && *(texturePaths - 1));
+      return (bool(m.texturePaths) && !m.texturePaths.materialPath().empty());
     }
     inline const std::string& materialPath() const
     {
-      return *(*(texturePaths - 1));
+      return m.texturePaths.materialPath();
     }
   };
   enum
@@ -272,7 +243,6 @@ class NIFFile : public FileBuffer
     int     textureSet;
     unsigned long long  flags;
     BGSMFile  material; // (material.flags & 4) != 0 if this is an effect shader
-    NIFTextureSet texturePaths;
     void readEffectShaderProperty(NIFFile& f);
     void readLightingShaderProperty(NIFFile& f);
     NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType,
@@ -280,13 +250,15 @@ class NIFFile : public FileBuffer
     virtual ~NIFBlkBSLightingShaderProperty();
     inline const std::string *materialName() const
     {
-      return texturePaths[-1];
+      if (bool(material.texturePaths))
+        return &(material.texturePaths.materialPath());
+      return (std::string *) 0;
     }
   };
   struct NIFBlkBSShaderTextureSet : public NIFBlock
   {
-    NIFTextureSet texturePaths;
-    std::uint16_t texturePathMask;
+    BGSMFile::TextureSet  texturePaths;
+    std::uint32_t texturePathMask;
     NIFBlkBSShaderTextureSet(NIFFile& f);
     virtual ~NIFBlkBSShaderTextureSet();
   };
@@ -313,17 +285,13 @@ class NIFFile : public FileBuffer
   //     155: Fallout 76
   unsigned int  bsVersion;
   unsigned int  blockCnt;
-  const std::string *authorName;
-  const std::string *processScriptName;
-  const std::string *exportScriptName;
   std::vector< size_t >     blockOffsets;
   std::vector< NIFBlock * > blocks;
-  std::vector< const std::string * >  stringTable;
-  std::set< std::string >   stringSet;
+  std::vector< std::string >  stringTable;
   std::string   stringBuf;
-  std::vector< std::string >  bgsmTexturePaths;
-  void readString(size_t stringLengthSize);
-  const std::string *storeString(std::string& s);
+  // authorName, processScriptName, exportScriptName
+  std::vector< std::string >  headerStrings;
+  void readString(std::string& s, size_t stringLengthSize);
   inline int readBlockID()
   {
     int     n = readInt32();
@@ -343,6 +311,7 @@ class NIFFile : public FileBuffer
   inline const std::string& getAuthorName() const;
   inline const std::string& getProcessScriptName() const;
   inline const std::string& getExportScriptName() const;
+  inline const std::string *getString(int n) const;
   inline size_t getBlockCount() const;
   inline int getBlockType(size_t n) const;
   inline int getBaseBlockType(size_t n) const;
@@ -390,17 +359,24 @@ inline unsigned int NIFFile::getVersion() const
 
 inline const std::string& NIFFile::getAuthorName() const
 {
-  return *authorName;
+  return headerStrings[0];
 }
 
 inline const std::string& NIFFile::getProcessScriptName() const
 {
-  return *processScriptName;
+  return headerStrings[1];
 }
 
 inline const std::string& NIFFile::getExportScriptName() const
 {
-  return *exportScriptName;
+  return headerStrings[2];
+}
+
+inline const std::string * NIFFile::getString(int n) const
+{
+  if ((unsigned int) n >= (unsigned int) stringTable.size())
+    return (std::string *) 0;
+  return (&(stringTable.front()) + n);
 }
 
 inline size_t NIFFile::getBlockCount() const
@@ -426,7 +402,7 @@ inline const char * NIFFile::getBlockTypeAsString(size_t n) const
 inline const char * NIFFile::getBlockName(size_t n) const
 {
   if (blocks[n]->nameID >= 0)
-    return stringTable[blocks[n]->nameID]->c_str();
+    return stringTable[blocks[n]->nameID].c_str();
   return "";
 }
 
