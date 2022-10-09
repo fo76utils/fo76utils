@@ -8,6 +8,7 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **-o FILENAME**: Set output file name (default: standard output).
 * **-q**: Print author name, file name, and file size only.
 * **-v**: Verbose mode, print block list, and vertex and triangle data.
+* **-m**: Print detailed material information.
 * **-obj**: Print model data in .obj format.
 * **-mtl**: Print material data in .mtl format.
 * **-render[WIDTHxHEIGHT] DDSFILE**: Render model to DDS file.
