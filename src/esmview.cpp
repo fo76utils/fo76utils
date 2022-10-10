@@ -1,11 +1,16 @@
 
 #include "common.hpp"
 #include "esmdbase.hpp"
+#include "sdlvideo.hpp"
+#include "nif_view.hpp"
 
-class ESMView : public ESMDump
+class ESMView : public ESMDump, public SDLDisplay
 {
+ protected:
+  Renderer  *renderer;
+  void printID(unsigned int id);
  public:
-  ESMView(const char *fileName, std::FILE *outFile = 0);
+  ESMView(const char *fileName);
   virtual ~ESMView();
   unsigned int findPreviousRecord(unsigned int formID) const;
   unsigned int findNextRecord(unsigned int formID) const;
@@ -17,14 +22,35 @@ class ESMView : public ESMDump
   void dumpRecord(unsigned int formID = 0U, bool noUnknownFields = false);
 };
 
-ESMView::ESMView(const char *fileName, std::FILE *outFile)
-  : ESMDump(fileName, outFile)
+void ESMView::printID(unsigned int id)
 {
+  char    tmpBuf[8];
+  for (int i = 0; i < 4; i++)
+  {
+    unsigned char c = (unsigned char) (id & 0x7F);
+    id = id >> 8;
+    if (c < 0x20 || c >= 0x7F)
+      c = 0x3F;
+    tmpBuf[i] = char(c);
+  }
+  tmpBuf[4] = '\0';
+  consolePrint("%s", tmpBuf);
+}
+
+ESMView::ESMView(const char *fileName)
+  : ESMDump(fileName, (std::FILE *) 0),
+    SDLDisplay(1152, 648, "esmview", 4U, 36),
+    renderer((Renderer *) 0)
+{
+  setEnableDownsample(true);
+  setDefaultTextColor(0xE6, 0x10);
   verboseMode = true;
 }
 
 ESMView::~ESMView()
 {
+  if (renderer)
+    delete renderer;
 }
 
 unsigned int ESMView::findPreviousRecord(unsigned int formID) const
@@ -277,14 +303,9 @@ void ESMView::printFormID(unsigned int formID)
 {
   std::map< unsigned int, std::string >::const_iterator i = edidDB.find(formID);
   if (i != edidDB.end())
-  {
-    std::fprintf(outputFile, "\033[4m0x%08X\033[24m (%s)",
-                 formID, i->second.c_str());
-  }
+    consolePrint("\033[4m0x%08X\033[24m (%s)", formID, i->second.c_str());
   else
-  {
-    std::fprintf(outputFile, "\033[4m0x%08X\033[24m", formID);
-  }
+    consolePrint("\033[4m0x%08X\033[24m", formID);
 }
 
 void ESMView::printRecordHdr(unsigned int formID)
@@ -292,10 +313,10 @@ void ESMView::printRecordHdr(unsigned int formID)
   const ESMRecord&  r = getRecord(formID);
   unsigned int  recordType = r.type;
   printID(recordType);
-  std::fprintf(outputFile, ":\t");
+  consolePrint(":\t");
   printFormID(formID);
   if (!(r == "GRUP") && r.flags != 0)
-    std::fprintf(outputFile, "\tFlags: 0x%08X", r.flags);
+    consolePrint("\tFlags: 0x%08X", r.flags);
   if (r == "GRUP")
   {
     static const char *groupTypes[11] =
@@ -312,8 +333,8 @@ void ESMView::printRecordHdr(unsigned int formID)
       "cell temporary children",
       "unknown"
     };
-    std::fprintf(outputFile, "\t%u (%s)\t",
-                 r.formID, groupTypes[(r.formID <= 9U ? r.formID : 10U)]);
+    consolePrint(
+        "\t%u (%s)\t", r.formID, groupTypes[(r.formID <= 9U ? r.formID : 10U)]);
     switch (r.formID)
     {
       case 0:
@@ -321,12 +342,11 @@ void ESMView::printRecordHdr(unsigned int formID)
         break;
       case 2:
       case 3:
-        std::fprintf(outputFile, "%d", uint32ToSigned(r.flags));
+        consolePrint("%d", uint32ToSigned(r.flags));
         break;
       case 4:
       case 5:
-        std::fprintf(outputFile, "%d\t%d",
-                     uint16ToSigned((unsigned short) (r.flags >> 16)),
+        consolePrint("%d\t%d", uint16ToSigned((unsigned short) (r.flags >> 16)),
                      uint16ToSigned((unsigned short) (r.flags & 0xFFFF)));
         break;
       default:
@@ -334,33 +354,33 @@ void ESMView::printRecordHdr(unsigned int formID)
         break;
     }
   }
-  std::fprintf(outputFile, "\033[m\n");
+  consolePrint("\033[m\n");
 }
 
 void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
 {
-  std::fprintf(outputFile, "\033[1m");
+  consolePrint("\033[31m\033[1m");
   printRecordHdr(formID);
   const ESMRecord&  r = getRecord(formID);
-  std::fprintf(outputFile, "Parent:\t");
+  consolePrint("Parent:\t");
   printID(getRecord(r.parent).type);
-  std::fputc(' ', outputFile);
+  consolePrint(" ");
   printFormID(r.parent);
   if (r.children)
   {
-    std::fprintf(outputFile, "\nChild:\t");
+    consolePrint("\nChild:\t");
     printID(getRecord(r.children).type);
-    std::fputc(' ', outputFile);
+    consolePrint(" ");
     printFormID(r.children);
   }
   if (r.next)
   {
-    std::fprintf(outputFile, "\nNext:\t");
+    consolePrint("\nNext:\t");
     printID(getRecord(r.next).type);
-    std::fputc(' ', outputFile);
+    consolePrint(" ");
     printFormID(r.next);
   }
-  std::fputc('\n', outputFile);
+  consolePrint("\n");
 
   if (r == "GRUP")
   {
@@ -379,9 +399,17 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
       char    tmpBuf[32];
       std::sprintf(tmpBuf, "\t[%5u]", (unsigned int) f.size());
       tmpField.data = tmpBuf;
+#ifdef HAVE_SDL2
+      size_t  maxElements = size_t(getTextColumns());
+      if (maxElements < 32)
+        maxElements = 32;
+      maxElements = ((maxElements - 24) * 39) >> 7;
+#else
+      size_t  maxElements = 17;
+#endif
       for (size_t i = 0; i < f.size(); i++)
       {
-        if (i >= 17)
+        if (i >= maxElements)
         {
           tmpField.data += " ...";
           break;
@@ -397,12 +425,12 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
   if (fields.size() < 1)
     return;
 
-  std::fputc('\n', outputFile);
+  consolePrint("\n");
   for (size_t i = 0; i < fields.size(); i++)
   {
-    std::fprintf(outputFile, "  ");
+    consolePrint("  ");
     printID(fields[i].type);
-    std::fprintf(outputFile, ":%s\n", fields[i].data.c_str());
+    consolePrint(":%s\n", fields[i].data.c_str());
   }
 }
 
@@ -417,8 +445,31 @@ static void printUsage()
   std::fprintf(stderr, "    -F FILE read field definitions from FILE\n");
 }
 
+static const char *usageString =
+    "0xxxxxx:        hexadecimal form ID\n"
+    "B:              print history of records viewed\n"
+    "C:              first child record\n"
+    "D r:f:name:data define field(s)\n"
+    "F xx xx xx xx:  convert binary floating point value(s)\n"
+    "G cccc:         find next top level group of record type cccc\n"
+    "G d:xxxxxxxx:   find group of type d with form ID label\n"
+    "G d:d:          find group of type 2 or 3 with int32 label\n"
+    "G d:d,d:        find group of type 4 or 5 with X,Y label\n"
+    "I:              print short info and all parent groups\n"
+    "L:              back to previously shown record\n"
+    "N:              next record in current group\n"
+    "P:              parent group\n"
+    "R cccc:xxxxxxxx find next reference to form ID in field cccc\n"
+    "R *:xxxxxxxx    find next reference to form ID\n"
+    "S pattern:      find next record with EDID matching pattern\n"
+    "U:              toggle hexadecimal display of unknown field types\n"
+    "Q:              quit\n"
+    "V:              previous record in current group\n\n"
+    "C, N, P, and V can be grouped and used as a single command\n\n";
+
 int main(int argc, char **argv)
 {
+  SDLDisplay::enableConsole();
   if (argc < 2)
   {
     printUsage();
@@ -480,7 +531,7 @@ int main(int argc, char **argv)
       }
     }
 
-    ESMView esmFile(inputFileName, stdout);
+    ESMView esmFile(inputFileName);
     if (stringsFileName)
     {
       if (!stringsPrefix)
@@ -492,44 +543,33 @@ int main(int argc, char **argv)
       esmFile.loadFieldDefFile(fldDefFileName);
 
     std::vector< unsigned int > prvRecords;
+    std::map< size_t, std::string > cmdHistory1;
+    std::map< std::string, size_t > cmdHistory2;
     std::string cmdBuf;
-    std::string prvCmd;
     unsigned int  formID = 0U;
     bool    helpFlag = false;
     bool    noUnknownFields = false;
     while (true)
     {
-      if (!cmdBuf.empty() && !helpFlag)
-        prvCmd = cmdBuf;
-      cmdBuf.clear();
       if (!helpFlag)
       {
         esmFile.dumpRecord(formID, noUnknownFields);
-        std::fputc('\n', stdout);
+        esmFile.consolePrint("\n");
       }
       helpFlag = false;
-      std::printf("> ");
-      std::fflush(stdout);
-      while (true)
+      if (!esmFile.consoleInput(cmdBuf, cmdHistory1, cmdHistory2))
+        break;
+      for (size_t i = 0; i < cmdBuf.length(); )
       {
-        int     c = std::fgetc(stdin);
-        if (c == EOF)
-        {
-          cmdBuf = "q";
+        if (cmdBuf[0] == 'd' && i > 1)
           break;
-        }
-        c = c & 0xFF;
-        if (c == '\n')
-          break;
-        else if (*(cmdBuf.c_str()) == 'd')
-          cmdBuf += char(c);
-        else if (c >= 'A' && c <= 'Z')
-          cmdBuf += (char(c) + ('a' - 'A'));
-        else if (c > 0x20 && c < 0x7F)
-          cmdBuf += char(c);
+        if (cmdBuf[i] >= 'A' && cmdBuf[i] <= 'Z')
+          cmdBuf[i] = cmdBuf[i] + ('a' - 'A');
+        if ((unsigned char) cmdBuf[i] < 0x20 || cmdBuf[i] == '\177')
+          cmdBuf.erase(i, 1);
+        else
+          i++;
       }
-      if (cmdBuf.empty())
-        cmdBuf = prvCmd;
       if (cmdBuf.empty())
       {
         helpFlag = true;
@@ -563,7 +603,8 @@ int main(int argc, char **argv)
         }
         for (size_t i = tmpBuf.size(); i-- > 0; )
           esmFile.printRecordHdr(tmpBuf[i]);
-        std::printf("%s\033[1m", (tmpBuf.size() > 0 ? "\n" : ""));
+        esmFile.consolePrint(
+            "%s\033[31m\033[1m", (tmpBuf.size() > 0 ? "\n" : ""));
         esmFile.printRecordHdr(formID);
         r = esmFile.getRecordPtr(formID);
         if (!r)
@@ -572,19 +613,20 @@ int main(int argc, char **argv)
             size_t(r->fileData - esmFile.getRecordPtr(0U)->fileData);
         ESMFile::ESMVCInfo  vcInfo;
         esmFile.getVersionControlInfo(vcInfo, *r);
-        std::printf("Timestamp:  %04u-%02u-%02u\tUser ID:  0x%04X, 0x%02X\t"
-                    "File pointer:  0x%08X\n\n",
-                    vcInfo.year, vcInfo.month, vcInfo.day,
-                    vcInfo.userID1, vcInfo.userID2,
-                    (unsigned int) fileOffs & 0xFFFFFFFFU);
+        esmFile.consolePrint(
+            "Timestamp:  %04u-%02u-%02u\tUser ID:  0x%04X, 0x%02X\t"
+            "File pointer:  0x%08X\n\n",
+            vcInfo.year, vcInfo.month, vcInfo.day,
+            vcInfo.userID1, vcInfo.userID2,
+            (unsigned int) fileOffs & 0xFFFFFFFFU);
         if (r->children)
         {
-          std::printf("Child:\t");
+          esmFile.consolePrint("Child:\t");
           esmFile.printRecordHdr(r->children);
         }
         if (r->next)
         {
-          std::printf("Next:\t");
+          esmFile.consolePrint("Next:\t");
           esmFile.printRecordHdr(r->next);
         }
       }
@@ -605,7 +647,7 @@ int main(int argc, char **argv)
         }
         catch (std::exception& e)
         {
-          std::printf("Invalid field definition\n");
+          esmFile.consolePrint("Invalid field definition\n");
           continue;
         }
       }
@@ -634,7 +676,8 @@ int main(int argc, char **argv)
               j = 0;
               FileBuffer  buf(tmpBuf, 4);
               double  x = buf.readFloat();
-              std::printf(((x > -1.0e7 && x < 1.0e8) ? "%f\n" : "%g\n"), x);
+              esmFile.consolePrint(
+                  ((x > -1.0e7 && x < 1.0e8) ? "%f\n" : "%g\n"), x);
             }
           }
           if (j != 0)
@@ -642,7 +685,7 @@ int main(int argc, char **argv)
         }
         catch (std::exception& e)
         {
-          std::printf("%s\n", e.what());
+          esmFile.consolePrint("%s\n", e.what());
           continue;
         }
       }
@@ -652,7 +695,7 @@ int main(int argc, char **argv)
         if (tmp == 0xFFFFFFFFU)
         {
           helpFlag = true;
-          std::printf("Group not found\n");
+          esmFile.consolePrint("Group not found\n");
         }
         else if (tmp != formID)
         {
@@ -666,7 +709,7 @@ int main(int argc, char **argv)
         if (tmp == 0xFFFFFFFFU)
         {
           helpFlag = true;
-          std::printf("Record not found\n");
+          esmFile.consolePrint("Record not found\n");
         }
         else if (tmp != formID)
         {
@@ -680,7 +723,7 @@ int main(int argc, char **argv)
         if (tmp == 0xFFFFFFFFU)
         {
           helpFlag = true;
-          std::printf("Record not found\n");
+          esmFile.consolePrint("Record not found\n");
         }
         else if (tmp != formID)
         {
@@ -692,8 +735,8 @@ int main(int argc, char **argv)
       {
         helpFlag = true;
         noUnknownFields = !noUnknownFields;
-        std::printf("Printing unknown fields: %s\n",
-                    (!noUnknownFields ? "on" : "off"));
+        esmFile.consolePrint("Printing unknown fields: %s\n",
+                             (!noUnknownFields ? "on" : "off"));
       }
       else if (cmdBuf[0] >= '0' && cmdBuf[0] <= '9')
       {
@@ -711,7 +754,7 @@ int main(int argc, char **argv)
         }
         catch (...)
         {
-          std::printf("Invalid form ID\n\n");
+          esmFile.consolePrint("Invalid form ID\n\n");
           newFormID = formID;
           helpFlag = true;
         }
@@ -745,7 +788,7 @@ int main(int argc, char **argv)
             default:
               if ((unsigned char) cmdBuf[i] > 0x20)
               {
-                std::printf("Invalid command: %c\n", cmdBuf[i]);
+                esmFile.consolePrint("Invalid command: %c\n", cmdBuf[i]);
                 if (prvFormID != 0xFFFFFFFFU)
                   formID = prvFormID;
                 helpFlag = true;
@@ -764,34 +807,7 @@ int main(int argc, char **argv)
       }
       else
       {
-        std::printf("0xxxxxx:        hexadecimal form ID\n");
-        std::printf("B:              print history of records viewed\n");
-        std::printf("C:              first child record\n");
-        std::printf("D r:f:name:data define field(s)\n");
-        std::printf("F xx xx xx xx:  convert binary floating point value(s)\n");
-        std::printf("G cccc:         find next top level group of record type "
-                    "cccc\n");
-        std::printf("G d:xxxxxxxx:   find group of type d with form ID "
-                    "label\n");
-        std::printf("G d:d:          find group of type 2 or 3 with int32 "
-                    "label\n");
-        std::printf("G d:d,d:        find group of type 4 or 5 with X,Y "
-                    "label\n");
-        std::printf("I:              print short info and all parent groups\n");
-        std::printf("L:              back to previously shown record\n");
-        std::printf("N:              next record in current group\n");
-        std::printf("P:              parent group\n");
-        std::printf("R cccc:xxxxxxxx find next reference to form ID in field "
-                    "cccc\n");
-        std::printf("R *:xxxxxxxx    find next reference to form ID\n");
-        std::printf("S pattern:      find next record with EDID matching "
-                    "pattern\n");
-        std::printf("U:              toggle hexadecimal display of unknown "
-                    "field types\n");
-        std::printf("Q:              quit\n");
-        std::printf("V:              previous record in current group\n\n");
-        std::printf("C, N, P, and V can be grouped and used as a single "
-                    "command\n\n");
+        esmFile.consolePrint("%s", usageString);
         helpFlag = true;
       }
     }
