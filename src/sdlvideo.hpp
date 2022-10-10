@@ -259,6 +259,21 @@ class SDLDisplay
   {
     return int(textBuf.size() / size_t(textWidth));
   }
+  // colors = background + (foreground << 8)
+  //          + (selection_bg << 16) + (selection_fg << 24)
+  //          + (title_bg << 32) + (title_fg << 40)
+  // color = 255 is interpreted as the default color
+  // Returns -1 if nothing is selected, -2 if the window is closed
+  int browseList(const std::vector< std::string >& v, const char *titleString,
+                 int itemSelected, std::uint64_t colors = 0xFFFF0F04FFFFULL);
+#ifdef __GNUC__
+  __attribute__ ((__format__ (__printf__, 2, 3)))
+#endif
+  void consolePrint(const char *fmt, ...);
+  // returns false if the window is closed
+  bool consoleInput(
+      std::string& s, std::map< size_t, std::string >& cmdHistory1,
+      std::map< std::string, size_t >& cmdHistory2, size_t historySize = 4096);
 };
 
 #endif

@@ -94,7 +94,7 @@ void SDLDisplay::drawCharacterFG(std::uint32_t *p,
   p = p + (size_t(y0) * size_t(imageWidth));
   // font texture size = 1024x1024, font size = 28x40, 36 characters per row
   float   uOffset = float(int(((unsigned int) n0 % 36U) * 28U + 14U));
-  float   vOffset = float(int(((unsigned int) n0 / 36U) * 40U + 20U));
+  float   vOffset = float(int(((unsigned int) n0 / 36U) * 40U + 22U));
   uOffset = uOffset - (xc * fontUScale);
   vOffset = vOffset - (yc * fontVScale);
   std::uint32_t c1 = ansiColor256Table[(c >> 24) & 0xFFU];
@@ -125,8 +125,9 @@ void SDLDisplay::drawCharacterFG(std::uint32_t *p,
                 FloatVector4(1.0f - u_f, u_f, 1.0f - u_f, u_f)
                 * FloatVector4(1.0f - v_f, 1.0f - v_f, v_f, v_f)) * fgAlpha;
         FloatVector4  c0(FloatVector4::convertRGBA32(p[i]));
-        p[i] = (c0 * c0 + ((c1l - c0) * a)).squareRootFast().convertToRGBA32(
-                                                                 false, true);
+        c0 *= c0;
+        p[i] = (c0 + ((c1l - c0) * a)).squareRootFast().convertToRGBA32(
+                                                            false, true);
       }
       else
       {
@@ -1050,5 +1051,479 @@ void SDLDisplay::printString(const char *s)
       printBufCnt = 0;
     }
   }
+}
+
+int SDLDisplay::browseList(
+    const std::vector< std::string >& v, const char *titleString,
+    int itemSelected, std::uint64_t colors)
+{
+  if (v.size() < 1)
+    return -1;
+  if (itemSelected < 0)
+    itemSelected = 0;
+  else if (size_t(itemSelected) >= v.size())
+    itemSelected = int(v.size()) - 1;
+#ifdef HAVE_SDL2
+  // TODO: implement this
+  (void) titleString;
+  (void) colors;
+#else
+  (void) titleString;
+  (void) colors;
+#endif
+  return itemSelected;
+}
+
+static void convertUTF8ToUInt32(
+    std::vector< std::uint32_t >& v, const char *s,
+    size_t maxLen = 1024, size_t *insertPosPtr = (size_t *) 0)
+{
+  if (!s)
+    return;
+  for (size_t i = 0; s[i] != '\0'; i++)
+  {
+    if (v.size() >= maxLen)
+      break;
+    std::uint32_t c = (unsigned char) s[i];
+    if (c >= 0x80U)
+    {
+      unsigned char c1 = (unsigned char) s[i + 1];
+      unsigned char c2 = 0;
+      if (c1)
+        c2 = (unsigned char) s[i + 2];
+      if ((c & 0xE0U) == 0xC0U && (c1 & 0xC0) == 0x80)
+      {
+        c = ((c & 0x1FU) << 6) | (c1 & 0x3FU);
+        i++;
+      }
+      else if ((c & 0xF0U) == 0xE0U &&
+               (c1 & 0xC0) == 0x80 && (c2 & 0xC0) == 0x80)
+      {
+        c = ((c & 0x0FU) << 6) | (c1 & 0x3FU);
+        c = (c << 6) | (c2 & 0x3FU);
+        i = i + 2;
+      }
+    }
+    if (c == 0x09U)
+      c = 0x20U;
+    if (c >= 0x0020U && c < 0x4000U)
+    {
+      if (!insertPosPtr)
+      {
+        v.push_back(c);
+      }
+      else
+      {
+        v.insert(v.begin() + (*insertPosPtr), c);
+        (*insertPosPtr)++;
+      }
+    }
+  }
+}
+
+static void convertUInt32ToUTF8(
+    std::string& s, const std::vector< std::uint32_t >& v,
+    size_t startPos = 0, size_t endPos = 0x7FFFFFFF)
+{
+  s.clear();
+  endPos = (endPos < v.size() ? endPos : v.size());
+  for (size_t i = startPos; i < endPos; i++)
+  {
+    std::uint32_t c = v[i] & 0x3FFFU;
+    if (c >= 0x0020U && c < 0x0080U)
+    {
+      s += char(c);
+    }
+    else if (c >= 0x0080U && c < 0x0800U)
+    {
+      s += char(((c >> 6) & 0x1FU) | 0xC0U);
+      s += char((c & 0x3FU) | 0x80U);
+    }
+    else if (c >= 0x0800U)
+    {
+      s += char(((c >> 12) & 0x0FU) | 0xE0U);
+      s += char(((c >> 6) & 0x3FU) | 0x80U);
+      s += char((c & 0x3FU) | 0x80U);
+    }
+  }
+}
+
+#ifdef __GNUC__
+__attribute__ ((__format__ (__printf__, 2, 3)))
+#endif
+void SDLDisplay::consolePrint(const char *fmt, ...)
+{
+#ifdef HAVE_SDL2
+  if (BRANCH_UNLIKELY(textBuf.size() >= 1048576))
+  {
+    int     n = 524288 / textWidth;
+    printYPos = (printYPos > n ? (printYPos - n) : 0);
+    textBuf.erase(textBuf.begin(), textBuf.begin() + size_t(n * textWidth));
+  }
+  if (!fmt || !std::strchr(fmt, '%'))
+  {
+    printString(fmt);
+    return;
+  }
+  char    tmpBuf[2048];
+  std::va_list  ap;
+  va_start(ap, fmt);
+  std::vsnprintf(tmpBuf, 2048, fmt, ap);
+  va_end(ap);
+  tmpBuf[2047] = '\0';
+  printString(tmpBuf);
+#else
+  std::va_list  ap;
+  va_start(ap, fmt);
+  std::vfprintf(stdout, fmt, ap);
+  va_end(ap);
+#endif
+}
+
+bool SDLDisplay::consoleInput(
+    std::string& s, std::map< size_t, std::string >& cmdHistory1,
+    std::map< std::string, size_t >& cmdHistory2, size_t historySize)
+{
+  s.clear();
+#ifdef HAVE_SDL2
+  if (textWidth < 4 || textHeight < 2)
+    return false;
+  std::vector< SDLEvent > eventBuf;
+  std::vector< std::uint32_t >  tmpBuf;
+  int     displayLine = -1;
+  int     waitTime = 10;
+  unsigned char redrawFlag = 1;         // 1: redraw, 2: do not reset Y position
+  bool    eolFlag = false;
+  bool    quitFlag = false;
+  size_t  insertPos = 0;
+  std::map< size_t, std::string >::const_iterator historyPos =
+      cmdHistory1.end();
+  while (!quitFlag)
+  {
+    if (redrawFlag)
+    {
+      clearSurface(ansiColor256Table[(defaultTextColor >> 16) & 0xFFU]);
+      printXPos = 0;
+      printYPos = int(textBuf.size() / size_t(textWidth));
+      printYPos -= int(printYPos > 0);
+      for (int i = 0; i < textWidth; i++)
+      {
+        std::uint32_t c = std::uint32_t(' ');
+        if (!i)
+          c = std::uint32_t('>');
+        else if (i >= 2 && size_t(i - 2) < tmpBuf.size())
+          c = tmpBuf[i - 2];
+        printCharacter(c);
+      }
+      if (int(insertPos + 2) < textWidth && !eolFlag)
+      {
+        // reverse colors at cursor position
+        std::uint32_t&  c =
+            textBuf[textBuf.size() - (size_t(textWidth) - (insertPos + 2))];
+        c = (c & 0xFFFFU) | ((c >> 8) & 0x00FF0000U) | ((c << 8) & 0xFF000000U)
+            | 0x8000U;
+      }
+      if (redrawFlag == 1)
+        displayLine = -1;
+      if (eolFlag)
+      {
+        printCharacter(0x0020U);
+        printXPos = 0;
+      }
+      drawText(0, displayLine, textHeight, 1.0f, 1.0f);
+      blitSurface();
+      redrawFlag = 0;
+    }
+    if (eolFlag)
+      break;
+    pollEvents(eventBuf, waitTime, true, true);
+    waitTime += int(waitTime < 10);
+    int     textBufLines = int(textBuf.size() / size_t(textWidth));
+    for (size_t i = 0; i < eventBuf.size(); i++)
+    {
+      int     t = eventBuf[i].type();
+      int     d1 = eventBuf[i].data1();
+      if (t == SDLEventWindow)
+      {
+        if (d1 == 0)
+          quitFlag = true;
+        else
+          redrawFlag = 2;
+        continue;
+      }
+      if (t == SDLEventMButtonDown)
+      {
+        int     d3 = eventBuf[i].data3();
+        int     d4 = eventBuf[i].data4();
+        // double click = copy word
+        // triple click = copy line
+        // middle click = paste
+        // right click = copy and paste word
+        if ((d3 == 1 && d4 >= 2) || d3 == 3)
+        {
+          int     d2 = eventBuf[i].data2();
+          int     x = (d1 * textWidth) / imageWidth;
+          int     y = (d2 * textHeight) / imageHeight;
+          x = (x > 0 ? (x < (textWidth - 1) ? x : (textWidth - 1)) : 0);
+          y = (y > 0 ? (y < (textHeight - 1) ? y : (textHeight - 1)) : 0);
+          if (textBufLines > textHeight)
+            y = y + ((textBufLines + 1 - textHeight) + displayLine);
+          std::string clipboardBuf;
+          if (y >= 0 && y < textBufLines)
+          {
+            size_t  startPos, endPos;
+            if (d4 < 3)         // copy word
+            {
+              startPos = size_t(y) * size_t(textWidth) + size_t(x);
+              endPos = startPos;
+              int     x0 = x;
+              int     x1 = x;
+              while (x0 >= 0 && (textBuf[startPos] & 0x3FFFU) > 0x20U)
+                x0--, startPos--;
+              startPos++;
+              while (x1 < textWidth && (textBuf[endPos] & 0x3FFFU) > 0x20U)
+                x1++, endPos++;
+            }
+            else                // copy line
+            {
+              startPos = size_t(y) * size_t(textWidth);
+              endPos = startPos + size_t(textWidth);
+              int     x0 = 0;
+              int     x1 = textWidth;
+              while (x0 < textWidth && (textBuf[startPos] & 0x3FFFU) <= 0x20U)
+                x0++, startPos++;
+              while (x1 > x0 && (textBuf[endPos - 1] & 0x3FFFU) <= 0x20U)
+                x1--, endPos--;
+            }
+            convertUInt32ToUTF8(clipboardBuf, textBuf, startPos, endPos);
+          }
+          if (clipboardBuf.empty() ||
+              SDL_SetClipboardText(clipboardBuf.c_str()) != 0)
+          {
+            d3 = 0;
+          }
+        }
+        if ((d3 == 2 || d3 == 3) && SDL_HasClipboardText())
+        {
+          char    *clipboardBuf = SDL_GetClipboardText();
+          if (clipboardBuf)
+          {
+            try
+            {
+              size_t  prvSize = tmpBuf.size();
+              convertUTF8ToUInt32(tmpBuf, clipboardBuf, size_t(textWidth - 3),
+                                  &insertPos);
+              redrawFlag = (unsigned char) (tmpBuf.size() != prvSize);
+            }
+            catch (...)
+            {
+              SDL_free(clipboardBuf);
+              throw;
+            }
+            SDL_free(clipboardBuf);
+          }
+        }
+        continue;
+      }
+      if (t == SDLEventMouseWheel)
+      {
+        int     d2 = eventBuf[i].data2();
+        int     minOffs = (textHeight - 1) - textBufLines;
+        minOffs = (minOffs < -1 ? minOffs : -1);
+        d2 = displayLine - (d2 / 10);
+        d2 = (d2 > minOffs ? (d2 < -1 ? d2 : -1) : minOffs);
+        if (d2 != displayLine)
+        {
+          displayLine = d2;
+          waitTime = 1;
+          redrawFlag = 2;
+        }
+        continue;
+      }
+      if (t != SDLEventKeyDown && t != SDLEventKeyRepeat)
+        continue;
+      if (d1 >= 0x0020 && d1 <= 0x3FFF && d1 != SDLKeySymDelete)
+      {
+        if (int(tmpBuf.size() + 3) < textWidth)
+        {
+          tmpBuf.insert(tmpBuf.begin() + insertPos, std::uint32_t(d1));
+          insertPos++;
+          redrawFlag = 1;
+        }
+        continue;
+      }
+      switch (d1)
+      {
+        case SDLKeySymBackspace:
+          if (insertPos > 0)
+          {
+            insertPos--;
+            tmpBuf.erase(tmpBuf.begin() + insertPos);
+            redrawFlag = 1;
+          }
+          break;
+        case SDLKeySymReturn:
+          redrawFlag = 1;
+          eolFlag = true;
+          if (tmpBuf.size() > 0)
+            break;
+          historyPos = cmdHistory1.end();
+        case SDLKeySymUp:
+        case SDLKeySymDown:
+          if (d1 != SDLKeySymDown)
+          {
+            if (historyPos == cmdHistory1.begin())
+              continue;
+            historyPos--;
+          }
+          else
+          {
+            if (historyPos == cmdHistory1.end())
+              continue;
+            historyPos++;
+          }
+          tmpBuf.clear();
+          if (historyPos != cmdHistory1.end())
+          {
+            convertUTF8ToUInt32(tmpBuf, historyPos->second.c_str(),
+                                size_t(textWidth - 3));
+          }
+          insertPos = tmpBuf.size();
+          redrawFlag = 1;
+          break;
+        case SDLKeySymDelete:
+          if (insertPos < tmpBuf.size())
+          {
+            tmpBuf.erase(tmpBuf.begin() + insertPos);
+            redrawFlag = 1;
+          }
+          break;
+        case SDLKeySymLeft:
+          if (insertPos > 0)
+          {
+            insertPos--;
+            redrawFlag = 1;
+          }
+          break;
+        case SDLKeySymRight:
+          if (insertPos < tmpBuf.size())
+          {
+            insertPos++;
+            redrawFlag = 1;
+          }
+          break;
+        case SDLKeySymHome:
+          if (insertPos)
+          {
+            insertPos = 0;
+            redrawFlag = 1;
+          }
+          break;
+        case SDLKeySymEnd:
+          if (insertPos != tmpBuf.size())
+          {
+            insertPos = tmpBuf.size();
+            redrawFlag = 1;
+          }
+          break;
+        case SDLKeySymPageUp:
+        case SDLKeySymPageDown:
+          {
+            int     minOffs = (textHeight - 1) - textBufLines;
+            minOffs = (minOffs < -1 ? minOffs : -1);
+            int     tmp = (textHeight > 2 ? (textHeight - 2) : 1);
+            tmp = (d1 == SDLKeySymPageUp ?
+                   (displayLine - tmp) : (displayLine + tmp));
+            tmp = (tmp > minOffs ? (tmp < -1 ? tmp : -1) : minOffs);
+            if (tmp != displayLine)
+            {
+              displayLine = tmp;
+              redrawFlag = 2;
+            }
+          }
+          break;
+        default:
+          break;
+      }
+      if (t == SDLEventKeyRepeat && redrawFlag)
+        waitTime = 1;
+    }
+  }
+  if (quitFlag)
+    s = "\004";
+  else
+    convertUInt32ToUTF8(s, tmpBuf);
+#else
+  std::printf("> ");
+  std::fflush(stdout);
+  while (true)
+  {
+    int     c = std::fgetc(stdin);
+    if (c == EOF || c == 0x04)
+    {
+      std::fputc('\n', stdout);
+      if (c == 0x04 || s.empty())
+        s = "\004";
+      break;
+    }
+    c = c & 0xFF;
+    if (c == '\n')
+      break;
+    if (c)
+      s += char(c);
+  }
+#endif
+  if (s == "\004")
+    return false;
+  size_t  n;
+  for (n = 0; n < s.length() && (unsigned char) s[n] <= 0x20; n++)
+    ;
+  if (n > 0)
+    s.erase(0, n);
+  for (n = s.length(); n > 0 && (unsigned char) s[n - 1] <= 0x20; n--)
+    ;
+  if (n < s.length())
+    s.erase(n, s.length() - n);
+#ifndef HAVE_SDL2
+  if (s.empty())
+  {
+    if (cmdHistory1.begin() != cmdHistory1.end())
+    {
+      std::map< size_t, std::string >::const_iterator i = cmdHistory1.end();
+      i--;
+      s = i->second;
+      std::printf("> %s\n", s.c_str());
+      std::fflush(stdout);
+    }
+  }
+  else
+#endif
+  if (historySize > 0 && !s.empty())
+  {
+    if (cmdHistory1.begin() != cmdHistory1.end())
+    {
+      std::map< std::string, size_t >::iterator i = cmdHistory2.find(s);
+      if (i != cmdHistory2.end())
+      {
+        cmdHistory1.erase(i->second);
+        cmdHistory2.erase(i);
+      }
+      else if (cmdHistory1.size() >= historySize)
+      {
+        cmdHistory2.erase(cmdHistory1.begin()->second);
+        cmdHistory1.erase(cmdHistory1.begin());
+      }
+    }
+    n = 0;
+    if (cmdHistory1.begin() != cmdHistory1.end())
+    {
+      std::map< size_t, std::string >::const_iterator i = cmdHistory1.end();
+      i--;
+      n = i->first + 1;
+    }
+    cmdHistory1.insert(std::pair< size_t, std::string >(n, s));
+    cmdHistory2.insert(std::pair< std::string, size_t >(s, n));
+  }
+  return true;
 }
 
