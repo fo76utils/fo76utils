@@ -107,7 +107,7 @@ static void renderCubeMap(const BA2File& ba2File,
     bool    quitFlag = false;
     while (!(redrawFlag || quitFlag))
     {
-      display.pollEvents(eventBuf, 10, false, true);
+      display.pollEvents(eventBuf, -1000, false, true);
       for (size_t i = 0; i < eventBuf.size(); i++)
       {
         int     t = eventBuf[i].type();
