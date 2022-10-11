@@ -2,15 +2,22 @@
 #include "common.hpp"
 #include "esmdbase.hpp"
 #include "sdlvideo.hpp"
-#include "nif_view.hpp"
+
+#ifdef HAVE_SDL2
+#  include "nif_view.hpp"
+#endif
 
 class ESMView : public ESMDump, public SDLDisplay
 {
  protected:
+#ifdef HAVE_SDL2
   Renderer  *renderer;
+#endif
   void printID(unsigned int id);
  public:
-  ESMView(const char *fileName);
+  ESMView(const char *fileName,
+          int w = 1152, int h = 648, int l = 36, bool enableDownsampling = true,
+          unsigned char bgColor = 0xE6, unsigned char fgColor = 0x00);
   virtual ~ESMView();
   unsigned int findPreviousRecord(unsigned int formID) const;
   unsigned int findNextRecord(unsigned int formID) const;
@@ -37,20 +44,37 @@ void ESMView::printID(unsigned int id)
   consolePrint("%s", tmpBuf);
 }
 
-ESMView::ESMView(const char *fileName)
+ESMView::ESMView(
+    const char *fileName, int w, int h, int l, bool enableDownsampling,
+    unsigned char bgColor, unsigned char fgColor)
   : ESMDump(fileName, (std::FILE *) 0),
-    SDLDisplay(1152, 648, "esmview", 4U, 36),
+#ifdef HAVE_SDL2
+    SDLDisplay(w, h, "esmview", 4U, l),
     renderer((Renderer *) 0)
+#else
+    SDLDisplay(640, 360, "esmview", 0U, 30)
+#endif
 {
-  setEnableDownsample(true);
-  setDefaultTextColor(0xE6, 0x10);
+#ifdef HAVE_SDL2
+  setEnableDownsample(enableDownsampling);
+  setDefaultTextColor(bgColor, fgColor);
+#else
+  (void) w;
+  (void) h;
+  (void) l;
+  (void) enableDownsampling;
+  (void) bgColor;
+  (void) fgColor;
+#endif
   verboseMode = true;
 }
 
 ESMView::~ESMView()
 {
+#ifdef HAVE_SDL2
   if (renderer)
     delete renderer;
+#endif
 }
 
 unsigned int ESMView::findPreviousRecord(unsigned int formID) const
@@ -399,14 +423,10 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
       char    tmpBuf[32];
       std::sprintf(tmpBuf, "\t[%5u]", (unsigned int) f.size());
       tmpField.data = tmpBuf;
-#ifdef HAVE_SDL2
       size_t  maxElements = size_t(getTextColumns());
       if (maxElements < 32)
         maxElements = 32;
       maxElements = ((maxElements - 24) * 39) >> 7;
-#else
-      size_t  maxElements = 17;
-#endif
       for (size_t i = 0; i < f.size(); i++)
       {
         if (i >= maxElements)
@@ -463,9 +483,14 @@ static const char *usageString =
     "R *:xxxxxxxx    find next reference to form ID\n"
     "S pattern:      find next record with EDID matching pattern\n"
     "U:              toggle hexadecimal display of unknown field types\n"
-    "Q:              quit\n"
-    "V:              previous record in current group\n\n"
-    "C, N, P, and V can be grouped and used as a single command\n\n";
+    "V:              previous record in current group\n"
+    "Q or Ctrl-D:    quit\n\n"
+    "C, N, P, and V can be grouped and used as a single command\n\n"
+    "Mouse controls:\n\n"
+    "Double click:   copy word\n"
+    "Triple click:   copy line\n"
+    "Middle button:  paste\n"
+    "Right button:   copy and paste word\n\n";
 
 int main(int argc, char **argv)
 {
