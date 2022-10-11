@@ -31,7 +31,14 @@ C, N, P, and V can be grouped and used as a single command.
 * **R cccc:xxxxxxxx**: Find next reference to form ID in field cccc.
 * **R \*:xxxxxxxx**: Find next reference to form ID.
 * **S pattern**: Find next record with EDID matching pattern.
-* **Q**: Quit.
+* **Q** or **Ctrl-D**: Quit.
+
+##### Mouse controls
+
+* Double click: copy word.
+* Triple click: copy line.
+* Middle button: paste.
+* Right button: copy and paste word.
 
 ### Field definition line format
 
