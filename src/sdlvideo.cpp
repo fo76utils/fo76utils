@@ -348,6 +348,7 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
     screenBuf.resize(size_t(w) * size_t(h), 0U);
     usingImageBuf = isDownsampled;
 #endif
+    textInputEnabled = false;
     if (usingImageBuf)
       imageBuf.resize(size_t(imageWidth) * size_t(imageHeight), 0U);
     fontData.resize(1024 * 1024);
@@ -437,6 +438,8 @@ SDLDisplay::~SDLDisplay()
 #ifdef HAVE_SDL2
   while (surfaceLockCnt > 0)
     unlockScreenSurface();
+  if (textInputEnabled)
+    SDL_StopTextInput();
   if (sdlScreen)
     SDL_FreeSurface(sdlScreen);
   if (sdlWindow)
@@ -560,23 +563,33 @@ void SDLDisplay::clearSurface(std::uint32_t c)
 }
 
 void SDLDisplay::pollEvents(std::vector< SDLEvent >& buf, int waitTime,
-                            bool enableKeyModifiers, bool pollMouseEvents)
+                            bool textInputMode, bool pollMouseEvents)
 {
   buf.clear();
 #ifdef HAVE_SDL2
-  static const char *modifiedKeysShift =
-      "@ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}^_~!\"#$%&\"()*+<_>?)!@#$%^&*(::>+>?";
+  if (BRANCH_UNLIKELY(textInputMode != textInputEnabled))
+  {
+    textInputEnabled = textInputMode;
+    if (!textInputMode)
+      SDL_StopTextInput();
+    else
+      SDL_StartTextInput();
+  }
+  SDL_Event event;
   if (waitTime > 0)
     SDL_Delay((Uint32) waitTime);
-  SDL_Event event;
-  while (SDL_PollEvent(&event))
+  if ((waitTime < 0 && !SDL_WaitEventTimeout(&event, -waitTime)) ||
+      (waitTime >= 0 && !SDL_PollEvent(&event)))
+  {
+    return;
+  }
+  do
   {
     int     t = SDLEventWindow;
     int     d1 = 0;
     int     d2 = 0;
     int     d3 = 0;
     int     d4 = 0;
-    SDL_Keycode sym;
     switch (event.type)
     {
       case SDL_QUIT:
@@ -590,152 +603,57 @@ void SDLDisplay::pollEvents(std::vector< SDLEvent >& buf, int waitTime,
           t = SDLEventKeyUp;
         else
           t = (!event.key.repeat ? SDLEventKeyDown : SDLEventKeyRepeat);
-        sym = event.key.keysym.sym;
-        if (sym >= 0x20 && sym < 0x7F)
+        d1 = int(event.key.keysym.sym);
+        if ((d1 >= 0x0020 && d1 < 0x007F) || (d1 >= 0x00A0 && d1 < 0x4000))
         {
           // printable characters
-          if (enableKeyModifiers)
+          if (textInputMode)
           {
-            if ((sym >= 0x41 && sym <= 0x5A) || (sym >= 0x61 && sym <= 0x7A))
+            if (!(event.key.keysym.mod & KMOD_CTRL) ||
+                !((d1 >= 0x41 && d1 <= 0x5A) || (d1 >= 0x61 && d1 <= 0x7A)))
             {
-              if (event.key.keysym.mod & KMOD_CAPS)
-                sym = sym & 0xDF;
-              else
-                sym = sym | 0x20;
-              if (event.key.keysym.mod & KMOD_SHIFT)
-                sym = sym ^ 0x20;
+              continue;
             }
-            else if (sym > 0x20 && sym < 0x61)
-            {
-              if (event.key.keysym.mod & KMOD_SHIFT)
-                sym = (SDL_Keycode) modifiedKeysShift[sym & 0x3F];
-            }
+            d1 = d1 & 0x1F;
           }
-          d1 = int(sym);
         }
         else
         {
-          switch (sym)
-          {
-            case SDLK_BACKSPACE:
-              d1 = SDLKeySymBackspace;
-              break;
-            case SDLK_TAB:
-              d1 = SDLKeySymTab;
-              break;
-            case SDLK_RETURN:
-              d1 = SDLKeySymReturn;
-              break;
-            case SDLK_ESCAPE:
-              d1 = SDLKeySymEscape;
-              break;
-            case SDLK_SPACE:
-              d1 = 0x20;
-              break;
-            case SDLK_DELETE:
-              d1 = SDLKeySymDelete;
-              break;
-            case SDLK_CAPSLOCK:
-              d1 = SDLKeySymCapsLock;
-              break;
-            case SDLK_F1:
-            case SDLK_F2:
-            case SDLK_F3:
-            case SDLK_F4:
-            case SDLK_F5:
-            case SDLK_F6:
-            case SDLK_F7:
-            case SDLK_F8:
-            case SDLK_F9:
-            case SDLK_F10:
-            case SDLK_F11:
-            case SDLK_F12:
-              d1 = int(sym - SDLK_F1) + SDLKeySymF1;
-              break;
-            case SDLK_PRINTSCREEN:
-              d1 = SDLKeySymPrintScr;
-              break;
-            case SDLK_SCROLLLOCK:
-              d1 = SDLKeySymScrollLock;
-              break;
-            case SDLK_PAUSE:
-              d1 = SDLKeySymPause;
-              break;
-            case SDLK_INSERT:
-              d1 = SDLKeySymInsert;
-              break;
-            case SDLK_HOME:
-              d1 = SDLKeySymHome;
-              break;
-            case SDLK_PAGEUP:
-              d1 = SDLKeySymPageUp;
-              break;
-            case SDLK_END:
-              d1 = SDLKeySymEnd;
-              break;
-            case SDLK_PAGEDOWN:
-              d1 = SDLKeySymPageDown;
-              break;
-            case SDLK_RIGHT:
-              d1 = SDLKeySymRight;
-              break;
-            case SDLK_LEFT:
-              d1 = SDLKeySymLeft;
-              break;
-            case SDLK_DOWN:
-              d1 = SDLKeySymDown;
-              break;
-            case SDLK_UP:
-              d1 = SDLKeySymUp;
-              break;
-            case SDLK_NUMLOCKCLEAR:
-              d1 = SDLKeySymNumLock;
-              break;
-            case SDLK_KP_DIVIDE:
-              d1 = SDLKeySymKPDivide;
-              break;
-            case SDLK_KP_MULTIPLY:
-              d1 = SDLKeySymKPMultiply;
-              break;
-            case SDLK_KP_MINUS:
-              d1 = SDLKeySymKPMinus;
-              break;
-            case SDLK_KP_PLUS:
-              d1 = SDLKeySymKPPlus;
-              break;
-            case SDLK_KP_ENTER:
-              d1 = SDLKeySymKPEnter;
-              break;
-            case SDLK_KP_1:
-            case SDLK_KP_2:
-            case SDLK_KP_3:
-            case SDLK_KP_4:
-            case SDLK_KP_5:
-            case SDLK_KP_6:
-            case SDLK_KP_7:
-            case SDLK_KP_8:
-            case SDLK_KP_9:
-              d1 = int(sym - SDLK_KP_1) + SDLKeySymKP1;
-              break;
-            case SDLK_KP_0:
-              d1 = SDLKeySymKPIns;
-              break;
-            case SDLK_KP_PERIOD:
-              d1 = SDLKeySymKPDel;
-              break;
-            default:
-              if (sym >= 0x00A1 && sym <= 0x3FFF)
-                d1 = int(sym);
-              else if (sym >= 0x40000000 && sym <= 0x40003FFF)
-                d1 = int(sym) - 0x3FFFC000;
-              else if (sym == 0x00A0)
-                d1 = 0x20;
-              else
-                continue;
-              break;
-          }
+          if (d1 >= (SDLKeyOffs + 0x4000) && d1 <= (SDLKeyOffs + 0x7FFF))
+            d1 = d1 - SDLKeyOffs;
+          else if (!((d1 >= 0x0001 && d1 < 0x0020) || d1 == SDLK_DELETE))
+            continue;
         }
         break;
+      case SDL_TEXTINPUT:
+        if (BRANCH_LIKELY(textInputMode))
+        {
+          std::uint32_t c = 0U;
+          for (size_t i = 0; true; i++)
+          {
+            unsigned char b = 0;
+            if (BRANCH_LIKELY(i < SDL_TEXTINPUTEVENT_TEXT_SIZE))
+              b = (unsigned char) event.text.text[i];
+            if ((b & 0xC0) == 0x80 && (c & 0x80000000U))
+            {
+              c = ((c << 6) | (b & 0x3FU)) & 0xFFFFFFFFU;
+              continue;
+            }
+            if (c > 0U && c < 0x4000U)
+              buf.push_back(SDLEvent(SDLEventKeyDown, int(c), 0, 0, 0));
+            if (!b)
+              break;
+            if (!(b & 0x80))
+              c = b;
+            else if ((b & 0xE0) == 0xC0)
+              c = (b & 0x1FU) | 0x80000000U;
+            else if ((b & 0xF0) == 0xE0)
+              c = (b & 0x0FU) | 0x82000000U;
+            else if ((b & 0xF8) == 0xF0)
+              c = (b & 0x07U) | 0x82080000U;
+          }
+        }
+        continue;
       case SDL_MOUSEMOTION:
         if (!pollMouseEvents)
           continue;
@@ -775,9 +693,10 @@ void SDLDisplay::pollEvents(std::vector< SDLEvent >& buf, int waitTime,
     }
     buf.push_back(SDLEvent(t, d1, d2, d3, d4));
   }
+  while (SDL_PollEvent(&event));
 #else
   (void) waitTime;
-  (void) enableKeyModifiers;
+  (void) textInputMode;
   (void) pollMouseEvents;
   buf.push_back(SDLEvent(SDLEventWindow, 0, 0, 0, 0));
 #endif
@@ -1074,6 +993,7 @@ int SDLDisplay::browseList(
   return itemSelected;
 }
 
+#ifdef HAVE_SDL2
 static void convertUTF8ToUInt32(
     std::vector< std::uint32_t >& v, const char *s,
     size_t maxLen = 1024, size_t *insertPosPtr = (size_t *) 0)
@@ -1147,6 +1067,7 @@ static void convertUInt32ToUTF8(
     }
   }
 }
+#endif
 
 #ifdef __GNUC__
 __attribute__ ((__format__ (__printf__, 2, 3)))
@@ -1191,7 +1112,6 @@ bool SDLDisplay::consoleInput(
   std::vector< SDLEvent > eventBuf;
   std::vector< std::uint32_t >  tmpBuf;
   int     displayLine = -1;
-  int     waitTime = 10;
   unsigned char redrawFlag = 1;         // 1: redraw, 2: do not reset Y position
   bool    eolFlag = false;
   bool    quitFlag = false;
@@ -1204,8 +1124,6 @@ bool SDLDisplay::consoleInput(
     {
       clearSurface(ansiColor256Table[(defaultTextColor >> 16) & 0xFFU]);
       printXPos = 0;
-      printYPos = int(textBuf.size() / size_t(textWidth));
-      printYPos -= int(printYPos > 0);
       for (int i = 0; i < textWidth; i++)
       {
         std::uint32_t c = std::uint32_t(' ');
@@ -1236,8 +1154,7 @@ bool SDLDisplay::consoleInput(
     }
     if (eolFlag)
       break;
-    pollEvents(eventBuf, waitTime, true, true);
-    waitTime += int(waitTime < 10);
+    pollEvents(eventBuf, -1000, true, true);
     int     textBufLines = int(textBuf.size() / size_t(textWidth));
     for (size_t i = 0; i < eventBuf.size(); i++)
     {
@@ -1335,13 +1252,14 @@ bool SDLDisplay::consoleInput(
         if (d2 != displayLine)
         {
           displayLine = d2;
-          waitTime = 1;
           redrawFlag = 2;
         }
         continue;
       }
       if (t != SDLEventKeyDown && t != SDLEventKeyRepeat)
         continue;
+      if (d1 == 0x0009)         // convert tab to space
+        d1 = 0x0020;
       if (d1 >= 0x0020 && d1 <= 0x3FFF && d1 != SDLKeySymDelete)
       {
         if (int(tmpBuf.size() + 3) < textWidth)
@@ -1354,6 +1272,9 @@ bool SDLDisplay::consoleInput(
       }
       switch (d1)
       {
+        case 0x0004:                    // Ctrl-D
+          quitFlag = true;
+          break;
         case SDLKeySymBackspace:
           if (insertPos > 0)
           {
@@ -1445,8 +1366,6 @@ bool SDLDisplay::consoleInput(
         default:
           break;
       }
-      if (t == SDLEventKeyRepeat && redrawFlag)
-        waitTime = 1;
     }
   }
   if (quitFlag)
@@ -1493,7 +1412,6 @@ bool SDLDisplay::consoleInput(
       i--;
       s = i->second;
       std::printf("> %s\n", s.c_str());
-      std::fflush(stdout);
     }
   }
   else

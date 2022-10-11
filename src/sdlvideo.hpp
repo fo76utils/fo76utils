@@ -22,6 +22,7 @@ class SDLDisplay
 #endif
   bool    isDownsampled;
   bool    usingImageBuf;
+  bool    textInputEnabled;
   std::vector< std::uint32_t >  imageBuf;
   std::vector< unsigned char >  fontData;
   // bits 0 to 13: Unicode character
@@ -69,30 +70,53 @@ class SDLDisplay
     SDLKeySymTab = 9,
     SDLKeySymReturn = 13,
     SDLKeySymEscape = 27,
-    SDLKeySymDelete = 127,
-    SDLKeySymCapsLock = 0x4039,
-    SDLKeySymF1 = 0x403A,               // F1-F12 = 0x403A-0x4045
-    SDLKeySymPrintScr = 0x4046,
-    SDLKeySymScrollLock = 0x4047,
-    SDLKeySymPause = 0x4048,
-    SDLKeySymInsert = 0x4049,
-    SDLKeySymHome = 0x404A,
-    SDLKeySymPageUp = 0x404B,           // Delete = 127 instead of 0x404C
-    SDLKeySymEnd = 0x404D,
-    SDLKeySymPageDown = 0x404E,
-    SDLKeySymRight = 0x404F,
-    SDLKeySymLeft = 0x4050,
-    SDLKeySymDown = 0x4051,
-    SDLKeySymUp = 0x4052,
-    SDLKeySymNumLock = 0x4053,
-    SDLKeySymKPDivide = 0x4054,
-    SDLKeySymKPMultiply = 0x4055,
-    SDLKeySymKPMinus = 0x4056,
-    SDLKeySymKPPlus = 0x4057,
-    SDLKeySymKPEnter = 0x4058,
-    SDLKeySymKP1 = 0x4059,              // KP1-KP9 = 0x4059-0x4061
-    SDLKeySymKPIns = 0x4062,
-    SDLKeySymKPDel = 0x4063
+    SDLKeySymDelete = 127
+#ifdef HAVE_SDL2
+    , SDLKeyOffs = SDLK_SCANCODE_MASK - 0x4000,
+    SDLKeySymCapsLock = SDLK_CAPSLOCK - SDLKeyOffs,
+    SDLKeySymF1 = SDLK_F1 - SDLKeyOffs,
+    SDLKeySymF2 = SDLK_F2 - SDLKeyOffs,
+    SDLKeySymF3 = SDLK_F3 - SDLKeyOffs,
+    SDLKeySymF4 = SDLK_F4 - SDLKeyOffs,
+    SDLKeySymF5 = SDLK_F5 - SDLKeyOffs,
+    SDLKeySymF6 = SDLK_F6 - SDLKeyOffs,
+    SDLKeySymF7 = SDLK_F7 - SDLKeyOffs,
+    SDLKeySymF8 = SDLK_F8 - SDLKeyOffs,
+    SDLKeySymF9 = SDLK_F9 - SDLKeyOffs,
+    SDLKeySymF10 = SDLK_F10 - SDLKeyOffs,
+    SDLKeySymF11 = SDLK_F11 - SDLKeyOffs,
+    SDLKeySymF12 = SDLK_F12 - SDLKeyOffs,
+    SDLKeySymPrintScr = SDLK_PRINTSCREEN - SDLKeyOffs,
+    SDLKeySymScrollLock = SDLK_SCROLLLOCK - SDLKeyOffs,
+    SDLKeySymPause = SDLK_PAUSE - SDLKeyOffs,
+    SDLKeySymInsert = SDLK_INSERT - SDLKeyOffs,
+    SDLKeySymHome = SDLK_HOME - SDLKeyOffs,
+    SDLKeySymPageUp = SDLK_PAGEUP - SDLKeyOffs,
+    // Delete = 127 instead of 0x404C
+    SDLKeySymEnd = SDLK_END - SDLKeyOffs,
+    SDLKeySymPageDown = SDLK_PAGEDOWN - SDLKeyOffs,
+    SDLKeySymRight = SDLK_RIGHT - SDLKeyOffs,
+    SDLKeySymLeft = SDLK_LEFT - SDLKeyOffs,
+    SDLKeySymDown = SDLK_DOWN - SDLKeyOffs,
+    SDLKeySymUp = SDLK_UP - SDLKeyOffs,
+    SDLKeySymNumLock = SDLK_NUMLOCKCLEAR - SDLKeyOffs,
+    SDLKeySymKPDivide = SDLK_KP_DIVIDE - SDLKeyOffs,
+    SDLKeySymKPMultiply = SDLK_KP_MULTIPLY - SDLKeyOffs,
+    SDLKeySymKPMinus = SDLK_KP_MINUS - SDLKeyOffs,
+    SDLKeySymKPPlus = SDLK_KP_PLUS - SDLKeyOffs,
+    SDLKeySymKPEnter = SDLK_KP_ENTER - SDLKeyOffs,
+    SDLKeySymKP1 = SDLK_KP_1 - SDLKeyOffs,
+    SDLKeySymKP2 = SDLK_KP_2 - SDLKeyOffs,
+    SDLKeySymKP3 = SDLK_KP_3 - SDLKeyOffs,
+    SDLKeySymKP4 = SDLK_KP_4 - SDLKeyOffs,
+    SDLKeySymKP5 = SDLK_KP_5 - SDLKeyOffs,
+    SDLKeySymKP6 = SDLK_KP_6 - SDLKeyOffs,
+    SDLKeySymKP7 = SDLK_KP_7 - SDLKeyOffs,
+    SDLKeySymKP8 = SDLK_KP_8 - SDLKeyOffs,
+    SDLKeySymKP9 = SDLK_KP_9 - SDLKeyOffs,
+    SDLKeySymKPIns = SDLK_KP_0 - SDLKeyOffs,
+    SDLKeySymKPDel = SDLK_KP_PERIOD - SDLKeyOffs
+#endif
   };
   struct SDLEvent
   {
@@ -223,9 +247,11 @@ class SDLDisplay
   void setEnableDownsample(bool isEnabled);
   void blitSurface();
   void clearSurface(std::uint32_t c = 0U);
-  void pollEvents(std::vector< SDLEvent >& buf, int waitTime = 10,
-                  bool enableKeyModifiers = false,
-                  bool pollMouseEvents = false);
+  // waitTime = number of milliseconds to wait before polling for events.
+  // If waitTime is negative, then wait until an event is received, but
+  // at most -waitTime milliseconds.
+  void pollEvents(std::vector< SDLEvent >& buf, int waitTime = -1000,
+                  bool textInputMode = false, bool pollMouseEvents = false);
   // y0Dst = Y position on screen (0 = top)
   // y0Src = line number in text buffer (0 = first, < 0: until last + 1 + y0Src)
   // lineCnt = maximum number of lines to draw
