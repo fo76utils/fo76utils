@@ -34,19 +34,6 @@ static const char *cubeMapPaths[24] =
   "textures/shared/cubemaps/mipblur_defaultoutside_pitt.dds"
 };
 
-static float viewRotations[27] =
-{
-  54.73561f,  180.0f,     45.0f,        // isometric from NW
-  54.73561f,  180.0f,     135.0f,       // isometric from SW
-  54.73561f,  180.0f,     -135.0f,      // isometric from SE
-  54.73561f,  180.0f,     -45.0f,       // isometric from NE
-  180.0f,     0.0f,       0.0f,         // top
-  -90.0f,     0.0f,       0.0f,         // front
-  -90.0f,     0.0f,       90.0f,        // right
-  -90.0f,     0.0f,       180.0f,       // back
-  -90.0f,     0.0f,       -90.0f        // left
-};
-
 void Renderer::threadFunction(Renderer *p, size_t n)
 {
   p->threadErrMsg[n].clear();
@@ -450,6 +437,20 @@ void Renderer::renderModelToFile(const char *outFileName,
   outFile.writeImageData(&(downsampleBuf.front()), imageDataSize, pixelFormat);
 }
 
+#ifdef HAVE_SDL2
+static float viewRotations[27] =
+{
+  54.73561f,  180.0f,     45.0f,        // isometric from NW
+  54.73561f,  180.0f,     135.0f,       // isometric from SW
+  54.73561f,  180.0f,     -135.0f,      // isometric from SE
+  54.73561f,  180.0f,     -45.0f,       // isometric from NE
+  180.0f,     0.0f,       0.0f,         // top
+  -90.0f,     0.0f,       0.0f,         // front
+  -90.0f,     0.0f,       90.0f,        // right
+  -90.0f,     0.0f,       180.0f,       // back
+  -90.0f,     0.0f,       -90.0f        // left
+};
+
 static void updateRotation(float& rx, float& ry, float& rz,
                            int dx, int dy, int dz,
                            std::string& messageBuf, const char *msg)
@@ -616,15 +617,17 @@ static const char *keyboardUsageString =
     "Clear messages.                                                 \n"
     "  \033[4m\033[38;5;228mEsc\033[m                   "
     "Quit viewer.                                                    \n";
+#endif
 
-void Renderer::viewModels(SDLDisplay& display,
+bool Renderer::viewModels(SDLDisplay& display,
                           const std::vector< std::string >& nifFileNames)
 {
+#ifdef HAVE_SDL2
   if (nifFileNames.size() < 1)
-    return;
+    return true;
   std::vector< SDLDisplay::SDLEvent > eventBuf;
   std::string messageBuf;
-  bool    quitFlag = false;
+  unsigned char quitFlag = 0;   // 1 = Esc key pressed, 2 = window closed
   try
   {
     int     imageWidth = display.getWidth();
@@ -676,7 +679,7 @@ void Renderer::viewModels(SDLDisplay& display,
 
         while (!(redrawFlags || nextFileFlag || quitFlag))
         {
-          display.pollEvents(eventBuf, 10, false, false);
+          display.pollEvents(eventBuf);
           for (size_t i = 0; i < eventBuf.size(); i++)
           {
             int     t = eventBuf[i].type();
@@ -684,7 +687,7 @@ void Renderer::viewModels(SDLDisplay& display,
             if (t == SDLDisplay::SDLEventWindow)
             {
               if (d1 == 0)
-                quitFlag = true;
+                quitFlag = 2;
               else if (d1 == 1)
                 redrawFlags = 1;
               continue;
@@ -718,7 +721,7 @@ void Renderer::viewModels(SDLDisplay& display,
                 updateValueLogScale(viewScale, d, 0.0625f, 16.0f, messageBuf,
                                     "View scale");
                 break;
-              case SDLDisplay::SDLKeySymKP1 + 6:
+              case SDLDisplay::SDLKeySymKP7:
                 viewRotation = 0;
                 messageBuf += "Isometric view from the NW\n";
                 break;
@@ -726,42 +729,42 @@ void Renderer::viewModels(SDLDisplay& display,
                 viewRotation = 1;
                 messageBuf += "Isometric view from the SW\n";
                 break;
-              case SDLDisplay::SDLKeySymKP1 + 2:
+              case SDLDisplay::SDLKeySymKP3:
                 viewRotation = 2;
                 messageBuf += "Isometric view from the SE\n";
                 break;
-              case SDLDisplay::SDLKeySymKP1 + 8:
+              case SDLDisplay::SDLKeySymKP9:
                 viewRotation = 3;
                 messageBuf += "Isometric view from the NE\n";
                 break;
-              case SDLDisplay::SDLKeySymKP1 + 4:
+              case SDLDisplay::SDLKeySymKP5:
                 viewRotation = 4;
                 messageBuf += "Top view\n";
                 break;
-              case SDLDisplay::SDLKeySymKP1 + 1:
+              case SDLDisplay::SDLKeySymKP2:
                 viewRotation = 5;
                 messageBuf += "S view\n";
                 break;
-              case SDLDisplay::SDLKeySymKP1 + 5:
+              case SDLDisplay::SDLKeySymKP6:
                 viewRotation = 6;
                 messageBuf += "E view\n";
                 break;
-              case SDLDisplay::SDLKeySymKP1 + 7:
+              case SDLDisplay::SDLKeySymKP8:
                 viewRotation = 7;
                 messageBuf += "N view\n";
                 break;
-              case SDLDisplay::SDLKeySymKP1 + 3:
+              case SDLDisplay::SDLKeySymKP4:
                 viewRotation = 8;
                 messageBuf += "W view\n";
                 break;
               case SDLDisplay::SDLKeySymF1:
-              case SDLDisplay::SDLKeySymF1 + 1:
-              case SDLDisplay::SDLKeySymF1 + 2:
-              case SDLDisplay::SDLKeySymF1 + 3:
-              case SDLDisplay::SDLKeySymF1 + 4:
-              case SDLDisplay::SDLKeySymF1 + 5:
-              case SDLDisplay::SDLKeySymF1 + 6:
-              case SDLDisplay::SDLKeySymF1 + 7:
+              case SDLDisplay::SDLKeySymF2:
+              case SDLDisplay::SDLKeySymF3:
+              case SDLDisplay::SDLKeySymF4:
+              case SDLDisplay::SDLKeySymF5:
+              case SDLDisplay::SDLKeySymF6:
+              case SDLDisplay::SDLKeySymF7:
+              case SDLDisplay::SDLKeySymF8:
                 defaultEnvMapNum = d1 - SDLDisplay::SDLKeySymF1;
                 setDefaultTextures();
                 messageBuf += "Default environment map: ";
@@ -877,7 +880,7 @@ void Renderer::viewModels(SDLDisplay& display,
                 fileNum = (size_t(fileNum) < nifFileNames.size() ? fileNum : 0);
                 nextFileFlag = true;
                 break;
-              case SDLDisplay::SDLKeySymF1 + 11:
+              case SDLDisplay::SDLKeySymF12:
               case SDLDisplay::SDLKeySymPrintScr:
                 screenshotFlag = true;
                 break;
@@ -935,7 +938,7 @@ void Renderer::viewModels(SDLDisplay& display,
               case 'c':
                 break;
               case SDLDisplay::SDLKeySymEscape:
-                quitFlag = true;
+                quitFlag = 1;
                 break;
               default:
                 redrawFlags = 0;
@@ -958,14 +961,14 @@ void Renderer::viewModels(SDLDisplay& display,
     display.blitSurface();
     do
     {
-      display.pollEvents(eventBuf, 10, false, false);
+      display.pollEvents(eventBuf);
       for (size_t i = 0; i < eventBuf.size(); i++)
       {
         if ((eventBuf[i].type() == SDLDisplay::SDLEventWindow &&
              eventBuf[i].data1() == 0) ||
             eventBuf[i].type() == SDLDisplay::SDLEventKeyDown)
         {
-          quitFlag = true;
+          quitFlag = (eventBuf[i].type() == SDLDisplay::SDLEventWindow ? 2 : 1);
           break;
         }
         else if (eventBuf[i].type() == SDLDisplay::SDLEventWindow &&
@@ -976,7 +979,12 @@ void Renderer::viewModels(SDLDisplay& display,
       }
     }
     while (!quitFlag);
-    throw;
   }
+  return (quitFlag < 2);
+#else
+  (void) display;
+  (void) nifFileNames;
+  return false;
+#endif
 }
 

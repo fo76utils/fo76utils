@@ -68,7 +68,8 @@ class Renderer : protected Renderer_Base
   void setWaterColor(unsigned int watrFormID);
   void renderModelToFile(const char *outFileName,
                          int imageWidth, int imageHeight);
-  void viewModels(SDLDisplay& display,
+  // returns false if the window is closed
+  bool viewModels(SDLDisplay& display,
                   const std::vector< std::string >& nifFileNames);
 };
 
