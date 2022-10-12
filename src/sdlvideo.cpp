@@ -52,12 +52,16 @@ void SDLDisplay::drawCharacterBG(std::uint32_t *p,
   }
 }
 
-static const std::uint32_t  fontTextureDecodeTable[16] =
+static const FloatVector4 fontTextureDecodeTable[16] =
 {
-  0x00000000U, 0x00000001U, 0x00000100U, 0x00000101U,
-  0x00010000U, 0x00010001U, 0x00010100U, 0x00010101U,
-  0x01000000U, 0x01000001U, 0x01000100U, 0x01000101U,
-  0x01010000U, 0x01010001U, 0x01010100U, 0x01010101U
+  FloatVector4(0.0f, 0.0f, 0.0f, 0.0f), FloatVector4(1.0f, 0.0f, 0.0f, 0.0f),
+  FloatVector4(0.0f, 1.0f, 0.0f, 0.0f), FloatVector4(1.0f, 1.0f, 0.0f, 0.0f),
+  FloatVector4(0.0f, 0.0f, 1.0f, 0.0f), FloatVector4(1.0f, 0.0f, 1.0f, 0.0f),
+  FloatVector4(0.0f, 1.0f, 1.0f, 0.0f), FloatVector4(1.0f, 1.0f, 1.0f, 0.0f),
+  FloatVector4(0.0f, 0.0f, 0.0f, 1.0f), FloatVector4(1.0f, 0.0f, 0.0f, 1.0f),
+  FloatVector4(0.0f, 1.0f, 0.0f, 1.0f), FloatVector4(1.0f, 1.0f, 0.0f, 1.0f),
+  FloatVector4(0.0f, 0.0f, 1.0f, 1.0f), FloatVector4(1.0f, 0.0f, 1.0f, 1.0f),
+  FloatVector4(0.0f, 1.0f, 1.0f, 1.0f), FloatVector4(1.0f, 1.0f, 1.0f, 1.0f)
 };
 
 void SDLDisplay::drawCharacterFG(std::uint32_t *p,
@@ -70,23 +74,24 @@ void SDLDisplay::drawCharacterFG(std::uint32_t *p,
   {
     unsigned short  tmp = (unsigned short) (c & 0x3FFFU);
     // find in character table with binary search
-    size_t  n1;
-    while ((n1 = ((n0 + n2) >> 1)) > n0)
+    size_t  n = sizeof(courB24CharacterTable) / sizeof(unsigned short);
+    n = (n > 512 ? (n > 1024 ? (n > 2048 ? 12 : 11) : 10) : (n > 256 ? 9 : 8));
+    while (n--)
     {
-      if (tmp < courB24CharacterTable[n1])
-        n2 = n1;
-      else
-        n0 = n1;
+      size_t  n1 = ((n0 + n2) >> 1);
+      bool    l = (tmp < courB24CharacterTable[n1]);
+      n0 = (l ? n0 : n1);
+      n2 = (l ? n1 : n2);
     }
     if (tmp != courB24CharacterTable[n0])
       return;                   // not found
   }
   float   xc = (float(x) + 0.5f) * textXScale;
   float   yc = (float(y) + 0.5f) * textYScale;
-  int     x0 = roundFloat(xc - (fontWidth * 0.5f));
-  int     y0 = roundFloat(yc - (fontHeight * 0.5f));
-  int     x1 = roundFloat(xc + (fontWidth * 0.5f));
-  int     y1 = roundFloat(yc + (fontHeight * 0.5f));
+  int     x0 = roundFloat(xc - fontWidthD2);
+  int     y0 = roundFloat(yc - (fontLineHeight * 21.0f));
+  int     x1 = roundFloat(xc + fontWidthD2);
+  int     y1 = roundFloat(yc + (fontLineHeight * 17.0f));
   x0 = (x0 > 0 ? (x0 < (imageWidth - 1) ? x0 : (imageWidth - 1)) : 0);
   y0 = (y0 > 0 ? (y0 < (imageHeight - 1) ? y0 : (imageHeight - 1)) : 0);
   x1 = (x1 > 0 ? (x1 < (imageWidth - 1) ? x1 : (imageWidth - 1)) : 0);
@@ -104,26 +109,25 @@ void SDLDisplay::drawCharacterFG(std::uint32_t *p,
   float   v = float(y0) * fontVScale + vOffset;
   for ( ; y0 < y1; y0++, p = p + imageWidth, v = v + fontVScale)
   {
-    float   v_f = float(std::floor(v));
-    int     v_i = int(v_f) & 1023;
-    v_f = v - v_f;
+    int     v_i = int(v);
+    float   tmp1 = (v - float(v_i)) * fgAlpha;
+    float   tmp2 = fgAlpha - tmp1;
+    FloatVector4  v_f(tmp2, tmp2, tmp1, tmp1);
     const unsigned char *textureDataPtr =
-        &(fontData.front()) + (size_t(v_i) << 10);
+        &(fontData.front()) + (size_t(v_i & 1023) << 10);
     float   u = float(x0) * fontUScale + uOffset;
     for (int i = x0; i < x1; i++, u = u + fontUScale)
     {
-      float   u_f = float(std::floor(u));
-      int     u_i = int(u_f) & 1023;
-      u_f = u - u_f;
-      unsigned char tmp = textureDataPtr[u_i];
+      int     u_i = int(u);
+      unsigned char tmp = textureDataPtr[u_i & 1023];
       if (!tmp)
         continue;
       if (tmp < 0x0F || fgAlpha < 1.0f)
       {
+        float   u_f = u - float(u_i);
         float   a =
-            FloatVector4(&(fontTextureDecodeTable[tmp])).dotProduct(
-                FloatVector4(1.0f - u_f, u_f, 1.0f - u_f, u_f)
-                * FloatVector4(1.0f - v_f, 1.0f - v_f, v_f, v_f)) * fgAlpha;
+            (FloatVector4(1.0f - u_f, u_f, 1.0f - u_f, u_f) * v_f).dotProduct(
+                fontTextureDecodeTable[tmp]);
         FloatVector4  c0(FloatVector4::convertRGBA32(p[i]));
         c0 *= c0;
         p[i] = (c0 + ((c1l - c0) * a)).squareRootFast().convertToRGBA32(
@@ -378,8 +382,8 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
     textBuf.reserve(size_t(textWidth) * size_t(textHeight));
     textXScale = float(imageWidth) / float(textWidth);
     textYScale = float(imageHeight) / float(textHeight);
-    fontWidth = float(imageWidth * 26) / float(textWidth * 20);
-    fontHeight = float(imageHeight * 38) / float(textHeight * 30);
+    fontWidthD2 = float(imageWidth * 13) / float(textWidth * 20);
+    fontLineHeight = float(imageHeight) / float(textHeight * 30);
     fontUScale = float(textWidth * 20) / float(imageWidth);
     fontVScale = float(textHeight * 30) / float(imageHeight);
     printXPos = 0;
@@ -388,19 +392,17 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
     defaultTextColor = 0x00FF8000U;
     printBufCnt = 0;
     ansiColor256Table.resize(256);
-    for (int i = 0; i < 256; i++)
+    for (std::uint32_t i = 0U; i < 256U; i++)
     {
-      std::uint32_t c = std::uint32_t(i);
-      if (i < 16)
+      std::uint32_t c = i;
+      if (i < 16U)
       {
         // standard and high intensity colors
-        c = fontTextureDecodeTable[c & 7U] * 0xFFU;
-        if (i < 7)
-          c = c & 0x00808080U;
-        else if (i < 9)
-          c = (c & 0x00404040U) | 0x00808080U;
+        c = std::uint32_t(fontTextureDecodeTable[c]) * (i < 8U ? 0x80U : 0xFFU);
+        if (!((i + 9U) & 14U))
+          c = (c >> 1) | 0x80808080U;
       }
-      else if (i < 232)
+      else if (i < 232U)
       {
         // 6x6x6 color cube
         std::uint32_t b = (c - 16U) % 6U;
@@ -489,8 +491,8 @@ void SDLDisplay::setEnableDownsample(bool isEnabled)
   isDownsampled = isEnabled;
   textXScale = float(imageWidth) / float(textWidth);
   textYScale = float(imageHeight) / float(textHeight);
-  fontWidth = float(imageWidth * 26) / float(textWidth * 20);
-  fontHeight = float(imageHeight * 38) / float(textHeight * 30);
+  fontWidthD2 = float(imageWidth * 13) / float(textWidth * 20);
+  fontLineHeight = float(imageHeight) / float(textHeight * 30);
   fontUScale = float(textWidth * 20) / float(imageWidth);
   fontVScale = float(textHeight * 30) / float(imageHeight);
 }

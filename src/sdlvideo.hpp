@@ -36,8 +36,8 @@ class SDLDisplay
   int     textHeight;
   float   textXScale;
   float   textYScale;
-  float   fontWidth;
-  float   fontHeight;
+  float   fontWidthD2;
+  float   fontLineHeight;
   float   fontUScale;
   float   fontVScale;
   int     printXPos;
