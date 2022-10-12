@@ -35,8 +35,11 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **Page Up**: Enable downsampling (slow).
 * **Page Down**: Disable downsampling.
 * **Space**, **Backspace**: Load next or previous file matching the pattern.
+* **F9**: Select file from list.
 * **F12** or **Print Screen**: Save screenshot.
-* **P**: Print current settings and file list.
+* **F11**: Save high quality screenshot (double resolution and downsample).
+* **P**: Print current settings and file name.
+* **V**: View detailed model information.
 * **H**: Show help screen.
 * **C**: Clear messages.
 * **Esc**: Quit program.

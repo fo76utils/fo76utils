@@ -502,7 +502,8 @@ static void updateValueLogScale(float& s, int d, float minVal, float maxVal,
   messageBuf = buf;
 }
 
-static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName)
+static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName,
+                           Renderer *renderer = (Renderer *) 0)
 {
   size_t  n1 = nifFileName.rfind('/');
   n1 = (n1 != std::string::npos ? (n1 + 1) : 0);
@@ -525,32 +526,223 @@ static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName)
     std::sprintf(buf, "_%02u%02u%02u.dds", h, m, s);
     fileName += buf;
   }
+  int     w = display.getWidth() >> int(display.getIsDownsampled());
+  int     h = display.getHeight() >> int(display.getIsDownsampled());
+  if (!renderer)
   {
     display.blitSurface();
     const std::uint32_t *p = display.lockScreenSurface();
-    int     w = display.getWidth() >> int(display.getIsDownsampled());
-    int     h = display.getHeight() >> int(display.getIsDownsampled());
-    DDSOutputFile f(fileName.c_str(), w, h,
-#if USE_PIXELFMT_RGB10A2
-                    DDSInputFile::pixelFormatA2R10G10B10
-#else
-                    DDSInputFile::pixelFormatRGB24
-#endif
-                    );
+    DDSOutputFile f(fileName.c_str(), w, h, DDSInputFile::pixelFormatRGBA32);
     size_t  pitch = display.getPitch();
     for (int y = 0; y < h; y++, p = p + pitch)
-    {
-#if USE_PIXELFMT_RGB10A2
-      f.writeImageData(p, size_t(w), DDSInputFile::pixelFormatA2R10G10B10);
-#else
-      f.writeImageData(p, size_t(w), DDSInputFile::pixelFormatRGB24);
-#endif
-    }
+      f.writeImageData(p, size_t(w), DDSInputFile::pixelFormatRGBA32);
     display.unlockScreenSurface();
+  }
+  else
+  {
+    renderer->renderModelToFile(fileName.c_str(), w << 1, h << 1);
   }
   display.printString("Saved screenshot to ");
   display.printString(fileName.c_str());
   display.printString("\n");
+}
+
+static bool viewModelInfo(SDLDisplay& display, const NIFFile& nifFile)
+{
+  display.clearTextBuffer();
+  display.consolePrint("BS version: 0x%08X\n", nifFile.getVersion());
+  display.consolePrint("Author name: %s\n", nifFile.getAuthorName().c_str());
+  display.consolePrint("Process script: %s\n",
+                       nifFile.getProcessScriptName().c_str());
+  display.consolePrint("Export script: %s\n",
+                       nifFile.getExportScriptName().c_str());
+  display.consolePrint("Block count: %u\n",
+                       (unsigned int) nifFile.getBlockCount());
+  for (size_t i = 0; i < nifFile.getBlockCount(); i++)
+  {
+    display.consolePrint("  Block %3d: offset = 0x%08X, size = %7u, "
+                         "name = \"%s\", type = %s\n",
+                         int(i),
+                         (unsigned int) nifFile.getBlockOffset(i),
+                         (unsigned int) nifFile.getBlockSize(i),
+                         nifFile.getBlockName(i),
+                         nifFile.getBlockTypeAsString(i));
+    const NIFFile::NIFBlkNiNode *nodeBlock = nifFile.getNode(i);
+    const NIFFile::NIFBlkBSTriShape *triShapeBlock = nifFile.getTriShape(i);
+    const NIFFile::NIFBlkBSLightingShaderProperty *
+        lspBlock = nifFile.getLightingShaderProperty(i);
+    const NIFFile::NIFBlkBSShaderTextureSet *
+        tsBlock = nifFile.getShaderTextureSet(i);
+    const NIFFile::NIFBlkNiAlphaProperty *
+        alphaPropertyBlock = nifFile.getAlphaProperty(i);
+    if (nodeBlock)
+    {
+      if (nodeBlock->controller >= 0)
+        display.consolePrint("    Controller: %3d\n", nodeBlock->controller);
+      if (nodeBlock->collisionObject >= 0)
+      {
+        display.consolePrint("    Collision object: %3d\n",
+                             nodeBlock->collisionObject);
+      }
+      if (nodeBlock->children.size() > 0)
+      {
+        display.consolePrint("    Children: ");
+        for (size_t j = 0; j < nodeBlock->children.size(); j++)
+        {
+          display.consolePrint("%s%3u", (!j ? "" : ", "),
+                               nodeBlock->children[j]);
+        }
+        display.consolePrint("\n");
+      }
+    }
+    else if (triShapeBlock)
+    {
+      if (triShapeBlock->controller >= 0)
+      {
+        display.consolePrint("    Controller: %3d\n",
+                             triShapeBlock->controller);
+      }
+      display.consolePrint("    Flags: 0x%08X\n", triShapeBlock->flags);
+      if (triShapeBlock->collisionObject >= 0)
+      {
+        display.consolePrint("    Collision object: %3d\n",
+                             triShapeBlock->collisionObject);
+      }
+      if (triShapeBlock->skinID >= 0)
+        display.consolePrint("    Skin: %3d\n", triShapeBlock->skinID);
+      if (triShapeBlock->shaderProperty >= 0)
+      {
+        display.consolePrint("    Shader property: %3d\n",
+                             triShapeBlock->shaderProperty);
+      }
+      if (triShapeBlock->alphaProperty >= 0)
+      {
+        display.consolePrint("    Alpha property: %3d\n",
+                             triShapeBlock->alphaProperty);
+      }
+    }
+    else if (lspBlock)
+    {
+      if (lspBlock->controller >= 0)
+        display.consolePrint("    Controller: %3d\n", lspBlock->controller);
+      if (lspBlock->material.version < 20)
+      {
+        display.consolePrint("    Flags: 0x%016llX\n",
+                             (unsigned long long) lspBlock->flags);
+      }
+      if (lspBlock->textureSet >= 0)
+        display.consolePrint("    Texture set: %3d\n", lspBlock->textureSet);
+      display.consolePrint("    Material version: %2u\n",
+                           (unsigned int) lspBlock->material.version);
+      display.consolePrint("    Material flags (defined in bgsmfile.hpp): "
+                           "0x%04X\n", (unsigned int) lspBlock->material.flags);
+      display.consolePrint("    Material alpha flags: 0x%04X\n",
+                           (unsigned int) lspBlock->material.alphaFlags);
+      display.consolePrint("    Material alpha threshold: %3u (%.3f)\n",
+                           (unsigned int) lspBlock->material.alphaThreshold,
+                           lspBlock->material.alphaThresholdFloat);
+      display.consolePrint("    Material alpha: %.3f\n",
+                           lspBlock->material.alpha);
+      display.consolePrint("    Material texture U, V offset: %.3f, %.3f\n",
+                           lspBlock->material.textureOffsetU,
+                           lspBlock->material.textureOffsetV);
+      display.consolePrint("    Material texture U, V scale: %.3f, %.3f\n",
+                           lspBlock->material.textureScaleU,
+                           lspBlock->material.textureScaleV);
+      if (lspBlock->material.flags & BGSMFile::Flag_TSWater)
+      {
+        unsigned int  shallowColor =
+            std::uint32_t(lspBlock->material.w.shallowColor * 255.0f);
+        unsigned int  deepColor =
+            std::uint32_t(lspBlock->material.w.deepColor * 255.0f);
+        display.consolePrint("    Water shallow color (0xAABBGGRR): 0x%08X\n",
+                             shallowColor);
+        display.consolePrint("    Water deep color (0xAABBGGRR): 0x%08X\n",
+                             deepColor);
+        display.consolePrint("    Water depth range: %.3f\n",
+                             lspBlock->material.w.maxDepth);
+        display.consolePrint("    Water environment map scale: %.3f\n",
+                             lspBlock->material.w.envMapScale);
+        display.consolePrint("    Water specular smoothness: %.3f\n",
+                             lspBlock->material.w.specularSmoothness);
+      }
+      else if (lspBlock->material.flags & BGSMFile::Flag_IsEffect)
+      {
+        unsigned int  baseColor =
+            std::uint32_t(lspBlock->material.e.baseColor * 255.0f);
+        display.consolePrint("    Effect base color (0xAABBGGRR): 0x%08X\n",
+                             baseColor);
+        display.consolePrint("    Effect base color scale: %.3f\n",
+                             lspBlock->material.e.baseColorScale);
+        display.consolePrint("    Effect lighting influence: %.3f\n",
+                             lspBlock->material.e.lightingInfluence);
+        display.consolePrint("    Effect environment map scale: %.3f\n",
+                             lspBlock->material.e.envMapScale);
+        display.consolePrint("    Effect specular smoothness: %.3f\n",
+                             lspBlock->material.e.specularSmoothness);
+        display.consolePrint("    Effect falloff parameters: "
+                             "%.3f, %.3f, %.3f, %.3f\n",
+                             lspBlock->material.e.falloffParams[0],
+                             lspBlock->material.e.falloffParams[1],
+                             lspBlock->material.e.falloffParams[2],
+                             lspBlock->material.e.falloffParams[3]);
+      }
+      else
+      {
+        display.consolePrint("    Material gradient map scale: %.3f\n",
+                             lspBlock->material.s.gradientMapV);
+        display.consolePrint("    Material environment map scale: %.3f\n",
+                             lspBlock->material.s.envMapScale);
+        unsigned int  specularColor =
+            std::uint32_t(lspBlock->material.s.specularColor * 255.0f);
+        unsigned int  emissiveColor =
+            std::uint32_t(lspBlock->material.s.emissiveColor * 255.0f);
+        display.consolePrint("    Material specular color (0xBBGGRR): 0x%06X\n",
+                             specularColor & 0x00FFFFFFU);
+        display.consolePrint("    Material specular scale: %.3f\n",
+                             lspBlock->material.s.specularColor[3]);
+        display.consolePrint("    Material specular smoothness: %.3f\n",
+                             lspBlock->material.s.specularSmoothness);
+        display.consolePrint("    Material emissive color (0xBBGGRR): 0x%06X\n",
+                             emissiveColor & 0x00FFFFFFU);
+        display.consolePrint("    Material emissive scale: %.3f\n",
+                             lspBlock->material.s.emissiveColor[3]);
+      }
+      unsigned int  m = lspBlock->material.texturePathMask;
+      for (size_t j = 0; m; j++, m = m >> 1)
+      {
+        if (!(m & 1U))
+          continue;
+        display.consolePrint(
+            "    Material texture %d: %s\n",
+            int(j), lspBlock->material.texturePaths[j].c_str());
+      }
+    }
+    else if (tsBlock)
+    {
+      unsigned int  m = tsBlock->texturePathMask;
+      for (size_t j = 0; m; j++, m = m >> 1)
+      {
+        if (!(m & 1U))
+          continue;
+        display.consolePrint("    Texture %2d: %s\n",
+                             int(j), tsBlock->texturePaths[j].c_str());
+      }
+    }
+    else if (alphaPropertyBlock)
+    {
+      if (alphaPropertyBlock->controller >= 0)
+      {
+        display.consolePrint("    Controller: %3d\n",
+                             alphaPropertyBlock->controller);
+      }
+      display.consolePrint("    Flags: 0x%04X\n",
+                           (unsigned int) alphaPropertyBlock->flags);
+      display.consolePrint("    Alpha threshold: %u\n",
+                           (unsigned int) alphaPropertyBlock->alphaThreshold);
+    }
+  }
+  return display.viewTextBuffer();
 }
 
 static const char *keyboardUsageString =
@@ -606,11 +798,17 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mSpace\033[m, "
     "\033[4m\033[38;5;228mBackspace\033[m      "
     "Load next or previous file matching the pattern.                \n"
+    "  \033[4m\033[38;5;228mF9\033[m                    "
+    "Select file from list.                                          \n"
     "  \033[4m\033[38;5;228mF12\033[m "
     "or \033[4m\033[38;5;228mPrint Screen\033[m   "
     "Save screenshot.                                                \n"
+    "  \033[4m\033[38;5;228mF11\033[m                   "
+    "Save high quality screenshot (double resolution and downsample).\n"
     "  \033[4m\033[38;5;228mP\033[m                     "
-    "Print current settings and file list.                           \n"
+    "Print current settings and file name.                           \n"
+    "  \033[4m\033[38;5;228mV\033[m                     "
+    "View detailed model information.                                \n"
     "  \033[4m\033[38;5;228mH\033[m                     "
     "Show help screen.                                               \n"
     "  \033[4m\033[38;5;228mC\033[m                     "
@@ -646,7 +844,8 @@ bool Renderer::viewModels(SDLDisplay& display,
       loadModel(nifFileNames[fileNum]);
 
       bool    nextFileFlag = false;
-      bool    screenshotFlag = false;
+      // 1: screenshot, 2: high quality screenshot, 4: view info, 8: browse file
+      unsigned char eventFlags = 0;
       unsigned char redrawFlags = 3;    // bit 0: blit only, bit 1: render
       while (!(nextFileFlag || quitFlag))
       {
@@ -666,10 +865,34 @@ bool Renderer::viewModels(SDLDisplay& display,
           std::uint32_t *outBufRGBA = display.lockDrawSurface();
           renderModel(outBufRGBA, &(outBufZ.front()), imageWidth, imageHeight);
           display.unlockDrawSurface();
-          if (screenshotFlag)
+          if (eventFlags)
           {
-            saveScreenshot(display, nifFileNames[fileNum]);
-            screenshotFlag = false;
+            if (eventFlags & 2)
+              saveScreenshot(display, nifFileNames[fileNum], this);
+            else if (eventFlags & 1)
+              saveScreenshot(display, nifFileNames[fileNum]);
+            if (eventFlags & 8)
+            {
+              int     n = display.browseList(
+                              nifFileNames, "Select NIF file", fileNum,
+                              0x0B080F04FFFFULL);
+              if (n >= 0 && size_t(n) < nifFileNames.size() && n != fileNum)
+              {
+                fileNum = n;
+                nextFileFlag = true;
+              }
+              else if (n < -1)
+              {
+                quitFlag = 2;
+              }
+            }
+            else if ((eventFlags & 4) && nifFile)
+            {
+              if (!viewModelInfo(display, *nifFile))
+                quitFlag = 2;
+              display.clearTextBuffer();
+            }
+            eventFlags = 0;
           }
           display.drawText(0, -1, display.getTextRows(), 0.75f, 1.0f);
           redrawFlags = 1;
@@ -689,7 +912,7 @@ bool Renderer::viewModels(SDLDisplay& display,
               if (d1 == 0)
                 quitFlag = 2;
               else if (d1 == 1)
-                redrawFlags = 1;
+                redrawFlags = redrawFlags | 1;
               continue;
             }
             if (!(t == SDLDisplay::SDLEventKeyRepeat ||
@@ -770,6 +993,9 @@ bool Renderer::viewModels(SDLDisplay& display,
                 messageBuf += "Default environment map: ";
                 messageBuf += defaultEnvMap;
                 messageBuf += '\n';
+                break;
+              case SDLDisplay::SDLKeySymF9:
+                eventFlags = eventFlags | 8;    // browse file list
                 break;
               case 'a':
                 updateRotation(modelRotationX, modelRotationY, modelRotationZ,
@@ -880,9 +1106,12 @@ bool Renderer::viewModels(SDLDisplay& display,
                 fileNum = (size_t(fileNum) < nifFileNames.size() ? fileNum : 0);
                 nextFileFlag = true;
                 break;
+              case SDLDisplay::SDLKeySymF11:
+                eventFlags = eventFlags | 2;    // high quality screenshot
+                break;
               case SDLDisplay::SDLKeySymF12:
               case SDLDisplay::SDLKeySymPrintScr:
-                screenshotFlag = true;
+                eventFlags = eventFlags | 1;    // screenshot
                 break;
               case 'p':
                 display.clearTextBuffer();
@@ -912,26 +1141,13 @@ bool Renderer::viewModels(SDLDisplay& display,
                   messageBuf += "Downsampling disabled\n";
                 messageBuf += "Default environment map: ";
                 messageBuf += defaultEnvMap;
-                messageBuf += "\nFile list:\n";
-                {
-                  int     n0 = 0;
-                  int     n1 = int(nifFileNames.size());
-                  while ((n1 - n0) > (display.getTextRows() - 12))
-                  {
-                    if (fileNum < ((n0 + n1) >> 1))
-                      n1--;
-                    else
-                      n0++;
-                  }
-                  for ( ; n0 < n1; n0++)
-                  {
-                    messageBuf += (n0 != fileNum ?
-                                   "  " : "  \033[44m\033[37m\033[1m");
-                    messageBuf += nifFileNames[n0];
-                    messageBuf += "\033[m  \n";
-                  }
-                }
+                messageBuf += "\nFile name:\n  \033[44m\033[37m\033[1m";
+                messageBuf += nifFileNames[fileNum];
+                messageBuf += "\033[m  \n";
                 continue;
+              case 'v':
+                eventFlags = eventFlags | 4;    // view model info
+                break;
               case 'h':
                 messageBuf = keyboardUsageString;
                 break;
