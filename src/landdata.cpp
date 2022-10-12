@@ -329,7 +329,7 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
     cellMaxY = (y > cellMaxY ? y : cellMaxY);
   }
   if (!(cellMaxX >= cellMinX && cellMaxY >= cellMinY))
-    errorMessage("LandscapeData: world not found in ESM file");
+    errorMessage("LandscapeData: landscape data not found for world in ESM file");
   allocateDataBuf(formatMask, false);
   std::map< unsigned int, unsigned int >  emptyCells;
   std::map< unsigned int, float > cellHeightOffsets;
