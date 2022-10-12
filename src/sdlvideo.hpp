@@ -247,6 +247,8 @@ class SDLDisplay
   void setEnableDownsample(bool isEnabled);
   void blitSurface();
   void clearSurface(std::uint32_t c = 0U);
+  void copyFromDrawSurface(std::vector< std::uint32_t >& buf);
+  void copyToDrawSurface(const std::vector< std::uint32_t >& buf);
   // waitTime = number of milliseconds to wait before polling for events.
   // If waitTime is negative, then wait until an event is received, but
   // at most -waitTime milliseconds.
@@ -285,6 +287,16 @@ class SDLDisplay
   {
     return int(textBuf.size() / size_t(textWidth));
   }
+  // xPos > 0: left margin = xPos - 1 characters
+  // xPos < 0: right margin = -1 - xPos characters
+  // xPos = 0: centered
+  // colors = background + (foreground << 8), color = 255 uses the default
+  void printLine(const char *s, int xPos, int yPos,
+                 std::uint32_t colors = 0xFFFFU);
+  // copy word or line (if triple click) from text buffer to clipboard
+  bool clipboardCopy(const SDLEvent& e, int yScroll);
+  // returns false if the window is closed
+  bool viewTextBuffer();
   // colors = background + (foreground << 8)
   //          + (selection_bg << 16) + (selection_fg << 24)
   //          + (title_bg << 32) + (title_fg << 40)

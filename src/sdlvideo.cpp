@@ -564,6 +564,28 @@ void SDLDisplay::clearSurface(std::uint32_t c)
 #endif
 }
 
+void SDLDisplay::copyFromDrawSurface(std::vector< std::uint32_t >& buf)
+{
+  size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
+  if (buf.size() != imageDataSize)
+    buf.resize(imageDataSize, 0U);
+  const std::uint32_t *p = lockDrawSurface();
+  if (p)
+    std::memcpy(&(buf.front()), p, imageDataSize * sizeof(std::uint32_t));
+  unlockDrawSurface();
+}
+
+void SDLDisplay::copyToDrawSurface(const std::vector< std::uint32_t >& buf)
+{
+  size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
+  if (buf.size() < imageDataSize)
+    imageDataSize = buf.size();
+  std::uint32_t *p = lockDrawSurface();
+  if (p)
+    std::memcpy(p, &(buf.front()), imageDataSize * sizeof(std::uint32_t));
+  unlockDrawSurface();
+}
+
 void SDLDisplay::pollEvents(std::vector< SDLEvent >& buf, int waitTime,
                             bool textInputMode, bool pollMouseEvents)
 {
@@ -974,27 +996,6 @@ void SDLDisplay::printString(const char *s)
   }
 }
 
-int SDLDisplay::browseList(
-    const std::vector< std::string >& v, const char *titleString,
-    int itemSelected, std::uint64_t colors)
-{
-  if (v.size() < 1)
-    return -1;
-  if (itemSelected < 0)
-    itemSelected = 0;
-  else if (size_t(itemSelected) >= v.size())
-    itemSelected = int(v.size()) - 1;
-#ifdef HAVE_SDL2
-  // TODO: implement this
-  (void) titleString;
-  (void) colors;
-#else
-  (void) titleString;
-  (void) colors;
-#endif
-  return itemSelected;
-}
-
 #ifdef HAVE_SDL2
 static void convertUTF8ToUInt32(
     std::vector< std::uint32_t >& v, const char *s,
@@ -1070,6 +1071,417 @@ static void convertUInt32ToUTF8(
   }
 }
 #endif
+
+void SDLDisplay::printLine(
+    const char *s, int xPos, int yPos, std::uint32_t colors)
+{
+#ifdef HAVE_SDL2
+  if (yPos < 0 || yPos >= textHeight)
+    return;
+  if (!s)
+    s = "";
+  std::vector< std::uint32_t >  tmpBuf;
+  size_t  w = size_t(textWidth);
+  tmpBuf.reserve(w);
+  if (xPos > 1)
+    tmpBuf.resize(size_t(xPos <= textWidth ? (xPos - 1) : textWidth), 0x20U);
+  convertUTF8ToUInt32(tmpBuf, s, w);
+  if (xPos < 0)
+  {
+    size_t  n = size_t(-1 - xPos);
+    if (n >= w)
+      n = 0;
+    else
+      n = w - n;
+    if (n < tmpBuf.size())
+      tmpBuf.erase(tmpBuf.begin(), tmpBuf.begin() + (tmpBuf.size() - n));
+    else if (n > tmpBuf.size())
+      tmpBuf.insert(tmpBuf.begin(), n - tmpBuf.size(), 0x20U);
+  }
+  else if (xPos == 0 && (tmpBuf.size() + 1) < w)
+  {
+    tmpBuf.insert(tmpBuf.begin(), (w - tmpBuf.size()) >> 1, 0x20U);
+  }
+  printXPos = 0;
+  printYPos = yPos;
+  textColor = defaultTextColor;
+  if ((colors & 0xFFU) != 0xFFU)
+    textColor = (textColor & ~0x00FF0000U) | ((colors & 0xFFU) << 16) | 0x8000U;
+  if ((colors & 0xFF00U) != 0xFF00U)
+    textColor = (textColor & ~0xFF000000U) | ((colors & 0xFF00U) << 16);
+  int     i = 0;
+  for ( ; i < int(tmpBuf.size()); i++)
+    printCharacter(tmpBuf[i]);
+  for ( ; i < textWidth; i++)
+    printCharacter(0x20U);
+#else
+  (void) s;
+  (void) xPos;
+  (void) yPos;
+  (void) colors;
+#endif
+}
+
+bool SDLDisplay::clipboardCopy(const SDLEvent& e, int yScroll)
+{
+#ifdef HAVE_SDL2
+  int     t = e.type();
+  int     d1 = e.data1();
+  int     d2 = e.data2();
+  int     d4 = e.data4();
+  if (t != SDLEventMButtonUp && t != SDLEventMButtonDown)
+    return false;
+  int     x = (d1 * textWidth) / imageWidth;
+  int     y = (d2 * textHeight) / imageHeight;
+  x = std::max(std::min(x, textWidth - 1), 0);
+  y = std::max(std::min(y, textHeight - 1), 0);
+  int     textBufLines = int(textBuf.size() / size_t(textWidth));
+  if (yScroll < 0 && textBufLines > textHeight)
+    y = y + ((textBufLines + 1 - textHeight) + yScroll);
+  else if (yScroll > 0)
+    y = y + yScroll;
+  std::string clipboardBuf;
+  if (y >= 0 && y < textBufLines)
+  {
+    size_t  startPos, endPos;
+    if (d4 < 3)                         // copy word
+    {
+      startPos = size_t(y) * size_t(textWidth) + size_t(x);
+      endPos = startPos;
+      int     x0 = x;
+      int     x1 = x;
+      while (x0 >= 0 && (textBuf[startPos] & 0x3FFFU) > 0x20U)
+        x0--, startPos--;
+      startPos++;
+      while (x1 < textWidth && (textBuf[endPos] & 0x3FFFU) > 0x20U)
+        x1++, endPos++;
+    }
+    else                                // copy line
+    {
+      startPos = size_t(y) * size_t(textWidth);
+      endPos = startPos + size_t(textWidth);
+      int     x0 = 0;
+      int     x1 = textWidth;
+      while (x0 < textWidth && (textBuf[startPos] & 0x3FFFU) <= 0x20U)
+        x0++, startPos++;
+      while (x1 > x0 && (textBuf[endPos - 1] & 0x3FFFU) <= 0x20U)
+        x1--, endPos--;
+    }
+    convertUInt32ToUTF8(clipboardBuf, textBuf, startPos, endPos);
+  }
+  return (!clipboardBuf.empty() && !SDL_SetClipboardText(clipboardBuf.c_str()));
+#else
+  (void) e;
+  (void) yScroll;
+  return false;
+#endif
+}
+
+bool SDLDisplay::viewTextBuffer()
+{
+#ifdef HAVE_SDL2
+  if (textWidth < 4 || textHeight < 2 || textBuf.size() < size_t(textWidth))
+    return true;
+  std::vector< std::uint32_t >  savedDrawSurface;
+  copyFromDrawSurface(savedDrawSurface);
+  std::vector< SDLEvent > eventBuf;
+  int     textBufLines = int(textBuf.size() / size_t(textWidth));
+  int     minOffs = std::min((textHeight - 1) - textBufLines, -1);
+  int     displayLine = minOffs;
+  bool    redrawFlag = true;
+  bool    quitFlag = false;
+  bool    doneFlag = false;
+  while (!quitFlag && !doneFlag)
+  {
+    if (redrawFlag)
+    {
+      copyToDrawSurface(savedDrawSurface);
+      drawText(0, displayLine, textHeight, 0.75f, 1.0f);
+      blitSurface();
+      redrawFlag = false;
+    }
+    pollEvents(eventBuf, -1000, false, true);
+    for (size_t i = 0; i < eventBuf.size(); i++)
+    {
+      int     t = eventBuf[i].type();
+      int     d1 = eventBuf[i].data1();
+      if (t == SDLEventWindow)
+      {
+        if (d1 == 0)
+          quitFlag = true;
+        else
+          redrawFlag = true;
+        continue;
+      }
+      if (t == SDLEventMButtonDown)
+      {
+        // double click = copy word
+        // triple click = copy line
+        if (eventBuf[i].data3() == 1 && eventBuf[i].data4() >= 2)
+          clipboardCopy(eventBuf[i], displayLine);
+        continue;
+      }
+      if (t == SDLEventMouseWheel)
+      {
+        int     d2 = eventBuf[i].data2();
+        d2 = displayLine - (d2 / 10);
+        d2 = std::min(std::max(d2, minOffs), -1);
+        if (d2 != displayLine)
+        {
+          displayLine = d2;
+          redrawFlag = true;
+        }
+        continue;
+      }
+      if (t != SDLEventKeyDown && t != SDLEventKeyRepeat)
+        continue;
+      switch (d1)
+      {
+        case SDLKeySymBackspace:
+        case SDLKeySymReturn:
+        case SDLKeySymEscape:
+        case 0x0020:
+        case 0x0063:
+        case 0x0071:
+          doneFlag = true;
+          break;
+        case SDLKeySymUp:
+        case SDLKeySymDown:
+        case SDLKeySymHome:
+        case SDLKeySymEnd:
+        case SDLKeySymPageUp:
+        case SDLKeySymPageDown:
+          {
+            int     n = displayLine;
+            if (d1 == SDLKeySymUp || d1 == SDLKeySymDown)
+              n = n + (d1 == SDLKeySymUp ? -1 : 1);
+            else if (d1 == SDLKeySymHome || d1 == SDLKeySymEnd)
+              n = (d1 == SDLKeySymHome ? minOffs : -1);
+            else if (d1 == SDLKeySymPageUp)
+              n = n - std::max(textHeight - 2, 1);
+            else
+              n = n + std::max(textHeight - 2, 1);
+            n = std::min(std::max(n, minOffs), -1);
+            if (n != displayLine)
+            {
+              displayLine = n;
+              redrawFlag = true;
+            }
+          }
+          break;
+        default:
+          break;
+      }
+    }
+  }
+  if (quitFlag)
+    return false;
+  copyToDrawSurface(savedDrawSurface);
+  return true;
+#else
+  return false;
+#endif
+}
+
+int SDLDisplay::browseList(
+    const std::vector< std::string >& v, const char *titleString,
+    int itemSelected, std::uint64_t colors)
+{
+  if (v.size() < 2)
+    return (int(v.size()) - 1);
+  int     maxItemNum =
+      int(std::min(v.size() - 1, size_t(0x7FFFFFFF - textHeight)));
+  itemSelected = std::max(std::min(itemSelected, maxItemNum), 0);
+#ifdef HAVE_SDL2
+  if (textWidth < 16 || textHeight < 4)
+    return itemSelected;
+  clearTextBuffer();
+  textBuf.resize(size_t(textWidth) * size_t(textHeight), 0U);
+  std::vector< std::uint32_t >  savedDrawSurface;
+  copyFromDrawSurface(savedDrawSurface);
+  std::uint32_t listColor = std::uint32_t(colors & 0xFFFFU);
+  std::uint32_t selectColor = std::uint32_t((colors >> 16) & 0xFFFFU);
+  std::uint32_t titleColor = std::uint32_t((colors >> 32) & 0xFFFFU);
+  if (!titleString || titleString[0] == '\0')
+    titleString = "Select item";
+  std::vector< SDLEvent > eventBuf;
+  bool    redrawFlag = true;
+  bool    quitFlag = false;
+  bool    doneFlag = false;
+  while (!quitFlag && !doneFlag)
+  {
+    int     n0 = itemSelected - ((textHeight - 1) >> 1);
+    n0 = std::max(std::min(n0, maxItemNum - (textHeight - 2)), 0);
+    if (redrawFlag)
+    {
+      copyToDrawSurface(savedDrawSurface);
+      printLine(titleString, 0, 0, titleColor);
+      for (int i = 1; i < textHeight; i++)
+      {
+        const char  *s = "";
+        int     n = n0 + (i - 1);
+        if (n <= maxItemNum)
+          s = v[n].c_str();
+        printLine(s, 3, i, (n != itemSelected ? listColor : selectColor));
+      }
+      drawText(0, 0, textHeight, 0.75f, 1.0f);
+      blitSurface();
+      redrawFlag = false;
+    }
+    pollEvents(eventBuf, -1000, false, true);
+    for (size_t i = 0; i < eventBuf.size(); i++)
+    {
+      int     t = eventBuf[i].type();
+      int     d1 = eventBuf[i].data1();
+      if (t == SDLEventWindow)
+      {
+        if (d1 == 0)
+          quitFlag = true;
+        else
+          redrawFlag = true;
+        continue;
+      }
+      if (t == SDLEventMButtonDown)
+      {
+        int     d3 = eventBuf[i].data3();
+        int     d4 = eventBuf[i].data4();
+        // single click = select item
+        // double click = select item and return
+        if (d3 == 1)
+        {
+          int     d2 = eventBuf[i].data2();
+          int     x = (d1 * textWidth) / imageWidth;
+          int     y = (d2 * textHeight) / imageHeight;
+          if (x >= 0 && x < textWidth && y >= 1 && y < textHeight)
+          {
+            int     n = n0 + (y - 1);
+            if (n <= maxItemNum)
+            {
+              redrawFlag |= (n != itemSelected);
+              doneFlag |= (d4 >= 2);
+              itemSelected = n;
+            }
+          }
+        }
+        continue;
+      }
+      if (t == SDLEventMouseWheel)
+      {
+        int     d2 = eventBuf[i].data2();
+        d2 = itemSelected - (d2 / 10);
+        d2 = std::max(std::min(d2, maxItemNum), 0);
+        if (d2 != itemSelected)
+        {
+          itemSelected = d2;
+          redrawFlag = true;
+        }
+        continue;
+      }
+      if (t != SDLEventKeyDown && t != SDLEventKeyRepeat)
+        continue;
+      switch (d1)
+      {
+        case SDLKeySymBackspace:
+        case SDLKeySymEscape:
+          itemSelected = -1;
+        case SDLKeySymReturn:
+        case 0x0020:
+          doneFlag = true;
+          break;
+        case SDLKeySymUp:
+          if (itemSelected > 0)
+          {
+            itemSelected--;
+            redrawFlag = true;
+          }
+          break;
+        case SDLKeySymDown:
+          if (itemSelected < maxItemNum)
+          {
+            itemSelected++;
+            redrawFlag = true;
+          }
+          break;
+        case SDLKeySymLeft:             // left: previous directory
+          if (itemSelected > 0)
+          {
+            size_t  n = v[itemSelected].rfind('/');
+            if (n != std::string::npos)
+            {
+              do
+              {
+                itemSelected--;
+              }
+              while (itemSelected > 0 &&
+                     std::strncmp(v[itemSelected].c_str(),
+                                  v[itemSelected + 1].c_str(), n + 1) == 0);
+              redrawFlag = true;
+            }
+          }
+          break;
+        case SDLKeySymRight:            // right: next directory
+          if (itemSelected < maxItemNum)
+          {
+            size_t  n = v[itemSelected].rfind('/');
+            if (n != std::string::npos)
+            {
+              do
+              {
+                itemSelected++;
+              }
+              while (itemSelected < maxItemNum &&
+                     v[itemSelected].rfind('/') == n &&
+                     std::strncmp(v[itemSelected].c_str(),
+                                  v[itemSelected - 1].c_str(), n) == 0);
+              redrawFlag = true;
+            }
+          }
+          break;
+        case SDLKeySymHome:
+          if (itemSelected)
+          {
+            itemSelected = 0;
+            redrawFlag = true;
+          }
+          break;
+        case SDLKeySymEnd:
+          if (itemSelected != maxItemNum)
+          {
+            itemSelected = maxItemNum;
+            redrawFlag = true;
+          }
+          break;
+        case SDLKeySymPageUp:
+          if (itemSelected > 0)
+          {
+            itemSelected = itemSelected - (textHeight - 3);
+            itemSelected = std::max(itemSelected, 0);
+            redrawFlag = true;
+          }
+          break;
+        case SDLKeySymPageDown:
+          if (itemSelected < maxItemNum)
+          {
+            itemSelected = itemSelected + (textHeight - 3);
+            itemSelected = std::min(itemSelected, maxItemNum);
+            redrawFlag = true;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+  }
+  if (quitFlag)
+    return -2;
+  copyToDrawSurface(savedDrawSurface);
+  clearTextBuffer();
+#else
+  (void) titleString;
+  (void) colors;
+#endif
+  return itemSelected;
+}
 
 #ifdef __GNUC__
 __attribute__ ((__format__ (__printf__, 2, 3)))
@@ -1180,47 +1592,8 @@ bool SDLDisplay::consoleInput(
         // right click = copy and paste word
         if ((d3 == 1 && d4 >= 2) || d3 == 3)
         {
-          int     d2 = eventBuf[i].data2();
-          int     x = (d1 * textWidth) / imageWidth;
-          int     y = (d2 * textHeight) / imageHeight;
-          x = (x > 0 ? (x < (textWidth - 1) ? x : (textWidth - 1)) : 0);
-          y = (y > 0 ? (y < (textHeight - 1) ? y : (textHeight - 1)) : 0);
-          if (textBufLines > textHeight)
-            y = y + ((textBufLines + 1 - textHeight) + displayLine);
-          std::string clipboardBuf;
-          if (y >= 0 && y < textBufLines)
-          {
-            size_t  startPos, endPos;
-            if (d4 < 3)         // copy word
-            {
-              startPos = size_t(y) * size_t(textWidth) + size_t(x);
-              endPos = startPos;
-              int     x0 = x;
-              int     x1 = x;
-              while (x0 >= 0 && (textBuf[startPos] & 0x3FFFU) > 0x20U)
-                x0--, startPos--;
-              startPos++;
-              while (x1 < textWidth && (textBuf[endPos] & 0x3FFFU) > 0x20U)
-                x1++, endPos++;
-            }
-            else                // copy line
-            {
-              startPos = size_t(y) * size_t(textWidth);
-              endPos = startPos + size_t(textWidth);
-              int     x0 = 0;
-              int     x1 = textWidth;
-              while (x0 < textWidth && (textBuf[startPos] & 0x3FFFU) <= 0x20U)
-                x0++, startPos++;
-              while (x1 > x0 && (textBuf[endPos - 1] & 0x3FFFU) <= 0x20U)
-                x1--, endPos--;
-            }
-            convertUInt32ToUTF8(clipboardBuf, textBuf, startPos, endPos);
-          }
-          if (clipboardBuf.empty() ||
-              SDL_SetClipboardText(clipboardBuf.c_str()) != 0)
-          {
+          if (!clipboardCopy(eventBuf[i], displayLine))
             d3 = 0;
-          }
         }
         if ((d3 == 2 || d3 == 3) && SDL_HasClipboardText())
         {
@@ -1247,10 +1620,9 @@ bool SDLDisplay::consoleInput(
       if (t == SDLEventMouseWheel)
       {
         int     d2 = eventBuf[i].data2();
-        int     minOffs = (textHeight - 1) - textBufLines;
-        minOffs = (minOffs < -1 ? minOffs : -1);
+        int     minOffs = std::min((textHeight - 1) - textBufLines, -1);
         d2 = displayLine - (d2 / 10);
-        d2 = (d2 > minOffs ? (d2 < -1 ? d2 : -1) : minOffs);
+        d2 = std::min(std::max(d2, minOffs), -1);
         if (d2 != displayLine)
         {
           displayLine = d2;
@@ -1352,12 +1724,11 @@ bool SDLDisplay::consoleInput(
         case SDLKeySymPageUp:
         case SDLKeySymPageDown:
           {
-            int     minOffs = (textHeight - 1) - textBufLines;
-            minOffs = (minOffs < -1 ? minOffs : -1);
-            int     tmp = (textHeight > 2 ? (textHeight - 2) : 1);
+            int     minOffs = std::min((textHeight - 1) - textBufLines, -1);
+            int     tmp = std::max(textHeight - 2, 1);
             tmp = (d1 == SDLKeySymPageUp ?
                    (displayLine - tmp) : (displayLine + tmp));
-            tmp = (tmp > minOffs ? (tmp < -1 ? tmp : -1) : minOffs);
+            tmp = std::min(std::max(tmp, minOffs), -1);
             if (tmp != displayLine)
             {
               displayLine = tmp;
