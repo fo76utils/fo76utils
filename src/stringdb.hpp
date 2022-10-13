@@ -4,6 +4,7 @@
 
 #include "common.hpp"
 #include "filebuf.hpp"
+#include "ba2file.hpp"
 
 class StringDB : public FileBuffer
 {
@@ -13,7 +14,8 @@ class StringDB : public FileBuffer
   StringDB();
   virtual ~StringDB();
   void clear();
-  bool loadFile(const char *fileName, const char *stringsPrefix);
+  bool loadFile(const BA2File& ba2File, const char *stringsPrefix);
+  bool loadFile(const char *archivePath, const char *stringsPrefix);
   bool findString(std::string& s, unsigned int id) const;
   std::string operator[](size_t id) const;
 };

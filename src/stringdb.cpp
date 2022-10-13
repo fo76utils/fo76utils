@@ -17,7 +17,7 @@ void StringDB::clear()
   strings.clear();
 }
 
-bool StringDB::loadFile(const char *fileName, const char *stringsPrefix)
+bool StringDB::loadFile(const BA2File& ba2File, const char *stringsPrefix)
 {
   strings.clear();
   std::vector< std::string >  fileNames;
@@ -34,7 +34,6 @@ bool StringDB::loadFile(const char *fileName, const char *stringsPrefix)
     tmpName += stringsSuffixTable[k];
     fileNames.push_back(tmpName);
   }
-  BA2File ba2File(fileName, &fileNames);
   std::vector< unsigned char >  buf;
   std::vector< std::string >    namesFound;
   ba2File.getFileList(namesFound);
@@ -101,6 +100,27 @@ bool StringDB::loadFile(const char *fileName, const char *stringsPrefix)
     filePos = 0;
   }
   return (!strings.empty());
+}
+
+bool StringDB::loadFile(const char *archivePath, const char *stringsPrefix)
+{
+  strings.clear();
+  std::vector< std::string >  fileNames;
+  std::string tmpName;
+  if (!stringsPrefix)
+    stringsPrefix = "strings/seventysix_en";
+  for (int k = 0; k < 3; k++)
+  {
+    static const char *stringsSuffixTable[3] =
+    {
+      ".strings", ".dlstrings", ".ilstrings"
+    };
+    tmpName = stringsPrefix;
+    tmpName += stringsSuffixTable[k];
+    fileNames.push_back(tmpName);
+  }
+  BA2File ba2File(archivePath, &fileNames);
+  return loadFile(ba2File, stringsPrefix);
 }
 
 bool StringDB::findString(std::string& s, unsigned int id) const

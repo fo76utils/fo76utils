@@ -4,6 +4,7 @@
 
 #include "common.hpp"
 #include "esmfile.hpp"
+#include "ba2file.hpp"
 #include "stringdb.hpp"
 
 class ESMDump : public ESMFile
@@ -65,7 +66,8 @@ class ESMDump : public ESMFile
   void excludeRecordType(const char *s);
   void excludeFieldType(const char *s);
   void setTSVFormat(bool isEnabled);
-  void loadStrings(const char *fileName, const char *stringsPrefix);
+  void loadStrings(const BA2File& ba2File, const char *stringsPrefix);
+  void loadStrings(const char *archivePath, const char *stringsPrefix);
   void dumpRecord(unsigned int formID = 0U,
                   const ESMRecord *parentGroup = (ESMRecord *) 0);
   void dumpVersionInfo(unsigned int formID = 0U,

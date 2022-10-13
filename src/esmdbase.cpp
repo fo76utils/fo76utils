@@ -763,13 +763,20 @@ void ESMDump::setTSVFormat(bool isEnabled)
   }
 }
 
-void ESMDump::loadStrings(const char *fileName, const char *stringsPrefix)
+void ESMDump::loadStrings(const BA2File& ba2File, const char *stringsPrefix)
 {
   haveStrings = false;
   strings.clear();
-  if (!fileName)
+  haveStrings = strings.loadFile(ba2File, stringsPrefix);
+}
+
+void ESMDump::loadStrings(const char *archivePath, const char *stringsPrefix)
+{
+  haveStrings = false;
+  strings.clear();
+  if (!archivePath)
     return;
-  haveStrings = strings.loadFile(fileName, stringsPrefix);
+  haveStrings = strings.loadFile(archivePath, stringsPrefix);
 }
 
 void ESMDump::dumpRecord(unsigned int formID, const ESMRecord *parentGroup)
