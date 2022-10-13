@@ -20,10 +20,10 @@ void SDLDisplay::drawCharacterBG(std::uint32_t *p,
   int     y0 = roundFloat(float(y) * textYScale);
   int     x1 = roundFloat(float(x + 1) * textXScale);
   int     y1 = roundFloat(float(y + 1) * textYScale);
-  x0 = (x0 > 0 ? (x0 < (imageWidth - 1) ? x0 : (imageWidth - 1)) : 0);
-  y0 = (y0 > 0 ? (y0 < (imageHeight - 1) ? y0 : (imageHeight - 1)) : 0);
-  x1 = (x1 > 0 ? (x1 < (imageWidth - 1) ? x1 : (imageWidth - 1)) : 0);
-  y1 = (y1 > 0 ? (y1 < (imageHeight - 1) ? y1 : (imageHeight - 1)) : 0);
+  x0 = std::max(std::min(x0, imageWidth), 0);
+  y0 = std::max(std::min(y0, imageHeight), 0);
+  x1 = std::max(std::min(x1, imageWidth), 0);
+  y1 = std::max(std::min(y1, imageHeight), 0);
   p = p + (size_t(y0) * size_t(imageWidth));
   if (bgAlpha < 1.0f)
   {
@@ -92,10 +92,10 @@ void SDLDisplay::drawCharacterFG(std::uint32_t *p,
   int     y0 = roundFloat(yc - (fontLineHeight * 21.0f));
   int     x1 = roundFloat(xc + fontWidthD2);
   int     y1 = roundFloat(yc + (fontLineHeight * 17.0f));
-  x0 = (x0 > 0 ? (x0 < (imageWidth - 1) ? x0 : (imageWidth - 1)) : 0);
-  y0 = (y0 > 0 ? (y0 < (imageHeight - 1) ? y0 : (imageHeight - 1)) : 0);
-  x1 = (x1 > 0 ? (x1 < (imageWidth - 1) ? x1 : (imageWidth - 1)) : 0);
-  y1 = (y1 > 0 ? (y1 < (imageHeight - 1) ? y1 : (imageHeight - 1)) : 0);
+  x0 = std::max(std::min(x0, imageWidth), 0);
+  y0 = std::max(std::min(y0, imageHeight), 0);
+  x1 = std::max(std::min(x1, imageWidth), 0);
+  y1 = std::max(std::min(y1, imageHeight), 0);
   p = p + (size_t(y0) * size_t(imageWidth));
   // font texture size = 1024x1024, font size = 28x40, 36 characters per row
   float   uOffset = float(int(((unsigned int) n0 % 36U) * 28U + 14U));
