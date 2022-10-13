@@ -46,6 +46,9 @@ class FO76UtilsError : public std::exception
   {
     storeMessage(msg, bool(copyFlag));
   }
+#ifdef __GNUC__
+  __attribute__ ((__format__ (__printf__, 2, 3)))
+#endif
   FO76UtilsError(const char *fmt, ...) noexcept;
   virtual ~FO76UtilsError() noexcept;
   FO76UtilsError& operator=(const FO76UtilsError& r) noexcept

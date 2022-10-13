@@ -31,6 +31,9 @@ void FO76UtilsError::storeMessage(const char *msg, bool copyFlag) noexcept
   }
 }
 
+#ifdef __GNUC__
+__attribute__ ((__format__ (__printf__, 2, 3)))
+#endif
 FO76UtilsError::FO76UtilsError(const char *fmt, ...) noexcept
 {
   char    tmpBuf[512];
