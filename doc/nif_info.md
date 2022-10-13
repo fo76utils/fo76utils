@@ -30,6 +30,7 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **O**, **9**: Decrease or increase light source blue level.
 * **Left**, **Right**: Rotate light vector around the Z axis.
 * **Up**, **Down**: Rotate light vector around the Y axis.
+* **Home**: Reset rotations.
 * **Insert**, **Delete**: Zoom reflected environment in or out.
 * **Caps Lock**: Toggle fine adjustment of view and lighting parameters.
 * **Page Up**: Enable downsampling (slow).

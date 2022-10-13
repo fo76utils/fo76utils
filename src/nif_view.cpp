@@ -620,6 +620,10 @@ static bool viewModelInfo(SDLDisplay& display, const NIFFile& nifFile)
         display.consolePrint("    Alpha property: %3d\n",
                              triShapeBlock->alphaProperty);
       }
+      display.consolePrint("    Vertex count: %lu\n",
+                           (unsigned long) triShapeBlock->vertexData.size());
+      display.consolePrint("    Triangle count: %lu\n",
+                           (unsigned long) triShapeBlock->triangleData.size());
     }
     else if (lspBlock)
     {
@@ -786,6 +790,8 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mUp\033[m, "
     "\033[4m\033[38;5;228mDown\033[m              "
     "Rotate light vector around the Y axis.                          \n"
+    "  \033[4m\033[38;5;228mHome\033[m                  "
+    "Reset rotations.                                                \n"
     "  \033[4m\033[38;5;228mInsert\033[m, "
     "\033[4m\033[38;5;228mDelete\033[m        "
     "Zoom reflected environment in or out.                           \n"
@@ -1044,6 +1050,14 @@ bool Renderer::viewModels(SDLDisplay& display,
               case SDLDisplay::SDLKeySymUp:
                 updateRotation(lightRotationX, lightRotationY, lightRotationZ,
                                0, -d, 0, messageBuf, "Light rotation");
+                break;
+              case SDLDisplay::SDLKeySymHome:
+                messageBuf = "Model and light rotations reset to defaults";
+                modelRotationX = 0.0f;
+                modelRotationY = 0.0f;
+                modelRotationZ = 0.0f;
+                lightRotationY = 56.25f;
+                lightRotationZ = -135.0f;
                 break;
               case '7':
                 updateLightColor(lightColor, d, 0, 0, messageBuf);
