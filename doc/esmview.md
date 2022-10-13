@@ -1,12 +1,13 @@
-    esmview FILENAME.ESM[,...] [LOCALIZATION.BA2 [STRINGS_PREFIX]] [OPTIONS...]
+    esmview FILENAME.ESM[,...] [ARCHIVEPATH [STRINGS_PREFIX]] [OPTIONS...]
 
-Interactive version of [esmdump](esmdump.md). On Windows, it is recommended to run esmview in the MSYS2 terminal for correct support of ANSI escape sequences, and for easy copying and pasting of form IDs with the mouse (double click to copy and middle button to paste).
+Interactive version of [esmdump](esmdump.md). On Windows, if compiled without SDL, it is recommended to run esmview in the MSYS2 terminal for correct support of ANSI escape sequences, and for easy copying and pasting of form IDs with the mouse (double click to copy and middle button to paste).
 
 ### Options
 
 * **-h**: Print usage.
 * **--**: Remaining options are file names.
 * **-F FILE**: Read field definitions from FILE.
+* **-w COLUMNS,ROWS,FONT_HEIGHT,DOWNSAMPLE,BGCOLOR,FGCOLOR**: Set SDL console dimensions and colors, not available if esmview is built without SDL support. The defaults are 96,36,18,1,0xE6,0x00, any parameter that is omitted uses the default value. Font height is in pixels, the font is currently Courier in bitmap format with a native resolution of 20x30 per character. Colors use the 8-bit encoding described [here](https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit).
 
 ### Commands
 
@@ -31,6 +32,7 @@ C, N, P, and V can be grouped and used as a single command.
 * **R cccc:xxxxxxxx**: Find next reference to form ID in field cccc.
 * **R \*:xxxxxxxx**: Find next reference to form ID.
 * **S pattern**: Find next record with EDID matching pattern.
+* **W**: View the model (MODL) of the current record, if present. This command is not available if esmview is built without SDL support. Pressing H while in the NIF viewer prints the list of keyboard controls, Esc returns to the esmview console.
 * **Q** or **Ctrl-D**: Quit.
 
 ##### Mouse controls

@@ -10,15 +10,17 @@
 class ESMView : public ESMDump, public SDLDisplay
 {
  protected:
+  BA2File   *ba2File;
 #ifdef HAVE_SDL2
   Renderer  *renderer;
 #endif
   void printID(unsigned int id);
  public:
-  ESMView(const char *fileName,
+  ESMView(const char *fileName, const char *archivePath,
           int w = 1152, int h = 648, int l = 36, bool enableDownsampling = true,
           unsigned char bgColor = 0xE6, unsigned char fgColor = 0x00);
   virtual ~ESMView();
+  void loadStrings(const char *stringsPrefix);
   unsigned int findPreviousRecord(unsigned int formID) const;
   unsigned int findNextRecord(unsigned int formID) const;
   unsigned int findNextGroup(unsigned int formID, const char *pattern) const;
@@ -27,7 +29,16 @@ class ESMView : public ESMDump, public SDLDisplay
   void printFormID(unsigned int formID);
   void printRecordHdr(unsigned int formID);
   void dumpRecord(unsigned int formID = 0U, bool noUnknownFields = false);
+#ifdef HAVE_SDL2
+  bool viewModel(unsigned int formID);
+#endif
 };
+
+void ESMView::loadStrings(const char *stringsPrefix)
+{
+  if (ba2File)
+    ESMDump::loadStrings(*ba2File, stringsPrefix);
+}
 
 void ESMView::printID(unsigned int id)
 {
@@ -45,14 +56,16 @@ void ESMView::printID(unsigned int id)
 }
 
 ESMView::ESMView(
-    const char *fileName, int w, int h, int l, bool enableDownsampling,
-    unsigned char bgColor, unsigned char fgColor)
+    const char *fileName, const char *archivePath, int w, int h, int l,
+    bool enableDownsampling, unsigned char bgColor, unsigned char fgColor)
   : ESMDump(fileName, (std::FILE *) 0),
 #ifdef HAVE_SDL2
     SDLDisplay(w, h, "esmview", 4U, l),
+    ba2File((BA2File *) 0),
     renderer((Renderer *) 0)
 #else
-    SDLDisplay(640, 360, "esmview", 0U, 30)
+    SDLDisplay(640, 360, "esmview", 0U, 30),
+    ba2File((BA2File *) 0)
 #endif
 {
 #ifdef HAVE_SDL2
@@ -67,6 +80,14 @@ ESMView::ESMView(
   (void) fgColor;
 #endif
   verboseMode = true;
+  if (archivePath)
+  {
+    ba2File = new BA2File(archivePath,
+#ifdef HAVE_SDL2
+                          ".bgem\t.bgsm\t.bto\t.btr\t.dds\t.nif\t"
+#endif
+                          ".dlstrings\t.ilstrings\t.strings");
+  }
 }
 
 ESMView::~ESMView()
@@ -75,6 +96,8 @@ ESMView::~ESMView()
   if (renderer)
     delete renderer;
 #endif
+  if (ba2File)
+    delete ba2File;
 }
 
 unsigned int ESMView::findPreviousRecord(unsigned int formID) const
@@ -454,15 +477,105 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
   }
 }
 
+#ifdef HAVE_SDL2
+bool ESMView::viewModel(unsigned int formID)
+{
+  if (!renderer)
+  {
+    if (!ba2File)
+      errorMessage("viewing meshes requires specifying an archive path");
+    renderer = new Renderer(*ba2File, this);
+  }
+  const ESMRecord *r;
+  if (!formID || !(r = getRecordPtr(formID)))
+    errorMessage("invalid form ID");
+  renderer->clearMaterialSwaps();
+  unsigned int  refrMSWPFormID = 0U;
+  if (*r == "REFR")
+  {
+    unsigned int  refrName = 0U;
+    ESMField  f(*this, *r);
+    while (f.next())
+    {
+      if (f == "NAME" && f.size() >= 4)
+        refrName = f.readUInt32Fast();
+      else if (f == "XMSP" && f.size() >= 4)
+        refrMSWPFormID = f.readUInt32Fast();
+    }
+    if (!refrName || !(r = getRecordPtr(refrName)))
+      errorMessage("invalid record type");
+  }
+  std::vector< std::string >  nifFileNames(1, std::string());
+  std::string&  modelPath = nifFileNames[0];
+  ESMField  f(*this, *r);
+  while (f.next())
+  {
+    if ((f == "MODL" || f == "MOD2") && f.size() > 4)
+    {
+      f.readPath(modelPath, std::string::npos, "meshes/", ".nif");
+      if (*r == "SCOL" && getESMVersion() >= 0xC0)
+      {
+        if (modelPath.find(".esm/", 0, 5) == std::string::npos)
+        {
+          // fix invalid SCOL model paths in SeventySix.esm
+          modelPath = "meshes/scol/seventysix.esm/cm00000000.nif";
+          unsigned int  n = r->formID;
+          for (int j = 36; n; j--, n = n >> 4)
+            modelPath[j] = char(n & 15U) + ((n & 15U) < 10U ? '0' : 'W');
+        }
+      }
+    }
+    else if ((f == "MODS" || f == "MO2S") && f.size() >= 4)
+    {
+      renderer->addMaterialSwap(f.readUInt32Fast() & 0x7FFFFFFFU);
+    }
+    else if (f == "MODC" && f.size() >= 4)
+    {
+      renderer->addColorSwap(f.readFloat());
+    }
+    else if (f == "WNAM" && *r == "ACTI" && f.size() >= 4)
+    {
+      renderer->setWaterColor(f.readUInt32Fast());
+    }
+  }
+  if (modelPath.empty())
+    errorMessage("model path not found in record");
+  if (refrMSWPFormID)
+    renderer->addMaterialSwap(refrMSWPFormID);
+  clearTextBuffer();
+  std::uint32_t savedTextColor = defaultTextColor;
+  bool    noQuitFlag = true;
+  try
+  {
+    setDefaultTextColor(0x00, 0xC1);
+    noQuitFlag = renderer->viewModels(*this, nifFileNames);
+    defaultTextColor = savedTextColor;
+    textColor = savedTextColor;
+  }
+  catch (...)
+  {
+    defaultTextColor = savedTextColor;
+    textColor = savedTextColor;
+    throw;
+  }
+  return noQuitFlag;
+}
+#endif
+
 static void printUsage()
 {
   std::fprintf(stderr,
-               "esmview FILENAME.ESM[,...] [LOCALIZATION.BA2 "
+               "esmview FILENAME.ESM[,...] [ARCHIVEPATH "
                "[STRINGS_PREFIX]] [OPTIONS...]\n\n");
   std::fprintf(stderr, "Options:\n");
   std::fprintf(stderr, "    -h      print usage\n");
   std::fprintf(stderr, "    --      remaining options are file names\n");
   std::fprintf(stderr, "    -F FILE read field definitions from FILE\n");
+#ifdef HAVE_SDL2
+  std::fprintf(stderr,
+               "    -w COLUMNS,ROWS,FONT_HEIGHT,DOWNSAMPLE,BGCOLOR,FGCOLOR\n");
+  std::fprintf(stderr, "            set SDL console dimensions and colors\n");
+#endif
 }
 
 static const char *usageString =
@@ -484,6 +597,9 @@ static const char *usageString =
     "S pattern:      find next record with EDID matching pattern\n"
     "U:              toggle hexadecimal display of unknown field types\n"
     "V:              previous record in current group\n"
+#ifdef HAVE_SDL2
+    "W:              view model (MODL) of current record, if present\n"
+#endif
     "Q or Ctrl-D:    quit\n\n"
     "C, N, P, and V can be grouped and used as a single command\n\n"
     "Mouse controls:\n\n"
@@ -494,354 +610,472 @@ static const char *usageString =
 
 int main(int argc, char **argv)
 {
-  SDLDisplay::enableConsole();
-  if (argc < 2)
-  {
-    printUsage();
-    return 1;
-  }
-  try
-  {
-    const char  *inputFileName = 0;
-    const char  *stringsFileName = 0;
-    const char  *stringsPrefix = 0;
-    const char  *fldDefFileName = 0;
-    bool    noOptionsFlag = false;
-    for (int i = 1; i < argc; i++)
-    {
-      if (!noOptionsFlag && argv[i][0] == '-')
-      {
-        if (std::strcmp(argv[i], "--help") == 0)
-        {
-          printUsage();
-          return 0;
-        }
-        if (argv[i][1] != '\0' && argv[i][2] == '\0')
-        {
-          switch (argv[i][1])
-          {
-            case '-':
-              noOptionsFlag = true;
-              continue;
-            case 'h':
-              printUsage();
-              return 0;
-            case 'F':
-              if (++i >= argc)
-                errorMessage("-F: missing file name");
-              fldDefFileName = argv[i];
-              continue;
-            default:
-              break;
-          }
-        }
-        printUsage();
-        throw FO76UtilsError("\ninvalid option: %s", argv[i]);
-      }
-      if (!inputFileName)
-      {
-        inputFileName = argv[i];
-      }
-      else if (!stringsFileName)
-      {
-        stringsFileName = argv[i];
-      }
-      else if (!stringsPrefix)
-      {
-        stringsPrefix = argv[i];
-      }
-      else
-      {
-        errorMessage("too many file names");
-      }
-    }
+  int     consoleWidth = 1152;
+  int     consoleHeight = 648;
+  int     consoleRows = 36;
+  bool    consoleDownsampling = true;
+  unsigned char consoleBGColor = 0xE6;
+  unsigned char consoleFGColor = 0x00;
 
-    ESMView esmFile(inputFileName);
-    if (stringsFileName)
+  std::vector< unsigned int > prvRecords;
+  std::map< size_t, std::string > cmdHistory1;
+  std::map< std::string, size_t > cmdHistory2;
+  std::string cmdBuf;
+  unsigned int  formID = 0U;
+  bool    helpFlag = false;
+  bool    noUnknownFields = false;
+  // 0: print usage and exit with success, 1: error, 2: print usage and error
+  unsigned char errorFlag = 1;
+  ESMView *esmFilePtr = (ESMView *) 0;
+  do
+  {
+    try
     {
-      if (!stringsPrefix)
-        stringsPrefix = "strings/seventysix_en";
-      esmFile.loadStrings(stringsFileName, stringsPrefix);
-    }
-    esmFile.findEDIDs();
-    if (fldDefFileName)
-      esmFile.loadFieldDefFile(fldDefFileName);
-
-    std::vector< unsigned int > prvRecords;
-    std::map< size_t, std::string > cmdHistory1;
-    std::map< std::string, size_t > cmdHistory2;
-    std::string cmdBuf;
-    unsigned int  formID = 0U;
-    bool    helpFlag = false;
-    bool    noUnknownFields = false;
-    while (true)
-    {
-      if (!helpFlag)
+      if (!esmFilePtr)
       {
-        esmFile.dumpRecord(formID, noUnknownFields);
-        esmFile.consolePrint("\n");
-      }
-      helpFlag = false;
-      if (!esmFile.consoleInput(cmdBuf, cmdHistory1, cmdHistory2))
-        break;
-      for (size_t i = 0; i < cmdBuf.length(); )
-      {
-        if (cmdBuf[0] == 'd' && i > 1)
-          break;
-        if (cmdBuf[i] >= 'A' && cmdBuf[i] <= 'Z')
-          cmdBuf[i] = cmdBuf[i] + ('a' - 'A');
-        if ((unsigned char) cmdBuf[i] < 0x20 || cmdBuf[i] == '\177')
-          cmdBuf.erase(i, 1);
-        else
-          i++;
-      }
-      if (cmdBuf.empty())
-      {
-        helpFlag = true;
-        continue;
-      }
-      if (cmdBuf == "q" || cmdBuf == "quit" || cmdBuf == "exit")
-        break;
-      if (cmdBuf == "l")
-      {
-        if (prvRecords.size() > 0)
+        if (argc < 2)
         {
-          formID = prvRecords[prvRecords.size() - 1];
-          prvRecords.resize(prvRecords.size() - 1);
+          errorFlag = 2;
+          errorMessage("");
         }
-      }
-      else if (cmdBuf == "b")
-      {
-        helpFlag = true;
-        for (size_t i = 0; i < prvRecords.size(); i++)
-          esmFile.printRecordHdr(prvRecords[i]);
-      }
-      else if (cmdBuf == "i")
-      {
-        helpFlag = true;
-        std::vector< unsigned int > tmpBuf;
-        const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
-        while (r && r->parent)
+        const char  *inputFileName = 0;
+        const char  *archivePath = 0;
+        const char  *stringsPrefix = 0;
+        const char  *fldDefFileName = 0;
+        bool    noOptionsFlag = false;
+        for (int i = 1; i < argc; i++)
         {
-          tmpBuf.push_back(r->parent);
-          r = esmFile.getRecordPtr(r->parent);
-        }
-        for (size_t i = tmpBuf.size(); i-- > 0; )
-          esmFile.printRecordHdr(tmpBuf[i]);
-        esmFile.consolePrint(
-            "%s\033[31m\033[1m", (tmpBuf.size() > 0 ? "\n" : ""));
-        esmFile.printRecordHdr(formID);
-        r = esmFile.getRecordPtr(formID);
-        if (!r)
-          continue;
-        size_t  fileOffs =
-            size_t(r->fileData - esmFile.getRecordPtr(0U)->fileData);
-        ESMFile::ESMVCInfo  vcInfo;
-        esmFile.getVersionControlInfo(vcInfo, *r);
-        esmFile.consolePrint(
-            "Timestamp:  %04u-%02u-%02u\tUser ID:  0x%04X, 0x%02X\t"
-            "File pointer:  0x%08X\n\n",
-            vcInfo.year, vcInfo.month, vcInfo.day,
-            vcInfo.userID1, vcInfo.userID2,
-            (unsigned int) fileOffs & 0xFFFFFFFFU);
-        if (r->children)
-        {
-          esmFile.consolePrint("Child:\t");
-          esmFile.printRecordHdr(r->children);
-        }
-        if (r->next)
-        {
-          esmFile.consolePrint("Next:\t");
-          esmFile.printRecordHdr(r->next);
-        }
-      }
-      else if (cmdBuf[0] == 'd' && cmdBuf.length() > 1)
-      {
-        helpFlag = true;
-        std::string tmp(cmdBuf.c_str() + 1);
-        for (size_t i = 0; i < tmp.length(); i++)
-        {
-          if (tmp[i] == ':')
-            tmp[i] = '\t';
-        }
-        FileBuffer  tmpBuf(reinterpret_cast< const unsigned char * >(
-                               tmp.c_str()), tmp.length());
-        try
-        {
-          esmFile.loadFieldDefFile(tmpBuf);
-        }
-        catch (std::exception& e)
-        {
-          esmFile.consolePrint("Invalid field definition\n");
-          continue;
-        }
-      }
-      else if (cmdBuf[0] == 'f' && cmdBuf.length() > 1)
-      {
-        helpFlag = true;
-        try
-        {
-          unsigned char tmpBuf[4];
-          unsigned char j = 0;
-          for (size_t i = 1; i < cmdBuf.length(); i++)
+          if (!noOptionsFlag && argv[i][0] == '-')
           {
-            char    c = cmdBuf[i];
-            if (c >= '0' && c <= '9')
-              c = c - '0';
-            else if (c >= 'a' && c <= 'f')
-              c = c - 'W';
-            else
-              errorMessage("Invalid hexadecimal floating point value");
-            if (!(j & 1))
-              tmpBuf[j >> 1] = (unsigned char) c << 4;
-            else
-              tmpBuf[j >> 1] |= (unsigned char) c;
-            if (++j >= 8)
+            if (std::strcmp(argv[i], "--help") == 0)
             {
-              j = 0;
-              FileBuffer  buf(tmpBuf, 4);
-              double  x = buf.readFloat();
-              esmFile.consolePrint(
-                  ((x > -1.0e7 && x < 1.0e8) ? "%f\n" : "%g\n"), x);
+              errorFlag = 0;
+              errorMessage("");
             }
+            if (argv[i][1] != '\0' && argv[i][2] == '\0')
+            {
+              switch (argv[i][1])
+              {
+                case '-':
+                  noOptionsFlag = true;
+                  continue;
+                case 'h':
+                  errorFlag = 0;
+                  errorMessage("");
+                  break;
+                case 'F':
+                  if (++i >= argc)
+                    errorMessage("-F: missing file name");
+                  fldDefFileName = argv[i];
+                  continue;
+#ifdef HAVE_SDL2
+                case 'w':
+                  if (++i >= argc)
+                  {
+                    errorMessage("-w: missing argument");
+                  }
+                  else
+                  {
+                    const char  *s = argv[i];
+                    int     consoleParams[6];
+                    int     n = 0;
+                    consoleParams[0] = 96;      // number of columns
+                    consoleParams[1] = 36;      // number of rows
+                    consoleParams[2] = 18;      // font height in pixels
+                    consoleParams[3] = 1;       // downsampling enabled
+                    consoleParams[4] = 0xE6;    // background color
+                    consoleParams[5] = 0x00;    // foreground color
+                    while (true)
+                    {
+                      while (*s && (unsigned char) *s <= 0x20)
+                        s++;
+                      if (*s == '\0')
+                        break;
+                      if (n >= 6)
+                        errorMessage("-w: too many arguments");
+                      if (*s != ',')
+                      {
+                        char    *endp = (char *) 0;
+                        long    tmp = std::strtol(s, &endp, 0);
+                        if (!endp || endp == s)
+                          errorMessage("-w: invalid integer argument");
+                        s = endp;
+                        while (*s && (unsigned char) *s <= 0x20)
+                          s++;
+                        if (*s && *s != ',')
+                          errorMessage("-w: invalid integer argument");
+                        if (n == 0 && !(tmp >= 32L && tmp <= 384L))
+                          errorMessage("-w: invalid number of columns");
+                        if (n == 1 && !(tmp >= 8L && tmp <= 128L))
+                          errorMessage("-w: invalid number of rows");
+                        if (n == 2 && !(tmp >= 9L && tmp <= 120L))
+                          errorMessage("-w: invalid font height");
+                        if (n == 4 && (tmp & ~0xFFL))
+                          errorMessage("-w: invalid background color");
+                        if (n == 5 && (tmp & ~0xFFL))
+                          errorMessage("-w: invalid text color");
+                        consoleParams[n] = int(tmp);
+                      }
+                      if (*s == ',')
+                        s++;
+                      n++;
+                    }
+                    consoleWidth = consoleParams[0] * consoleParams[2];
+                    consoleWidth = (consoleWidth + consoleWidth + 1) / 3;
+                    consoleHeight = consoleParams[1] * consoleParams[2];
+                    if (consoleWidth < 256 || consoleWidth > 16384 ||
+                        consoleHeight < 64 || consoleHeight > 8192)
+                    {
+                      errorMessage("invalid console dimensions");
+                    }
+                    consoleRows = consoleParams[1];
+                    consoleDownsampling = bool(consoleParams[3]);
+                    consoleBGColor = (unsigned char) consoleParams[4];
+                    consoleFGColor = (unsigned char) consoleParams[5];
+                  }
+                  continue;
+#endif
+                default:
+                  break;
+              }
+            }
+            errorFlag = 2;
+            throw FO76UtilsError("\ninvalid option: %s", argv[i]);
           }
-          if (j != 0)
-            errorMessage("Invalid hexadecimal floating point value");
+          if (!inputFileName)
+          {
+            inputFileName = argv[i];
+          }
+          else if (!archivePath)
+          {
+            archivePath = argv[i];
+          }
+          else if (!stringsPrefix)
+          {
+            stringsPrefix = argv[i];
+          }
+          else
+          {
+            errorMessage("too many file names");
+          }
         }
-        catch (std::exception& e)
+
+        esmFilePtr =
+            new ESMView(inputFileName, archivePath,
+                        consoleWidth, consoleHeight, consoleRows,
+                        consoleDownsampling, consoleBGColor, consoleFGColor);
+        if (archivePath)
         {
-          esmFile.consolePrint("%s\n", e.what());
+          if (!stringsPrefix)
+            stringsPrefix = "strings/seventysix_en";
+          esmFilePtr->loadStrings(stringsPrefix);
+        }
+        esmFilePtr->findEDIDs();
+        if (fldDefFileName)
+          esmFilePtr->loadFieldDefFile(fldDefFileName);
+      }
+
+      ESMView&  esmFile = *esmFilePtr;
+      while (true)
+      {
+        if (!helpFlag)
+        {
+          esmFile.dumpRecord(formID, noUnknownFields);
+          esmFile.consolePrint("\n");
+        }
+        helpFlag = false;
+        if (!esmFile.consoleInput(cmdBuf, cmdHistory1, cmdHistory2))
+        {
+          delete esmFilePtr;
+          esmFilePtr = (ESMView *) 0;
+          break;
+        }
+        for (size_t i = 0; i < cmdBuf.length(); )
+        {
+          if (cmdBuf[0] == 'd' && i > 1)
+            break;
+          if (cmdBuf[i] >= 'A' && cmdBuf[i] <= 'Z')
+            cmdBuf[i] = cmdBuf[i] + ('a' - 'A');
+          if ((unsigned char) cmdBuf[i] < 0x20 || cmdBuf[i] == '\177')
+            cmdBuf.erase(i, 1);
+          else
+            i++;
+        }
+        if (cmdBuf.empty())
+        {
+          helpFlag = true;
           continue;
         }
-      }
-      else if (cmdBuf[0] == 'g' && cmdBuf.length() > 1)
-      {
-        unsigned int  tmp = esmFile.findNextGroup(formID, cmdBuf.c_str() + 1);
-        if (tmp == 0xFFFFFFFFU)
+        if (cmdBuf == "q" || cmdBuf == "quit" || cmdBuf == "exit")
         {
-          helpFlag = true;
-          esmFile.consolePrint("Group not found\n");
+          delete esmFilePtr;
+          esmFilePtr = (ESMView *) 0;
+          break;
         }
-        else if (tmp != formID)
+        if (cmdBuf == "l")
         {
-          prvRecords.push_back(formID);
-          formID = tmp;
-        }
-      }
-      else if (cmdBuf[0] == 'r' && cmdBuf.length() > 1)
-      {
-        unsigned int  tmp = esmFile.findNextRef(formID, cmdBuf.c_str() + 1);
-        if (tmp == 0xFFFFFFFFU)
-        {
-          helpFlag = true;
-          esmFile.consolePrint("Record not found\n");
-        }
-        else if (tmp != formID)
-        {
-          prvRecords.push_back(formID);
-          formID = tmp;
-        }
-      }
-      else if (cmdBuf[0] == 's' && cmdBuf.length() > 1)
-      {
-        unsigned int  tmp = esmFile.findNextRecord(formID, cmdBuf.c_str() + 1);
-        if (tmp == 0xFFFFFFFFU)
-        {
-          helpFlag = true;
-          esmFile.consolePrint("Record not found\n");
-        }
-        else if (tmp != formID)
-        {
-          prvRecords.push_back(formID);
-          formID = tmp;
-        }
-      }
-      else if (cmdBuf == "u")
-      {
-        helpFlag = true;
-        noUnknownFields = !noUnknownFields;
-        esmFile.consolePrint("Printing unknown fields: %s\n",
-                             (!noUnknownFields ? "on" : "off"));
-      }
-      else if (cmdBuf[0] >= '0' && cmdBuf[0] <= '9')
-      {
-        unsigned int  newFormID = 0U;
-        for (size_t i = 0; i < cmdBuf.length(); i++)
-        {
-          if (cmdBuf[i] >= '0' && cmdBuf[i] <= '9')
-            newFormID = (newFormID << 4) | (unsigned int) (cmdBuf[i] - '0');
-          else if (cmdBuf[i] >= 'a' && cmdBuf[i] <= 'f')
-            newFormID = (newFormID << 4) | (unsigned int) (cmdBuf[i] - 'W');
-        }
-        try
-        {
-          (void) esmFile.getRecordTimestamp(newFormID);
-        }
-        catch (...)
-        {
-          esmFile.consolePrint("Invalid form ID\n\n");
-          newFormID = formID;
-          helpFlag = true;
-        }
-        if (newFormID != formID)
-        {
-          prvRecords.push_back(formID);
-          formID = newFormID;
-        }
-      }
-      else if (std::strchr("cnpv", cmdBuf[0]))
-      {
-        unsigned int  prvFormID = 0xFFFFFFFFU;
-        for (size_t i = 0; i < cmdBuf.length(); i++)
-        {
-          unsigned int  newFormID = 0xFFFFFFFFU;
-          switch (cmdBuf[i])
+          if (prvRecords.size() > 0)
           {
-            case 'c':
-              newFormID = esmFile.getRecord(formID).children;
-              break;
-            case 'n':
-              newFormID = esmFile.getRecord(formID).next;
-              break;
-            case 'p':
-              if (formID)
-                newFormID = esmFile.getRecord(formID).parent;
-              break;
-            case 'v':
-              newFormID = esmFile.findPreviousRecord(formID);
-              break;
-            default:
-              if ((unsigned char) cmdBuf[i] > 0x20)
-              {
-                esmFile.consolePrint("Invalid command: %c\n", cmdBuf[i]);
-                if (prvFormID != 0xFFFFFFFFU)
-                  formID = prvFormID;
-                helpFlag = true;
-                i = cmdBuf.length() - 1;
-              }
-              break;
+            formID = prvRecords[prvRecords.size() - 1];
+            prvRecords.resize(prvRecords.size() - 1);
           }
-          if (newFormID != (cmdBuf[i] < 'p' ? 0U : 0xFFFFFFFFU))
+        }
+        else if (cmdBuf == "b")
+        {
+          helpFlag = true;
+          for (size_t i = 0; i < prvRecords.size(); i++)
+            esmFile.printRecordHdr(prvRecords[i]);
+        }
+        else if (cmdBuf == "i")
+        {
+          helpFlag = true;
+          std::vector< unsigned int > tmpBuf;
+          const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
+          while (r && r->parent)
           {
-            prvFormID = (prvFormID == 0xFFFFFFFFU ? formID : prvFormID);
+            tmpBuf.push_back(r->parent);
+            r = esmFile.getRecordPtr(r->parent);
+          }
+          for (size_t i = tmpBuf.size(); i-- > 0; )
+            esmFile.printRecordHdr(tmpBuf[i]);
+          esmFile.consolePrint(
+              "%s\033[31m\033[1m", (tmpBuf.size() > 0 ? "\n" : ""));
+          esmFile.printRecordHdr(formID);
+          r = esmFile.getRecordPtr(formID);
+          if (!r)
+            continue;
+          size_t  fileOffs =
+              size_t(r->fileData - esmFile.getRecordPtr(0U)->fileData);
+          ESMFile::ESMVCInfo  vcInfo;
+          esmFile.getVersionControlInfo(vcInfo, *r);
+          esmFile.consolePrint(
+              "Timestamp:  %04u-%02u-%02u\tUser ID:  0x%04X, 0x%02X\t"
+              "File pointer:  0x%08X\n\n",
+              vcInfo.year, vcInfo.month, vcInfo.day,
+              vcInfo.userID1, vcInfo.userID2,
+              (unsigned int) fileOffs & 0xFFFFFFFFU);
+          if (r->children)
+          {
+            esmFile.consolePrint("Child:\t");
+            esmFile.printRecordHdr(r->children);
+          }
+          if (r->next)
+          {
+            esmFile.consolePrint("Next:\t");
+            esmFile.printRecordHdr(r->next);
+          }
+        }
+        else if (cmdBuf[0] == 'd' && cmdBuf.length() > 1)
+        {
+          helpFlag = true;
+          std::string tmp(cmdBuf.c_str() + 1);
+          for (size_t i = 0; i < tmp.length(); i++)
+          {
+            if (tmp[i] == ':')
+              tmp[i] = '\t';
+          }
+          FileBuffer  tmpBuf(reinterpret_cast< const unsigned char * >(
+                                 tmp.c_str()), tmp.length());
+          try
+          {
+            esmFile.loadFieldDefFile(tmpBuf);
+          }
+          catch (std::exception& e)
+          {
+            esmFile.consolePrint("Invalid field definition\n");
+            continue;
+          }
+        }
+        else if (cmdBuf[0] == 'f' && cmdBuf.length() > 1)
+        {
+          helpFlag = true;
+          try
+          {
+            unsigned char tmpBuf[4];
+            unsigned char j = 0;
+            for (size_t i = 1; i < cmdBuf.length(); i++)
+            {
+              char    c = cmdBuf[i];
+              if (c >= '0' && c <= '9')
+                c = c - '0';
+              else if (c >= 'a' && c <= 'f')
+                c = c - 'W';
+              else
+                errorMessage("Invalid hexadecimal floating point value");
+              if (!(j & 1))
+                tmpBuf[j >> 1] = (unsigned char) c << 4;
+              else
+                tmpBuf[j >> 1] |= (unsigned char) c;
+              if (++j >= 8)
+              {
+                j = 0;
+                FileBuffer  buf(tmpBuf, 4);
+                double  x = buf.readFloat();
+                esmFile.consolePrint(
+                    ((x > -1.0e7 && x < 1.0e8) ? "%f\n" : "%g\n"), x);
+              }
+            }
+            if (j != 0)
+              errorMessage("Invalid hexadecimal floating point value");
+          }
+          catch (std::exception& e)
+          {
+            esmFile.consolePrint("%s\n", e.what());
+            continue;
+          }
+        }
+        else if (cmdBuf[0] == 'g' && cmdBuf.length() > 1)
+        {
+          unsigned int  tmp = esmFile.findNextGroup(formID, cmdBuf.c_str() + 1);
+          if (tmp == 0xFFFFFFFFU)
+          {
+            helpFlag = true;
+            esmFile.consolePrint("Group not found\n");
+          }
+          else if (tmp != formID)
+          {
+            prvRecords.push_back(formID);
+            formID = tmp;
+          }
+        }
+        else if (cmdBuf[0] == 'r' && cmdBuf.length() > 1)
+        {
+          unsigned int  tmp = esmFile.findNextRef(formID, cmdBuf.c_str() + 1);
+          if (tmp == 0xFFFFFFFFU)
+          {
+            helpFlag = true;
+            esmFile.consolePrint("Record not found\n");
+          }
+          else if (tmp != formID)
+          {
+            prvRecords.push_back(formID);
+            formID = tmp;
+          }
+        }
+        else if (cmdBuf[0] == 's' && cmdBuf.length() > 1)
+        {
+          unsigned int  tmp = esmFile.findNextRecord(formID, cmdBuf.c_str() + 1);
+          if (tmp == 0xFFFFFFFFU)
+          {
+            helpFlag = true;
+            esmFile.consolePrint("Record not found\n");
+          }
+          else if (tmp != formID)
+          {
+            prvRecords.push_back(formID);
+            formID = tmp;
+          }
+        }
+        else if (cmdBuf == "u")
+        {
+          helpFlag = true;
+          noUnknownFields = !noUnknownFields;
+          esmFile.consolePrint("Printing unknown fields: %s\n",
+                               (!noUnknownFields ? "on" : "off"));
+        }
+        else if (cmdBuf[0] >= '0' && cmdBuf[0] <= '9')
+        {
+          unsigned int  newFormID = 0U;
+          for (size_t i = 0; i < cmdBuf.length(); i++)
+          {
+            if (cmdBuf[i] >= '0' && cmdBuf[i] <= '9')
+              newFormID = (newFormID << 4) | (unsigned int) (cmdBuf[i] - '0');
+            else if (cmdBuf[i] >= 'a' && cmdBuf[i] <= 'f')
+              newFormID = (newFormID << 4) | (unsigned int) (cmdBuf[i] - 'W');
+          }
+          try
+          {
+            (void) esmFile.getRecordTimestamp(newFormID);
+          }
+          catch (...)
+          {
+            esmFile.consolePrint("Invalid form ID\n\n");
+            newFormID = formID;
+            helpFlag = true;
+          }
+          if (newFormID != formID)
+          {
+            prvRecords.push_back(formID);
             formID = newFormID;
           }
         }
-        if (prvFormID != 0xFFFFFFFFU)
-          prvRecords.push_back(prvFormID);
+        else if (std::strchr("cnpv", cmdBuf[0]))
+        {
+          unsigned int  prvFormID = 0xFFFFFFFFU;
+          for (size_t i = 0; i < cmdBuf.length(); i++)
+          {
+            unsigned int  newFormID = 0xFFFFFFFFU;
+            switch (cmdBuf[i])
+            {
+              case 'c':
+                newFormID = esmFile.getRecord(formID).children;
+                break;
+              case 'n':
+                newFormID = esmFile.getRecord(formID).next;
+                break;
+              case 'p':
+                if (formID)
+                  newFormID = esmFile.getRecord(formID).parent;
+                break;
+              case 'v':
+                newFormID = esmFile.findPreviousRecord(formID);
+                break;
+              default:
+                if ((unsigned char) cmdBuf[i] > 0x20)
+                {
+                  esmFile.consolePrint("Invalid command: %c\n", cmdBuf[i]);
+                  if (prvFormID != 0xFFFFFFFFU)
+                    formID = prvFormID;
+                  helpFlag = true;
+                  i = cmdBuf.length() - 1;
+                }
+                break;
+            }
+            if (newFormID != (cmdBuf[i] < 'p' ? 0U : 0xFFFFFFFFU))
+            {
+              prvFormID = (prvFormID == 0xFFFFFFFFU ? formID : prvFormID);
+              formID = newFormID;
+            }
+          }
+          if (prvFormID != 0xFFFFFFFFU)
+            prvRecords.push_back(prvFormID);
+        }
+#ifdef HAVE_SDL2
+        else if (cmdBuf == "w")
+        {
+          if (!esmFile.viewModel(formID))
+          {
+            delete esmFilePtr;
+            esmFilePtr = (ESMView *) 0;
+            break;
+          }
+        }
+#endif
+        else
+        {
+          esmFile.consolePrint("%s", usageString);
+          helpFlag = true;
+        }
+      }
+    }
+    catch (std::exception& e)
+    {
+      if (esmFilePtr)
+      {
+        esmFilePtr->consolePrint("\033[41m\033[33m\033[1mError: %s\033[m\n",
+                                 e.what());
       }
       else
       {
-        esmFile.consolePrint("%s", usageString);
-        helpFlag = true;
+        SDLDisplay::enableConsole();
+        if (errorFlag != 1)
+          printUsage();
+        std::fprintf(stderr, "esmview: %s\n", e.what());
+        return int(bool(errorFlag));
       }
     }
   }
-  catch (std::exception& e)
-  {
-    std::fprintf(stderr, "esmview: %s\n", e.what());
-    return 1;
-  }
+  while (esmFilePtr);
   return 0;
 }
 
