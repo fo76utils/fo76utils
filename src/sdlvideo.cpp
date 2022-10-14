@@ -405,10 +405,14 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
       else if (i < 232U)
       {
         // 6x6x6 color cube
-        std::uint32_t b = (c - 16U) % 6U;
-        std::uint32_t g = ((c - 16U) / 6U) % 6U;
-        std::uint32_t r = ((c - 16U) / 6U) / 6U;
-        c = (r | (g << 8) | (b << 16)) * 51U;
+        static const unsigned char  colorCubeLevels[6] =
+        {
+          0, 95, 135, 175, 215, 255
+        };
+        std::uint32_t b = colorCubeLevels[(c - 16U) % 6U];
+        std::uint32_t g = colorCubeLevels[((c - 16U) / 6U) % 6U];
+        std::uint32_t r = colorCubeLevels[((c - 16U) / 6U) / 6U];
+        c = r | (g << 8) | (b << 16);
       }
       else
       {
