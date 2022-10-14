@@ -32,6 +32,7 @@ C, N, P, and V can be grouped and used as a single command.
 * **R cccc:xxxxxxxx**: Find next reference to form ID in field cccc.
 * **R \*:xxxxxxxx**: Find next reference to form ID.
 * **S pattern**: Find next record with EDID matching pattern.
+* **S**: Select record interactively (requires SDL).
 * **W**: View the model (MODL) of the current record, if present. This command is not available if esmview is built without SDL support. Pressing H while in the NIF viewer prints the list of keyboard controls, Esc returns to the esmview console.
 * **Q** or **Ctrl-D**: Quit.
 

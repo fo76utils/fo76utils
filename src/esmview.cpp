@@ -14,6 +14,7 @@ class ESMView : public ESMDump, public SDLDisplay
 #ifdef HAVE_SDL2
   Renderer  *renderer;
 #endif
+  static void printID(char *bufp, unsigned int id);
   void printID(unsigned int id);
  public:
   ESMView(const char *fileName, const char *archivePath,
@@ -30,7 +31,9 @@ class ESMView : public ESMDump, public SDLDisplay
   void printRecordHdr(unsigned int formID);
   void dumpRecord(unsigned int formID = 0U, bool noUnknownFields = false);
 #ifdef HAVE_SDL2
+  // the following functions return false if the window is closed
   bool viewModel(unsigned int formID);
+  bool browseRecord(unsigned int& formID);
 #endif
 };
 
@@ -40,17 +43,20 @@ void ESMView::loadStrings(const char *stringsPrefix)
     ESMDump::loadStrings(*ba2File, stringsPrefix);
 }
 
+void ESMView::printID(char *bufp, unsigned int id)
+{
+  id = id & 0x7F7F7F7FU;
+  for (int i = 0; i < 4; i++, id = id >> 8)
+  {
+    unsigned char c = (unsigned char) (id & 0xFFU);
+    bufp[i] = ((c >= 0x20 && c < 0x7F) ? char(c) : '?');
+  }
+}
+
 void ESMView::printID(unsigned int id)
 {
   char    tmpBuf[8];
-  for (int i = 0; i < 4; i++)
-  {
-    unsigned char c = (unsigned char) (id & 0x7F);
-    id = id >> 8;
-    if (c < 0x20 || c >= 0x7F)
-      c = 0x3F;
-    tmpBuf[i] = char(c);
-  }
+  printID(tmpBuf, id);
   tmpBuf[4] = '\0';
   consolePrint("%s", tmpBuf);
 }
@@ -487,7 +493,7 @@ bool ESMView::viewModel(unsigned int formID)
     renderer = new Renderer(*ba2File, this);
   }
   const ESMRecord *r;
-  if (!formID || !(r = getRecordPtr(formID)))
+  if (!formID || !(r = findRecord(formID)))
     errorMessage("invalid form ID");
   renderer->clearMaterialSwaps();
   unsigned int  refrMSWPFormID = 0U;
@@ -502,7 +508,7 @@ bool ESMView::viewModel(unsigned int formID)
       else if (f == "XMSP" && f.size() >= 4)
         refrMSWPFormID = f.readUInt32Fast();
     }
-    if (!refrName || !(r = getRecordPtr(refrName)))
+    if (!refrName || !(r = findRecord(refrName)))
       errorMessage("invalid record type");
   }
   std::vector< std::string >  nifFileNames(1, std::string());
@@ -547,7 +553,7 @@ bool ESMView::viewModel(unsigned int formID)
   bool    noQuitFlag = true;
   try
   {
-    setDefaultTextColor(0x00, 0xC1);
+    setDefaultTextColor(0x00, 0xC0);
     noQuitFlag = renderer->viewModels(*this, nifFileNames);
     defaultTextColor = savedTextColor;
     textColor = savedTextColor;
@@ -557,6 +563,166 @@ bool ESMView::viewModel(unsigned int formID)
     defaultTextColor = savedTextColor;
     textColor = savedTextColor;
     throw;
+  }
+  return noQuitFlag;
+}
+
+bool ESMView::browseRecord(unsigned int& formID)
+{
+  const ESMRecord *r;
+  if (!(r = findRecord(formID)))
+    return true;
+  if (!(*r == "GRUP" && r->children) && formID)
+  {
+    if (!r->parent || !(r = findRecord(r->parent)))
+      return true;
+  }
+  std::vector< std::string >  recordList;
+  std::vector< unsigned int > formIDList;
+  std::string s;
+  char    tmpBuf[64];
+  bool    noQuitFlag = true;
+  while (true)
+  {
+    recordList.clear();
+    formIDList.clear();
+    int     itemSelected = 0;
+    unsigned int  nextFormID = r->children;
+    if (*r == "TES4")
+    {
+      nextFormID = r->next;
+    }
+    else
+    {
+      std::sprintf(tmpBuf, "0x%08X            Parent group", r->parent);
+      s = tmpBuf;
+      recordList.push_back(s);
+      formIDList.push_back(r->parent);
+    }
+    while (nextFormID && (r = findRecord(nextFormID)) != (ESMRecord *) 0)
+    {
+      std::sprintf(tmpBuf, "0x%08X    ????", nextFormID);
+      printID(&(tmpBuf[14]), r->type);
+      s = tmpBuf;
+      std::map< unsigned int, std::string >::const_iterator i;
+      i = edidDB.find(nextFormID);
+      bool    haveEDID = (i != edidDB.end());
+      if (*r == "REFR" || *r == "ACHR")
+      {
+        unsigned int  refrName = 0U;
+        ESMField  f(*this, *r);
+        while (f.next())
+        {
+          if (f == "NAME" && f.size() >= 4)
+            refrName = f.readUInt32Fast();
+        }
+        const ESMRecord *r2;
+        if (refrName && (r2 = findRecord(refrName)) != (ESMRecord *) 0)
+        {
+          std::sprintf(tmpBuf, "    ????: 0x%08X", refrName);
+          printID(&(tmpBuf[4]), r2->type);
+          s += tmpBuf;
+          if (!haveEDID)
+            i = edidDB.find(refrName);
+        }
+      }
+      else if (*r == "CELL")
+      {
+        int     xPos = 0;
+        int     yPos = 0;
+        bool    isInterior = false;
+        ESMField  f(*this, *r);
+        while (f.next())
+        {
+          if (f == "DATA" && f.size() >= 1)
+          {
+            isInterior = bool(f.readUInt8Fast() & 0x01);
+          }
+          else if (f == "XCLC" && f.size() >= 8)
+          {
+            xPos = f.readInt32();
+            yPos = f.readInt32();
+          }
+        }
+        if (isInterior)
+          std::sprintf(tmpBuf, "    Interior        ");
+        else
+          std::sprintf(tmpBuf, "    X, Y: %4d, %4d", xPos, yPos);
+        s += tmpBuf;
+      }
+      else if (*r == "GRUP")
+      {
+        static const char *groupTypes[10] =
+        {
+          "Top  ", "World", "ICBlk", "ICSub", "ECBlk",
+          "ECSub", "Cell ", "Topic", "CPers", "CTemp"
+        };
+        if (r->formID <= 9U)
+          std::sprintf(tmpBuf, "    %s", groupTypes[r->formID]);
+        else
+          std::sprintf(tmpBuf, "    %05u", r->formID & 0xFFFFU);
+        s += tmpBuf;
+        if (r->formID == 2U || r->formID == 3U)
+        {
+          std::sprintf(tmpBuf, " %4d      ", uint32ToSigned(r->flags));
+        }
+        else if (r->formID == 4U || r->formID == 5U)
+        {
+          std::sprintf(tmpBuf, " %4d, %4d",
+                       uint16ToSigned((unsigned short) (r->flags >> 16)),
+                       uint16ToSigned((unsigned short) (r->flags & 0xFFFF)));
+        }
+        else if (r->formID)
+        {
+          std::sprintf(tmpBuf, " 0x%08X", r->flags);
+        }
+        else
+        {
+          std::sprintf(tmpBuf, " ????");
+          printID(&(tmpBuf[1]), r->flags);
+        }
+        s += tmpBuf;
+        if ((r->formID == 1U || r->formID >= 6U) && !haveEDID)
+          i = edidDB.find(r->flags);
+      }
+      else if (haveEDID)
+      {
+        s += "                    ";
+      }
+      if (haveEDID)
+      {
+        s += "    \"";
+        s += i->second;
+        s += '"';
+      }
+      else if (i != edidDB.end())
+      {
+        s += "    [";
+        s += i->second;
+        s += ']';
+      }
+      recordList.push_back(s);
+      formIDList.push_back(nextFormID);
+      if (nextFormID == formID)
+        itemSelected = int(recordList.size() - 1);
+      nextFormID = r->next;
+    }
+    if (recordList.size() < 1)
+      break;
+    clearSurface(ansiColor256Table[(defaultTextColor >> 16) & 0xFFU]);
+    itemSelected = browseList(recordList, "Select record", itemSelected,
+                              0x0B080F04FFFFULL);
+    if (itemSelected < 0)
+    {
+      noQuitFlag = (itemSelected >= -1);
+      break;
+    }
+    if ((r = findRecord(formIDList[itemSelected])) != (ESMRecord *) 0 &&
+        !(*r == "GRUP" || *r == "TES4"))
+    {
+      formID = formIDList[itemSelected];
+      break;
+    }
   }
   return noQuitFlag;
 }
@@ -595,6 +761,9 @@ static const char *usageString =
     "R cccc:xxxxxxxx find next reference to form ID in field cccc\n"
     "R *:xxxxxxxx    find next reference to form ID\n"
     "S pattern:      find next record with EDID matching pattern\n"
+#ifdef HAVE_SDL2
+    "S:              select record interactively\n"
+#endif
     "U:              toggle hexadecimal display of unknown field types\n"
     "V:              previous record in current group\n"
 #ifdef HAVE_SDL2
@@ -624,7 +793,7 @@ int main(int argc, char **argv)
   unsigned int  formID = 0U;
   bool    helpFlag = false;
   bool    noUnknownFields = false;
-  // 0: print usage and exit with success, 1: error, 2: print usage and error
+  // 0: print usage and return 0, 1: error, 2: print usage, 3: usage + error
   unsigned char errorFlag = 1;
   ESMView *esmFilePtr = (ESMView *) 0;
   do
@@ -739,8 +908,8 @@ int main(int argc, char **argv)
                   break;
               }
             }
-            errorFlag = 2;
-            throw FO76UtilsError("\ninvalid option: %s", argv[i]);
+            errorFlag = 3;
+            throw FO76UtilsError("invalid option: %s", argv[i]);
           }
           if (!inputFileName)
           {
@@ -954,7 +1123,8 @@ int main(int argc, char **argv)
         }
         else if (cmdBuf[0] == 's' && cmdBuf.length() > 1)
         {
-          unsigned int  tmp = esmFile.findNextRecord(formID, cmdBuf.c_str() + 1);
+          unsigned int  tmp =
+              esmFile.findNextRecord(formID, cmdBuf.c_str() + 1);
           if (tmp == 0xFFFFFFFFU)
           {
             helpFlag = true;
@@ -966,6 +1136,17 @@ int main(int argc, char **argv)
             formID = tmp;
           }
         }
+#ifdef HAVE_SDL2
+        else if (cmdBuf == "s")
+        {
+          if (!esmFile.browseRecord(formID))
+          {
+            delete esmFilePtr;
+            esmFilePtr = (ESMView *) 0;
+            break;
+          }
+        }
+#endif
         else if (cmdBuf == "u")
         {
           helpFlag = true;
@@ -1070,7 +1251,8 @@ int main(int argc, char **argv)
         SDLDisplay::enableConsole();
         if (errorFlag != 1)
           printUsage();
-        std::fprintf(stderr, "esmview: %s\n", e.what());
+        if (errorFlag & 1)
+          std::fprintf(stderr, "esmview: %s\n", e.what());
         return int(bool(errorFlag));
       }
     }
