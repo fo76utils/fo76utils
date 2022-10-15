@@ -10,7 +10,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 * **-q**: Do not print messages other than errors.
 * **-threads INT**: Set the number of threads to use.
 * **-debug INT**: Set debug render mode (0: disabled, 1: reference form IDs as 0xRRGGBB, 2: depth \* 16 or 64, 3: normals, 4: diffuse texture only, 5: light only).
-* **-ssaa BOOL**: Render at double resolution and downsample.
+* **-ssaa INT**: Render at 2<sup>N</sup> (double or quadruple) resolution and downsample.
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
 * **-f INT**: Select output format, 0: 24-bit RGB (default), 1: 32-bit A8R8G8B8, 2: 32-bit A2R10G10B10.
 

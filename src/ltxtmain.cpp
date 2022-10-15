@@ -6,6 +6,7 @@
 #include "esmfile.hpp"
 #include "landdata.hpp"
 #include "landtxt.hpp"
+#include "downsamp.hpp"
 
 #include <thread>
 
@@ -183,7 +184,7 @@ static const char *usageStrings[] =
   "    -defclr 0x00RRGGBB  default color for untextured areas",
   "    -scale INT          scale output resolution by 2^N",
   "    -threads INT        set the number of threads to use",
-  "    -ssaa BOOL          render at double resolution and downsample",
+  "    -ssaa INT           render at 2^N resolution and downsample",
   "    -q                  do not print texture file names",
   "",
   "DDS input file options:",
@@ -236,7 +237,7 @@ int main(int argc, char **argv)
     int           xMax = 32767;
     int           yMax = 32767;
     unsigned char btdLOD = 2;
-    bool          enableDownscale = false;
+    unsigned char ssaaLevel = 0;
     bool          disableVCLR = false;
     bool          disableGCVR = true;
     unsigned int  hdrBuf[11];
@@ -306,8 +307,9 @@ int main(int argc, char **argv)
       {
         if (++i >= argc)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        enableDownscale =
-            bool(parseInteger(argv[i], 0, "invalid argument for -ssaa", 0, 1));
+        ssaaLevel =
+            (unsigned char) parseInteger(argv[i], 0,
+                                         "invalid argument for -ssaa", 0, 2);
       }
       else if (std::strcmp(argv[i], "-q") == 0)
       {
@@ -390,8 +392,8 @@ int main(int argc, char **argv)
       ba2File = new BA2File(archivePath, ".dds\t.bgsm", "/lod/\t/actors/");
     int     width = 0;
     int     height = 0;
-    if (enableDownscale)
-      mipLevel = (mipLevel > 1.0f ? (mipLevel - 1.0f) : 0.0f);
+    if (ssaaLevel > 0)
+      mipLevel = std::max(mipLevel - float(int(ssaaLevel)), 0.0f);
     if (!checkNameExtension(args[0], ".esm"))
     {
       // DDS input files
@@ -496,12 +498,12 @@ int main(int argc, char **argv)
     hdrBuf[9] = hdrBuf[9] << xyScale;
     DDSOutputFile outFile(args[1],
                           width, height, DDSInputFile::pixelFormatRGB24,
-                          hdrBuf, (!enableDownscale ? 0 : 16384));
-    if (enableDownscale)
+                          hdrBuf, (!ssaaLevel ? 0 : 16384));
+    if (ssaaLevel > 0)
     {
-      xyScale++;
-      width = width << 1;
-      height = height << 1;
+      xyScale += int(ssaaLevel);
+      width = width << ssaaLevel;
+      height = height << ssaaLevel;
     }
     for (size_t i = 0; i < threads.size(); i++)
     {
@@ -546,10 +548,11 @@ int main(int argc, char **argv)
     std::vector< std::uint32_t >  downsampleBuf;
     std::uint32_t *lineBuf = (std::uint32_t *) 0;
     int     h = 1 << xyScale;
-    h = (h > 16 ? h : 16);
-    if (enableDownscale)
+    h = (h > 32 ? h : 32);
+    if (ssaaLevel > 0)
     {
-      downsampleBuf.resize(size_t(width) * size_t(h * 3) + size_t(width >> 1));
+      downsampleBuf.resize(size_t(width) * size_t(h * 3)
+                           + size_t(width >> ssaaLevel));
       lineBuf = &(downsampleBuf.front()) + (size_t(width) * size_t(h * 3));
     }
     int     downsampleY0 = 0;
@@ -570,7 +573,7 @@ int main(int argc, char **argv)
         threads[i]->threadPtr->join();
         delete threads[i]->threadPtr;
         threads[i]->threadPtr = (std::thread *) 0;
-        if (!enableDownscale)
+        if (!ssaaLevel)
         {
           outFile.writeData(&(threads[i]->outBuf.front()),
                             sizeof(unsigned char) * threads[i]->outBuf.size());
@@ -590,14 +593,18 @@ int main(int argc, char **argv)
           bool    endFlag =
               (y >= height &&
                !((i + 1) < threads.size() && threads[i + 1]->threadPtr));
-          if (downsampleY1 >= (h << 1) || endFlag)
+          if (downsampleY1 >= (h * 2) || endFlag)
           {
             std::uint32_t *p = &(downsampleBuf.front());
-            int     yc = downsampleY0;
-            for ( ; yc < (downsampleY1 - (!endFlag ? 8 : 0)); yc = yc + 2)
+            for (int yc = downsampleY0;
+                 yc < (downsampleY1 - (!endFlag ? 16 : 0));
+                 yc = yc + (1 << ssaaLevel))
             {
-              downsample2xFilter_Line(lineBuf, p, width, downsampleY1, yc, 0);
-              for (int xc = 0; xc < (width >> 1); xc++)
+              if (ssaaLevel == 1)
+                downsample2xFilter_Line(lineBuf, p, width, downsampleY1, yc, 0);
+              else
+                downsample4xFilter_Line(lineBuf, p, width, downsampleY1, yc, 0);
+              for (int xc = 0; xc < (width >> ssaaLevel); xc++)
               {
                 std::uint32_t c = lineBuf[xc];
                 outFile.writeByte((unsigned char) ((c >> 16) & 0xFF));
@@ -607,10 +614,10 @@ int main(int argc, char **argv)
             }
             if (!endFlag)
             {
-              std::memcpy(p, p + (size_t(downsampleY1 - 16) * size_t(width)),
-                          (size_t(width) * 16U) * sizeof(std::uint32_t));
-              downsampleY0 = 8;
-              downsampleY1 = 16;
+              std::memcpy(p, p + (size_t(downsampleY1 - 32) * size_t(width)),
+                          (size_t(width) * 32U) * sizeof(std::uint32_t));
+              downsampleY0 = 16;
+              downsampleY1 = 32;
             }
           }
         }

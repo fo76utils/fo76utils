@@ -2,6 +2,7 @@
 #include "common.hpp"
 #include "render.hpp"
 #include "fp32vec4.hpp"
+#include "downsamp.hpp"
 
 #include <algorithm>
 
@@ -1774,7 +1775,7 @@ static const char *usageStrings[] =
   "    -a                  render all object types",
   "    -textures BOOL      make all diffuse textures white if false",
   "    -txtcache INT       texture cache size in megabytes",
-  "    -ssaa BOOL          render at double resolution and downsample",
+  "    -ssaa INT           render at 2^N resolution and downsample",
   "    -f INT              output format, 0: RGB24, 1: A8R8G8B8, 2: RGB10A2",
   "    -q                  do not print messages other than errors",
   "",
@@ -1826,7 +1827,7 @@ int main(int argc, char **argv)
     bool    verboseMode = true;
     bool    distantObjectsOnly = false;
     bool    noDisabledObjects = true;
-    bool    enableDownscale = false;
+    unsigned char ssaaLevel = 0;
     bool    enableSCOL = false;
     bool    enableAllObjects = false;
     bool    enableTextures = true;
@@ -1900,7 +1901,7 @@ int main(int argc, char **argv)
         std::printf("-scol %d\n", int(enableSCOL));
         std::printf("-textures %d\n", int(enableTextures));
         std::printf("-txtcache %d\n", textureCacheSize);
-        std::printf("-ssaa %d\n", int(enableDownscale));
+        std::printf("-ssaa %d\n", int(ssaaLevel));
         std::printf("-f %d\n", outputFormat);
         std::printf("-w 0x%08X", formID);
         if (!formID)
@@ -2004,8 +2005,9 @@ int main(int argc, char **argv)
       {
         if (++i >= argc)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        enableDownscale =
-            bool(parseInteger(argv[i], 0, "invalid argument for -ssaa", 0, 1));
+        ssaaLevel =
+            (unsigned char) parseInteger(argv[i], 0,
+                                         "invalid argument for -ssaa", 0, 2);
       }
       else if (std::strcmp(argv[i], "-f") == 0)
       {
@@ -2274,7 +2276,7 @@ int main(int argc, char **argv)
     }
     if (debugMode == 1)
     {
-      enableDownscale = false;
+      ssaaLevel = 0;
       enableSCOL = true;
       ltxtResolution = 128 >> btdLOD;
     }
@@ -2292,15 +2294,16 @@ int main(int argc, char **argv)
     viewOffsY = viewOffsY + (float(height - 2) * 0.5f);
     viewOffsZ = viewOffsZ - float(zMin);
     zMax = zMax - zMin;
-    if (enableDownscale)
+    if (ssaaLevel > 0)
     {
-      width = width << 1;
-      height = height << 1;
-      viewScale = viewScale * 2.0f;
-      viewOffsX = viewOffsX * 2.0f;
-      viewOffsY = viewOffsY * 2.0f;
-      viewOffsZ = viewOffsZ * 2.0f;
-      zMax = zMax << 1;
+      width = width << ssaaLevel;
+      height = height << ssaaLevel;
+      float   ssaaScale = float(1 << ssaaLevel);
+      viewScale = viewScale * ssaaScale;
+      viewOffsX = viewOffsX * ssaaScale;
+      viewOffsY = viewOffsY * ssaaScale;
+      viewOffsZ = viewOffsZ * ssaaScale;
+      zMax = zMax << ssaaLevel;
       zMax = (zMax < 16777216 ? zMax : 16777216);
     }
 
@@ -2366,7 +2369,7 @@ int main(int argc, char **argv)
       const NIFFile::NIFBounds& b = renderer.getBounds();
       if (b.xMax() > b.xMin())
       {
-        float   scale = (!enableDownscale ? 1.0f : 0.5f);
+        float   scale = float(8 >> ssaaLevel) * 0.125f;
         std::fprintf(stderr,
                      "Bounds: %6.0f, %6.0f, %6.0f to %6.0f, %6.0f, %6.0f\n",
                      b.xMin() * scale, b.yMin() * scale, b.zMin() * scale,
@@ -2376,17 +2379,26 @@ int main(int argc, char **argv)
     renderer.clear();
     renderer.deallocateBuffers(0x02);
 
-    width = width >> int(enableDownscale);
-    height = height >> int(enableDownscale);
+    width = width >> ssaaLevel;
+    height = height >> ssaaLevel;
     const std::uint32_t *imageDataPtr = renderer.getImageData();
     size_t  imageDataSize = size_t(width) * size_t(height);
     std::vector< std::uint32_t >  downsampleBuf;
-    if (enableDownscale)
+    if (ssaaLevel > 0)
     {
       downsampleBuf.resize(imageDataSize);
-      downsample2xFilter(
-          &(downsampleBuf.front()), imageDataPtr, width << 1, height << 1,
-          width, (unsigned char) ((outputFormat & 2) | USE_PIXELFMT_RGB10A2));
+      if (ssaaLevel == 1)
+      {
+        downsample2xFilter(
+            &(downsampleBuf.front()), imageDataPtr, width << 1, height << 1,
+            width, (unsigned char) ((outputFormat & 2) | USE_PIXELFMT_RGB10A2));
+      }
+      else
+      {
+        downsample4xFilter(
+            &(downsampleBuf.front()), imageDataPtr, width << 2, height << 2,
+            width, (unsigned char) ((outputFormat & 2) | USE_PIXELFMT_RGB10A2));
+      }
       imageDataPtr = &(downsampleBuf.front());
     }
     if (!outputFormat)

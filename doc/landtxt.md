@@ -12,7 +12,7 @@ Create an RGB land texture from the output of [btddump](btddump.md) (formats 2, 
 * **-defclr 0x00RRGGBB**: Default color for untextured areas.
 * **-scale INT**: Scale output resolution by 2^N.
 * **-threads INT**: Set the number of threads to use.
-* **-ssaa BOOL**: Render at double resolution and downsample.
+* **-ssaa INT**: Render at 2<sup>N</sup> (double or quadruple) resolution and downsample.
 * **-q**: Do not print texture file names.
 
 ### DDS input file options
