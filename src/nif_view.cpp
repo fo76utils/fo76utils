@@ -1,6 +1,7 @@
 
 #include "common.hpp"
 #include "nif_view.hpp"
+#include "downsamp.hpp"
 
 #include <algorithm>
 

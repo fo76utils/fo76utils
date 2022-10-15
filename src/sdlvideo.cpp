@@ -5,6 +5,7 @@
 #include "filebuf.hpp"
 #include "ddstxt.hpp"
 #include "zlib.hpp"
+#include "downsamp.hpp"
 
 #include <thread>
 #if defined(_WIN32) || defined(_WIN64)
