@@ -359,7 +359,7 @@ void Renderer::addTerrainCell(const ESMFile::ESMRecord& r)
 
 void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
 {
-  if (!(r == "CELL"))
+  if (!waterColor)
     return;
   int     cellX = 0;
   int     cellY = 0;
@@ -391,7 +391,7 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
     waterLevel = defaultWaterLevel;
   }
   RenderObject  tmp;
-  tmp.flags = 0x0004;                   // water cell
+  tmp.flags = 0x000C;                   // water cell, alpha blending
   tmp.tileIndex = -1;
   tmp.z = 0;
   tmp.model.t.x0 = 0;
@@ -532,7 +532,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
           isWater = true;
         }
       }
-      if (!isWater && isExcludedModel(stringBuf))
+      if ((!isWater && isExcludedModel(stringBuf)) || (isWater && !waterColor))
         continue;
       tmp.type = (unsigned short) (r.type & 0xFFFFU);
       tmp.flags = tmp.flags | (unsigned short) ((!isWater ? 0x02 : 0x06)
@@ -1333,7 +1333,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           t.terrainMesh->getTextures(), t.terrainMesh->getTextureMask());
     }
   }
-  else if (p.flags & 0x04)              // water cell
+  else if ((p.flags & renderPass) & 0x04)       // water cell
   {
     NIFFile::NIFTriShape  tmp;
     NIFFile::NIFVertex    vTmp[4];
@@ -1346,13 +1346,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     {
       vTmp[j].x = float(j == 0 || j == 3 ? x0 : x1);
       vTmp[j].y = float(j == 0 || j == 1 ? y0 : y1);
-      vTmp[j].z = 0.0f;
-      vTmp[j].bitangent = 0x008080FFU;
-      vTmp[j].tangent = 0x0080FF80U;
-      vTmp[j].normal = 0x00FF8080U;
       vTmp[j].u = (unsigned short) (j == 0 || j == 3 ? 0x0000 : 0x4000);
       vTmp[j].v = (unsigned short) (j == 0 || j == 1 ? 0x0000 : 0x4000);
-      vTmp[j].vertexColor = 0xFFFFFFFFU;
     }
     tTmp[0].v0 = 0;
     tTmp[0].v1 = 1;
@@ -2401,7 +2396,8 @@ int main(int argc, char **argv)
     else
       outputFormat = DDSInputFile::pixelFormatA2R10G10B10;
     DDSOutputFile outFile(args[1], width, height, outputFormat);
-    outFile.writeImageData(imageDataPtr, imageDataSize, outputFormat);
+    outFile.writeImageData(imageDataPtr, imageDataSize,
+                           outputFormat, outputFormat);
     err = 0;
   }
   catch (std::exception& e)
