@@ -45,7 +45,7 @@ mapList = [ [ "the_pitt_industrial",        0x00616199, False,  768, -256 ],
             [ "morgantown",                 0x0025DA15, False,  1792, 11008,
               [ "-btd", btdPath1, "-xm", "/babylon" ] ],
             [ "watoga",                     0x0025DA15, False,  -18296, -17688,
-              [ "-btd", btdPath1 ] ]
+              [ "-btd", btdPath1, "-xm", "meshes/effects/cranberry_" ] ]
             ]
 
 def runCmd(args):
