@@ -367,11 +367,18 @@ void BGSMFile::updateAlphaProperties()
     flags = flags | Flag_TSAlphaBlending;
     return;
   }
-  bool    isAlphaBlending = ((alphaFlags & 0x001F) == 0x000D);
+  bool    isAlphaBlending = bool(alphaFlags & 0x0001);
   bool    isAlphaTesting = !(~alphaFlags & 0x1200);
   flags = flags & ~(std::uint32_t(Flag_TSAlphaBlending));
   if (BRANCH_LIKELY(!(isAlphaBlending || isAlphaTesting)))
     return;
+  if (BRANCH_UNLIKELY(isAlphaBlending && (alphaFlags & 0x001E) != 0x000C))
+  {
+    // unsupported alpha blending mode
+    if ((alphaFlags & 0x001E) == 0x0002)
+      alphaThresholdFloat = 256.0f;
+    return;
+  }
   if (BRANCH_UNLIKELY(!(alpha >= (1.0f / 512.0f))))
   {
     alphaThresholdFloat = 256.0f;
