@@ -79,7 +79,7 @@ float FileBuffer::readFloat()
 
 FloatVector4 FileBuffer::readFloatVector4()
 {
-#if defined(__GNUC__) && (defined(__x86_64__) || defined(__x86_64))
+#if ENABLE_X86_64_AVX
   if ((filePos + 16) > fileBufSize)
     errorMessage("end of input file");
   union
