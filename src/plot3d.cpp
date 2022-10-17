@@ -345,25 +345,18 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
 
 inline FloatVector4 Plot3D_TriShape::Fragment::normalMap(FloatVector4 n)
 {
-  float   x = n[0] - 127.5f;
-  float   y = n[1] - 127.5f;
+  n -= 127.5f;
   // calculate Z normal
-  float   z = (127.5f * 127.5f) - ((x * x) + (y * y));
+  float   z = (127.5f * 127.5f) - n.dotProduct2(n);
   if (BRANCH_LIKELY(z > 0.0f))
     z = float(std::sqrt(z));
   else
     z = 0.0f;
-  FloatVector4  tmpB(bitangent);
-  tmpB.normalize3Fast();
-  tmpB *= x;
-  FloatVector4  tmpT(tangent);
-  tmpT.normalize3Fast();
-  tmpT *= y;
-  FloatVector4  tmpN(normal);
-  tmpN.normalize3Fast();
-  tmpN *= z;
-  tmpN += tmpB;
-  tmpN += tmpT;
+  FloatVector4  tmpN(FloatVector4::normalize3x3Fast(
+                         bitangent, tangent, normal));
+  n *= tmpN;
+  tmpN = (bitangent * n[0]) + (tangent * n[1]) + (normal * (z * tmpN[2]));
+  tmpN.clearV3();
   // normalize and store result
   tmpN.normalize(invNormals);
   normal = tmpN;
