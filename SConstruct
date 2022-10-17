@@ -63,8 +63,9 @@ terrain = env.Program("terrain", ["src/terrain.cpp"])
 
 if "win" in sys.platform:
     if buildPackage:
-        pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, findwater]
-        pkgFiles += [fo4land, landtxt, markers, nif_info, render, terrain]
+        pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, esm_view]
+        pkgFiles += [findwater, fo4land, landtxt, markers, nif_info, render]
+        pkgFiles += [terrain]
         if buildCubeView:
             pkgFiles += [cubeview]
             pkgFiles += ["/mingw64/bin/SDL2.dll", "LICENSE.SDL"]
