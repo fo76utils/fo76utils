@@ -452,6 +452,19 @@ static float viewRotations[27] =
   -90.0f,     0.0f,       -90.0f        // left
 };
 
+static const char *viewRotationMessages[9] =
+{
+  "Isometric view from the NW\n",
+  "Isometric view from the SW\n",
+  "Isometric view from the SE\n",
+  "Isometric view from the NE\n",
+  "Top view\n",
+  "S view\n",
+  "E view\n",
+  "N view\n",
+  "W view\n"
+};
+
 static void updateRotation(float& rx, float& ry, float& rz,
                            int dx, int dy, int dz,
                            std::string& messageBuf, const char *msg)
@@ -837,7 +850,7 @@ bool Renderer::viewModels(SDLDisplay& display,
   {
     int     imageWidth = display.getWidth();
     int     imageHeight = display.getHeight();
-    int     viewRotation = 0;   // isometric from NW
+    int     viewRotation = -1;  // < 0: do not change
     float   lightRotationX = 0.0f;
     int     fileNum = 0;
     int     d = 4;              // scale of adjusting parameters
@@ -863,9 +876,14 @@ bool Renderer::viewModels(SDLDisplay& display,
         }
         if (redrawFlags & 2)
         {
-          viewRotationX = viewRotations[viewRotation * 3];
-          viewRotationY = viewRotations[viewRotation * 3 + 1];
-          viewRotationZ = viewRotations[viewRotation * 3 + 2];
+          if (viewRotation >= 0)
+          {
+            viewRotationX = viewRotations[viewRotation * 3];
+            viewRotationY = viewRotations[viewRotation * 3 + 1];
+            viewRotationZ = viewRotations[viewRotation * 3 + 2];
+            display.printString(viewRotationMessages[viewRotation]);
+            viewRotation = -1;
+          }
           display.clearSurface();
           for (size_t i = 0; i < imageDataSize; i++)
             outBufZ[i] = 16777216.0f;
@@ -953,39 +971,30 @@ bool Renderer::viewModels(SDLDisplay& display,
                 break;
               case SDLDisplay::SDLKeySymKP7:
                 viewRotation = 0;
-                messageBuf += "Isometric view from the NW\n";
                 break;
               case SDLDisplay::SDLKeySymKP1:
                 viewRotation = 1;
-                messageBuf += "Isometric view from the SW\n";
                 break;
               case SDLDisplay::SDLKeySymKP3:
                 viewRotation = 2;
-                messageBuf += "Isometric view from the SE\n";
                 break;
               case SDLDisplay::SDLKeySymKP9:
                 viewRotation = 3;
-                messageBuf += "Isometric view from the NE\n";
                 break;
               case SDLDisplay::SDLKeySymKP5:
                 viewRotation = 4;
-                messageBuf += "Top view\n";
                 break;
               case SDLDisplay::SDLKeySymKP2:
                 viewRotation = 5;
-                messageBuf += "S view\n";
                 break;
               case SDLDisplay::SDLKeySymKP6:
                 viewRotation = 6;
-                messageBuf += "E view\n";
                 break;
               case SDLDisplay::SDLKeySymKP8:
                 viewRotation = 7;
-                messageBuf += "N view\n";
                 break;
               case SDLDisplay::SDLKeySymKP4:
                 viewRotation = 8;
-                messageBuf += "W view\n";
                 break;
               case SDLDisplay::SDLKeySymF1:
               case SDLDisplay::SDLKeySymF2:
