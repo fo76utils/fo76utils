@@ -37,7 +37,11 @@ struct FloatVector4
 {
 #if ENABLE_X86_64_AVX
  private:
-  static constexpr float  floatMinVal = 5.16987883e-26f;
+  static constexpr float      floatMinVal = 5.16987883e-26f;
+  static constexpr XMM_Float  floatMinValV =
+  {
+    floatMinVal, floatMinVal, floatMinVal, floatMinVal
+  };
  public:
   XMM_Float v;
   inline FloatVector4(const XMM_Float& r)
@@ -116,9 +120,11 @@ struct FloatVector4
   static inline float polynomial3(const float *p, float x);
   static inline float exp2Fast(float x);
   inline FloatVector4& normalize(bool invFlag = false);
-  inline FloatVector4& normalizeFast();
-  // normalize first three elements
+  // normalize first three elements (v[3] is cleared)
   inline FloatVector4& normalize3Fast();
+  // returns a vector of values a, b, and c need to be multiplied with
+  static inline FloatVector4 normalize3x3Fast(
+      const FloatVector4& a, const FloatVector4& b, const FloatVector4& c);
   // 0.0 - 255.0 sRGB -> 0.0 - 1.0 linear
   inline FloatVector4& srgbExpand();
   // 0.0 - 1.0 linear -> 0.0 - 255.0 sRGB (clamps input to 0.0 - 1.0)
@@ -378,8 +384,7 @@ inline FloatVector4& FloatVector4::squareRoot()
 inline FloatVector4& FloatVector4::squareRootFast()
 {
   XMM_Float tmp1 = v;
-  const XMM_Float tmp2 = { floatMinVal, floatMinVal, floatMinVal, floatMinVal };
-  __asm__ ("vmaxps %1, %0, %0" : "+x" (tmp1) : "xm" (tmp2));
+  __asm__ ("vmaxps %1, %0, %0" : "+x" (tmp1) : "xm" (floatMinValV));
   __asm__ ("vrsqrtps %1, %0" : "=x" (v) : "x" (tmp1));
   v *= tmp1;
   return (*this);
@@ -452,27 +457,19 @@ inline FloatVector4& FloatVector4::normalize(bool invFlag)
 {
   static const float  invMultTable[2] = { -0.5f, 0.5f };
   float   tmp = dotProduct(*this);
-  float   tmp2 = floatMinVal;
-  __asm__ ("vmaxss %0, %1, %0" : "+x" (tmp2) : "x" (tmp));
+  float   tmp2;
+  __asm__ ("vmaxss %2, %1, %0"
+           : "=x" (tmp2) : "x" (tmp), "xm" (floatMinValV[0]));
   __asm__ ("vrsqrtss %0, %0, %0" : "+x" (tmp2));
   v *= ((tmp * tmp2 * tmp2 - 3.0f) * (tmp2 * invMultTable[int(invFlag)]));
   return (*this);
 }
 
-inline FloatVector4& FloatVector4::normalizeFast()
-{
-  float   tmp = dotProduct(*this);
-  const float tmp2 = floatMinVal;
-  __asm__ ("vmaxss %1, %0, %0" : "+x" (tmp) : "xm" (tmp2));
-  __asm__ ("vrsqrtss %0, %0, %0" : "+x" (tmp));
-  v *= tmp;
-  return (*this);
-}
-
 inline FloatVector4& FloatVector4::normalize3Fast()
 {
+  const FloatVector4  minVal(1.0f / float(0x0000040000000000LL));
   XMM_Float tmp = v;
-  tmp[3] = 1.0f / float(0x0000040000000000LL);
+  __asm__ ("vblendps $0x08, %1, %0, %0" : "+x" (tmp) : "xm" (minVal.v));
   XMM_Float tmp2 = tmp * tmp;
   XMM_Float tmp3;
   __asm__ ("vshufps $0xb1, %1, %1, %0" : "=x" (tmp3) : "x" (tmp2));
@@ -482,6 +479,25 @@ inline FloatVector4& FloatVector4::normalize3Fast()
   __asm__ ("vrsqrtps %0, %0" : "+x" (tmp2));
   v = tmp * tmp2;
   return (*this);
+}
+
+inline FloatVector4 FloatVector4::normalize3x3Fast(
+    const FloatVector4& a, const FloatVector4& b, const FloatVector4& c)
+{
+  XMM_Float tmp1, tmp2, tmp3;
+  // tmp1 = b[0], b[0], c[0], c[0]
+  __asm__ ("vshufps $0x00, %2, %1, %0" : "=x" (tmp1) : "x" (b), "xm" (c));
+  // tmp2 = a[1], a[1], c[1], c[1]
+  __asm__ ("vshufps $0x55, %2, %1, %0" : "=x" (tmp2) : "x" (a), "xm" (c));
+  // tmp3 = a[2], b[2], a[3], b[3]
+  __asm__ ("vunpckhps %2, %1, %0" : "=x" (tmp3) : "x" (a), "xm" (b));
+  __asm__ ("vblendps $0x09, %1, %0, %0" : "+x" (tmp1) : "xm" (a));
+  __asm__ ("vblendps $0x0a, %1, %0, %0" : "+x" (tmp2) : "xm" (b));
+  __asm__ ("vblendps $0x0c, %1, %0, %0" : "+x" (tmp3) : "xm" (c));
+  tmp1 = (tmp1 * tmp1) + (tmp2 * tmp2) + (tmp3 * tmp3);
+  __asm__ ("vmaxps %1, %0, %0" : "+x" (tmp1) : "xm" (floatMinValV));
+  __asm__ ("vrsqrtps %0, %0" : "+x" (tmp1));
+  return tmp1;
 }
 
 inline FloatVector4& FloatVector4::srgbExpand()
@@ -860,20 +876,21 @@ inline FloatVector4& FloatVector4::normalize(bool invFlag)
   return (*this);
 }
 
-inline FloatVector4& FloatVector4::normalizeFast()
-{
-  float   tmp = dotProduct(*this);
-  if (tmp > 0.0f)
-    *this *= (1.0f / float(std::sqrt(tmp)));
-  return (*this);
-}
-
 inline FloatVector4& FloatVector4::normalize3Fast()
 {
   v[3] = 1.0f / float(0x0000040000000000LL);
   float   tmp = dotProduct(*this);
   *this *= (1.0f / float(std::sqrt(tmp)));
   return (*this);
+}
+
+inline FloatVector4 FloatVector4::normalize3x3Fast(
+    const FloatVector4& a, const FloatVector4& b, const FloatVector4& c)
+{
+  FloatVector4  tmp(a.dotProduct3(a), b.dotProduct3(b), c.dotProduct3(c), 0.0f);
+  tmp.maxValues(FloatVector4(1.0f / (float(0x0000040000000000LL)
+                                     * float(0x0000040000000000LL))));
+  return tmp.rsqrtFast();
 }
 
 inline FloatVector4& FloatVector4::srgbExpand()
