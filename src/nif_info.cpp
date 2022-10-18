@@ -415,7 +415,7 @@ int main(int argc, char **argv)
 {
   std::FILE   *outFile = (std::FILE *) 0;
   const char  *outFileName = (char *) 0;
-  Renderer    *renderer = (Renderer *) 0;
+  NIF_View    *renderer = (NIF_View *) 0;
   bool    consoleFlag = true;
   try
   {
@@ -540,7 +540,7 @@ int main(int argc, char **argv)
     BA2File ba2File(argv[1], &fileNames);
     ba2File.getFileList(fileNames);
     if (outFmt >= 5)
-      renderer = new Renderer(ba2File);
+      renderer = new NIF_View(ba2File);
     if (outFmt == 6)
     {
       for (size_t i = 0; i < fileNames.size(); )

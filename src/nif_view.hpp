@@ -14,7 +14,7 @@
 #include <thread>
 #include <mutex>
 
-class Renderer : protected Renderer_Base
+class NIF_View : protected Renderer_Base
 {
  protected:
   const BA2File&  ba2File;
@@ -36,7 +36,7 @@ class Renderer : protected Renderer_Base
   DDSTexture  defaultTexture;
   std::string defaultEnvMap;
   std::string waterTexture;
-  static void threadFunction(Renderer *p, size_t n);
+  static void threadFunction(NIF_View *p, size_t n);
   const DDSTexture *loadTexture(const std::string& texturePath,
                                 size_t threadNum = 0);
   void setDefaultTextures();
@@ -53,8 +53,8 @@ class Renderer : protected Renderer_Base
   std::uint32_t waterColor;
   int     defaultEnvMapNum;     // 0 to 7
   int     debugMode;            // 0 to 5
-  Renderer(const BA2File& archiveFiles, ESMFile *esmFilePtr = (ESMFile *) 0);
-  virtual ~Renderer();
+  NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr = (ESMFile *) 0);
+  virtual ~NIF_View();
   void loadModel(const std::string& fileName);
   void renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
                    int imageWidth, int imageHeight);

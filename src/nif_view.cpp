@@ -35,7 +35,7 @@ static const char *cubeMapPaths[24] =
   "textures/shared/cubemaps/mipblur_defaultoutside_pitt.dds"
 };
 
-void Renderer::threadFunction(Renderer *p, size_t n)
+void NIF_View::threadFunction(NIF_View *p, size_t n)
 {
   p->threadErrMsg[n].clear();
   try
@@ -130,7 +130,7 @@ void Renderer::threadFunction(Renderer *p, size_t n)
   }
 }
 
-const DDSTexture * Renderer::loadTexture(const std::string& texturePath,
+const DDSTexture * NIF_View::loadTexture(const std::string& texturePath,
                                          size_t threadNum)
 {
   const DDSTexture  *t =
@@ -146,7 +146,7 @@ const DDSTexture * Renderer::loadTexture(const std::string& texturePath,
   return t;
 }
 
-void Renderer::setDefaultTextures()
+void NIF_View::setDefaultTextures()
 {
   int     n = 0;
   if (nifFile && nifFile->getVersion() >= 0x80)
@@ -156,7 +156,7 @@ void Renderer::setDefaultTextures()
   waterTexture = "textures/water/defaultwater.dds";
 }
 
-Renderer::Renderer(const BA2File& archiveFiles, ESMFile *esmFilePtr)
+NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
   : ba2File(archiveFiles),
     esmFile(esmFilePtr),
     textureSet(0x10000000),
@@ -216,7 +216,7 @@ Renderer::Renderer(const BA2File& archiveFiles, ESMFile *esmFilePtr)
   }
 }
 
-Renderer::~Renderer()
+NIF_View::~NIF_View()
 {
   if (nifFile)
   {
@@ -231,7 +231,7 @@ Renderer::~Renderer()
   }
 }
 
-void Renderer::loadModel(const std::string& fileName)
+void NIF_View::loadModel(const std::string& fileName)
 {
   meshData.clear();
   textureSet.shrinkTextureCache();
@@ -263,7 +263,7 @@ static inline float degreesToRadians(float x)
   return float(double(x) * (std::atan(1.0) / 45.0));
 }
 
-void Renderer::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
+void NIF_View::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
                            int imageWidth, int imageHeight)
 {
   if (!(meshData.size() > 0 &&
@@ -378,7 +378,7 @@ void Renderer::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
   }
 }
 
-void Renderer::addMaterialSwap(unsigned int formID)
+void NIF_View::addMaterialSwap(unsigned int formID)
 {
   if (!(formID & 0x80000000U))
   {
@@ -400,14 +400,14 @@ void Renderer::addMaterialSwap(unsigned int formID)
   }
 }
 
-void Renderer::clearMaterialSwaps()
+void NIF_View::clearMaterialSwaps()
 {
   size_t  i;
   for (i = 0; i < (sizeof(materialSwapTable) / sizeof(unsigned int)); i++)
     materialSwapTable[i] = 0U;
 }
 
-void Renderer::setWaterColor(unsigned int watrFormID)
+void NIF_View::setWaterColor(unsigned int watrFormID)
 {
   std::uint32_t c = defaultWaterColor;
   if (watrFormID && esmFile)
@@ -419,7 +419,7 @@ void Renderer::setWaterColor(unsigned int watrFormID)
   waterColor = c;
 }
 
-void Renderer::renderModelToFile(const char *outFileName,
+void NIF_View::renderModelToFile(const char *outFileName,
                                  int imageWidth, int imageHeight)
 {
   size_t  imageDataSize = size_t(imageWidth << 1) * size_t(imageHeight << 1);
@@ -517,7 +517,7 @@ static void updateValueLogScale(float& s, int d, float minVal, float maxVal,
 }
 
 static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName,
-                           Renderer *renderer = (Renderer *) 0)
+                           NIF_View *renderer = (NIF_View *) 0)
 {
   size_t  n1 = nifFileName.rfind('/');
   n1 = (n1 != std::string::npos ? (n1 + 1) : 0);
@@ -837,7 +837,7 @@ static const char *keyboardUsageString =
     "Quit viewer.                                                    \n";
 #endif
 
-bool Renderer::viewModels(SDLDisplay& display,
+bool NIF_View::viewModels(SDLDisplay& display,
                           const std::vector< std::string >& nifFileNames)
 {
 #ifdef HAVE_SDL2

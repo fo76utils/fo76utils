@@ -12,7 +12,7 @@ class ESMView : public ESMDump, public SDLDisplay
  protected:
   BA2File   *ba2File;
 #ifdef HAVE_SDL2
-  Renderer  *renderer;
+  NIF_View  *renderer;
 #endif
   static void printID(char *bufp, unsigned int id);
   void printID(unsigned int id);
@@ -68,7 +68,7 @@ ESMView::ESMView(
 #ifdef HAVE_SDL2
     SDLDisplay(w, h, "esmview", 4U, l),
     ba2File((BA2File *) 0),
-    renderer((Renderer *) 0)
+    renderer((NIF_View *) 0)
 #else
     SDLDisplay(640, 360, "esmview", 0U, 30),
     ba2File((BA2File *) 0)
@@ -490,7 +490,7 @@ bool ESMView::viewModel(unsigned int formID)
   {
     if (!ba2File)
       errorMessage("viewing meshes requires specifying an archive path");
-    renderer = new Renderer(*ba2File, this);
+    renderer = new NIF_View(*ba2File, this);
   }
   const ESMRecord *r;
   if (!formID || !(r = findRecord(formID)))
