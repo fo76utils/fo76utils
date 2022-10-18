@@ -27,7 +27,7 @@ libSources += ["src/ba2file.cpp", "src/esmfile.cpp", "src/stringdb.cpp"]
 libSources += ["src/btdfile.cpp", "src/ddstxt.cpp", "src/downsamp.cpp"]
 libSources += ["src/esmdbase.cpp", "src/nif_file.cpp", "src/bgsmfile.cpp"]
 libSources += ["src/landdata.cpp", "src/plot3d.cpp", "src/landtxt.cpp"]
-libSources += ["src/terrmesh.cpp", "src/rndrbase.cpp"]
+libSources += ["src/terrmesh.cpp", "src/render.cpp", "src/rndrbase.cpp"]
 fo76utilsLib = env.StaticLibrary("fo76utils", libSources)
 env.Prepend(LIBS = [fo76utilsLib])
 nifViewEnv = env.Clone()
@@ -58,7 +58,7 @@ esmview_o = nifViewEnv.Object("esmview", ["src/esmview.cpp"])
 esmview = nifViewEnv.Program("esmview", [esmview_o])
 if buildCubeView:
     cubeview = nifViewEnv.Program("cubeview", ["src/cubeview.cpp"])
-render = env.Program("render", ["src/render.cpp"])
+render = env.Program("render", ["src/rndrmain.cpp"])
 terrain = env.Program("terrain", ["src/terrain.cpp"])
 
 if "win" in sys.platform:

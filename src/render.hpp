@@ -100,6 +100,14 @@ class Renderer : protected Renderer_Base
     void join();
     void clear();
   };
+  struct ThreadSortObject
+  {
+    unsigned long long  tileMask;
+    size_t  triangleCnt;
+    inline ThreadSortObject();
+    inline bool operator<(const ThreadSortObject& r) const;
+    inline ThreadSortObject& operator+=(const ThreadSortObject& r);
+  };
   std::uint32_t *outBufRGBA;
   float   *outBufZ;
   int     width;
@@ -129,9 +137,12 @@ class Renderer : protected Renderer_Base
   unsigned char renderPass;
   int     threadCnt;
   TextureCache  textureCache;
-  std::vector< const DDSTexture * > landTextures;
-  std::vector< const DDSTexture * > landTexturesN;
+  const DDSTexture  **landTextures;
+  const DDSTexture  **landTexturesN;
+  size_t  objectListPos;
+  unsigned int  modelIDBase;
   std::vector< RenderObject > objectList;
+  std::vector< ThreadSortObject > threadSortBuf;
   std::vector< std::string >  excludeModelPatterns;
   std::vector< std::string >  hdModelNamePatterns;
   std::string defaultEnvMap;
@@ -143,7 +154,6 @@ class Renderer : protected Renderer_Base
   std::uint32_t waterColor;
   float   waterReflectionLevel;
   int     zRangeMax;
-  bool    verboseMode;
   bool    useESMWaterColors;
   unsigned char bufAllocFlags;          // bit 0: RGBA buffer, bit 1: Z buffer
   NIFFile::NIFBounds  worldBounds;
@@ -306,11 +316,6 @@ class Renderer : protected Renderer_Base
   {
     waterReflectionLevel = n;
   }
-  // disable printing messages if n is false
-  void setVerboseMode(bool n)
-  {
-    verboseMode = n;
-  }
   // colors are in 0xRRGGBB format, ambientColor < 0 takes the color from
   // the default environment map
   void setRenderParameters(int lightColor, int ambientColor, int envColor,
@@ -320,11 +325,27 @@ class Renderer : protected Renderer_Base
                    unsigned int worldID = 0U, unsigned int defTxtID = 0U,
                    int mipLevel = 2, int xMin = -32768, int yMin = -32768,
                    int xMax = 32767, int yMax = 32767);
-  void renderTerrain(unsigned int worldID = 0U);
-  void renderObjects(unsigned int formID = 0U);
+  // n = 0: terrain (exterior cells only, loadTerrain() must be called first)
+  // n = 1: objects
+  // n = 2: water and objects with alpha blending
+  void initRenderPass(int n, unsigned int formID = 0U);
+  // returns true if all objects have been rendered
+  bool renderObjects();
+  inline size_t getObjectsRendered() const
+  {
+    return objectListPos;       // <= getObjectCount()
+  }
+  inline size_t getObjectCount() const
+  {
+    return objectList.size();
+  }
   inline const NIFFile::NIFBounds& getBounds() const
   {
     return worldBounds;
+  }
+  inline void resetBounds()
+  {
+    worldBounds = NIFFile::NIFBounds();
   }
 };
 
