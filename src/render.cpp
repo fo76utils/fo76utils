@@ -965,12 +965,19 @@ void Renderer::loadModels(unsigned int t, unsigned long long modelIDMask)
     nifFiles[n].clear();
     if (o.modelID == 0xFFFFFFFFU || o.modelPath.empty())
       continue;
-    if (renderPass & 4)
+    if (BRANCH_UNLIKELY(renderPass & 4))
     {
-      if (std::strncmp(o.modelPath.c_str(), "meshes/sky/", 11) == 0 ||
-          std::strncmp(o.modelPath.c_str(), "meshes/effects/ambient/", 23) == 0)
-      {
+      if (std::strncmp(o.modelPath.c_str(), "meshes/sky/", 11) == 0)
         continue;
+      if (std::strncmp(o.modelPath.c_str(), "meshes/effects/", 15) == 0)
+      {
+        size_t  len = o.modelPath.length();
+        if (std::strncmp(o.modelPath.c_str() + 15, "ambient/", 8) == 0 ||
+            std::strcmp(o.modelPath.c_str() + (len - 7), "fog.nif") == 0 ||
+            std::strcmp(o.modelPath.c_str() + (len - 9), "cloud.nif") == 0)
+        {
+          continue;
+        }
       }
     }
     try
@@ -1619,7 +1626,6 @@ void Renderer::initRenderPass(int n, unsigned int formID)
       break;
     case 1:
       renderPass = 2;
-      baseObjects.clear();
       findObjects(formID, 1);
       break;
     case 2:
