@@ -151,8 +151,8 @@ int main(int argc, char **argv)
                     int(i), landData.getTextureFormID(i));
         if (!landData.getTextureEDID(i).empty())
           std::printf("\t%s", landData.getTextureEDID(i).c_str());
-        if (!landData.getTextureMaterial(i).empty())
-          std::printf("\t%s", landData.getTextureMaterial(i).c_str());
+        if (!landData.getMaterialPath(i).empty())
+          std::printf("\t%s", landData.getMaterialPath(i).c_str());
         if (!landData.getTextureDiffuse(i).empty())
           std::printf("\t%s", landData.getTextureDiffuse(i).c_str());
         std::fputc('\n', stdout);
