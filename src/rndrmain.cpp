@@ -33,6 +33,7 @@ static const char *usageStrings[] =
   "    -mip INT            base mip level for all textures",
   "    -lmip FLOAT         additional mip level for land textures",
   "    -lmult FLOAT        land texture RGB level scale",
+  "    -lpbr BOOL          use terrain specular/lighting/reflectance maps",
   "",
   "    -view SCALE RX RY RZ OFFS_X OFFS_Y OFFS_Z",
   "                        set transform from world coordinates to image",
@@ -112,6 +113,7 @@ int main(int argc, char **argv)
     float   reflZScale = 2.0f;
     int     waterUVScale = 2048;
     int     outputFormat = 0;
+    bool    landTxtEnablePBR = false;
     const char  *defaultEnvMap =
         "textures/shared/cubemaps/mipblur_defaultoutside1.dds";
     const char  *waterTexture = "textures/water/defaultwater.dds";
@@ -159,6 +161,7 @@ int main(int argc, char **argv)
         std::printf("-mip %d\n", textureMip);
         std::printf("-lmip %.1f\n", landTextureMip);
         std::printf("-lmult %.1f\n", landTextureMult);
+        std::printf("-lpbr %d\n", int(landTxtEnablePBR));
         std::printf("-view %.6f %.1f %.1f %.1f %.1f %.1f %.1f\n",
                     viewScale, viewRotationX, viewRotationY, viewRotationZ,
                     viewOffsX, viewOffsY, viewOffsZ);
@@ -346,6 +349,13 @@ int main(int argc, char **argv)
                                            "invalid land texture RGB scale",
                                            0.5, 8.0));
       }
+      else if (std::strcmp(argv[i], "-lpbr") == 0)
+      {
+        if (++i >= argc)
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
+        landTxtEnablePBR =
+            bool(parseInteger(argv[i], 0, "invalid argument for -lpbr", 0, 1));
+      }
       else if (std::strcmp(argv[i], "-view") == 0 ||
                std::strcmp(argv[i], "-cam") == 0)
       {
@@ -492,7 +502,7 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         waterReflectionLevel =
             float(parseFloat(argv[i], "invalid water environment map scale",
-                             0.0, 2.0));
+                             0.0, 4.0));
       }
       else if (std::strcmp(argv[i], "-wscale") == 0)
       {
@@ -573,6 +583,7 @@ int main(int argc, char **argv)
     renderer.setTextureMipLevel(textureMip);
     renderer.setLandTextureMip(landTextureMip);
     renderer.setLandTxtRGBScale(landTextureMult);
+    renderer.setLandTxtEnablePBR(landTxtEnablePBR);
     renderer.setModelLOD(modelLOD);
     renderer.setWaterColor(waterColor);
     renderer.setWaterEnvMapScale(waterReflectionLevel);

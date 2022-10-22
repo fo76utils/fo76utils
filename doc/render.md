@@ -35,6 +35,7 @@ Compiling with **rgb10a2=1** is required to actually increase frame buffer preci
 * **-lmip FLOAT**: Additional mip level for land textures, defaults to 3.0.
 * **-lmult FLOAT**: Land texture RGB level scale.
 * **-ltxtres INT**: Land texture resolution per cell, must be power of two, and in the range 2<sup>(7-l)</sup> to 4096. Using a value greater than 2<sup>(7-l)</sup> enables normal mapping on terrain. For approximately correct scaling, use 16384 / 2<sup>(mip+lmip)</sup> for Fallout 4 and 76, and 8192 / 2<sup>(mip+lmip)</sup> for Skyrim.
+* **-lpbr BOOL**: Enable the use of Fallout 4 specular and Fallout 76 lighting and reflectance maps on terrain.
 
 ### Model options
 
