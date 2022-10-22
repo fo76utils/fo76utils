@@ -25,10 +25,11 @@ static bool checkNameExtension(const char *fileName, const char *suffix)
 }
 
 static void loadTextures(
-    std::vector< DDSTexture * >& textures,
+    std::vector< LandscapeTextureSet >& textures,
     const char *listFileName, const LandscapeData *landData,
     bool verboseMode, int mipOffset = 0, const BA2File *ba2File = 0)
 {
+  textures.clear();
   std::vector< std::string >  fileNames;
   if (!landData)
   {
@@ -71,7 +72,7 @@ static void loadTextures(
   }
   if (fileNames.size() < 1)
     errorMessage("texture file list is empty");
-  textures.resize(fileNames.size(), (DDSTexture *) 0);
+  textures.resize(fileNames.size());
   std::vector< unsigned char >  tmpBuf;
   for (size_t i = 0; i < fileNames.size(); i++)
   {
@@ -87,11 +88,11 @@ static void loadTextures(
       if (ba2File)
       {
         int     n = ba2File->extractTexture(tmpBuf, fileNames[i], mipOffset);
-        textures[i] = new DDSTexture(&(tmpBuf.front()), tmpBuf.size(), n);
+        textures[i][0] = new DDSTexture(&(tmpBuf.front()), tmpBuf.size(), n);
       }
       else
       {
-        textures[i] = new DDSTexture(fileNames[i].c_str(), mipOffset);
+        textures[i][0] = new DDSTexture(fileNames[i].c_str(), mipOffset);
       }
     }
     catch (...)
@@ -118,9 +119,9 @@ class RenderThread : public LandscapeTexture
                const unsigned char *vclr24Ptr, const unsigned char *ltex16Ptr,
                const unsigned char *vclr16Ptr, const unsigned char *gcvrPtr,
                int vertexCntX, int vertexCntY, int cellResolution,
-               const DDSTexture * const *landTxts, size_t landTxtCnt);
+               const LandscapeTextureSet *landTxts, size_t landTxtCnt);
   RenderThread(const LandscapeData& landData,
-               const DDSTexture * const *landTxts, size_t landTxtCnt);
+               const LandscapeTextureSet *landTxts, size_t landTxtCnt);
   virtual ~RenderThread();
   void renderLines(int y0, int y1);
   static void runThread(RenderThread *p, int y0, int y1);
@@ -131,7 +132,7 @@ RenderThread::RenderThread(
     const unsigned char *vclr24Ptr, const unsigned char *ltex16Ptr,
     const unsigned char *vclr16Ptr, const unsigned char *gcvrPtr,
     int vertexCntX, int vertexCntY, int cellResolution,
-    const DDSTexture * const *landTxts, size_t landTxtCnt)
+    const LandscapeTextureSet *landTxts, size_t landTxtCnt)
   : LandscapeTexture(txtSetPtr, ltex32Ptr, vclr24Ptr,
                      ltex16Ptr, vclr16Ptr, gcvrPtr, vertexCntX, vertexCntY,
                      cellResolution, landTxts, landTxtCnt),
@@ -142,7 +143,7 @@ RenderThread::RenderThread(
 
 RenderThread::RenderThread(
     const LandscapeData& landData,
-    const DDSTexture * const *landTxts, size_t landTxtCnt)
+    const LandscapeTextureSet *landTxts, size_t landTxtCnt)
   : LandscapeTexture(landData, landTxts, landTxtCnt),
     threadPtr((std::thread *) 0),
     xyScale(0)
@@ -204,7 +205,7 @@ static const char *usageStrings[] =
 
 int main(int argc, char **argv)
 {
-  std::vector< DDSTexture * >   landTextures;
+  std::vector< LandscapeTextureSet >  landTextures;
   std::vector< RenderThread * > threads;
   DDSInputFile  *inFile = (DDSInputFile *) 0;
   DDSInputFile  *txtSetFile = (DDSInputFile *) 0;
@@ -637,8 +638,8 @@ int main(int argc, char **argv)
   }
   for (size_t i = 0; i < landTextures.size(); i++)
   {
-    if (landTextures[i])
-      delete landTextures[i];
+    if (landTextures[i][0])
+      delete const_cast< DDSTexture * >(landTextures[i][0]);
   }
   if (landData)
     delete landData;
