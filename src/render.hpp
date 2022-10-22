@@ -137,8 +137,7 @@ class Renderer : protected Renderer_Base
   unsigned char renderPass;
   int     threadCnt;
   TextureCache  textureCache;
-  const DDSTexture  **landTextures;
-  const DDSTexture  **landTexturesN;
+  LandscapeTextureSet *landTextures;
   size_t  objectListPos;
   unsigned int  modelIDBase;
   std::vector< RenderObject > objectList;
@@ -154,6 +153,7 @@ class Renderer : protected Renderer_Base
   std::uint32_t waterColor;
   float   waterReflectionLevel;
   int     zRangeMax;
+  bool    landTxtEnablePBR;
   bool    useESMWaterColors;
   unsigned char bufAllocFlags;          // bit 0: RGBA buffer, bit 1: Z buffer
   NIFFile::NIFBounds  worldBounds;
@@ -263,6 +263,10 @@ class Renderer : protected Renderer_Base
   void setLandTxtResolution(int n)
   {
     cellTextureResolution = n;  // must be power of two and >= cell resolution
+  }
+  void setLandTxtEnablePBR(bool n)
+  {
+    landTxtEnablePBR = n;
   }
   void setModelLOD(int n)
   {

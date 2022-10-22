@@ -906,12 +906,7 @@ void Renderer::clear(unsigned int flags)
     if (landTextures)
     {
       delete[] landTextures;
-      landTextures = (const DDSTexture **) 0;
-    }
-    if (landTexturesN)
-    {
-      delete[] landTexturesN;
-      landTexturesN = (const DDSTexture **) 0;
+      landTextures = (LandscapeTextureSet *) 0;
     }
   }
   if (flags & 0x08)
@@ -1188,14 +1183,22 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         landTxtScale++;
         j = j << 1;
       }
+      unsigned int  ltexMask = 0x0001U;
+      if (hdModelNamePatterns.size() > 0)
+      {
+        ltexMask = 0x0003U;
+        if (landTxtEnablePBR && esmFile.getESMVersion() >= 0x80U)
+          ltexMask = (esmFile.getESMVersion() < 0xC0U ? 0x0043U : 0x0303U);
+      }
       t.terrainMesh->createMesh(
           *landData, landTxtScale,
           p.model.t.x0, p.model.t.y0, p.model.t.x1, p.model.t.y1,
-          landTextures, landTexturesN, landData->getTextureCount(),
+          landTextures, landData->getTextureCount(), ltexMask,
           landTextureMip - float(int(landTextureMip)),
           landTxtRGBScale, landTxtDefColor);
-      t.renderer->setRenderMode((hdModelNamePatterns.size() > 0 ? 1U : 0U)
-                                | renderMode);
+      t.renderer->setRenderMode(
+          (((ltexMask >> 1) | (ltexMask >> 5) | (ltexMask >> 8)) & 3U)
+          | renderMode);
       *(t.renderer) = *(t.terrainMesh);
       t.renderer->drawTriShape(
           p.modelTransform, viewTransform, lightX, lightY, lightZ,
@@ -1348,13 +1351,13 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     debugMode(0),
     renderPass(0),
     threadCnt(0),
-    landTextures((const DDSTexture **) 0),
-    landTexturesN((const DDSTexture **) 0),
+    landTextures((LandscapeTextureSet *) 0),
     objectListPos(0),
     modelIDBase(0xFFFFFFFFU),
     waterColor(0xFFFFFFFFU),
     waterReflectionLevel(1.0f),
     zRangeMax(zMax),
+    landTxtEnablePBR(false),
     useESMWaterColors(true),
     bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
     whiteTexture(0xFFFFFFFFU)
@@ -1563,39 +1566,37 @@ void Renderer::loadTerrain(const char *btdFileName,
       waterColor = Renderer_Base::getWaterColor(esmFile, *r, waterColor);
   }
   size_t  textureCnt = landData->getTextureCount();
-  landTextures = new const DDSTexture*[textureCnt];
-  for (size_t i = 0; i < textureCnt; i++)
-    landTextures[i] = (DDSTexture *) 0;
-  if (cellTextureResolution > landData->getCellResolution())
-  {
-    landTexturesN = new const DDSTexture*[textureCnt];
-    for (size_t i = 0; i < textureCnt; i++)
-      landTexturesN[i] = (DDSTexture *) 0;
-  }
+  landTextures = new LandscapeTextureSet[textureCnt];
+  bool    ltxtHDMode = (cellTextureResolution > landData->getCellResolution());
   std::vector< unsigned char >& fileBuf(renderThreads[0].fileBuf);
   int     mipLevelD = textureMip + int(landTextureMip);
   for (size_t i = 0; i < textureCnt; i++)
   {
     if (!enableTextures)
     {
-      landTextures[i] = &whiteTexture;
+      landTextures[i][0] = &whiteTexture;
     }
     else
     {
-      landTextures[i] = textureCache.loadTexture(
-                            ba2File, landData->getTextureDiffuse(i), fileBuf,
-                            mipLevelD);
+      landTextures[i][0] = textureCache.loadTexture(
+                               ba2File, landData->getTextureDiffuse(i), fileBuf,
+                               mipLevelD);
     }
-    if (landTexturesN)
+    if (!ltxtHDMode)
+      continue;
+    long    fileSizeD = ba2File.getFileSize(landData->getTextureDiffuse(i));
+    for (size_t j = 1; j < 10; j++)
     {
-      long    fileSizeD = ba2File.getFileSize(landData->getTextureDiffuse(i));
-      long    fileSizeN = ba2File.getFileSize(landData->getTextureNormal(i));
+      if (j >= 2 && !(landTxtEnablePBR && (j == 6 || j >= 8)))
+        continue;
+      const std::string&  fileName =
+          landData->getTextureMaterial(i).texturePaths[j];
+      long    fileSizeN = ba2File.getFileSize(fileName);
       int     mipLevelN = mipLevelD + calculateLandTxtMip(fileSizeN)
                           - calculateLandTxtMip(fileSizeD);
       mipLevelN = (mipLevelN > 0 ? (mipLevelN < 15 ? mipLevelN : 15) : 0);
-      landTexturesN[i] = textureCache.loadTexture(
-                             ba2File, landData->getTextureNormal(i), fileBuf,
-                             mipLevelN);
+      landTextures[i][j] = textureCache.loadTexture(
+                               ba2File, fileName, fileBuf, mipLevelN);
     }
   }
 }
