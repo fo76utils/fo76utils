@@ -7,6 +7,7 @@
 #include "esmfile.hpp"
 #include "btdfile.hpp"
 #include "ba2file.hpp"
+#include "bgsmfile.hpp"
 
 class LandscapeData
 {
@@ -32,9 +33,7 @@ class LandscapeData
   unsigned int  waterFormID;
   std::vector< unsigned int > ltexFormIDs;
   std::vector< std::string >  ltexEDIDs;
-  std::vector< std::string >  ltexBGSMPaths;
-  std::vector< std::string >  ltexDPaths;
-  std::vector< std::string >  ltexNPaths;
+  std::vector< BGSMFile >     ltexMaterials;
   std::vector< std::uint32_t >  dataBuf;
   void allocateDataBuf(unsigned int formatMask, bool isFO76);
   void loadBTDFile(const char *btdFileName,
@@ -130,17 +129,21 @@ class LandscapeData
   {
     return ltexEDIDs[n];
   }
-  inline const std::string& getTextureMaterial(size_t n) const
+  inline const BGSMFile& getTextureMaterial(size_t n) const
   {
-    return ltexBGSMPaths[n];
+    return ltexMaterials[n];
+  }
+  inline const std::string& getMaterialPath(size_t n) const
+  {
+    return ltexMaterials[n].texturePaths.materialPath();
   }
   inline const std::string& getTextureDiffuse(size_t n) const
   {
-    return ltexDPaths[n];
+    return ltexMaterials[n].texturePaths[0];
   }
   inline const std::string& getTextureNormal(size_t n) const
   {
-    return ltexNPaths[n];
+    return ltexMaterials[n].texturePaths[1];
   }
   // txtSetData[y * nCellsX * 32 + (x * 16) + n] =
   //     texture ID for layer n of cell quadrant x,y

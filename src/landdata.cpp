@@ -1,7 +1,6 @@
 
 #include "common.hpp"
 #include "landdata.hpp"
-#include "bgsmfile.hpp"
 
 void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
 {
@@ -129,9 +128,9 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
   for (size_t i = 0; i < gcvrCnt; i++)
     ltexFormIDs[ltexCnt + i] = btdFile.getGroundCover(i);
   ltexEDIDs.resize(ltexCnt + gcvrCnt);
-  ltexBGSMPaths.resize(ltexCnt + gcvrCnt);
-  ltexDPaths.resize(ltexCnt + gcvrCnt);
-  ltexNPaths.resize(ltexCnt + gcvrCnt);
+  ltexMaterials.resize(ltexCnt + gcvrCnt);
+  for (size_t i = 0; i < ltexMaterials.size(); i++)
+    ltexMaterials[i].texturePaths.setTexturePath(0, "");
   allocateDataBuf(formatMask, true);
   size_t  n = size_t(cellResolution);
   unsigned char m = 7 - mipLevel;
@@ -329,7 +328,10 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
     cellMaxY = (y > cellMaxY ? y : cellMaxY);
   }
   if (!(cellMaxX >= cellMinX && cellMaxY >= cellMinY))
-    errorMessage("LandscapeData: landscape data not found for world in ESM file");
+  {
+    errorMessage("LandscapeData: "
+                 "landscape data not found for world in ESM file");
+  }
   allocateDataBuf(formatMask, false);
   std::map< unsigned int, unsigned int >  emptyCells;
   std::map< unsigned int, float > cellHeightOffsets;
@@ -538,9 +540,9 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
       }
     }
     ltexEDIDs.resize(ltexFormIDs.size());
-    ltexBGSMPaths.resize(ltexFormIDs.size());
-    ltexDPaths.resize(ltexFormIDs.size());
-    ltexNPaths.resize(ltexFormIDs.size());
+    ltexMaterials.resize(ltexFormIDs.size());
+    for (size_t i = 0; i < ltexMaterials.size(); i++)
+      ltexMaterials[i].texturePaths.setTexturePath(0, "");
   }
 }
 
@@ -550,6 +552,7 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
   const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(ltexFormIDs[n]);
   if (!r)
     return;
+  std::string stringBuf;
   ESMFile::ESMField f(esmFile, *r);
   while (f.next())
   {
@@ -560,10 +563,12 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
     else if ((f == "BNAM" && *r == "LTEX") ||
              (f == "MNAM" && *r == "TXST"))
     {
-      f.readPath(ltexBGSMPaths[n], std::string::npos, "materials/", ".bgsm");
+      f.readPath(stringBuf, std::string::npos, "materials/", ".bgsm");
+      ltexMaterials[n].texturePaths.setMaterialPath(stringBuf);
     }
     else if (f.size() >= 4 &&
-             ltexBGSMPaths[n].empty() && ltexDPaths[n].empty() &&
+             ltexMaterials[n].texturePaths.materialPath().empty() &&
+             ltexMaterials[n].texturePaths[0].empty() &&
              ((f == "TNAM" && *r == "LTEX") ||
               (f == "LNAM" && *r == "GCVR")))
     {
@@ -578,39 +583,43 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
         ltexFormIDs[n] = savedFormID;
       }
     }
-    else if (f == "TX00" && *r == "TXST")
+    else if ((f.type & 0xF0FFFFFFU) == 0x30305854U && *r == "TXST")
     {
-      f.readPath(ltexDPaths[n], std::string::npos, "textures/", ".dds");
-    }
-    else if (f == "TX01" && *r == "TXST")
-    {
-      f.readPath(ltexNPaths[n], std::string::npos, "textures/", ".dds");
-    }
-    else if (f == "ICON" && *r == "LTEX")
-    {
-      f.readPath(ltexDPaths[n], std::string::npos,
-                 "textures/landscape/", ".dds");
-      if (ba2File && !ltexDPaths[n].empty())
+      // f == "TX0*"
+      size_t  i = (f.type >> 24) & 15U;
+      unsigned int  v = esmFile.getESMVersion() & ~0x3FU;
+      if (i < 2 || i == 3 ||                    // diffuse, normal, or glow
+          (i == 7 && v == 0x80U) ||             // FO4 specular map
+          ((i & 14) == 8 && v == 0xC0U))        // FO76 reflectance or lighting
       {
-        ltexNPaths[n] = ltexDPaths[n];
-        ltexNPaths[n].insert(ltexNPaths[n].length() - 4, "_n");
-        if (ba2File->getFileSize(ltexNPaths[n]) < 0L)
-          ltexNPaths[n].clear();
+        f.readPath(stringBuf, std::string::npos, "textures/", ".dds");
+        if (!(~i & 3))
+          i--;                  // 3 -> 2, 7 -> 6
+        ltexMaterials[n].texturePaths.setTexturePath(i, stringBuf.c_str());
+      }
+    }
+    else if (f == "ICON" && *r == "LTEX")       // TES4
+    {
+      f.readPath(stringBuf, std::string::npos, "textures/landscape/", ".dds");
+      ltexMaterials[n].texturePaths.setTexturePath(0, stringBuf.c_str());
+      if (ba2File && !stringBuf.empty())
+      {
+        stringBuf.insert(stringBuf.length() - 4, "_n");
+        if (ba2File->getFileSize(stringBuf) > 0L)
+          ltexMaterials[n].texturePaths.setTexturePath(1, stringBuf.c_str());
       }
     }
   }
-  if (ltexDPaths[n].empty() && ba2File && !ltexBGSMPaths[n].empty())
+  if (ba2File && !ltexMaterials[n].texturePaths.materialPath().empty())
   {
     try
     {
-      BGSMFile  bgsmFile(*ba2File, ltexBGSMPaths[n]);
-      if (bgsmFile.texturePathMask & 0x0003U)
-      {
-        ltexDPaths[n] = bgsmFile.texturePaths[0];
-        ltexNPaths[n] = bgsmFile.texturePaths[1];
-      }
+      stringBuf = ltexMaterials[n].texturePaths.materialPath();
+      BGSMFile  bgsmFile(*ba2File, stringBuf);
+      bgsmFile.texturePaths.setMaterialPath(stringBuf);
+      ltexMaterials[n] = bgsmFile;
     }
-    catch (...)
+    catch (FO76UtilsError&)
     {
     }
   }
