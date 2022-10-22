@@ -189,30 +189,21 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
     float ao, FloatVector4 f0, const Fragment& z,
     float nDotL, float nDotV, float r, int s_i) const
 {
-  float   l = (nDotL > 0.0f ? nDotL : 0.0f);
-  float   v = float(std::fabs(nDotV));
   e *= m.s.envMapScale;
   // geometry function
   float   kEnv = r * r * 0.5f;
-  FloatVector4  g((ao * v) / (v * (1.0f - kEnv) + kEnv));
+  FloatVector4  g((ao * nDotV) / (nDotV + kEnv - (nDotV * kEnv)));
   g *= envColor;
   e *= g;
   float   a = c[3];
-  c *= ((lightColor * l) + (ambientLight * g));
+  c *= ((lightColor * std::max(nDotL, 0.0f)) + (ambientLight * g));
   if (BRANCH_UNLIKELY(alphaBlendingEnabled()) && textureS)
     c = alphaBlend(c, a, z);
   // Fresnel (coefficients are optimized for glass) with roughness
   const float *p = &(fresnelRoughTable[0]) + (s_i << 2);
-  float   f = FloatVector4::polynomial3(p, v);
+  float   f = FloatVector4::polynomial3(p, nDotV);
   c += ((e - c) * (f0 + ((FloatVector4(1.0f) - f0) * (f * f))));
-  if (BRANCH_LIKELY(nDotL > 0.0f))
-  {
-    specular = specular * m.s.specularColor * lightColor;
-    float   kSpec = (kEnv + r + 0.5f) * 0.25f;  // = (r + 1) * (r + 1) / 8
-    specular *= ((l * v) / ((l * (1.0f - kSpec) + kSpec)
-                            * (v * (1.0f - kSpec) + kSpec)));
-    c += specular;
-  }
+  c += (specular * m.s.specularColor * lightColor);
   if (BRANCH_UNLIKELY(alphaBlendingEnabled()) && !textureS)
     c = alphaBlend(c, a, z);
   if (BRANCH_UNLIKELY(glowEnabled()))
@@ -224,26 +215,15 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO4(
     FloatVector4 c, FloatVector4 e, float specular, float specLevel,
     const Fragment& z, float nDotL, float nDotV, float smoothness) const
 {
-  float   l = (nDotL > 0.0f ? nDotL : 0.0f);
-  float   v = float(std::fabs(nDotV));
   e *= (m.s.envMapScale * specLevel);
   // geometry function
-  float   r = 1.0f - (smoothness < 0.999f ? smoothness : 0.999f);
+  float   r = 1.0f - std::min(smoothness, 0.999f);
   float   kEnv = r * r * 0.5f;
-  FloatVector4  g(v / (v * (1.0f - kEnv) + kEnv));
+  FloatVector4  g(nDotV / (nDotV + kEnv - (nDotV * kEnv)));
   g *= envColor;
   float   a = c[3];
-  c *= ((lightColor * l) + (ambientLight * g));
-  c += (e * g);
-  if (BRANCH_LIKELY(nDotL > 0.0f))
-  {
-    FloatVector4  s(m.s.specularColor * lightColor);
-    s *= (specular * specLevel);
-    float   kSpec = (kEnv + r + 0.5f) * 0.25f;  // = (r + 1) * (r + 1) / 8
-    s *= ((l * v) / ((l * (1.0f - kSpec) + kSpec)
-                     * (v * (1.0f - kSpec) + kSpec)));
-    c += s;
-  }
+  c *= ((lightColor * std::max(nDotL, 0.0f)) + (ambientLight * g));
+  c += ((e * g) + (m.s.specularColor * lightColor * (specular * specLevel)));
   if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
     c = alphaBlend(c, a, z);
   if (BRANCH_UNLIKELY(glowEnabled()))
@@ -255,12 +235,10 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
     FloatVector4 c, FloatVector4 e, float specular, float envLevel,
     float specLevel, const Fragment& z, float nDotL, float nDotV) const
 {
-  float   l = (nDotL > 0.0f ? nDotL : 0.0f);
-  float   v = float(std::fabs(nDotV));
-  float   g = ((nDotL > -0.125f ? nDotL : -0.125f) + 0.125f) * (1.0f / 1.125f);
+  float   g = std::max(nDotL + 0.125f, 0.0f) * (1.0f / 1.125f);
   g = g / (g * 0.875f + 0.125f);
   // geometry function for ambient light only
-  FloatVector4  a(v / (v * 0.875f + 0.125f));
+  FloatVector4  a(nDotV / (nDotV * 0.875f + 0.125f));
   a *= envColor;
   FloatVector4  s(m.s.specularColor * lightColor);
   e *= (a * (m.s.envMapScale * envLevel));
@@ -269,7 +247,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
   if (BRANCH_UNLIKELY(glowEnabled()))
     glow = glowMap(z) * c * 2.0f;
   float   alpha = c[3];
-  c *= ((lightColor * l) + (ambientLight * a));
+  c *= ((lightColor * std::max(nDotL, 0.0f)) + (ambientLight * a));
   c += (e + s);
   if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
     c = alphaBlend(c, alpha, z);
@@ -280,15 +258,14 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
     FloatVector4 c, const Fragment& z) const
 {
   float   nDotL = z.normal.dotProduct3(lightVector);
-  float   nDotV = -(z.normal[2]);
-  float   l = (nDotL > 0.0f ? nDotL : 0.0f);
-  float   v = float(std::fabs(nDotV));
+  float   nDotV = float(std::fabs(z.normal[2]));
+  float   l = std::max(nDotL, 0.0f);
   // assume roughness = 1.0, f0 = 0.04, specular = 0.25
   FloatVector4  e(ambientLight);
   FloatVector4  s(m.s.specularColor * 0.5625f);
   s *= lightColor;
   // geometry function (kEnv = kSpec = 0.5), multiplied with ao = 8.0 / 9.0
-  FloatVector4  g(v / (v * 0.5625f + 0.5625f));
+  FloatVector4  g(nDotV / (nDotV * 0.5625f + 0.5625f));
   e *= envColor;
   e *= g;
   float   a = c[3];
@@ -297,7 +274,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   s *= (g * (l / (l + 1.0f)));
   if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
     c = alphaBlend(c, a, z);
-  FloatVector4  f((v * 0.05959029f - 0.11906419f) * v + 0.10030248f);
+  FloatVector4  f((nDotV * 0.05959029f - 0.11906419f) * nDotV + 0.10030248f);
   c = c + ((e + s - c) * f);
   if (BRANCH_UNLIKELY(glowEnabled()))
     c += glowMap(z);
@@ -308,14 +285,12 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO4(
     FloatVector4 c, const Fragment& z) const
 {
   float   nDotL = z.normal.dotProduct3(lightVector);
-  float   nDotV = -(z.normal[2]);
-  float   l = (nDotL > 0.0f ? nDotL : 0.0f);
-  float   v = float(std::fabs(nDotV));
+  float   nDotV = float(std::fabs(z.normal[2]));
   // geometry function for ambient light only
-  FloatVector4  g(v / (v * 0.875f + 0.125f));
+  FloatVector4  g(nDotV / (nDotV * 0.875f + 0.125f));
   g *= envColor;
   float   a = c[3];
-  c *= ((lightColor * l) + (ambientLight * g));
+  c *= ((lightColor * std::max(nDotL, 0.0f)) + (ambientLight * g));
   if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
     c = alphaBlend(c, a, z);
   if (BRANCH_UNLIKELY(glowEnabled()))
@@ -327,17 +302,15 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_TES5(
     FloatVector4 c, const Fragment& z) const
 {
   float   nDotL = z.normal.dotProduct3(lightVector);
-  float   nDotV = -(z.normal[2]);
-  float   l = (nDotL > 0.0f ? nDotL : 0.0f);
-  float   v = float(std::fabs(nDotV));
+  float   nDotV = float(std::fabs(z.normal[2]));
   // geometry function for ambient light only
-  FloatVector4  g(v / (v * 0.875f + 0.125f));
+  FloatVector4  g(nDotV / (nDotV * 0.875f + 0.125f));
   g *= envColor;
   FloatVector4  glow(0.0f);
   if (BRANCH_UNLIKELY(glowEnabled()))
     glow = glowMap(z) * c * 2.0f;
   float   a = c[3];
-  c *= ((lightColor * l) + (ambientLight * g));
+  c *= ((lightColor * std::max(nDotL, 0.0f)) + (ambientLight * g));
   if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
     c = alphaBlend(c, a, z);
   return ((c + glow) * (lightColor[3] * 255.0f));
@@ -398,10 +371,10 @@ inline FloatVector4 Plot3D_TriShape::environmentMap(
 }
 
 inline float Plot3D_TriShape::specularPhong(
-    FloatVector4 reflectedView, float smoothness, float nDotL, float vDotL,
-    const float *fresnelPoly) const
+    FloatVector4 reflectedView, float smoothness, float nDotL, float nDotV,
+    float vDotL, const float *fresnelPoly) const
 {
-  if (!(nDotL > -0.125f))
+  if (!(nDotL > (!fresnelPoly ? -0.125f : 0.0f)))
     return 0.0f;
   float   s = reflectedView.dotProduct3(lightVector);
   if (!(s > -0.5f))
@@ -417,6 +390,10 @@ inline float Plot3D_TriShape::specularPhong(
   {
     s = s * (g * 0.154375f + 0.095625f);        // 0.25 at smoothness = 0.0
     float   vDotH = float(std::sqrt(vDotL * 0.499999f + 0.5f));
+    // geometry function
+    float   k = (2.0f - smoothness) * (2.0f - smoothness) * 0.125f;
+    s /= ((nDotL * (1.0f - k) + k) * (nDotV * (1.0f - k) + k));
+    s *= (nDotL * nDotV);
     // polynomial not squared here because of gamma compressed color space
     s = s * FloatVector4::polynomial3(fresnelPoly, vDotH);
   }
@@ -424,20 +401,23 @@ inline float Plot3D_TriShape::specularPhong(
 }
 
 inline FloatVector4 Plot3D_TriShape::specularGGX(
-    FloatVector4 reflectedView, float roughness, float nDotL, float vDotL,
-    const float *fresnelPoly, FloatVector4 f0) const
+    FloatVector4 reflectedView, float roughness, float nDotL, float nDotV,
+    float vDotL, const float *fresnelPoly, FloatVector4 f0) const
 {
   if (!(nDotL > 0.0f))
     return FloatVector4(0.0f);
+  float   vDotH = float(std::sqrt(vDotL * 0.499999f + 0.5f));
+  // geometry function
+  float   k = (roughness + 1.0f) * (roughness + 1.0f) * 0.125f;
+  float   g = (nDotL * (1.0f - k) + k) * (nDotV * (1.0f - k) + k);
   // h2 = 2.0 * squared dot product with halfway vector
   float   h2 = reflectedView.dotProduct3(lightVector) + 1.0f;
   float   a = roughness * roughness;
-  float   d = a / (h2 * (a * a - 1.0f) + 2.0f);
-  float   vDotH = float(std::sqrt(vDotL * 0.499999f + 0.5f));
+  float   d = h2 * (a * a - 1.0f) + 2.0f;
+  d = (a * a * (nDotL * nDotV)) / (d * d * g);
   FloatVector4  f(FloatVector4::polynomial3(fresnelPoly, vDotH));
   f = f0 + ((FloatVector4(1.0f) - f0) * (f * f));
-  // return D * F only, geometry function is implemented in calculateLighting
-  return (f * (d * d));
+  return (f * d);
 }
 
 inline FloatVector4 Plot3D_TriShape::calculateLighting_Water(
@@ -449,36 +429,32 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_Water(
   FloatVector4  e(environmentMap(reflectedView, 1.0f,
                                  isFO76, (!isFO76 && renderMode < 8)));
   nDotL = n.dotProduct3(lightVector);
-  nDotV = -(n[2]);
+  nDotV = float(std::fabs(n[2]));
   FloatVector4  specular;
   if (!isFO76)
   {
-    specular = FloatVector4(specularPhong(reflectedView, 0.875f, nDotL, vDotL,
-                                          fresnelPoly3_Water));
+    specular = FloatVector4(specularPhong(reflectedView, 0.875f, nDotL, nDotV,
+                                          vDotL, fresnelPoly3_Water));
   }
   else
   {
-    specular = specularGGX(reflectedView, 0.125f, nDotL, vDotL,
+    specular = specularGGX(reflectedView, 0.125f, nDotL, nDotV, vDotL,
                            fresnelPoly3_Water, FloatVector4(0.0f));
   }
-  float   l = (nDotL > 0.0f ? nDotL : 0.0f);
-  float   v = float(std::fabs(nDotV));
   FloatVector4  c(m.w.deepColor);
   if (!isFO76)
     c0 *= (a * (1.0f / 255.0f));
   else
     c0 = c0.srgbExpand() * a;
-  c *= ((lightColor * l) + (ambientLight * envColor));
+  c *= ((lightColor * std::max(nDotL, 0.0f)) + (ambientLight * envColor));
   c *= (lightColor[3] * (1.0f - a));
   c += c0;
   e *= envColor;
   specular *= lightColor;
-  // geometry function (roughness assumed to be zero, kEnv = 0.0, kSpec = 0.125)
-  specular *= ((l * v) / ((l * 0.875f + 0.125f) * (v * 0.875f + 0.125f)));
   e *= (m.w.envMapScale * lightColor[3]);
   specular *= (m.w.envMapScale * lightColor[3]);
   // Fresnel (water)
-  float   f = FloatVector4::polynomial3(fresnelPoly3_Water, v);
+  float   f = FloatVector4::polynomial3(fresnelPoly3_Water, nDotV);
   if (!isFO76)
   {
     // polynomial not squared here because of gamma compressed color space
@@ -517,7 +493,7 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
     z.normal *= -1.0f;
   }
   float   nDotL = z.normal.dotProduct3(p.lightVector);
-  float   nDotV = -(z.normal[2]);
+  float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
   FloatVector4  reflectedView(p.calculateReflection(vDotL, z));
   FloatVector4  e(0.0f);
@@ -531,10 +507,8 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
             * (1.0f / 255.0f));
     }
   }
-  float   l = std::max(nDotL, 0.0f);
-  float   v = float(std::fabs(nDotV));
   // geometry function for ambient light only
-  FloatVector4  g(v / (v * 0.875f + 0.125f));
+  FloatVector4  g(nDotV / (nDotV * 0.875f + 0.125f));
   g *= p.envColor;
   e *= g;
   float   a = c[3];
@@ -545,7 +519,7 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
   }
   else
   {
-    c *= ((p.lightColor * l) + (p.ambientLight * g));
+    c *= ((p.lightColor * std::max(nDotL, 0.0f)) + (p.ambientLight * g));
   }
   c += e;
   if (p.alphaBlendingEnabled())
@@ -602,7 +576,7 @@ void Plot3D_TriShape::drawPixel_Effect_G(Plot3D_TriShape& p, Fragment& z)
   int     s_i = roundFloat(smoothness) & 0xFF;
   smoothness = smoothness * (1.0f / 255.0f);
   float   nDotL = z.normal.dotProduct3(p.lightVector);
-  float   nDotV = -(z.normal[2]);
+  float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
   FloatVector4  reflectedView(p.calculateReflection(vDotL, z));
   FloatVector4  e(0.0f);
@@ -611,11 +585,9 @@ void Plot3D_TriShape::drawPixel_Effect_G(Plot3D_TriShape& p, Fragment& z)
     e = p.environmentMap(reflectedView, smoothness, true, false);
     e *= p.m.e.envMapScale;
   }
-  float   l = std::max(nDotL, 0.0f);
-  float   v = float(std::fabs(nDotV));
   // geometry function
   float   kEnv = roughness * roughness * 0.5f;
-  FloatVector4  g((ao * v) / (v * (1.0f - kEnv) + kEnv));
+  FloatVector4  g((ao * nDotV) / (nDotV + kEnv - (nDotV * kEnv)));
   g *= p.envColor;
   e *= g;
   float   a = c[3];
@@ -626,7 +598,7 @@ void Plot3D_TriShape::drawPixel_Effect_G(Plot3D_TriShape& p, Fragment& z)
   }
   else
   {
-    c *= ((p.lightColor * l) + (p.ambientLight * g));
+    c *= ((p.lightColor * std::max(nDotL, 0.0f)) + (p.ambientLight * g));
   }
   if (!p.textureS)
   {
@@ -645,18 +617,12 @@ void Plot3D_TriShape::drawPixel_Effect_G(Plot3D_TriShape& p, Fragment& z)
     f0.maxValues(FloatVector4(0.015625f));
     // Fresnel (coefficients are optimized for glass) with roughness
     float   f =
-        FloatVector4::polynomial3(&(fresnelRoughTable[0]) + (s_i << 2), v);
+        FloatVector4::polynomial3(&(fresnelRoughTable[0]) + (s_i << 2), nDotV);
     c += ((e - c) * (f0 + ((FloatVector4(1.0f) - f0) * (f * f))));
     if (BRANCH_LIKELY(nDotL > 0.0f))
     {
-      FloatVector4  specular(p.specularGGX(reflectedView, roughness, nDotL,
-                                           vDotL, fresnelPoly3N_Glass, f0));
-      specular = specular * p.lightColor;
-      // kSpec = pow(roughness + 1, 2) / 8
-      float   kSpec = (kEnv + roughness + 0.5f) * 0.25f;
-      specular *= ((l * v) / ((l * (1.0f - kSpec) + kSpec)
-                              * (v * (1.0f - kSpec) + kSpec)));
-      c += specular;
+      c += (p.specularGGX(reflectedView, roughness, nDotL, nDotV, vDotL,
+                          fresnelPoly3N_Glass, f0) * p.lightColor);
     }
   }
   c = (c * p.lightColor[3]).srgbCompress();
@@ -906,7 +872,7 @@ void Plot3D_TriShape::drawPixel_TES5(Plot3D_TriShape& p, Fragment& z)
   float   specLevel = n[3] * (1.0f / 255.0f);
   float   smoothness = p.m.s.specularSmoothness;
   float   nDotL = z.normalMap(n).dotProduct3(p.lightVector);
-  float   nDotV = -(z.normal[2]);
+  float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
   FloatVector4  reflectedView(p.calculateReflection(vDotL, z));
   FloatVector4  e(p.environmentMap(reflectedView, smoothness, false, true));
@@ -916,7 +882,8 @@ void Plot3D_TriShape::drawPixel_TES5(Plot3D_TriShape& p, Fragment& z)
     envLevel = p.textureS->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsetS)[0];
     envLevel *= (1.0f / 255.0f);
   }
-  float   specular = p.specularPhong(reflectedView, smoothness, nDotL, vDotL);
+  float   specular =
+      p.specularPhong(reflectedView, smoothness, nDotL, nDotV, vDotL);
   c = p.calculateLighting_TES5(c, e, specular, envLevel,
                                specLevel, z, nDotL, nDotV);
   *(z.cPtr) = c.convertToRGBA32(true);
@@ -959,12 +926,12 @@ void Plot3D_TriShape::drawPixel_FO4(Plot3D_TriShape& p, Fragment& z)
   float   specLevel = n[2] * (1.0f / 255.0f);
   float   smoothness = p.m.s.specularSmoothness * n[3] * (1.0f / 255.0f);
   float   nDotL = z.normalMap(n).dotProduct3(p.lightVector);
-  float   nDotV = -(z.normal[2]);
+  float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
   FloatVector4  reflectedView(p.calculateReflection(vDotL, z));
   FloatVector4  e(p.environmentMap(reflectedView, smoothness, false, false));
-  float   specular = p.specularPhong(reflectedView, smoothness, nDotL, vDotL,
-                                     fresnelPoly3_FO4);
+  float   specular = p.specularPhong(reflectedView, smoothness, nDotL, nDotV,
+                                     vDotL, fresnelPoly3_FO4);
   c = p.calculateLighting_FO4(c, e, specular, specLevel,
                               z, nDotL, nDotV, smoothness);
   *(z.cPtr) = c.convertToRGBA32(true);
@@ -992,11 +959,11 @@ void Plot3D_TriShape::drawPixel_N_FO76(Plot3D_TriShape& p, Fragment& z)
   FloatVector4  n(p.textureN->getPixelT(z.u(), z.v(),
                                         z.mipLevel + p.mipOffsetN));
   float   nDotL = z.normalMap(n).dotProduct3(p.lightVector);
-  float   nDotV = -(z.normal[2]);
+  float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
   FloatVector4  reflectedView(p.calculateReflection(vDotL, z));
   FloatVector4  f0(0.04f);
-  FloatVector4  specular(p.specularGGX(reflectedView, 1.0f, nDotL, vDotL,
+  FloatVector4  specular(p.specularGGX(reflectedView, 1.0f, nDotL, nDotV, vDotL,
                                        fresnelPoly3N_Glass, f0));
   c = p.calculateLighting_FO76(c, p.ambientLight, specular, 1.0f / 1.125f, f0,
                                z, nDotL, nDotV, 1.0f, 0);
@@ -1023,12 +990,12 @@ void Plot3D_TriShape::drawPixel_FO76(Plot3D_TriShape& p, Fragment& z)
   int     s_i = roundFloat(smoothness) & 0xFF;
   smoothness = smoothness * (1.0f / 255.0f);
   float   nDotL = z.normalMap(n).dotProduct3(p.lightVector);
-  float   nDotV = -(z.normal[2]);
+  float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
   FloatVector4  reflectedView(p.calculateReflection(vDotL, z));
   FloatVector4  e(p.environmentMap(reflectedView, smoothness, true, false));
-  FloatVector4  specular(p.specularGGX(reflectedView, roughness, nDotL, vDotL,
-                                       fresnelPoly3N_Glass, f0));
+  FloatVector4  specular(p.specularGGX(reflectedView, roughness, nDotL, nDotV,
+                                       vDotL, fresnelPoly3N_Glass, f0));
   c = p.calculateLighting_FO76(c, e, specular, ao, f0,
                                z, nDotL, nDotV, roughness, s_i);
   *(z.cPtr) = c.convertToRGBA32(true, true);

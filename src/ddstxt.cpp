@@ -2,6 +2,8 @@
 #include "common.hpp"
 #include "ddstxt.hpp"
 
+#include <new>
+
 static inline std::uint64_t decodeBC3Alpha(std::uint64_t& a,
                                            const unsigned char *src,
                                            bool isSigned = false)
@@ -271,13 +273,13 @@ void DDSTexture::loadTextureData(
     size_t (*decodeFunction)(std::uint32_t *,
                              const unsigned char *, unsigned int))
 {
-  size_t  dataOffs = size_t(n) * textureDataSize;
+  size_t  dataOffs = size_t(n) * size_t(textureDataSize);
   for (int i = 0; i < 20; i++)
   {
     std::uint32_t *p = textureData[i] + dataOffs;
-    unsigned int  w = ((xSizeMip0 - 1U) >> i) + 1U;
-    unsigned int  h = ((ySizeMip0 - 1U) >> i) + 1U;
-    if (i < mipLevelCnt)
+    unsigned int  w = (xMaskMip0 >> (unsigned char) i) + 1U;
+    unsigned int  h = (yMaskMip0 >> (unsigned char) i) + 1U;
+    if (i <= int(maxMipLevel))
     {
       if (blockSize > 16)
       {
@@ -314,9 +316,9 @@ void DDSTexture::loadTextureData(
     {
       // generate missing mipmaps
       const std::uint32_t *p2 =
-          textureData[i - 1] + (textureDataSize * size_t(n));
-      unsigned int  xMask = (xSizeMip0 - 1U) >> (i - 1);
-      unsigned int  yMask = (ySizeMip0 - 1U) >> (i - 1);
+          textureData[i - 1] + (size_t(textureDataSize) * size_t(n));
+      unsigned int  xMask = xMaskMip0 >> (unsigned char) (i - 1);
+      unsigned int  yMask = yMaskMip0 >> (unsigned char) (i - 1);
       size_t  w2 = size_t(xMask + 1U);
       for (unsigned int y = 0; y < h; y++)
       {
@@ -368,15 +370,15 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   unsigned int  flags = buf.readUInt32();
   if ((flags & 0x1006) != 0x1006)       // height, width, pixel format required
     errorMessage("unsupported texture file format");
-  mipLevelCnt = 1;
+  maxMipLevel = 0U;
   haveAlpha = false;
   isCubeMap = false;
   textureCnt = 1;
-  ySizeMip0 = buf.readUInt32();
-  xSizeMip0 = buf.readUInt32();
-  if (ySizeMip0 < 1 || ySizeMip0 > 32768 ||
-      xSizeMip0 < 1 || xSizeMip0 > 32768 ||
-      (ySizeMip0 & (ySizeMip0 - 1)) != 0 || (xSizeMip0 & (xSizeMip0 - 1)) != 0)
+  yMaskMip0 = buf.readUInt32() - 1U;
+  xMaskMip0 = buf.readUInt32() - 1U;
+  // width and height must be power of two and in the range 1 to 32768
+  if (((xMaskMip0 | yMaskMip0) & ~0x7FFFU) ||
+      ((xMaskMip0 & (xMaskMip0 + 1U)) | (yMaskMip0 & (yMaskMip0 + 1U))) != 0U)
   {
     errorMessage("invalid or unsupported texture dimensions");
   }
@@ -384,9 +386,10 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   (void) buf.readUInt32();              // dwDepth
   if (flags & 0x00020000)               // DDSD_MIPMAPCOUNT
   {
-    mipLevelCnt = buf.readInt32();
+    int     mipLevelCnt = buf.readInt32();
     if (mipLevelCnt < 1 || mipLevelCnt > 16)
       errorMessage("invalid mipmap count");
+    maxMipLevel = std::uint32_t(mipLevelCnt - 1);
   }
   buf.setPosition(0x4C);                // ddspf
   if (buf.readUInt32() != 0x20)         // size of DDS_PIXELFORMAT
@@ -522,27 +525,19 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   size_t  sizeRequired = 0;
   if (blockSize > 16)
   {
-    for (int i = 0; i < mipLevelCnt; i++)
+    for (unsigned int i = 0; i <= maxMipLevel; i++)
     {
-      unsigned int  w = xSizeMip0 >> i;
-      unsigned int  h = ySizeMip0 >> i;
-      if (w < 1)
-        w = 1;
-      if (h < 1)
-        h = 1;
+      unsigned int  w = (xMaskMip0 >> i) + 1U;
+      unsigned int  h = (yMaskMip0 >> i) + 1U;
       sizeRequired = sizeRequired + (size_t(w) * h * (blockSize >> 4));
     }
   }
   else
   {
-    for (int i = 0; i < mipLevelCnt; i++)
+    for (int i = 0; i <= int(maxMipLevel); i++)
     {
-      unsigned int  w = xSizeMip0 >> (i + 2);
-      unsigned int  h = ySizeMip0 >> (i + 2);
-      if (w < 1)
-        w = 1;
-      if (h < 1)
-        h = 1;
+      unsigned int  w = (xMaskMip0 >> (i + 2)) + 1U;
+      unsigned int  h = (yMaskMip0 >> (i + 2)) + 1U;
       sizeRequired = sizeRequired + (size_t(w) * h * blockSize);
     }
   }
@@ -558,46 +553,65 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   {
     errorMessage("DDS file is shorter than expected");
   }
-  size_t  dataOffsets[20];
-  size_t  bufSize = 0;
-  for (int i = 0; i < 20; i++)
-  {
-    unsigned int  w = xSizeMip0 >> i;
-    unsigned int  h = ySizeMip0 >> i;
-    if (w < 1)
-      w = 1;
-    if (h < 1)
-      h = 1;
-    dataOffsets[i] = bufSize;
-    bufSize = bufSize + (size_t(w) * h);
-  }
-  textureDataSize = bufSize;
-  textureDataBuf = new std::uint32_t[bufSize * size_t(textureCnt)];
-  for (int i = 0; i < 20; i++)
-    textureData[i] = textureDataBuf + dataOffsets[i];
   const unsigned char *srcPtr = buf.getDataPtr() + dataOffs;
-  for ( ; mipOffset > 0 && mipLevelCnt > 1; mipOffset--, mipLevelCnt--)
+  for ( ; mipOffset > 0 && maxMipLevel; mipOffset--, maxMipLevel--)
   {
-    unsigned int  w = xSizeMip0;
-    unsigned int  h = ySizeMip0;
+    unsigned int  w = xMaskMip0 + 1U;
+    unsigned int  h = yMaskMip0 + 1U;
     if (blockSize > 16)
       srcPtr = srcPtr + (size_t(w) * h * (blockSize >> 4));
     else
       srcPtr = srcPtr + (size_t((w + 3) >> 2) * ((h + 3) >> 2) * blockSize);
-    xSizeMip0 = (xSizeMip0 + 1) >> 1;
-    ySizeMip0 = (ySizeMip0 + 1) >> 1;
+    xMaskMip0 = xMaskMip0 >> 1;
+    yMaskMip0 = yMaskMip0 >> 1;
   }
+  size_t  dataOffsets[20];
+  size_t  bufSize = 0;
+  unsigned int  xMask = (xMaskMip0 << 1) | 1U;
+  unsigned int  yMask = (yMaskMip0 << 1) | 1U;
+  for (unsigned int i = 0; i < 20; i++)
+  {
+    if (!(xMask | yMask))
+    {
+      dataOffsets[i] = dataOffsets[i - 1];
+      continue;
+    }
+    xMask = xMask >> 1;
+    yMask = yMask >> 1;
+    dataOffsets[i] = bufSize;
+    bufSize = bufSize + (size_t(xMask + 1U) * (yMask + 1U));
+  }
+  textureDataSize = std::uint32_t(bufSize);
+  std::uint32_t *textureDataBuf =
+      reinterpret_cast< std::uint32_t * >(
+          std::malloc(bufSize * size_t(textureCnt) * sizeof(std::uint32_t)));
+  if (!textureDataBuf)
+    throw std::bad_alloc();
+  for (unsigned int i = 0; i < 20; i++)
+    textureData[i] = textureDataBuf + dataOffsets[i];
   for (size_t i = 0; i < textureCnt; i++)
   {
     loadTextureData(srcPtr + (i * sizeRequired), int(i),
                     blockSize, decodeFunction);
   }
-  for ( ; mipOffset > 0; mipOffset--)
+  if (mipOffset > 0)
   {
-    xSizeMip0 = (xSizeMip0 + 1) >> 1;
-    ySizeMip0 = (ySizeMip0 + 1) >> 1;
-    for (int i = 0; (i + 1) < 20; i++)
-      textureData[i] = textureData[i + 1];
+    mipOffset = (mipOffset < 19 ? mipOffset : 19);
+    size_t  offs = dataOffsets[mipOffset];
+    if (offs < 1)
+      return;
+    size_t  newSize =
+        (bufSize * size_t(textureCnt) - offs) * sizeof(std::uint32_t);
+    std::memmove(textureData[0], textureData[mipOffset], newSize);
+    textureDataBuf = reinterpret_cast< std::uint32_t * >(
+                         std::realloc(textureDataBuf, newSize));
+    if (BRANCH_UNLIKELY(!textureDataBuf))
+      throw std::bad_alloc();
+    for (int i = 0; i < 20; i++)
+    {
+      int     j = ((i + mipOffset) < 19 ? (i + mipOffset) : 19);
+      textureData[i] = textureDataBuf + (dataOffsets[j] - offs);
+    }
   }
 }
 
@@ -636,25 +650,23 @@ DDSTexture::DDSTexture(FileBuffer& buf, int mipOffset)
 }
 
 DDSTexture::DDSTexture(std::uint32_t c)
-  : xSizeMip0(1U),
-    ySizeMip0(1U),
-    mipLevelCnt(1),
+  : xMaskMip0(0U),
+    yMaskMip0(0U),
+    maxMipLevel(0U),
+    textureDataSize(0U),
+    textureColor(c),
     haveAlpha(bool(~c & 0xFF000000U)),
     isCubeMap(false),
-    textureCnt(1),
-    textureDataSize(0),
-    textureDataBuf((std::uint32_t *) 0)
+    textureCnt(1)
 {
-  unsigned char *p = reinterpret_cast< unsigned char * >(&textureDataSize);
   for (size_t i = 0; i < (sizeof(textureData) / sizeof(std::uint32_t *)); i++)
-    textureData[i] = reinterpret_cast< std::uint32_t * >(p);
-  *(textureData[0]) = c;
+    textureData[i] = &textureColor;
 }
 
 DDSTexture::~DDSTexture()
 {
-  if (textureDataBuf)
-    delete[] textureDataBuf;
+  if (textureDataSize)
+    std::free(textureData[0]);
 }
 
 FloatVector4 DDSTexture::getPixelB(float x, float y, int mipLevel) const
@@ -675,15 +687,17 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
   float   mf = mipLevel - float(m0);
   const std::uint32_t * const *t1 = &(textureData[m0]);
   const std::uint32_t * const *t2 = &(t.textureData[m0]);
-  unsigned int  w = xSizeMip0;
-  unsigned int  h = ySizeMip0;
-  if (BRANCH_UNLIKELY(!(t.xSizeMip0 == w && t.ySizeMip0 == h)))
+  unsigned int  xMask = xMaskMip0;
+  unsigned int  yMask = yMaskMip0;
+  unsigned int  xMask2 = t.xMaskMip0;
+  unsigned int  yMask2 = t.yMaskMip0;
+  if (BRANCH_UNLIKELY(!(xMask2 == xMask && yMask2 == yMask)))
   {
-    if ((t.xSizeMip0 << 1) == w && (t.ySizeMip0 << 1) == h && m0 > 0)
+    if (xMask2 == (xMask >> 1) && yMask2 == (yMask >> 1) && m0 > 0)
     {
       t2--;
     }
-    else if (t.xSizeMip0 == (w << 1) && t.ySizeMip0 == (h << 1))
+    else if ((xMask2 >> 1) == xMask && (yMask2 >> 1) == yMask)
     {
       t2++;
     }
@@ -698,7 +712,6 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
   }
   int     x0, y0;
   float   xf, yf;
-  unsigned int  xMask, yMask;
   if (BRANCH_UNLIKELY(!convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0)))
     return FloatVector4(t1[0], t2[0]);
   FloatVector4  c0(getPixelB_2(t1[0], t2[0], x0, y0, xf, yf, xMask, yMask));
@@ -720,8 +733,8 @@ FloatVector4 DDSTexture::getPixelT_N(float x, float y, float mipLevel) const
   mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
   int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
-  unsigned int  xMask = (xSizeMip0 - 1U) >> (unsigned char) m0;
-  unsigned int  yMask = (ySizeMip0 - 1U) >> (unsigned char) m0;
+  unsigned int  xMask = xMaskMip0 >> (unsigned char) m0;
+  unsigned int  yMask = yMaskMip0 >> (unsigned char) m0;
   if (BRANCH_UNLIKELY(!(xMask | yMask)))
     return FloatVector4(textureData[m0]);
   float   xf = float(std::floor(x));

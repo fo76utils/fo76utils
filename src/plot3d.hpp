@@ -125,11 +125,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       bool isSRGB, bool invZ) const;
   // fresnelPoly != NULL also enables normalization
   inline float specularPhong(
-      FloatVector4 reflectedView, float smoothness, float nDotL, float vDotL,
-      const float *fresnelPoly = (float *) 0) const;
+      FloatVector4 reflectedView, float smoothness, float nDotL, float nDotV,
+      float vDotL, const float *fresnelPoly = (float *) 0) const;
   inline FloatVector4 specularGGX(
-      FloatVector4 reflectedView, float roughness, float nDotL, float vDotL,
-      const float *fresnelPoly, FloatVector4 f0) const;
+      FloatVector4 reflectedView, float roughness, float nDotL, float nDotV,
+      float vDotL, const float *fresnelPoly, FloatVector4 f0) const;
   // c0 = terrain color, a = water transparency
   inline FloatVector4 calculateLighting_Water(
       FloatVector4 c0, float a, Fragment& z, bool isFO76) const;

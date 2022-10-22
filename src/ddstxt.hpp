@@ -9,15 +9,15 @@
 class DDSTexture
 {
  protected:
-  unsigned int  xSizeMip0;
-  unsigned int  ySizeMip0;
-  int           mipLevelCnt;
+  unsigned int  xMaskMip0;              // width - 1
+  unsigned int  yMaskMip0;              // height - 1
+  std::uint32_t maxMipLevel;
+  std::uint32_t textureDataSize;        // total texture data size / textureCnt
+  std::uint32_t textureColor;           // for 1x1 texture without allocation
   bool          haveAlpha;
   bool          isCubeMap;              // true if textureCnt == 6
   unsigned short  textureCnt;
   std::uint32_t *textureData[20];
-  size_t        textureDataSize;        // size of textureDataBuf / textureCnt
-  std::uint32_t *textureDataBuf;
   static size_t decodeBlock_BC1(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC2(
@@ -70,15 +70,15 @@ class DDSTexture
   virtual ~DDSTexture();
   inline int getWidth() const
   {
-    return int(xSizeMip0);
+    return int(xMaskMip0 + 1U);
   }
   inline int getHeight() const
   {
-    return int(ySizeMip0);
+    return int(yMaskMip0 + 1U);
   }
   inline int getMaxMipLevel() const
   {
-    return (mipLevelCnt - 1);
+    return int(maxMipLevel);
   }
   inline bool isRGBATexture() const
   {
@@ -93,39 +93,42 @@ class DDSTexture
     return textureCnt;
   }
   // no interpolation, returns color in RGBA format (LSB = red, MSB = alpha)
-  inline std::uint32_t getPixelN(int x, int y, int mipLevel) const
+  inline const std::uint32_t& getPixelN(int x, int y, int mipLevel) const
   {
-    unsigned int  xMask = (xSizeMip0 - 1U) >> (unsigned char) mipLevel;
-    unsigned int  yMask = (ySizeMip0 - 1U) >> (unsigned char) mipLevel;
+    unsigned int  xMask = xMaskMip0 >> (unsigned char) mipLevel;
+    unsigned int  yMask = yMaskMip0 >> (unsigned char) mipLevel;
     return textureData[mipLevel][((unsigned int) y & yMask) * (xMask + 1U)
                                  + ((unsigned int) x & xMask)];
   }
-  inline std::uint32_t getPixelN(int x, int y, int mipLevel, int n) const
+  inline const std::uint32_t& getPixelN(int x, int y, int mipLevel, int n) const
   {
-    unsigned int  xMask = (xSizeMip0 - 1U) >> (unsigned char) mipLevel;
-    unsigned int  yMask = (ySizeMip0 - 1U) >> (unsigned char) mipLevel;
+    unsigned int  xMask = xMaskMip0 >> (unsigned char) mipLevel;
+    unsigned int  yMask = yMaskMip0 >> (unsigned char) mipLevel;
     const std::uint32_t *p =
-        textureData[mipLevel] + (textureDataSize * size_t(n));
+        textureData[mipLevel] + (size_t(textureDataSize) * size_t(n));
     return p[((unsigned int) y & yMask) * (xMask + 1U)
              + ((unsigned int) x & xMask)];
   }
   // getPixelN() with mirrored instead of wrapped texture coordinates
-  inline std::uint32_t getPixelM(int x, int y, int mipLevel) const
+  inline const std::uint32_t& getPixelM(int x, int y, int mipLevel) const
   {
-    int     xMask = int((xSizeMip0 - 1U) >> (unsigned char) mipLevel);
-    int     yMask = int((ySizeMip0 - 1U) >> (unsigned char) mipLevel);
-    x = (!(x & (xMask + 1)) ? x : ~x) & xMask;
-    y = (!(y & (yMask + 1)) ? y : ~y) & yMask;
-    return textureData[mipLevel][y * (xMask + 1) + x];
+    unsigned int  xMask = xMaskMip0 >> (unsigned char) mipLevel;
+    unsigned int  yMask = yMaskMip0 >> (unsigned char) mipLevel;
+    unsigned int  xc = (unsigned int) x;
+    unsigned int  yc = (unsigned int) y;
+    xc = (!(xc & (xMask + 1U)) ? xc : ~xc) & xMask;
+    yc = (!(yc & (yMask + 1U)) ? yc : ~yc) & yMask;
+    return textureData[mipLevel][yc * (xMask + 1U) + xc];
   }
   // getPixelN() with clamped texture coordinates
-  inline std::uint32_t getPixelC(int x, int y, int mipLevel) const
+  inline const std::uint32_t& getPixelC(int x, int y, int mipLevel) const
   {
-    int     xMask = int((xSizeMip0 - 1U) >> (unsigned char) mipLevel);
-    int     yMask = int((ySizeMip0 - 1U) >> (unsigned char) mipLevel);
-    x = (x > 0 ? (x < xMask ? x : xMask) : 0);
-    y = (y > 0 ? (y < yMask ? y : yMask) : 0);
-    return textureData[mipLevel][y * (xMask + 1) + x];
+    unsigned int  xMask = xMaskMip0 >> (unsigned char) mipLevel;
+    unsigned int  yMask = yMaskMip0 >> (unsigned char) mipLevel;
+    x = (x > 0 ? (x < int(xMask) ? x : int(xMask)) : 0);
+    y = (y > 0 ? (y < int(yMask) ? y : int(yMask)) : 0);
+    const std::uint32_t *p = textureData[mipLevel];
+    return p[(unsigned int) y * (xMask + 1U) + (unsigned int) x];
   }
   // bilinear filtering (getPixelB/getPixelT use normalized texture coordinates)
   FloatVector4 getPixelB(float x, float y, int mipLevel) const;
@@ -165,8 +168,8 @@ inline bool DDSTexture::convertTexCoord(
     unsigned int& xMask, unsigned int& yMask,
     float x, float y, int mipLevel, bool m) const
 {
-  xMask = (xSizeMip0 - 1U) >> (unsigned char) mipLevel;
-  yMask = (ySizeMip0 - 1U) >> (unsigned char) mipLevel;
+  xMask = xMaskMip0 >> (unsigned char) mipLevel;
+  yMask = yMaskMip0 >> (unsigned char) mipLevel;
   xf = x * float(int(xMask + (!m ? 1U : 0U)));
   yf = y * float(int(yMask + (!m ? 1U : 0U)));
   float   xi = float(std::floor(xf));
