@@ -13,6 +13,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 * **-ssaa INT**: Render at 2<sup>N</sup> (double or quadruple) resolution and downsample.
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
 * **-f INT**: Select output format, 0: 24-bit RGB (default), 1: 32-bit A8R8G8B8, 2: 32-bit A2R10G10B10.
+* **-rq INT**: Set render quality (0 to 15, defaults to 0). Normal mapping is enabled at 4 or above, specular/cube map reflections and PBR materials on objects from 8, and from 12 also on terrain. Adding 2 to the value implies using the **-a** option (render all object types), while adding 1 implies **-scol 1** (enable the use of pre-combined meshes).
 
 ##### Note
 
@@ -34,8 +35,7 @@ Compiling with **rgb10a2=1** is required to actually increase frame buffer preci
 * **-defclr 0x00RRGGBB**: Default color for untextured terrain.
 * **-lmip FLOAT**: Additional mip level for land textures, defaults to 3.0.
 * **-lmult FLOAT**: Land texture RGB level scale.
-* **-ltxtres INT**: Land texture resolution per cell, must be power of two, and in the range 2<sup>(7-l)</sup> to 4096. Using a value greater than 2<sup>(7-l)</sup> enables normal mapping on terrain. For approximately correct scaling, use 16384 / 2<sup>(mip+lmip)</sup> for Fallout 4 and 76, and 8192 / 2<sup>(mip+lmip)</sup> for Skyrim.
-* **-lpbr BOOL**: Enable the use of Fallout 4 specular and Fallout 76 lighting and reflectance maps on terrain.
+* **-ltxtres INT**: Land texture resolution per cell, must be power of two, and in the range 2<sup>(7-l)</sup> to 4096. For approximately correct scaling, use 16384 / 2<sup>(mip+lmip)</sup> for Fallout 4 and 76, and 8192 / 2<sup>(mip+lmip)</sup> for Skyrim.
 
 ### Model options
 
@@ -44,7 +44,7 @@ Compiling with **rgb10a2=1** is required to actually increase frame buffer preci
 * **-mlod INT**: Set level of detail for models, 0 (default and best) to 4.
 * **-vis BOOL**: Render only objects visible from distance.
 * **-ndis BOOL**: If zero, also render initially disabled objects.
-* **-hqm STRING**: Add high quality model path name pattern. Meshes that match the pattern are always rendered at the highest level of detail, with normal mapping and reflections enabled. Using **meshes** as the pattern matches all models.
+* **-hqm STRING**: Add high quality model path name pattern. Meshes that match the pattern are always rendered at the highest level of detail, with normal mapping and reflections enabled. Any non-empty string also implies setting **-rq** to at least 4 for all objects and terrain.
 * **-xm STRING**: Add excluded model path name pattern. **-xm meshes** disables all solid objects. Use **-xm babylon** to disable Nuclear Winter objects in Fallout 76.
 
 ### View options
@@ -70,12 +70,12 @@ For testing view and light settings, it is recommended to use faster low quality
 
 ### Examples
 
-    ./render Fallout76/Data/SeventySix.esm fo76_map_4k.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -a -hqm meshes -ssaa 1 -xm swamptree -view 0.0070922 180 0 0 0 0 4096
-    ./render Fallout76/Data/SeventySix.esm fo76_map_8k.dds 8192 8192 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -a -hqm meshes -ssaa 1 -xm swamptree -view 0.0141844 180 0 0 0 0 8192
-    ./render Fallout76/Data/SeventySix.esm fo76_map_16k.dds 16384 16384 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -a -hqm meshes -ssaa 1 -xm swamptree -view 0.0283688 180 0 0 0 0 16384
-    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCNukaWorld.esm fo4_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -light 1.5 70.5288 135 -ltxtres 512 -view 0.03064 180 0 0 316.1 -680.1 16384 -a -hqm meshes -ssaa 1
-    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCCoast.esm fo4fh_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -w 0x01000B0F -light 1.5 70.5288 135 -ltxtres 512 -view 0.05482 180 0 0 -444.1 -20.1 16384 -a -hqm meshes -ssaa 1
-    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCNukaWorld.esm fo4nw_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -w 0x0100290F -light 1.5 70.5288 135 -ltxtres 512 -view 0.06857 180 0 0 444.1 520.1 16384 -a -hqm meshes -scol 1 -ssaa 1
-    ./render Skyrim/Data/Skyrim.esm,Skyrim/Data/Dawnguard.esm tes5_map.dds 8192 6471 Skyrim/Data -deftxt 0x00000C16 -env textures/cubemaps/chrome_e.dds -light 2.6 70.5288 135 -ltxtres 256 -view 0.0168067 180 0 0 -173 274.5 8192 -a -hqm meshes -ssaa 1
-    ./render Skyrim/Data/Skyrim.esm,Skyrim/Data/Dragonborn.esm tes5db_map.dds 8192 8192 Skyrim/Data -deftxt 0x00000C16 -w 0x02000800 -env textures/cubemaps/chrome_e.dds -light 2.6 70.5288 135 -ltxtres 256 -view 0.0714286 180 0 0 -3776.1 3584.1 8192 -a -hqm meshes -ssaa 1
+    ./render Fallout76/Data/SeventySix.esm fo76_map_4k.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -rq 15 -ssaa 1 -xm swamptree -view 0.0070922 180 0 0 0 0 4096
+    ./render Fallout76/Data/SeventySix.esm fo76_map_8k.dds 8192 8192 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -rq 15 -ssaa 1 -xm swamptree -view 0.0141844 180 0 0 0 0 8192
+    ./render Fallout76/Data/SeventySix.esm fo76_map_16k.dds 16384 16384 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -rq 15 -ssaa 1 -xm swamptree -view 0.0283688 180 0 0 0 0 16384
+    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCNukaWorld.esm fo4_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -light 1.5 70.5288 135 -ltxtres 512 -view 0.03064 180 0 0 316.1 -680.1 16384 -rq 15 -ssaa 1
+    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCCoast.esm fo4fh_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -w 0x01000B0F -light 1.5 70.5288 135 -ltxtres 512 -view 0.05482 180 0 0 -444.1 -20.1 16384 -rq 15 -ssaa 1
+    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCNukaWorld.esm fo4nw_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -w 0x0100290F -light 1.5 70.5288 135 -ltxtres 512 -view 0.06857 180 0 0 444.1 520.1 16384 -rq 15 -ssaa 1
+    ./render Skyrim/Data/Skyrim.esm,Skyrim/Data/Dawnguard.esm tes5_map.dds 8192 6471 Skyrim/Data -deftxt 0x00000C16 -env textures/cubemaps/chrome_e.dds -light 2.6 70.5288 135 -ltxtres 256 -view 0.0168067 180 0 0 -173 274.5 8192 -rq 10 -ssaa 1
+    ./render Skyrim/Data/Skyrim.esm,Skyrim/Data/Dragonborn.esm tes5db_map.dds 8192 8192 Skyrim/Data -deftxt 0x00000C16 -w 0x02000800 -env textures/cubemaps/chrome_e.dds -light 2.6 70.5288 135 -ltxtres 256 -view 0.0714286 180 0 0 -3776.1 3584.1 8192 -rq 10 -ssaa 1
 

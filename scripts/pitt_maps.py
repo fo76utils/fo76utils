@@ -19,9 +19,7 @@ convertOptions += ["-quality", 80]
 
 baseOptions = [ fo76Path, "-btd", btdPath2,
                 "-light", 1.6, 70.5288, 135, "-ltxtres", 1024, "-lmip", 2,
-                "-a", "-ssaa", 1, "-hqm", "meshes",
-                "-env", "textures/shared/cubemaps/mipblur_defaultoutside1.dds",
-                "-wtxt", "textures/water/defaultwater.dds" ]
+                "-ssaa", 1, "-rq", 15 ]
 
 # map name, form ID, is isometric, X offset, Y offset, [additional options]
 mapList = [ [ "the_pitt_industrial",        0x00616199, False,  768, -256 ],

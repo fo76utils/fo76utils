@@ -978,7 +978,7 @@ void Renderer::loadModels(unsigned int t, unsigned long long modelIDMask)
     try
     {
       ba2File.extractFile(nifFiles[t].fileBuf, o.modelPath);
-      nifFiles[n].nifFile = new NIFFile(&(nifFiles[t].fileBuf.front()),
+      nifFiles[n].nifFile = new NIFFile(nifFiles[t].fileBuf.data(),
                                         nifFiles[t].fileBuf.size(), &ba2File);
       bool    isHDModel = bool(o.flags & 0x0040);
       nifFiles[n].nifFile->getMesh(nifFiles[n].meshData, 0U,
@@ -1078,17 +1078,24 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       }
       if (!isVisible)
         continue;
-      t.sortBuf.push_back(TriShapeSortObject(ts, b.zMin()));
+      t.sortBuf.emplace(t.sortBuf.end(), j, b.zMin(),
+                        bool(ts.m.flags & BGSMFile::Flag_TSAlphaBlending));
       if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSOrdered))
         TriShapeSortObject::orderedNodeFix(t.sortBuf, nifFiles[n].meshData);
     }
     if (t.sortBuf.size() < 1)
       return true;
-    std::stable_sort(t.sortBuf.begin(), t.sortBuf.end());
-    bool    isHDModel = bool(p.flags & 0x40);
+    std::sort(t.sortBuf.begin(), t.sortBuf.end());
+    std::uint16_t renderModeQuality =
+        renderMode | renderQuality | ((p.flags >> 5) & 2);
+    std::uint16_t texturePathMaskBase = 0x0009;
+    if (renderModeQuality & 2)
+      texturePathMaskBase = 0x037B;
+    else if (renderQuality >= 1)
+      texturePathMaskBase = 0x000B;
     for (size_t j = 0; j < t.sortBuf.size(); j++)
     {
-      *(t.renderer) = *(t.sortBuf[j].ts);
+      *(t.renderer) = nifFiles[n].meshData[size_t(t.sortBuf[j])];
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
       if (BRANCH_UNLIKELY(t.renderer->m.flags & BGSMFile::Flag_TSWater))
@@ -1117,8 +1124,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         }
         unsigned int  texturePathMask = t.renderer->m.texturePathMask;
         texturePathMask &= ((((unsigned int) t.renderer->m.flags & 0x80U) >> 5)
-                            | (!isHDModel ? 0x0009U : 0x037BU));
-        t.renderer->setRenderMode((!isHDModel ? 0U : 3U) | renderMode);
+                            | texturePathMaskBase);
+        t.renderer->setRenderMode(renderModeQuality);
         if (BRANCH_UNLIKELY(!enableTextures))
         {
           if (t.renderer->m.alphaThresholdFloat > 0.0f ||
@@ -1159,8 +1166,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
               textureMask |= tmp;
           }
         }
-        if (!(textureMask & 0x0010U) && t.renderer->m.s.envMapScale > 0.0f &&
-            isHDModel)
+        if (((textureMask ^ texturePathMaskBase) & 0x0010U) &&
+            t.renderer->m.s.envMapScale > 0.0f)
         {
           textures[4] = textureCache.loadTexture(ba2File, defaultEnvMap,
                                                  t.fileBuf, 0);
@@ -1184,10 +1191,10 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         j = j << 1;
       }
       unsigned int  ltexMask = 0x0001U;
-      if (hdModelNamePatterns.size() > 0)
+      if (renderQuality >= 1)
       {
         ltexMask = 0x0003U;
-        if (landTxtEnablePBR && esmFile.getESMVersion() >= 0x80U)
+        if (renderQuality >= 3 && esmFile.getESMVersion() >= 0x80U)
           ltexMask = (esmFile.getESMVersion() < 0xC0U ? 0x0043U : 0x0303U);
       }
       t.terrainMesh->createMesh(
@@ -1357,7 +1364,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     waterColor(0xFFFFFFFFU),
     waterReflectionLevel(1.0f),
     zRangeMax(zMax),
-    landTxtEnablePBR(false),
+    renderQuality(0),
     useESMWaterColors(true),
     bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
     whiteTexture(0xFFFFFFFFU)
@@ -1486,6 +1493,8 @@ void Renderer::addHDModelPattern(const std::string& s)
 {
   if (s.empty())
     return;
+  if (renderQuality < 1)
+    renderQuality = 1;
   for (size_t i = 0; i < hdModelNamePatterns.size(); i++)
   {
     if (s.find(hdModelNamePatterns[i]) != std::string::npos)
@@ -1567,7 +1576,6 @@ void Renderer::loadTerrain(const char *btdFileName,
   }
   size_t  textureCnt = landData->getTextureCount();
   landTextures = new LandscapeTextureSet[textureCnt];
-  bool    ltxtHDMode = (cellTextureResolution > landData->getCellResolution());
   std::vector< unsigned char >& fileBuf(renderThreads[0].fileBuf);
   int     mipLevelD = textureMip + int(landTextureMip);
   for (size_t i = 0; i < textureCnt; i++)
@@ -1582,12 +1590,12 @@ void Renderer::loadTerrain(const char *btdFileName,
                                ba2File, landData->getTextureDiffuse(i), fileBuf,
                                mipLevelD);
     }
-    if (!ltxtHDMode)
+    if (renderQuality < 1)
       continue;
     long    fileSizeD = ba2File.getFileSize(landData->getTextureDiffuse(i));
     for (size_t j = 1; j < 10; j++)
     {
-      if (j >= 2 && !(landTxtEnablePBR && (j == 6 || j >= 8)))
+      if (j >= 2 && !(renderQuality >= 3 && (j == 6 || j >= 8)))
         continue;
       const std::string&  fileName =
           landData->getTextureMaterial(i).texturePaths[j];

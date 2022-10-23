@@ -965,7 +965,7 @@ int main(int argc, char **argv)
             break;
           if (cmdBuf[i] >= 'A' && cmdBuf[i] <= 'Z')
             cmdBuf[i] = cmdBuf[i] + ('a' - 'A');
-          if ((unsigned char) cmdBuf[i] < 0x20 || cmdBuf[i] == '\177')
+          if ((unsigned char) cmdBuf[i] <= 0x20 || cmdBuf[i] == '\177')
             cmdBuf.erase(i, 1);
           else
             i++;

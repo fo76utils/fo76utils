@@ -153,7 +153,8 @@ class Renderer : protected Renderer_Base
   std::uint32_t waterColor;
   float   waterReflectionLevel;
   int     zRangeMax;
-  bool    landTxtEnablePBR;
+  // 0: diffuse only, 1: normal mapping, 2: PBR on objects only, 3: full PBR
+  unsigned char renderQuality;
   bool    useESMWaterColors;
   unsigned char bufAllocFlags;          // bit 0: RGBA buffer, bit 1: Z buffer
   NIFFile::NIFBounds  worldBounds;
@@ -264,9 +265,14 @@ class Renderer : protected Renderer_Base
   {
     cellTextureResolution = n;  // must be power of two and >= cell resolution
   }
-  void setLandTxtEnablePBR(bool n)
+  // 0: diffuse only, 4: normal mapping, 8: PBR on objects only, 12: full PBR
+  // + 2: render references to any object type
+  // + 1: do not split pre-combined meshes
+  void setRenderQuality(unsigned char n)
   {
-    landTxtEnablePBR = n;
+    renderQuality = (n >> 2) & 3;
+    enableSCOL |= bool(n & 1);
+    enableAllObjects |= bool(n & 2);
   }
   void setModelLOD(int n)
   {
@@ -305,6 +311,7 @@ class Renderer : protected Renderer_Base
   // models with path name including s are not rendered
   void addExcludeModelPattern(const std::string& s);
   // models with path name including s are rendered at full quality
+  // implies enabling normal maps (setRenderQuality() >= 4)
   void addHDModelPattern(const std::string& s);
   // default environment map texture path
   void setDefaultEnvMap(const std::string& s);

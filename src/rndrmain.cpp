@@ -21,6 +21,7 @@ static const char *usageStrings[] =
   "    -txtcache INT       texture cache size in megabytes",
   "    -ssaa INT           render at 2^N resolution and downsample",
   "    -f INT              output format, 0: RGB24, 1: A8R8G8B8, 2: RGB10A2",
+  "    -rq INT             set render quality (0 to 15, see doc/render.md)",
   "    -q                  do not print messages other than errors",
   "",
   "    -btd FILENAME.BTD   read terrain data from Fallout 76 .btd file",
@@ -33,7 +34,6 @@ static const char *usageStrings[] =
   "    -mip INT            base mip level for all textures",
   "    -lmip FLOAT         additional mip level for land textures",
   "    -lmult FLOAT        land texture RGB level scale",
-  "    -lpbr BOOL          use terrain specular/lighting/reflectance maps",
   "",
   "    -view SCALE RX RY RZ OFFS_X OFFS_Y OFFS_Z",
   "                        set transform from world coordinates to image",
@@ -113,7 +113,7 @@ int main(int argc, char **argv)
     float   reflZScale = 2.0f;
     int     waterUVScale = 2048;
     int     outputFormat = 0;
-    bool    landTxtEnablePBR = false;
+    unsigned char renderQuality = 0;
     const char  *defaultEnvMap =
         "textures/shared/cubemaps/mipblur_defaultoutside1.dds";
     const char  *waterTexture = "textures/water/defaultwater.dds";
@@ -149,6 +149,7 @@ int main(int argc, char **argv)
         std::printf("-txtcache %d\n", textureCacheSize);
         std::printf("-ssaa %d\n", int(ssaaLevel));
         std::printf("-f %d\n", outputFormat);
+        std::printf("-rq %d\n", int(renderQuality));
         std::printf("-w 0x%08X", formID);
         if (!formID)
           std::printf(" (defaults to 0x0000003C or 0x0025DA15)");
@@ -161,7 +162,6 @@ int main(int argc, char **argv)
         std::printf("-mip %d\n", textureMip);
         std::printf("-lmip %.1f\n", landTextureMip);
         std::printf("-lmult %.1f\n", landTextureMult);
-        std::printf("-lpbr %d\n", int(landTxtEnablePBR));
         std::printf("-view %.6f %.1f %.1f %.1f %.1f %.1f %.1f\n",
                     viewScale, viewRotationX, viewRotationY, viewRotationZ,
                     viewOffsX, viewOffsY, viewOffsZ);
@@ -263,6 +263,14 @@ int main(int argc, char **argv)
         outputFormat =
             int(parseInteger(argv[i], 10, "invalid output format", 0, 2));
       }
+      else if (std::strcmp(argv[i], "-rq") == 0)
+      {
+        if (++i >= argc)
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
+        renderQuality =
+            (unsigned char) parseInteger(argv[i], 0,
+                                         "invalid render quality", 0, 15);
+      }
       else if (std::strcmp(argv[i], "-q") == 0)
       {
         verboseMode = false;
@@ -348,13 +356,6 @@ int main(int argc, char **argv)
         landTextureMult = float(parseFloat(argv[i],
                                            "invalid land texture RGB scale",
                                            0.5, 8.0));
-      }
-      else if (std::strcmp(argv[i], "-lpbr") == 0)
-      {
-        if (++i >= argc)
-          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        landTxtEnablePBR =
-            bool(parseInteger(argv[i], 0, "invalid argument for -lpbr", 0, 1));
       }
       else if (std::strcmp(argv[i], "-view") == 0 ||
                std::strcmp(argv[i], "-cam") == 0)
@@ -576,6 +577,7 @@ int main(int argc, char **argv)
     renderer.setNoDisabledObjects(noDisabledObjects);
     renderer.setEnableSCOL(enableSCOL);
     renderer.setEnableAllObjects(enableAllObjects);
+    renderer.setRenderQuality(renderQuality);
     renderer.setEnableTextures(enableTextures);
     renderer.setDebugMode(debugMode);
     renderer.setLandDefaultColor(ltxtDefColor);
@@ -583,7 +585,6 @@ int main(int argc, char **argv)
     renderer.setTextureMipLevel(textureMip);
     renderer.setLandTextureMip(landTextureMip);
     renderer.setLandTxtRGBScale(landTextureMult);
-    renderer.setLandTxtEnablePBR(landTxtEnablePBR);
     renderer.setModelLOD(modelLOD);
     renderer.setWaterColor(waterColor);
     renderer.setWaterEnvMapScale(waterReflectionLevel);
@@ -671,16 +672,16 @@ int main(int argc, char **argv)
       if (ssaaLevel == 1)
       {
         downsample2xFilter(
-            &(downsampleBuf.front()), imageDataPtr, width << 1, height << 1,
+            downsampleBuf.data(), imageDataPtr, width << 1, height << 1,
             width, (unsigned char) ((outputFormat & 2) | USE_PIXELFMT_RGB10A2));
       }
       else
       {
         downsample4xFilter(
-            &(downsampleBuf.front()), imageDataPtr, width << 2, height << 2,
+            downsampleBuf.data(), imageDataPtr, width << 2, height << 2,
             width, (unsigned char) ((outputFormat & 2) | USE_PIXELFMT_RGB10A2));
       }
-      imageDataPtr = &(downsampleBuf.front());
+      imageDataPtr = downsampleBuf.data();
     }
     if (!outputFormat)
       outputFormat = DDSInputFile::pixelFormatRGB24;
