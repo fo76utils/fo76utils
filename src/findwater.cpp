@@ -144,8 +144,8 @@ static void createMeshFromOBND(std::vector< NIFFile::NIFTriShape >& meshData,
   }
   meshData[0].vertexCnt = (unsigned int) vertexData.size();
   meshData[0].triangleCnt = (unsigned int) obndTriangleBuf.size();
-  meshData[0].vertexData = &(vertexData.front());
-  meshData[0].triangleData = &(obndTriangleBuf.front());
+  meshData[0].vertexData = vertexData.data();
+  meshData[0].triangleData = obndTriangleBuf.data();
   meshData[0].m.flags = BGSMFile::Flag_TSWater | BGSMFile::Flag_TSAlphaBlending
                         | BGSMFile::Flag_TwoSided;
 }
@@ -228,7 +228,7 @@ static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
     {
       std::vector< unsigned char >  fileBuf;
       meshArchiveFile->extractFile(fileBuf, modelPath);
-      nifFile = new NIFFile(&(fileBuf.front()), fileBuf.size());
+      nifFile = new NIFFile(fileBuf.data(), fileBuf.size());
       nifFile->getMesh(i->second);
       nifFiles.push_back(nifFile);
       return i->second;
@@ -302,7 +302,7 @@ void findWater(ESMFile& esmFile, unsigned int formID)
         if (meshData.size() > 0)
         {
           NIFFile::NIFVertexTransform t(scale, rx, ry, rz, x, y, z);
-          fillWaterMesh(&(meshData.front()), meshData.size(), t);
+          fillWaterMesh(meshData.data(), meshData.size(), t);
         }
       }
     }

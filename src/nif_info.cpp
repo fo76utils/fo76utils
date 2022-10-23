@@ -25,11 +25,8 @@ static void printAuthorName(std::FILE *f,
 {
   if (fileBuf.size() < 57)
     return;
-  if (std::memcmp(&(fileBuf.front()), "Gamebryo File Format, Version 20", 32)
-      != 0)
-  {
+  if (std::memcmp(fileBuf.data(), "Gamebryo File Format, Version 20", 32) != 0)
     return;
-  }
   size_t  nameLen = fileBuf[56];
   if ((nameLen + 57) > fileBuf.size())
     throw FO76UtilsError("%s: end of input file", nifFileName);
@@ -602,7 +599,7 @@ int main(int argc, char **argv)
         printAuthorName(outFile, fileBuf, fileNames[i].c_str());
         continue;
       }
-      NIFFile nifFile(&(fileBuf.front()), fileBuf.size(), &ba2File);
+      NIFFile nifFile(fileBuf.data(), fileBuf.size(), &ba2File);
       if (outFmt == 0 || outFmt == 2)
         printBlockList(outFile, nifFile, verboseMaterialInfo);
       if (outFmt == 2)

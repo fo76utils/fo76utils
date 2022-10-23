@@ -376,7 +376,7 @@ inline const std::string * NIFFile::getString(int n) const
 {
   if ((unsigned int) n >= (unsigned int) stringTable.size())
     return (std::string *) 0;
-  return (&(stringTable.front()) + n);
+  return (stringTable.data() + n);
 }
 
 inline size_t NIFFile::getBlockCount() const

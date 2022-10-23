@@ -39,7 +39,7 @@ static void renderCubeMap(const BA2File& ba2File,
 {
   std::vector< unsigned char >  fileBuf;
   ba2File.extractFile(fileBuf, texturePath);
-  DDSTexture  texture(&(fileBuf.front()), fileBuf.size());
+  DDSTexture  texture(fileBuf.data(), fileBuf.size());
   if (!texture.getIsCubeMap())
   {
     std::fprintf(stderr, "Warning: %s is not a cube map\n",

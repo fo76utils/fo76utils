@@ -88,7 +88,7 @@ static void loadTextures(
       if (ba2File)
       {
         int     n = ba2File->extractTexture(tmpBuf, fileNames[i], mipOffset);
-        textures[i][0] = new DDSTexture(&(tmpBuf.front()), tmpBuf.size(), n);
+        textures[i][0] = new DDSTexture(tmpBuf.data(), tmpBuf.size(), n);
       }
       else
       {
@@ -162,7 +162,7 @@ RenderThread::~RenderThread()
 void RenderThread::renderLines(int y0, int y1)
 {
   outBuf.resize(size_t(width << xyScale) * size_t(y1 - y0) * 3U);
-  renderTexture(&(outBuf.front()), xyScale,
+  renderTexture(outBuf.data(), xyScale,
                 0, y0 >> xyScale, width - 1, (y1 >> xyScale) - 1);
 }
 
@@ -533,12 +533,12 @@ int main(int argc, char **argv)
                                       ltexData32, vclrData24,
                                       ltexData16, vclrData16, gcvrData,
                                       width >> xyScale, height >> xyScale,
-                                      2 << txtSetMip, &(landTextures.front()),
+                                      2 << txtSetMip, landTextures.data(),
                                       landTextures.size());
       }
       else
       {
-        threads[i] = new RenderThread(*landData, &(landTextures.front()),
+        threads[i] = new RenderThread(*landData, landTextures.data(),
                                       landTextures.size());
       }
       threads[i]->setMipLevel(mipLevel);
@@ -554,7 +554,7 @@ int main(int argc, char **argv)
     {
       downsampleBuf.resize(size_t(width) * size_t(h * 3)
                            + size_t(width >> ssaaLevel));
-      lineBuf = &(downsampleBuf.front()) + (size_t(width) * size_t(h * 3));
+      lineBuf = downsampleBuf.data() + (size_t(width) * size_t(h * 3));
     }
     int     downsampleY0 = 0;
     int     downsampleY1 = 0;
@@ -576,7 +576,7 @@ int main(int argc, char **argv)
         threads[i]->threadPtr = (std::thread *) 0;
         if (!ssaaLevel)
         {
-          outFile.writeData(&(threads[i]->outBuf.front()),
+          outFile.writeData(threads[i]->outBuf.data(),
                             sizeof(unsigned char) * threads[i]->outBuf.size());
         }
         else
@@ -596,7 +596,7 @@ int main(int argc, char **argv)
                !((i + 1) < threads.size() && threads[i + 1]->threadPtr));
           if (downsampleY1 >= (h * 2) || endFlag)
           {
-            std::uint32_t *p = &(downsampleBuf.front());
+            std::uint32_t *p = downsampleBuf.data();
             for (int yc = downsampleY0;
                  yc < (downsampleY1 - (!endFlag ? 16 : 0));
                  yc = yc + (1 << ssaaLevel))

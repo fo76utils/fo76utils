@@ -76,7 +76,7 @@ static void createIcon256(std::vector< unsigned char >& buf, unsigned int c)
     cTmp[3] = (cTmp[3] > 0.0f ? (cTmp[3] < 255.0f ? cTmp[3] : 255.0f) : 0.0f);
     cTmp[3] = cTmp[3] * a0;
     std::uint32_t n = std::uint32_t(cTmp);
-    unsigned char *p = &(buf.front()) + ((i << 2) + 128);
+    unsigned char *p = buf.data() + ((i << 2) + 128);
     p[0] = (unsigned char) (n & 0xFFU);
     p[1] = (unsigned char) ((n >> 8) & 0xFFU);
     p[2] = (unsigned char) ((n >> 16) & 0xFFU);
@@ -164,7 +164,7 @@ void loadTextures(std::vector< MarkerDef >& textures, const char *listFileName)
             if (!m.texture)
             {
               createIcon256(iconBuf, iconColor);
-              m.texture = new DDSTexture(&(iconBuf.front()), iconBuf.size());
+              m.texture = new DDSTexture(iconBuf.data(), iconBuf.size());
             }
             m.uniqueTexture = true;
             textureFiles.insert(std::pair< std::string, DDSTexture * >(
@@ -584,7 +584,7 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
     }
     if ((yi + yy) < 0 || (yi + yy) >= int(imageHeight))
       continue;
-    std::uint32_t *p = &(buf.front()) + (size_t(yi + yy) * imageWidth);
+    std::uint32_t *p = buf.data() + (size_t(yi + yy) * imageWidth);
     int     xx = 0;
     if (xi < 0)
       xx = -xi;
@@ -927,7 +927,7 @@ int main(int argc, char **argv)
     DDSOutputFile outFile(argv[2], imageWidth, imageHeight,
                           DDSInputFile::pixelFormatRGBA32);
     const std::vector< std::uint32_t >& buf = mapImage.getImageData();
-    outFile.writeImageData(&(buf.front()), buf.size(),
+    outFile.writeImageData(buf.data(), buf.size(),
                            DDSInputFile::pixelFormatRGBA32,
                            DDSInputFile::pixelFormatRGBA32);
     outFile.flush();

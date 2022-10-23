@@ -81,7 +81,7 @@ static void writeFileWithPath(const char *fileName,
   }
   try
   {
-    f->writeData(&(buf.front()), sizeof(unsigned char) * buf.size());
+    f->writeData(buf.data(), sizeof(unsigned char) * buf.size());
   }
   catch (...)
   {

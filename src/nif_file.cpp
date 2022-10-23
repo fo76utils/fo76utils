@@ -920,8 +920,8 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   NIFTriShape t;
   t.vertexCnt = (unsigned int) b.vertexData.size();
   t.triangleCnt = (unsigned int) b.triangleData.size();
-  t.vertexData = &(b.vertexData.front());
-  t.triangleData = &(b.triangleData.front());
+  t.vertexData = b.vertexData.data();
+  t.triangleData = b.triangleData.data();
   t.vertexTransform = b.vertexTransform;
   // hidden, has vertex colors
   t.m.flags = std::uint32_t(((b.flags & 0x01) << 15)

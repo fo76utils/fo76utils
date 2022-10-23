@@ -192,13 +192,13 @@ class SDLDisplay
   inline std::uint32_t *lockDrawSurface()
   {
     if (usingImageBuf)
-      return &(imageBuf.front());
+      return imageBuf.data();
 #ifdef HAVE_SDL2
     SDL_LockSurface(sdlScreen);
     surfaceLockCnt++;
     return reinterpret_cast< std::uint32_t * >(sdlScreen->pixels);
 #else
-    return &(screenBuf.front());
+    return screenBuf.data();
 #endif
   }
   inline void unlockDrawSurface()
@@ -221,7 +221,7 @@ class SDLDisplay
     surfaceLockCnt++;
     return reinterpret_cast< std::uint32_t * >(sdlScreen->pixels);
 #else
-    return &(screenBuf.front());
+    return screenBuf.data();
 #endif
   }
   inline void unlockScreenSurface()

@@ -326,12 +326,12 @@ void renderThread(size_t xMin, size_t xMax)
     {
       if (renderMode == 4)
       {
-        renderLine2D(&(lineBufRGB.front()), x0 + int(x), y0);
+        renderLine2D(lineBufRGB.data(), x0 + int(x), y0);
       }
       else
       {
         int     offs = int(((unsigned int) x * 2365ULL + 2048U) >> 12);
-        renderLineIsometric(&(lineBufRGB.front()),
+        renderLineIsometric(lineBufRGB.data(),
                             x0 + (!(renderMode & 2) ? offs : -offs),
                             y0 + (!((renderMode + 1) & 2) ? -offs : offs));
       }
@@ -343,9 +343,8 @@ void renderThread(size_t xMin, size_t xMax)
       unsigned int  r = (((unsigned int) (c >> 48) & 0x0FFF) + 1) >> 1;
       unsigned int  g = (((unsigned int) (c >> 28) & 0x0FFF) + 1) >> 1;
       unsigned int  b = (((unsigned int) (c >> 8) & 0x0FFF) + 1) >> 1;
-      unsigned char *p =
-          &(outBuf.front()) + (((imageHeight - (i + 1)) * imageWidth
-                                + ((x - 1) >> renderScale)) * 3);
+      unsigned char *p = outBuf.data() + (((imageHeight - (i + 1)) * imageWidth
+                                           + ((x - 1) >> renderScale)) * 3);
       p[0] = (unsigned char) (b < 255 ? b : 255);
       p[1] = (unsigned char) (g < 255 ? g : 255);
       p[2] = (unsigned char) (r < 255 ? r : 255);
@@ -652,7 +651,7 @@ int main(int argc, char **argv)
     DDSOutputFile outFile(argv[2], int(imageWidth), int(imageHeight),
                           DDSInputFile::pixelFormatRGB24,
                           (unsigned int *) 0, 0);
-    outFile.writeData(&(outBuf.front()), sizeof(unsigned char) * outBuf.size());
+    outFile.writeData(outBuf.data(), sizeof(unsigned char) * outBuf.size());
     if (ltexFile)
       delete ltexFile;
     if (wmapFile)

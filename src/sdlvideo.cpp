@@ -115,7 +115,7 @@ void SDLDisplay::drawCharacterFG(std::uint32_t *p,
     float   tmp2 = fgAlpha - tmp1;
     FloatVector4  v_f(tmp2, tmp2, tmp1, tmp1);
     const unsigned char *textureDataPtr =
-        &(fontData.front()) + (size_t(v_i & 1023) << 10);
+        fontData.data() + (size_t(v_i & 1023) << 10);
     float   u = float(x0) * fontUScale + uOffset;
     for (int i = x0; i < x1; i++, u = u + fontUScale)
     {
@@ -147,15 +147,15 @@ void SDLDisplay::drawTextThreadFunc(SDLDisplay *p, int y0Src, int y0Dst,
 {
   std::uint32_t *imageBufPtr;
   if (p->usingImageBuf)
-    imageBufPtr = &(p->imageBuf.front());
+    imageBufPtr = p->imageBuf.data();
   else
 #ifdef HAVE_SDL2
     imageBufPtr = reinterpret_cast< std::uint32_t * >(p->sdlScreen->pixels);
 #else
-    imageBufPtr = &(p->screenBuf.front());
+    imageBufPtr = p->screenBuf.data();
 #endif
   size_t  w = size_t(p->textWidth);
-  const std::uint32_t *srcPtr = &(p->textBuf.front()) + (size_t(y0Src) * w);
+  const std::uint32_t *srcPtr = p->textBuf.data() + (size_t(y0Src) * w);
   for ( ; lineCnt > 0; lineCnt--, y0Dst++, srcPtr = srcPtr + w)
   {
     if (isBackground)
@@ -358,7 +358,7 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
       imageBuf.resize(size_t(imageWidth) * size_t(imageHeight), 0U);
     fontData.resize(1024 * 1024);
     ZLibDecompressor::decompressData(
-        &(fontData.front()), 131072,
+        fontData.data(), 131072,
         &(courB24FontData[0]), sizeof(courB24FontData) / sizeof(unsigned char));
     for (size_t i = fontData.size(); i-- > 0; )
     {
@@ -506,7 +506,7 @@ void SDLDisplay::blitSurface()
 {
   if (usingImageBuf)
   {
-    const std::uint32_t *s = &(imageBuf.front());
+    const std::uint32_t *s = imageBuf.data();
     std::uint32_t *p;
     int     w = imageWidth;
     int     pitch;
@@ -515,7 +515,7 @@ void SDLDisplay::blitSurface()
     p = reinterpret_cast< std::uint32_t * >(sdlScreen->pixels);
     pitch = int(sdlScreen->pitch >> 2);
 #else
-    p = &(screenBuf.front());
+    p = screenBuf.data();
     pitch = w >> int(isDownsampled);
 #endif
     if (isDownsampled)
@@ -547,12 +547,12 @@ void SDLDisplay::clearSurface(std::uint32_t c)
 #endif
   std::uint32_t *p;
   if (usingImageBuf)
-    p = &(imageBuf.front());
+    p = imageBuf.data();
   else
 #ifdef HAVE_SDL2
     p = reinterpret_cast< std::uint32_t * >(sdlScreen->pixels);
 #else
-    p = &(screenBuf.front());
+    p = screenBuf.data();
 #endif
   if (c == ((c & 0xFFU) * 0x01010101U))
   {
@@ -576,7 +576,7 @@ void SDLDisplay::copyFromDrawSurface(std::vector< std::uint32_t >& buf)
     buf.resize(imageDataSize, 0U);
   const std::uint32_t *p = lockDrawSurface();
   if (p)
-    std::memcpy(&(buf.front()), p, imageDataSize * sizeof(std::uint32_t));
+    std::memcpy(buf.data(), p, imageDataSize * sizeof(std::uint32_t));
   unlockDrawSurface();
 }
 
@@ -587,7 +587,7 @@ void SDLDisplay::copyToDrawSurface(const std::vector< std::uint32_t >& buf)
     imageDataSize = buf.size();
   std::uint32_t *p = lockDrawSurface();
   if (p)
-    std::memcpy(p, &(buf.front()), imageDataSize * sizeof(std::uint32_t));
+    std::memcpy(p, buf.data(), imageDataSize * sizeof(std::uint32_t));
   unlockDrawSurface();
 }
 

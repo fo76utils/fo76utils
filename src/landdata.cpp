@@ -51,7 +51,7 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
   if (totalDataSize < 1)
     return;
   dataBuf.resize(totalDataSize);
-  unsigned char *p = reinterpret_cast< unsigned char * >(&(dataBuf.front()));
+  unsigned char *p = reinterpret_cast< unsigned char * >(dataBuf.data());
   if (hmapDataSize)
   {
     hmapData = reinterpret_cast< std::uint16_t * >(p);
@@ -144,7 +144,7 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
     size_t  w = size_t(cellMaxX + 1 - cellMinX);
     if (formatMask & 0x01)              // height map
     {
-      std::uint16_t *bufp16 = &(tmpBuf.front());
+      std::uint16_t *bufp16 = tmpBuf.data();
       btdFile.getCellHeightMap(bufp16, x, y, mipLevel);
       for (size_t yy = 0; yy < n; yy++)
       {
@@ -156,7 +156,7 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
     }
     if (formatMask & 0x02)              // land texture
     {
-      std::uint16_t *bufp16 = &(tmpBuf.front());
+      std::uint16_t *bufp16 = tmpBuf.data();
       btdFile.getCellLandTexture(bufp16, x, y, mipLevel);
       for (size_t yy = 0; yy < n; yy++)
       {
@@ -168,7 +168,7 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
     }
     if (formatMask & 0x08)              // terrain color
     {
-      std::uint16_t *bufp16 = &(tmpBuf.front());
+      std::uint16_t *bufp16 = tmpBuf.data();
       if (mipLevel > 2)
       {
         btdFile.getCellTerrainColor(bufp16, x, y, mipLevel);
@@ -195,7 +195,7 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
     if (formatMask & 0x10)              // ground cover
     {
       unsigned char   *bufp8 =
-          reinterpret_cast< unsigned char * >(&(tmpBuf.front()));
+          reinterpret_cast< unsigned char * >(tmpBuf.data());
       btdFile.getCellGroundCover(bufp8, x, y, mipLevel);
       for (size_t yy = 0; yy < n; yy++)
       {
@@ -208,7 +208,7 @@ void LandscapeData::loadBTDFile(const char *btdFileName,
     if (formatMask & 0x12)              // texture set
     {
       unsigned char   *bufp8 =
-          reinterpret_cast< unsigned char * >(&(tmpBuf.front()));
+          reinterpret_cast< unsigned char * >(tmpBuf.data());
       btdFile.getCellTextureSet(bufp8, x, y);
       for (size_t yy = 0; yy < 2; yy++)
       {

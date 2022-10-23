@@ -6,7 +6,7 @@
 const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
 {
   if (r.formID == zlibBufRecord)
-    return &(zlibBuf[zlibBufIndex].front());
+    return zlibBuf[zlibBufIndex].data();
   unsigned int  compressedSize;
   {
     FileBuffer  buf(r.fileData + 4, 4);
@@ -21,7 +21,7 @@ const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
   unsigned int  uncompressedSize = buf.readUInt32();
   zlibBufRecord = 0xFFFFFFFFU;
   zlibBuf[zlibBufIndex].resize(size_t(offs) + uncompressedSize);
-  unsigned char *p = &(zlibBuf[zlibBufIndex].front());
+  unsigned char *p = zlibBuf[zlibBufIndex].data();
   std::memcpy(p, buf.getDataPtr(), offs);
   p[4] = (unsigned char) (uncompressedSize & 0xFF);
   p[5] = (unsigned char) ((uncompressedSize >> 8) & 0xFF);

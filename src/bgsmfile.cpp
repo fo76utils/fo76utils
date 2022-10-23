@@ -355,7 +355,7 @@ void BGSMFile::loadBGSMFile(const BA2File& ba2File, const std::string& fileName)
 {
   std::vector< unsigned char >  tmpBuf;
   ba2File.extractFile(tmpBuf, fileName);
-  FileBuffer  buf(&(tmpBuf.front()), tmpBuf.size());
+  FileBuffer  buf(tmpBuf.data(), tmpBuf.size());
   loadBGSMFile(buf);
 }
 

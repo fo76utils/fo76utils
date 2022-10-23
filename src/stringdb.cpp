@@ -51,7 +51,7 @@ bool StringDB::loadFile(const BA2File& ba2File, const char *stringsPrefix)
     if (tmpName.empty())
       continue;
     ba2File.extractFile(buf, tmpName);
-    fileBuf = &(buf.front());
+    fileBuf = buf.data();
     fileBufSize = buf.size();
     filePos = 0;
     size_t  stringCnt = readUInt32();

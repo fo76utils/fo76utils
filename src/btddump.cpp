@@ -37,11 +37,11 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
       {
         for (int cellX = xMin; cellX <= xMax; cellX++)
         {
-          std::uint16_t *srcPtr = &(cellBuf.front());
+          std::uint16_t *srcPtr = cellBuf.data();
           btdFile.getCellHeightMap(srcPtr, cellX, cellY, l);
           for (int yc = 0; yc < cellResolution; yc++)
           {
-            std::uint16_t *dstPtr = &(buf.front());
+            std::uint16_t *dstPtr = buf.data();
             dstPtr = dstPtr + (size_t((cellResolution << ((yMax - cellY) & 1))
                                       - (yc + 1)) * size_t(w));
             dstPtr = dstPtr + (size_t(cellX - xMin) << m);
@@ -240,7 +240,7 @@ int main(int argc, char **argv)
     {
       outFmt = (outFmt >> 1) + 9;       // 10: LTEX RGB, 11: GCVR RGB
       ltexPalette.resize(256);
-      loadPalette(&(ltexPalette.front()), argv[9]);
+      loadPalette(ltexPalette.data(), argv[9]);
     }
     std::vector< std::uint16_t >  heightBuf;
     std::vector< std::uint16_t >  ltexBuf;
@@ -301,33 +301,33 @@ int main(int argc, char **argv)
       {
         case 0:
           heightBuf.resize(cellBufSize);
-          btdFile.getCellHeightMap(&(heightBuf.front()), x, y, l);
+          btdFile.getCellHeightMap(heightBuf.data(), x, y, l);
           break;
         case 2:
         case 3:
         case 10:
           ltexBuf.resize(cellBufSize);
-          btdFile.getCellLandTexture(&(ltexBuf.front()), x, y, l);
+          btdFile.getCellLandTexture(ltexBuf.data(), x, y, l);
           break;
         case 4:
         case 5:
         case 11:
           gcvrBuf.resize(cellBufSize);
-          btdFile.getCellGroundCover(&(gcvrBuf.front()), x, y, l);
+          btdFile.getCellGroundCover(gcvrBuf.data(), x, y, l);
           break;
         case 6:
         case 7:
           vclrBuf.resize(cellBufSize);
-          btdFile.getCellTerrainColor(&(vclrBuf.front()), x, y, l);
+          btdFile.getCellTerrainColor(vclrBuf.data(), x, y, l);
           break;
       }
       if (outFmt == 3 || outFmt == 5 || outFmt >= 8)
-        btdFile.getCellTextureSet(&(txtSetBuf.front()), x, y);
+        btdFile.getCellTextureSet(txtSetBuf.data(), x, y);
       for (size_t yy = 0; yy < (1U << m); yy++)
       {
         size_t  offs = size_t((y0 - y) << m) | ((127U >> l) - yy);
         offs = (offs * w + size_t(x - xMin)) << m;
-        unsigned char *p = &(outBuf.front()) + (offs * outFmtDataSizes[outFmt]);
+        unsigned char *p = outBuf.data() + (offs * outFmtDataSizes[outFmt]);
         switch (outFmt)
         {
           case 0:               // raw height map
@@ -350,7 +350,7 @@ int main(int argc, char **argv)
             for (size_t xx = 0; xx < (1U << m); xx++, p++)
             {
               const unsigned char *txtSetPtr =
-                  &(txtSetBuf.front())
+                  txtSetBuf.data()
                   + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4));
               unsigned char tmp = txtSetPtr[0];
               unsigned int  a = ltexBuf[(yy << m) | xx];
@@ -372,7 +372,7 @@ int main(int argc, char **argv)
             {
               const unsigned long long  ditherGCVR = 0x0110028041145AFFULL;
               const unsigned char *txtSetPtr =
-                  &(txtSetBuf.front())
+                  txtSetBuf.data()
                   + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4) + 8);
               unsigned char tmp = 0xFF;
               unsigned char dx = (unsigned char) (xx & 3);
@@ -444,7 +444,7 @@ int main(int argc, char **argv)
             for (size_t xx = 0; xx < (1U << m); xx++, p = p + 3)
             {
               const unsigned char *txtSetPtr =
-                  &(txtSetBuf.front())
+                  txtSetBuf.data()
                   + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4));
               unsigned long long  tmp = ltexPalette[txtSetPtr[0]];
               unsigned int  a = ltexBuf[(yy << m) | xx];
@@ -463,7 +463,7 @@ int main(int argc, char **argv)
             for (size_t xx = 0; xx < (1U << m); xx++, p = p + 3)
             {
               const unsigned char *txtSetPtr =
-                  &(txtSetBuf.front())
+                  txtSetBuf.data()
                   + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4) + 8);
               unsigned long long  tmp = ltexPalette[0xFF];
               unsigned int  n = 0;
@@ -492,7 +492,7 @@ int main(int argc, char **argv)
         {
           if (x > xMax)
           {
-            outFile.writeData(&(outBuf.front()),
+            outFile.writeData(outBuf.data(),
                               sizeof(unsigned char) * outBuf.size());
             outBuf.clear();
             x = xMin;

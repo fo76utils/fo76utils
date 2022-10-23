@@ -79,7 +79,7 @@ class ESMFile
       offs = formIDMap[n];
     if (offs >= recordBuf.size())
       return (ESMRecord *) 0;
-    return (&(recordBuf.front()) + offs);
+    return (recordBuf.data() + offs);
   }
   inline ESMRecord *findRecord(unsigned int n)
   {

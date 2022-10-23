@@ -96,7 +96,7 @@ void BTDFile::loadBlock(TileData& tileData, size_t dataOffs,
   size_t  compressedSize = blockBuf.readUInt32();
   if ((offs + compressedSize) > fileBufSize)
     errorMessage("end of input file");
-  unsigned char *p = reinterpret_cast< unsigned char * >(&(zlibBuf.front()));
+  unsigned char *p = reinterpret_cast< unsigned char * >(zlibBuf.data());
   if (ZLibDecompressor::decompressData(p,
                                        zlibBuf.size() * sizeof(std::uint16_t),
                                        fileBuf + offs, compressedSize)
@@ -110,18 +110,18 @@ void BTDFile::loadBlock(TileData& tileData, size_t dataOffs,
   {
     if (b == 0)                 // vertex height
     {
-      loadBlockLines_16(&(tileData.hmapData.front())
+      loadBlockLines_16(tileData.hmapData.data()
                         + dataOffs + (y << (l + 10)), p, xd, yd);
       p = p + 384;
     }
     else if (l == 0)            // ground cover
     {
-      loadBlockLines_8(&(tileData.gcvrData.front()) + dataOffs + (y << 10), p);
+      loadBlockLines_8(tileData.gcvrData.data() + dataOffs + (y << 10), p);
       p = p + 256;
     }
     else                        // vertex color
     {
-      loadBlockLines_16(&(tileData.vclrData.front())
+      loadBlockLines_16(tileData.vclrData.data()
                         + dataOffs + (y << (l + 6)), p, xd, yd);
       p = p + 384;
     }
@@ -131,7 +131,7 @@ void BTDFile::loadBlock(TileData& tileData, size_t dataOffs,
   for (size_t y = 0; y < 128; y = y + 2)
   {
     // landscape textures
-    loadBlockLines_16(&(tileData.ltexData.front())
+    loadBlockLines_16(tileData.ltexData.data()
                       + dataOffs + (y << (l + 10)), p, xd, yd);
     p = p + 384;
   }
@@ -266,7 +266,7 @@ const BTDFile::TileData& BTDFile::loadTile(int cellX, int cellY,
     try
     {
       threads[i] = new std::thread(loadBlocksThread,
-                                   this, &(errMsgs.front()) + i, &tileData,
+                                   this, errMsgs.data() + i, &tileData,
                                    x0, y0, i, threadCnt, blockMask);
     }
     catch (std::exception& e)
@@ -365,7 +365,7 @@ void BTDFile::setTileCacheSize(size_t n)
   }
   for (size_t i = 0; i < prvSize; i++)
   {
-    TileData  *t = &(tileCache.front()) + i;
+    TileData  *t = tileCache.data() + i;
     unsigned int  cacheKey = ((unsigned int) t->y0 << 16) | t->x0;
     if (bool(cacheKey & 0x80008000U) || !(t->blockMask))
     {

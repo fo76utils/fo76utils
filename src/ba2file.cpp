@@ -708,13 +708,13 @@ void BA2File::extractBlock(
   {
     if (offs >= fileBuf.size() || (offs + unpackedSize) > fileBuf.size())
       errorMessage("invalid packed data offset or size");
-    std::memcpy(&(buf.front()) + n, p, unpackedSize);
+    std::memcpy(buf.data() + n, p, unpackedSize);
   }
   else
   {
     if (offs >= fileBuf.size() || (offs + packedSize) > fileBuf.size())
       errorMessage("invalid packed data offset or size");
-    if (ZLibDecompressor::decompressData(&(buf.front()) + n, unpackedSize,
+    if (ZLibDecompressor::decompressData(buf.data() + n, unpackedSize,
                                          p, packedSize) != unpackedSize)
     {
       errorMessage("invalid or corrupt ZLib compressed data");
