@@ -48,10 +48,11 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
     vt.offsY = vt.offsY - float(p->viewOffsetY[n]);
     for (size_t i = 0; i < p->meshData.size(); i++)
     {
-      if (p->meshData[i].m.flags & BGSMFile::Flag_TSHidden)
+      const NIFFile::NIFTriShape& ts = p->meshData[i];
+      if (ts.m.flags & BGSMFile::Flag_TSHidden)
         continue;
       NIFFile::NIFBounds  b;
-      p->meshData[i].calculateBounds(b, &mt);
+      ts.calculateBounds(b, &mt);
       if (roundFloat(b.xMax()) < 0 ||
           roundFloat(b.yMin()) > p->viewOffsetY[n + 1] ||
           roundFloat(b.yMax()) < p->viewOffsetY[n] ||
@@ -59,17 +60,18 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
       {
         continue;
       }
-      sortBuf.push_back(TriShapeSortObject(p->meshData[i], b.zMin()));
-      if (BRANCH_UNLIKELY(p->meshData[i].m.flags & BGSMFile::Flag_TSOrdered))
+      sortBuf.emplace(sortBuf.end(), i, b.zMin(),
+                      bool(ts.m.flags & BGSMFile::Flag_TSAlphaBlending));
+      if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSOrdered))
         TriShapeSortObject::orderedNodeFix(sortBuf, p->meshData);
     }
     if (sortBuf.size() < 1)
       return;
-    std::stable_sort(sortBuf.begin(), sortBuf.end());
+    std::sort(sortBuf.begin(), sortBuf.end());
     for (size_t i = 0; i < sortBuf.size(); i++)
     {
       Plot3D_TriShape&  ts = *(p->renderers[n]);
-      ts = *(sortBuf[i].ts);
+      ts = p->meshData[size_t(sortBuf[i])];
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
       if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSWater))
@@ -244,7 +246,7 @@ void NIF_View::loadModel(const std::string& fileName)
     return;
   std::vector< unsigned char >& fileBuf = threadFileBuffers[0];
   ba2File.extractFile(fileBuf, fileName);
-  nifFile = new NIFFile(&(fileBuf.front()), fileBuf.size(), &ba2File);
+  nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), &ba2File);
   try
   {
     nifFile->getMesh(meshData);
@@ -425,17 +427,17 @@ void NIF_View::renderModelToFile(const char *outFileName,
   size_t  imageDataSize = size_t(imageWidth << 1) * size_t(imageHeight << 1);
   std::vector< std::uint32_t >  outBufRGBA(imageDataSize, 0U);
   std::vector< float >  outBufZ(imageDataSize, 16777216.0f);
-  renderModel(&(outBufRGBA.front()), &(outBufZ.front()),
+  renderModel(outBufRGBA.data(), outBufZ.data(),
               imageWidth << 1, imageHeight << 1);
   imageDataSize = imageDataSize >> 2;
   std::vector< std::uint32_t >  downsampleBuf(imageDataSize);
-  downsample2xFilter(&(downsampleBuf.front()), &(outBufRGBA.front()),
+  downsample2xFilter(downsampleBuf.data(), outBufRGBA.data(),
                      imageWidth << 1, imageHeight << 1, imageWidth);
   int     pixelFormat =
       (!USE_PIXELFMT_RGB10A2 ?
        DDSInputFile::pixelFormatRGBA32 : DDSInputFile::pixelFormatA2R10G10B10);
   DDSOutputFile outFile(outFileName, imageWidth, imageHeight, pixelFormat);
-  outFile.writeImageData(&(downsampleBuf.front()), imageDataSize, pixelFormat);
+  outFile.writeImageData(downsampleBuf.data(), imageDataSize, pixelFormat);
 }
 
 #ifdef HAVE_SDL2
@@ -888,7 +890,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
           for (size_t i = 0; i < imageDataSize; i++)
             outBufZ[i] = 16777216.0f;
           std::uint32_t *outBufRGBA = display.lockDrawSurface();
-          renderModel(outBufRGBA, &(outBufZ.front()), imageWidth, imageHeight);
+          renderModel(outBufRGBA, outBufZ.data(), imageWidth, imageHeight);
           display.unlockDrawSurface();
           if (eventFlags)
           {

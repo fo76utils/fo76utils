@@ -26,6 +26,24 @@ FloatVector4 Plot3D_TriShape::colorToSRGB(FloatVector4 c)
   return (tmp - 3.08537311f).maxValues(FloatVector4(0.0f));
 }
 
+Plot3D_TriShape::Triangle::Triangle(size_t i, float z)
+{
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  union
+  {
+    float   z_f;
+    std::int32_t  z_i;
+  }
+  tmp;
+  tmp.z_f = z;
+  if (tmp.z_i < 0)
+    tmp.z_i = tmp.z_i ^ 0x7FFFFFFF;
+  n = std::int64_t(i) | (std::int64_t(tmp.z_i) << 32);
+#else
+  n = std::int64_t(i) | (std::int64_t(roundFloat(z * 32.0f)) << 32);
+#endif
+}
+
 size_t Plot3D_TriShape::transformVertexData(
     const NIFFile::NIFVertexTransform& modelTransform,
     const NIFFile::NIFVertexTransform& viewTransform)
@@ -154,15 +172,13 @@ size_t Plot3D_TriShape::transformVertexData(
       continue;                 // no sampling point within the triangle bounds
     }
 #endif
-    Triangle  tmp;
-    tmp.z = v0.xyz[2] + v1.xyz[2] + v2.xyz[2];
-    tmp.n = (unsigned int) i;
-    triangleBuf.push_back(tmp);
+    triangleBuf.emplace(triangleBuf.end(),
+                        i, v0.xyz[2] + v1.xyz[2] + v2.xyz[2]);
   }
   if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
-    std::stable_sort(triangleBuf.begin(), triangleBuf.end(), Triangle::gt);
+    std::sort(triangleBuf.begin(), triangleBuf.end(), Triangle::gt);
   else
-    std::stable_sort(triangleBuf.begin(), triangleBuf.end());
+    std::sort(triangleBuf.begin(), triangleBuf.end());
   return triangleBuf.size();
 }
 
@@ -1092,10 +1108,10 @@ void Plot3D_TriShape::drawTriangles()
     v.mipLevel = 15.0f;
     const Vertex  *v0, *v1, *v2;
     {
-      const Triangle& t = triangleBuf[n];
-      v0 = &(vertexBuf.front()) + triangleData[t.n].v0;
-      v1 = &(vertexBuf.front()) + triangleData[t.n].v1;
-      v2 = &(vertexBuf.front()) + triangleData[t.n].v2;
+      const NIFFile::NIFTriangle& t = triangleData[size_t(triangleBuf[n])];
+      v0 = vertexBuf.data() + t.v0;
+      v1 = vertexBuf.data() + t.v1;
+      v2 = vertexBuf.data() + t.v2;
     }
     // rotate vertices so that v0 has the lowest Y coordinate
     if (v0->xyz[1] > v1->xyz[1] || v0->xyz[1] > v2->xyz[1])

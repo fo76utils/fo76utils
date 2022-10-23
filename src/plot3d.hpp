@@ -42,15 +42,21 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   };
   struct Triangle
   {
-    float   z;                  // Z coordinate for sorting
-    unsigned int  n;            // NIFFile::NIFTriShape::triangleData index
+    // n = NIFFile::NIFTriShape::triangleData index | (sort_Z << 32)
+    std::int64_t  n;
+    inline Triangle(size_t i, float z);
     inline bool operator<(const Triangle& r) const
     {
-      return (z < r.z);
+      return (n < r.n);
     }
+    // for reverse sorting
     static inline bool gt(const Triangle& r1, const Triangle& r2)
     {
-      return (r1.z > r2.z);
+      return (r2.n < r1.n);
+    }
+    inline operator size_t() const
+    {
+      return size_t(n & 0xFFFFFFFFLL);
     }
   };
   float   *bufZ;

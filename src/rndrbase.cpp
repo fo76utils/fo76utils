@@ -88,7 +88,7 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
   try
   {
     mipLevel = ba2File.extractTexture(fileBuf, fileName, mipLevel);
-    t = new DDSTexture(&(fileBuf.front()), fileBuf.size(), mipLevel);
+    t = new DDSTexture(fileBuf.data(), fileBuf.size(), mipLevel);
     cachedTexture->texture = t;
     textureCacheMutex.lock();
     textureDataSize = textureDataSize + getTextureDataSize(t);
@@ -226,7 +226,7 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
           {
             BGSMFile& m = v[bnamPath];
             ba2File.extractFile(fileBuf, snamPath);
-            FileBuffer  tmp(&(fileBuf.front()), fileBuf.size());
+            FileBuffer  tmp(fileBuf.data(), fileBuf.size());
             m.loadBGSMFile(tmp);
             if (gradientMapV >= 0.0f)
               m.s.gradientMapV = gradientMapV;
@@ -271,25 +271,25 @@ void Renderer_Base::TriShapeSortObject::orderedNodeFix(
   if (sortBuf.size() < 2)
     return;
   size_t  j = sortBuf.size() - 1;
-  size_t  i0 = size_t(sortBuf[j].ts - &(meshData.front()));
+  size_t  i0 = size_t(sortBuf[j]);
   while (i0 > 0 && (meshData[i0].m.flags & BGSMFile::Flag_TSOrdered))
     i0--;
-  double  zMin = sortBuf[j].z;
-  double  zMax = zMin;
+  std::uint64_t zMin = sortBuf[j].n & ~0xFFFFFFFFULL;
+  std::uint64_t zMax = zMin;
   while (j-- > 0)
   {
-    if (size_t(sortBuf[j].ts - &(meshData.front())) < i0)
+    if (size_t(sortBuf[j]) < i0)
       break;
-    double  z = sortBuf[j].z;
+    std::uint64_t z = sortBuf[j].n & ~0xFFFFFFFFULL;
     zMin = (z < zMin ? z : zMin);
     zMax = (z > zMax ? z : zMax);
   }
   while (++j < sortBuf.size())
   {
-    if (!(sortBuf[j].ts->m.flags & BGSMFile::Flag_TSAlphaBlending))
-      sortBuf[j].z = zMin;
+    if (meshData[size_t(sortBuf[j])].m.flags & BGSMFile::Flag_TSAlphaBlending)
+      sortBuf[j].n = (sortBuf[j].n & 0xFFFFFFFFU) | zMax;
     else
-      sortBuf[j].z = zMax;
+      sortBuf[j].n = (sortBuf[j].n & 0xFFFFFFFFU) | zMin;
   }
 }
 

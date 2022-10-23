@@ -61,18 +61,36 @@ struct Renderer_Base
   };
   struct TriShapeSortObject
   {
-    const NIFFile::NIFTriShape  *ts;
-    double  z;
-    inline TriShapeSortObject(const NIFFile::NIFTriShape& t, float zMin)
+    std::uint64_t n;
+    inline TriShapeSortObject(size_t i, float zMin, bool isAlphaBlending)
     {
-      ts = &t;
+      std::uint32_t zTmp;
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+      union
+      {
+        float   z_f;
+        std::uint32_t z_i;
+      }
+      tmp;
+      tmp.z_f = zMin * (1.0f / float(0x40000000));
+      zTmp = tmp.z_i;
+      zTmp = (std::int32_t(zTmp) >= 0 ?
+              (0x40000000U + zTmp) : (0xC0000000U - zTmp));
+#else
+      zTmp = std::uint32_t(roundFloat(zMin * 64.0f) + 0x40000000);
+#endif
       // sort transparent shapes back to front, and after all other shapes
-      z = (!(t.m.flags & BGSMFile::Flag_TSAlphaBlending) ?
-           double(zMin) : (double(0x02000000) - double(zMin)));
+      if (BRANCH_UNLIKELY(isAlphaBlending))
+        zTmp = ~zTmp;
+      n = std::uint64_t(i) | (std::uint64_t(zTmp) << 32);
     }
     inline bool operator<(const TriShapeSortObject& r) const
     {
-      return (z < r.z);
+      return (n < r.n);
+    }
+    inline operator size_t() const
+    {
+      return size_t(n & 0xFFFFFFFFU);
     }
     static void orderedNodeFix(
         std::vector< TriShapeSortObject >& sortBuf,
