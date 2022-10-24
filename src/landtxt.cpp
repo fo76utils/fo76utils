@@ -515,14 +515,15 @@ FloatVector4 LandscapeTexture::renderPixelTES4I(
                                                        int(p.mipLevel)));
     float   aTmp_f = float(int(aTmp)) * (1.0f / 15.0f);
     FloatVector4  nTmp[3];
-    p.getNormalSpecI(nTmp, t, txtX, txtY, int(p.mipLevel));
+    p.getNormalSpecI((aTmp != 15 ? &(nTmp[0]) : n),
+                     t, txtX, txtY, int(p.mipLevel));
+    prvTexture = t;
     if (aTmp != 15)
+    {
+      prvTexture = 0xFF;
       blendNormals(n, nTmp, aTmp_f);
-    else
-      n = nTmp;
-    prvTexture = (aTmp == 15 ? t : (unsigned char) 0xFF);
-    if (aTmp != 15)
       cTmp = blendColors(c, cTmp, aTmp_f);
+    }
     c = cTmp;
   }
   return c;
@@ -555,15 +556,15 @@ FloatVector4 LandscapeTexture::renderPixelTES4F(
                            p.mipLevel));
     float   aTmp_f = float(int(aTmp)) * (1.0f / 15.0f);
     FloatVector4  nTmp[3];
-    p.getNormalSpecF(nTmp, t, float(txtX) * p.txtScale,
+    p.getNormalSpecF((aTmp != 15 ? &(nTmp[0]) : n), t, float(txtX) * p.txtScale,
                      float(txtY) * p.txtScale, p.mipLevel);
+    prvTexture = t;
     if (aTmp != 15)
+    {
+      prvTexture = 0xFF;
       blendNormals(n, nTmp, aTmp_f);
-    else
-      n = nTmp;
-    prvTexture = (aTmp == 15 ? t : (unsigned char) 0xFF);
-    if (aTmp != 15)
       cTmp = blendColors(c, cTmp, aTmp_f);
+    }
     c = cTmp;
   }
   return c;
