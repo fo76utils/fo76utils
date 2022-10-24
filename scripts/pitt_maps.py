@@ -75,8 +75,6 @@ for i in mapList:
     else:
         args += [6144, 6144]
     args += baseOptions
-    if True or "protoexpo01" in mapName:
-        args += ["-scol", 1]
     if "the_pitt" in mapName:
         args += ["-env"]
         args += ["textures/shared/cubemaps/mipblur_defaultoutside_pitt.dds"]
