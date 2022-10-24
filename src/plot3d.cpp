@@ -37,7 +37,7 @@ Plot3D_TriShape::Triangle::Triangle(size_t i, float z)
   tmp;
   tmp.z_f = z;
   if (tmp.z_i < 0)
-    tmp.z_i = tmp.z_i ^ 0x7FFFFFFF;
+    tmp.z_i = std::int32_t(0x80000000U) - tmp.z_i;
   n = std::int64_t(i) | (std::int64_t(tmp.z_i) << 32);
 #else
   n = std::int64_t(i) | (std::int64_t(roundFloat(z * 32.0f)) << 32);
@@ -731,8 +731,8 @@ bool Plot3D_TriShape::getDiffuseColor_sRGB_G(
   if (BRANCH_UNLIKELY(a < p.m.alphaThresholdFloat))
     return false;
   float   u = tmp[1] * (1.0f / 255.0f);
-  float   v = p.m.s.gradientMapV + vColor[0] - 1.0f;
-  tmp = p.textureG->getPixelBM_Inline(u, v, 0);
+  float   v = p.m.s.gradientMapV * vColor[0];
+  tmp = p.textureG->getPixelBC_Inline(u, v, 0);
   tmp *= (1.0f / 255.0f);
   tmp[3] = a;                   // alpha * 255
   c = tmp;
@@ -763,8 +763,8 @@ bool Plot3D_TriShape::getDiffuseColor_Linear_G(
   if (BRANCH_UNLIKELY(a < p.m.alphaThresholdFloat))
     return false;
   float   u = tmp[1] * (1.0f / 255.0f);
-  float   v = p.m.s.gradientMapV + vColor[0] - 1.0f;
-  tmp = p.textureG->getPixelBM_Inline(u, v, 0).srgbExpand();
+  float   v = p.m.s.gradientMapV * vColor[0];
+  tmp = p.textureG->getPixelBC_Inline(u, v, 0).srgbExpand();
   tmp[3] = a;                   // alpha * 255
   c = tmp;
   return true;
