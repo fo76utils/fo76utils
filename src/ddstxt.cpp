@@ -594,12 +594,12 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     loadTextureData(srcPtr + (i * sizeRequired), int(i),
                     blockSize, decodeFunction);
   }
-  if (mipOffset > 0)
+  if (mipOffset > 0 && dataOffsets[1])
   {
     mipOffset = (mipOffset < 19 ? mipOffset : 19);
     size_t  offs = dataOffsets[mipOffset];
-    if (offs < 1)
-      return;
+    xMaskMip0 = xMaskMip0 >> (unsigned char) mipOffset;
+    yMaskMip0 = yMaskMip0 >> (unsigned char) mipOffset;
     size_t  newSize =
         (bufSize * size_t(textureCnt) - offs) * sizeof(std::uint32_t);
     std::memmove(textureData[0], textureData[mipOffset], newSize);
@@ -682,7 +682,7 @@ FloatVector4 DDSTexture::getPixelT(float x, float y, float mipLevel) const
 FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
                                      const DDSTexture& t) const
 {
-  mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
+  mipLevel = std::max(mipLevel, 0.0f);
   int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   const std::uint32_t * const *t1 = &(textureData[m0]);
@@ -730,7 +730,7 @@ FloatVector4 DDSTexture::getPixelT_2(float x, float y, float mipLevel,
 
 FloatVector4 DDSTexture::getPixelT_N(float x, float y, float mipLevel) const
 {
-  mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
+  mipLevel = std::max(mipLevel, 0.0f);
   int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   unsigned int  xMask = xMaskMip0 >> (unsigned char) m0;
@@ -764,7 +764,7 @@ FloatVector4 DDSTexture::getPixelBM(float x, float y, int mipLevel) const
 
 FloatVector4 DDSTexture::getPixelTM(float x, float y, float mipLevel) const
 {
-  mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
+  mipLevel = std::max(mipLevel, 0.0f);
   int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   int     x0, y0;
@@ -798,9 +798,9 @@ FloatVector4 DDSTexture::getPixelBC(float x, float y, int mipLevel) const
 
 FloatVector4 DDSTexture::getPixelTC(float x, float y, float mipLevel) const
 {
-  mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
-  x = (x > 0.0f ? (x < 1.0f ? x : 1.0f) : 0.0f);
-  y = (y > 0.0f ? (y < 1.0f ? y : 1.0f) : 0.0f);
+  mipLevel = std::max(mipLevel, 0.0f);
+  x = std::min(std::max(x, 0.0f), 1.0f);
+  y = std::min(std::max(y, 0.0f), 1.0f);
   int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   int     x0, y0;
@@ -864,7 +864,7 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
     y = y * tmp;
   }
   n = (BRANCH_LIKELY(isCubeMap) ? n : 0U);
-  mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
+  mipLevel = std::max(mipLevel, 0.0f);
   int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   x = (x + 1.0f) * 0.5f;
