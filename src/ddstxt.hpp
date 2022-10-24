@@ -210,7 +210,7 @@ inline FloatVector4 DDSTexture::getPixelB_Inline(
 inline FloatVector4 DDSTexture::getPixelT_Inline(
     float x, float y, float mipLevel) const
 {
-  mipLevel = (mipLevel > 0.0f ? mipLevel : 0.0f);
+  mipLevel = std::max(mipLevel, 0.0f);
   int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
   int     x0, y0;
@@ -252,8 +252,8 @@ inline FloatVector4 DDSTexture::getPixelBC_Inline(
     float x, float y, int mipLevel) const
 {
   mipLevel = (mipLevel > 0 ? mipLevel : 0);
-  x = (x > 0.0f ? (x < 1.0f ? x : 1.0f) : 0.0f);
-  y = (y > 0.0f ? (y < 1.0f ? y : 1.0f) : 0.0f);
+  x = std::min(std::max(x, 0.0f), 1.0f);
+  y = std::min(std::max(y, 0.0f), 1.0f);
   int     x0, y0;
   float   xf, yf;
   unsigned int  xMask, yMask;
