@@ -499,15 +499,6 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
   if (BRANCH_UNLIKELY(!getDiffuseColor_Effect(p, c, z)))
     return;
   *(z.zPtr) = z.xyz[2];
-  if (p.textureN)
-  {
-    (void) z.normalMap(p.textureN->getPixelT(z.u(), z.v(),
-                                             z.mipLevel + p.mipOffsetN));
-  }
-  else if (z.invNormals)
-  {
-    z.normal *= -1.0f;
-  }
   float   nDotL = z.normal.dotProduct3(p.lightVector);
   float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
@@ -566,28 +557,16 @@ void Plot3D_TriShape::drawPixel_Effect_G(Plot3D_TriShape& p, Fragment& z)
   *(z.zPtr) = z.xyz[2];
   float   txtU = z.u();
   float   txtV = z.v();
-  FloatVector4  n(127.5f, 127.5f, 255.0f, 255.0f);
-  if (p.textureN)
+  float   smoothness = 255.0f;
+  float   ao = 1.0f;
+  if (p.textureS)
   {
-    if (p.textureS)
-    {
-      n = p.textureN->getPixelT_2(txtU, txtV, z.mipLevel + p.mipOffsetN,
-                                  *(p.textureS));
-    }
-    else
-    {
-      n = p.textureN->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsetN);
-      n[2] = 255.0f;
-      n[3] = 255.0f;
-    }
-    (void) z.normalMap(n);
+    FloatVector4  tmp(p.textureS->getPixelT(txtU, txtV,
+                                            z.mipLevel + p.mipOffsetS));
+    smoothness = tmp[0];
+    ao = tmp[1] * (1.0f / 255.0f);
   }
-  else if (z.invNormals)
-  {
-    z.normal *= -1.0f;
-  }
-  float   smoothness = p.m.e.specularSmoothness * n[2];
-  float   ao = n[3] * (1.0f / 255.0f);
+  smoothness *= p.m.e.specularSmoothness;
   float   roughness = 0.96875f - (smoothness * (0.9375f / 255.0f));
   int     s_i = roundFloat(smoothness) & 0xFF;
   smoothness = smoothness * (1.0f / 255.0f);
@@ -630,7 +609,6 @@ void Plot3D_TriShape::drawPixel_Effect_G(Plot3D_TriShape& p, Fragment& z)
     FloatVector4  f0(p.textureR->getPixelT(txtU, txtV,
                                            z.mipLevel + p.mipOffsetR));
     f0.srgbExpand();
-    f0.maxValues(FloatVector4(0.015625f));
     // Fresnel (coefficients are optimized for glass) with roughness
     float   f =
         FloatVector4::polynomial3(&(fresnelRoughTable[0]) + (s_i << 2), nDotV);
@@ -665,6 +643,18 @@ FloatVector4 Plot3D_TriShape::glowMap(const Fragment& z) const
 bool Plot3D_TriShape::getDiffuseColor_Effect(
     const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
+  if (BRANCH_LIKELY(!p.debugMode))
+  {
+    if (p.textureN)
+    {
+      (void) z.normalMap(p.textureN->getPixelT_Inline(
+                             z.u(), z.v(), z.mipLevel + p.mipOffsetN));
+    }
+    else if (z.invNormals)
+    {
+      z.normal *= -1.0f;
+    }
+  }
   FloatVector4  tmp(p.textureD->getPixelT_Inline(z.u(), z.v(), z.mipLevel));
   FloatVector4  baseColor(p.m.e.baseColor);
   FloatVector4  vColor(z.vertexColor);
@@ -679,7 +669,6 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
     }
     else
     {
-      // FIXME: normal mapping is calculated only after this function is called
       float   nDotV = float(std::fabs(z.normal[2]));
       f = (nDotV - p.m.e.falloffParams[0]) / d;
       f = std::max(std::min(f, 1.0f), 0.0f);
@@ -1498,7 +1487,6 @@ void Plot3D_TriShape::drawEffect(
     drawPixelFunction = &drawPixel_Effect_G;
     if ((renderMode & 3) && (textureMask & 0x0300))
     {
-      textureN = &defaultTexture_N;
       textureS = &defaultTexture_L;
       textureR = &defaultTexture_R;
       if (textureMask & 0x0100)
@@ -1506,6 +1494,7 @@ void Plot3D_TriShape::drawEffect(
       if (textureMask & 0x0200)
         textureS = textures[9];
       mipOffsetR = calculateMipOffset(textureR, textureD);
+      mipOffsetS = calculateMipOffset(textureS, textureD);
     }
   }
   if (textureMask & 0x0002)
