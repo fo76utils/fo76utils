@@ -965,7 +965,7 @@ int main(int argc, char **argv)
             break;
           if (cmdBuf[i] >= 'A' && cmdBuf[i] <= 'Z')
             cmdBuf[i] = cmdBuf[i] + ('a' - 'A');
-          if ((unsigned char) cmdBuf[i] <= 0x20 || cmdBuf[i] == '\177')
+          if ((unsigned char) cmdBuf[i] < 0x20 || cmdBuf[i] == '\177')
             cmdBuf.erase(i, 1);
           else
             i++;
@@ -1060,32 +1060,55 @@ int main(int argc, char **argv)
           helpFlag = true;
           try
           {
+            std::uint64_t tmp = 0ULL;
             unsigned char tmpBuf[4];
-            unsigned char j = 0;
+            unsigned char nBits = 0;
+            unsigned char n = 0;
             for (size_t i = 1; i < cmdBuf.length(); i++)
             {
               char    c = cmdBuf[i];
               if (c >= '0' && c <= '9')
-                c = c - '0';
-              else if (c >= 'a' && c <= 'f')
-                c = c - 'W';
-              else
-                errorMessage("Invalid hexadecimal floating point value");
-              if (!(j & 1))
-                tmpBuf[j >> 1] = (unsigned char) c << 4;
-              else
-                tmpBuf[j >> 1] |= (unsigned char) c;
-              if (++j >= 8)
               {
-                j = 0;
-                FileBuffer  buf(tmpBuf, 4);
-                double  x = buf.readFloat();
-                esmFile.consolePrint(
-                    ((x > -1.0e7 && x < 1.0e8) ? "%f\n" : "%g\n"), x);
+                tmp = (tmp << 4) | std::uint64_t(c - '0');
+                nBits = nBits + 4;
               }
+              else if (c >= 'a' && c <= 'f')
+              {
+                tmp = (tmp << 4) | std::uint64_t(c - 'W');
+                nBits = nBits + 4;
+              }
+              else if (!(c == ' ' || (c == 'x' && nBits <= 4)))
+              {
+                errorMessage("Invalid hexadecimal floating point value");
+              }
+              if (nBits > 64 || tmp > 0xFFFFFFFFU)
+                errorMessage("Invalid hexadecimal floating point value");
+              if (!((c == ' ' || (i + 1) >= cmdBuf.length()) && nBits))
+                continue;
+              int     nBytes = 1;
+              if (nBits > 16 || tmp > 0xFFU || (i + 1) >= cmdBuf.length())
+                nBytes = 4;
+              nBits = 0;
+              do
+              {
+                if (n >= 4)
+                {
+                  if (!tmp)
+                    break;
+                  errorMessage("Invalid hexadecimal floating point value");
+                }
+                tmpBuf[n++] = (unsigned char) (tmp & 0xFFU);
+                tmp = tmp >> 8;
+              }
+              while (--nBytes);
+              if (n < 4)
+                continue;
+              n = 0;
+              FileBuffer  buf(tmpBuf, 4);
+              double  x = buf.readFloat();
+              esmFile.consolePrint(
+                  ((x > -1.0e7 && x < 1.0e8) ? "%f\n" : "%g\n"), x);
             }
-            if (j != 0)
-              errorMessage("Invalid hexadecimal floating point value");
           }
           catch (std::exception& e)
           {
