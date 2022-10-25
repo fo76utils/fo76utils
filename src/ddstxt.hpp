@@ -212,15 +212,16 @@ inline FloatVector4 DDSTexture::getPixelT_Inline(
 {
   mipLevel = std::max(mipLevel, 0.0f);
   int     m0 = int(mipLevel);
-  float   mf = mipLevel - float(m0);
   int     x0, y0;
   float   xf, yf;
   unsigned int  xMask, yMask;
   if (BRANCH_UNLIKELY(!convertTexCoord(x0, y0, xf, yf, xMask, yMask, x, y, m0)))
     return FloatVector4(textureData[m0]);
   FloatVector4  c0(getPixelB(textureData[m0], x0, y0, xf, yf, xMask, yMask));
-  if (BRANCH_LIKELY(mf >= (1.0f / 512.0f) && mf < (511.0f / 512.0f)))
+  float   mf = float(m0);
+  if (BRANCH_LIKELY(mf != mipLevel))
   {
+    mf = mipLevel - mf;
     xf = (xf + float(x0 & 1)) * 0.5f;
     yf = (yf + float(y0 & 1)) * 0.5f;
     x0 = int((unsigned int) x0 >> 1);
