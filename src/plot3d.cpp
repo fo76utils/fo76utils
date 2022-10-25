@@ -182,12 +182,37 @@ size_t Plot3D_TriShape::transformVertexData(
   return triangleBuf.size();
 }
 
+static inline FloatVector4 alphaBlendFunction(
+    FloatVector4 c, const FloatVector4& cSrc, const FloatVector4& cDst,
+    float srcAlpha, unsigned char blendMode)
+{
+  switch (blendMode)
+  {
+    case 0:
+    case 8:
+      return c;
+    case 2:
+      return (c * cSrc);
+    case 3:
+      return (c - (c * cSrc));
+    case 4:
+      return (c * cDst);
+    case 5:
+      return (c - (c * cDst));
+    case 6:
+      return (c * srcAlpha);
+    case 7:
+      return (c - (c * srcAlpha));
+  }
+  return FloatVector4(0.0f);
+}
+
 FloatVector4 Plot3D_TriShape::alphaBlend(
     FloatVector4 c, float a, const Fragment& z) const
 {
   a = a * m.alpha * (1.0f / 255.0f);
-  unsigned int  dstBlendMode = m.alphaFlags & 0x01E0U;
-  if (a >= (511.0f / 512.0f) && dstBlendMode)
+  unsigned char blendMode = (unsigned char) ((m.alphaFlags >> 1) & 0xFFU);
+  if (a >= (511.0f / 512.0f) && blendMode == 0xEC)
     return c;
   FloatVector4  c0(FloatVector4::convertRGBA32(*(z.cPtr)));
   if (usingSRGBColorSpace)
@@ -195,9 +220,12 @@ FloatVector4 Plot3D_TriShape::alphaBlend(
   else
     c0.srgbExpand();
   c0 /= lightColor[3];
-  if (BRANCH_LIKELY(dstBlendMode))
-    c -= c0;
-  return (c0 + (c * a));
+  if (BRANCH_LIKELY(blendMode == 0xEC))
+    return (c0 + ((c - c0) * a));
+  if (blendMode == 0x0C)
+    return (c0 + (c * a));
+  return (alphaBlendFunction(c, c, c0, a, blendMode & 0x0F)
+          + alphaBlendFunction(c0, c, c0, a, blendMode >> 4));
 }
 
 inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
