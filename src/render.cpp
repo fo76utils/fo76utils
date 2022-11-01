@@ -1125,7 +1125,12 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         unsigned int  texturePathMask = t.renderer->m.texturePathMask;
         texturePathMask &= ((((unsigned int) t.renderer->m.flags & 0x80U) >> 5)
                             | texturePathMaskBase);
-        t.renderer->setRenderMode(renderModeQuality);
+        if (!(texturePathMask & 0x0001U) ||
+            t.renderer->m.texturePaths[0].find("/temp_ground")
+            != std::string::npos)
+        {
+          continue;
+        }
         if (BRANCH_UNLIKELY(!enableTextures))
         {
           if (t.renderer->m.alphaThresholdFloat > 0.0f ||
@@ -1141,12 +1146,6 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
             textures[0] = &whiteTexture;
             textureMask |= 0x0001U;
           }
-        }
-        else if (!(texturePathMask & 0x0001U) ||
-                 t.renderer->m.texturePaths[0].find("/temp_ground")
-                 != std::string::npos)
-        {
-          continue;
         }
         for (unsigned int m = 0x00080200U; texturePathMask; m = m >> 1)
         {
@@ -1175,6 +1174,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
             textureMask |= 0x0010U;
         }
       }
+      t.renderer->setRenderMode(renderModeQuality);
       t.renderer->drawTriShape(
           p.modelTransform, viewTransform, lightX, lightY, lightZ,
           textures, textureMask);
@@ -1563,19 +1563,22 @@ void Renderer::loadTerrain(const char *btdFileName,
                            unsigned int worldID, unsigned int defTxtID,
                            int mipLevel, int xMin, int yMin, int xMax, int yMax)
 {
-  clear(0x44);
-  landData = new LandscapeData(&esmFile, btdFileName, &ba2File, 0x0B, worldID,
-                               defTxtID, mipLevel, xMin, yMin, xMax, yMax);
-  defaultWaterLevel = landData->getWaterLevel();
-  if (useESMWaterColors)
+  if (!landData)
   {
-    const ESMFile::ESMRecord  *r =
-        esmFile.getRecordPtr(landData->getWaterFormID());
-    if (r && *r == "WATR")
-      waterColor = Renderer_Base::getWaterColor(esmFile, *r, waterColor);
+    landData = new LandscapeData(&esmFile, btdFileName, &ba2File, 0x0B, worldID,
+                                 defTxtID, mipLevel, xMin, yMin, xMax, yMax);
+    defaultWaterLevel = landData->getWaterLevel();
+    if (useESMWaterColors)
+    {
+      const ESMFile::ESMRecord  *r =
+          esmFile.getRecordPtr(landData->getWaterFormID());
+      if (r && *r == "WATR")
+        waterColor = Renderer_Base::getWaterColor(esmFile, *r, waterColor);
+    }
   }
   size_t  textureCnt = landData->getTextureCount();
-  landTextures = new LandscapeTextureSet[textureCnt];
+  if (!landTextures)
+    landTextures = new LandscapeTextureSet[textureCnt];
   std::vector< unsigned char >& fileBuf(renderThreads[0].fileBuf);
   int     mipLevelD = textureMip + int(landTextureMip);
   for (size_t i = 0; i < textureCnt; i++)
@@ -1615,10 +1618,7 @@ void Renderer::initRenderPass(int n, unsigned int formID)
     formID = getDefaultWorldID();
   if (useESMWaterColors && waterColor == 0xFFFFFFFFU)
     waterColor = 0xC0302010U;           // default water color
-  unsigned int  clearFlags = (n != 2 ? 0x38U : 0x30U);
-  if (n && landData)
-    clearFlags |= 0x44U;
-  clear(clearFlags);
+  clear(n != 2 ? 0x38U : 0x30U);
   objectListPos = 0;
   switch (n)
   {
