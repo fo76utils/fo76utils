@@ -441,7 +441,7 @@ void NIF_View::renderModelToFile(const char *outFileName,
 }
 
 #ifdef HAVE_SDL2
-static float viewRotations[27] =
+static const float  viewRotations[27] =
 {
   54.73561f,  180.0f,     45.0f,        // isometric from NW
   54.73561f,  180.0f,     135.0f,       // isometric from SW
