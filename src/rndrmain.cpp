@@ -644,9 +644,10 @@ int main(int argc, char **argv)
                      (unsigned int) renderer.getObjectCount(),
                      (unsigned int) renderer.getObjectCount());
       }
+      if (renderPass != 1)
+        renderer.clear();
     }
     while (++renderPass <= 2);
-    renderer.clear();
     renderer.deallocateBuffers(0x02);
     if (verboseMode)
     {
