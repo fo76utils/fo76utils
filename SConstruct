@@ -58,6 +58,7 @@ esmview_o = nifViewEnv.Object("esmview", ["src/esmview.cpp"])
 esmview = nifViewEnv.Program("esmview", [esmview_o])
 if buildCubeView:
     cubeview = nifViewEnv.Program("cubeview", ["src/cubeview.cpp"])
+    wrldview = nifViewEnv.Program("wrldview", ["src/wrldview.cpp"])
 render = env.Program("render", ["src/rndrmain.cpp"])
 terrain = env.Program("terrain", ["src/terrain.cpp"])
 
@@ -67,7 +68,7 @@ if "win" in sys.platform:
         pkgFiles += [findwater, fo4land, landtxt, markers, nif_info, render]
         pkgFiles += [terrain]
         if buildCubeView:
-            pkgFiles += [cubeview]
+            pkgFiles += [cubeview, wrldview]
             pkgFiles += ["/mingw64/bin/SDL2.dll", "LICENSE.SDL"]
         pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
         pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
