@@ -5,6 +5,7 @@
 #include "sdlvideo.hpp"
 
 #include <ctime>
+#include <SDL2/SDL.h>
 
 static const char *usageStrings[] =
 {
@@ -29,7 +30,7 @@ static const char *usageStrings[] =
   "    -l INT              level of detail to use from BTD file (0 to 4)",
   "    -deftxt FORMID      form ID of default land texture",
   "    -defclr 0x00RRGGBB  default color for untextured terrain",
-  "    -ltxtres INT        land texture resolution per cell",
+  "    -ltxtres INT        maximum land texture resolution per cell",
   "    -mip INT            base mip level for all textures",
   "    -lmult FLOAT        land texture RGB level scale",
   "",
@@ -67,6 +68,7 @@ static const float  viewRotations[27] =
 
 int main(int argc, char **argv)
 {
+  char    tmpBuf[512];
   std::vector< std::uint32_t >  imageBuf;
   std::vector< SDLDisplay::SDLEvent > eventBuf;
   SDLDisplay  *display = (SDLDisplay *) 0;
@@ -91,8 +93,8 @@ int main(int argc, char **argv)
     int     terrainY1 = 32767;
     unsigned int  defTxtID = 0U;
     std::uint32_t ltxtDefColor = 0x003F3F3FU;
-    int     ltxtResolution = 128;
-    int     textureMip = 7;
+    int     ltxtMaxResolution = 2048;
+    int     textureMip = 2;
     float   landTextureMult = 1.0f;
     int     modelLOD = 0;
     std::uint32_t waterColor = 0x7FFFFFFFU;
@@ -158,7 +160,7 @@ int main(int argc, char **argv)
         std::printf("-l %d\n", btdLOD);
         std::printf("-deftxt 0x%08X\n", defTxtID);
         std::printf("-defclr 0x%08X\n", (unsigned int) ltxtDefColor);
-        std::printf("-ltxtres %d\n", ltxtResolution);
+        std::printf("-ltxtres %d\n", ltxtMaxResolution);
         std::printf("-mip %d\n", textureMip);
         std::printf("-lmult %.1f\n", landTextureMult);
         std::printf("-light %.1f %.4f %.4f\n",
@@ -292,10 +294,10 @@ int main(int argc, char **argv)
       {
         if (++i >= argc)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        ltxtResolution = int(parseInteger(argv[i], 0,
-                                          "invalid land texture resolution",
-                                          8, 4096));
-        if (ltxtResolution & (ltxtResolution - 1))
+        ltxtMaxResolution =
+            int(parseInteger(argv[i], 0, "invalid land texture resolution",
+                             32, 4096));
+        if (ltxtMaxResolution & (ltxtMaxResolution - 1))
           errorMessage("invalid land texture resolution");
       }
       else if (std::strcmp(argv[i], "-mip") == 0)
@@ -433,11 +435,6 @@ int main(int argc, char **argv)
       btdPath = (char *) 0;
       btdLOD = 2;
     }
-    if (debugMode == 1)
-    {
-      enableSCOL = true;
-      ltxtResolution = 128 >> btdLOD;
-    }
     if (!formID)
       formID = (!btdPath ? 0x0000003CU : 0x0025DA15U);
     waterColor =
@@ -463,15 +460,9 @@ int main(int argc, char **argv)
     renderer.setTextureCacheSize(size_t(textureCacheSize) << 20);
     renderer.setDistantObjectsOnly(distantObjectsOnly);
     renderer.setNoDisabledObjects(noDisabledObjects);
-    renderer.setEnableSCOL(enableSCOL);
-    renderer.setEnableAllObjects(enableAllObjects);
-    renderer.setRenderQuality(renderQuality);
     renderer.setEnableTextures(enableTextures);
-    renderer.setDebugMode(debugMode);
     renderer.setLandDefaultColor(ltxtDefColor);
-    renderer.setLandTxtResolution(ltxtResolution);
     renderer.setTextureMipLevel(textureMip);
-    renderer.setLandTextureMip(0.0f);
     renderer.setLandTxtRGBScale(landTextureMult);
     renderer.setModelLOD(modelLOD);
     renderer.setWaterColor(waterColor);
@@ -495,7 +486,7 @@ int main(int argc, char **argv)
     bool    quitFlag = false;
     bool    redrawScreenFlag = true;
     bool    redrawWorldFlag = true;
-    std::time_t lastRedrawTime = std::time((std::time_t *) 0);
+    std::uint64_t lastRedrawTime = SDL_GetTicks64();
     do
     {
       if (redrawWorldFlag)
@@ -505,6 +496,11 @@ int main(int argc, char **argv)
         renderPassCompleted = false;
         renderer.clearImage();
         display->clearTextBuffer();
+        renderer.setEnableSCOL(enableSCOL);
+        renderer.setEnableAllObjects(enableAllObjects);
+        renderer.setRenderQuality(renderQuality
+                                  | (unsigned char) (debugMode == 1));
+        renderer.setDebugMode(debugMode);
         viewOffsX = -camPositionX;
         viewOffsY = -camPositionY;
         viewOffsZ = -camPositionZ;
@@ -513,12 +509,11 @@ int main(int argc, char **argv)
         float   rZ = viewRotations[viewRotation * 3 + 2] * d;
         NIFFile::NIFVertexTransform vt(viewScale, rX, rY, rZ, 0.0f, 0.0f, 0.0f);
         vt.transformXYZ(viewOffsX, viewOffsY, viewOffsZ);
-        viewOffsX = viewOffsX + (float(width) * 0.5f);
-        viewOffsY = viewOffsY + (float(height - 2) * 0.5f);
-        viewOffsX = float(roundFloat(viewOffsX)) + 0.125f;
-        viewOffsY = float(roundFloat(viewOffsY)) + 0.125f;
+        viewOffsX = float(roundFloat(viewOffsX)) + 0.1f;
+        viewOffsY = float(roundFloat(viewOffsY)) + 0.1f;
         renderer.setViewTransform(
-            viewScale, rX, rY, rZ, viewOffsX, viewOffsY, viewOffsZ);
+            viewScale, rX, rY, rZ, viewOffsX + (float(width) * 0.5f),
+            viewOffsY + (float(height - 2) * 0.5f), viewOffsZ);
         renderer.setLightDirection(lightRotationY * d, lightRotationZ * d);
         renderer.setRenderParameters(
             lightColor, ambientColor, envColor, lightLevel, envLevel,
@@ -530,6 +525,17 @@ int main(int argc, char **argv)
           display->clearSurface();
           display->drawText(0, -1, display->getTextRows(), 0.75f, 1.0f);
           display->blitSurface();
+          int     ltxtResolution = int(debugMode != 1 && debugMode != 2);
+          ltxtResolution =
+              ltxtResolution << roundFloat(float(std::log2(viewScale)) + 11.9f);
+          ltxtResolution = std::min(ltxtResolution, ltxtMaxResolution);
+          ltxtResolution = std::max(ltxtResolution, 128 >> btdLOD);
+          renderer.setLandTxtResolution(ltxtResolution);
+          int     ltxtMip =
+              textureMip + (esmFile.getESMVersion() < 0x80U ? 9 : 10);
+          ltxtMip = ltxtMip - FloatVector4::log2Int(ltxtResolution);
+          ltxtMip = std::max(std::min(ltxtMip, 15 - textureMip), 0);
+          renderer.setLandTextureMip(float(ltxtMip));
           renderer.loadTerrain(btdPath, worldID, defTxtID, btdLOD,
                                terrainX0, terrainY0, terrainX1, terrainY1);
           display->consolePrint("Rendering terrain\n");
@@ -571,13 +577,13 @@ int main(int argc, char **argv)
                                 (unsigned int) renderer.getObjectCount(),
                                 (unsigned int) renderer.getObjectCount());
         }
-        if (std::time((std::time_t *) 0) != lastRedrawTime)
+        if (SDL_GetTicks64() >= (lastRedrawTime + 500ULL))
           redrawScreenFlag = true;
       }
       if (redrawScreenFlag)
       {
         redrawScreenFlag = false;
-        lastRedrawTime = std::time((std::time_t *) 0);
+        lastRedrawTime = SDL_GetTicks64();
         std::memcpy(display->lockDrawSurface(), imageBuf.data(),
                     imageDataSize * sizeof(std::uint32_t));
         display->unlockDrawSurface();
@@ -598,24 +604,36 @@ int main(int argc, char **argv)
           else if (eventBuf[i].data1() == 1)
             redrawScreenFlag = true;
         }
-        if (eventBuf[i].type() == SDLDisplay::SDLEventMButtonDown &&
-            (eventBuf[i].data3() == 1 || eventBuf[i].data3() == 3) &&
-            eventBuf[i].data4() == 2)
+        else if (eventBuf[i].type() == SDLDisplay::SDLEventMButtonDown)
         {
           int     x = eventBuf[i].data1();
           int     y = eventBuf[i].data2();
           x = (x > 0 ? (x < (width - 1) ? x : (width - 1)) : 0);
           y = (y > 0 ? (y < (height - 1) ? y : (height - 1)) : 0);
-          int     x0 = (width + 1) >> 1;
-          int     y0 = (height - 1) >> 1;
-          xStep += float(x - x0);
-          yStep += float(y - y0);
-          if (eventBuf[i].data3() == 3)
+          if ((eventBuf[i].data3() == 1 || eventBuf[i].data3() == 3) &&
+              eventBuf[i].data4() == 2)
           {
-            const float *zBuf = renderer.getZBufferData();
-            float   z = zBuf[size_t(y) * size_t(width) + size_t(x)];
-            if (z < 1000000.0f)
-              zStep += (z - 1.0f);
+            int     x0 = (width + 1) >> 1;
+            int     y0 = (height - 1) >> 1;
+            xStep += float(x - x0);
+            yStep += float(y - y0);
+            if (eventBuf[i].data3() == 3)
+            {
+              const float *zBuf = renderer.getZBufferData();
+              float   z = zBuf[size_t(y) * size_t(width) + size_t(x)];
+              if (z < 1000000.0f)
+                zStep += (z - 1.0f);
+            }
+          }
+          else if (debugMode == 1 &&
+                   eventBuf[i].data3() == 1 && eventBuf[i].data4() == 1)
+          {
+            std::uint32_t c = imageBuf[size_t(y) * size_t(width) + size_t(x)];
+            c = ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU) | (c & 0xFF00U);
+            std::sprintf(tmpBuf, "0x%08X", (unsigned int) c);
+            display->consolePrint("Reference form ID = %s\n", tmpBuf);
+            (void) SDL_SetClipboardText(tmpBuf);
+            redrawScreenFlag = true;
           }
         }
         if (eventBuf[i].type() != SDLDisplay::SDLEventKeyDown)
@@ -680,6 +698,21 @@ int main(int argc, char **argv)
             redrawWorldFlag = redrawWorldFlag | (viewRotation != 8);
             viewRotation = 8;
             break;
+          case '0':
+          case '1':
+          case '2':
+          case '3':
+          case '4':
+          case '5':
+            {
+              unsigned char tmp = (unsigned char) (eventBuf[i].data1() - '0');
+              if (tmp != debugMode)
+              {
+                debugMode = tmp;
+                redrawWorldFlag = true;
+              }
+            }
+            break;
           case 'a':
           case 'd':
           case 'e':
@@ -712,6 +745,24 @@ int main(int argc, char **argv)
                   break;
               }
             }
+            break;
+          case 'p':
+            std::sprintf(tmpBuf, "-light %.7g %.7g %.7g "
+                                 "-view %.7g %.7g %.7g %.7g %.7g %.7g %.7g "
+                                 "(cam: %.7g %.7g %.7g)",
+                         rgbScale, lightRotationY, lightRotationZ, viewScale,
+                         viewRotations[viewRotation * 3],
+                         viewRotations[viewRotation * 3 + 1],
+                         viewRotations[viewRotation * 3 + 2],
+                         viewOffsX, viewOffsY, viewOffsZ,
+                         camPositionX, camPositionY, camPositionZ);
+            display->consolePrint("%s\n", tmpBuf);
+            (void) SDL_SetClipboardText(tmpBuf);
+            redrawScreenFlag = true;
+            break;
+          case 'c':
+            display->clearTextBuffer();
+            redrawScreenFlag = true;
             break;
           case SDLDisplay::SDLKeySymEscape:
             quitFlag = true;
