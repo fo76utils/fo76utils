@@ -1201,8 +1201,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           *landData, landTxtScale,
           p.model.t.x0, p.model.t.y0, p.model.t.x1, p.model.t.y1,
           landTextures, landData->getTextureCount(), ltexMask,
-          landTextureMip - float(int(landTextureMip)),
-          landTxtRGBScale, landTxtDefColor);
+          landTextureMip, landTxtRGBScale, landTxtDefColor);
       t.renderer->setRenderMode(
           (((ltexMask >> 1) | (ltexMask >> 5) | (ltexMask >> 8)) & 3U)
           | renderMode);
@@ -1580,7 +1579,7 @@ void Renderer::loadTerrain(const char *btdFileName,
   if (!landTextures)
     landTextures = new LandscapeTextureSet[textureCnt];
   std::vector< unsigned char >& fileBuf(renderThreads[0].fileBuf);
-  int     mipLevelD = textureMip + int(landTextureMip);
+  int     mipLevelD = textureMip;
   for (size_t i = 0; i < textureCnt; i++)
   {
     if (!enableTextures)
