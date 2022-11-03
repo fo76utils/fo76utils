@@ -1,0 +1,72 @@
+    wrldview INFILE.ESM[,...] W H ARCHIVEPATH [OPTIONS...]
+
+Interactively render a world, cell, or object from ESM file(s), terrain data, and archives. See also [render](render.md) for additional details. W and H are the width and height of the window to be created. A window that would be larger than the display dimensions and has even width and height is automatically downsampled to half resolution.
+
+### General options
+
+* **--help** or **-h**: Print usage.
+* **--list** or **--list-defaults**: Print defaults for all options, and exit. If used after other options, then the updated values are printed, including the light vector calculated from **-light**.
+* **--**: Remaining options are file names.
+* **-threads INT**: Set the number of threads to use.
+* **-debug INT**: Set debug render mode (0: disabled, 1: reference form IDs as 0xRRGGBB, 2: depth \* 16 or 64, 3: normals, 4: diffuse texture only, 5: light only).
+* **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
+* **-rq INT**: Set render quality (0 to 15, defaults to 0). Normal mapping is enabled at 4 or above, specular/cube map reflections and PBR materials on objects from 8, and from 12 also on terrain. Adding 2 to the value enables rendering all supported object types, while adding 1 enables the use of pre-combined meshes.
+
+### Texture options
+
+* **-textures BOOL**: Make all diffuse textures white if false.
+* **-txtcache INT**: Texture cache size in megabytes.
+* **-mip INT**: Base mip level for all textures other than cube maps and the water texture. Defaults to 2.
+* **-env FILENAME.DDS**: Default environment map texture path in archives. Defaults to **textures/shared/cubemaps/mipblur_defaultoutside1.dds**. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures, and [cubeview](cubeview.md) to preview them.
+
+### Terrain options
+
+* **-btd FILENAME.BTD**: Read terrain data from Fallout 76 .btd file.
+* **-r X0 Y0 X1 Y1**: Terrain cell range, X0,Y0 = SW to X1,Y1 = NE. The default is to use all available terrain, limiting the range can be useful for Fallout 76 to reduce the load time and memory usage.
+* **-l INT**: Level of detail to use from BTD file (0 to 4), see [btddump](btddump.md). Fallout 76 defaults to 0, all other games use a fixed level of 2.
+* **-deftxt FORMID**: Form ID of default land texture. See the table in [SConstruct.maps](../SConstruct.maps) for game specific values.
+* **-defclr 0x00RRGGBB**: Default color for untextured terrain.
+* **-lmult FLOAT**: Land texture RGB level scale.
+* **-ltxtres INT**: Maximum land texture resolution per cell, must be power of two, and in the range 2<sup>(7-l)</sup> to 4096.
+
+### Model options
+
+* **-mlod INT**: Set level of detail for models, 0 (default and best) to 4.
+* **-vis BOOL**: Render only objects visible from distance.
+* **-ndis BOOL**: If zero, also render initially disabled objects.
+* **-xm STRING**: Add excluded model path name pattern. **-xm meshes** disables all solid objects. Use **-xm babylon** to disable Nuclear Winter objects in Fallout 76.
+* **-xm_clear**: Clear any previously added excluded model path name patterns.
+
+### Lighting options
+
+* **-light SCALE RY RZ**: Set overall brightness, and light vector Y, Z rotation in degrees (0, 0 = top). The light direction is rotated around the Y axis first (positive = east, negative = west), then around the Z axis (positive = counter-clockwise, from east towards north). The default direction of RY=70.5288 and RZ=135 translates to a light vector of -2/3, 2/3, 1/3.
+* **-lcolor LMULT LCOLOR EMULT ECOLOR ACOLOR**: Set light source, environment, and ambient light colors and levels. LCOLOR, ECOLOR, and ACOLOR are in 0xRRGGBB format (sRGB color space), -1 is interpreted as white for LCOLOR and ECOLOR. LMULT and LCOLOR multiply diffuse and specular lighting, while EMULT and ECOLOR are applied to environment maps and also to ambient light. If ACOLOR is negative, the ambient light color is determined from the default cube map specified with **-env**, if one is available, otherwise it defaults to 0x404040.
+* **-rscale FLOAT**: Scale factor to use when calculating a view vector (X \* -normalZ, Y \* -normalZ, H \* RSCALE) from the pixel coordinates and image height for cube mapping and specular reflections. A higher value simulates a narrower FOV for the purpose of reflections. Defaults to 2.0.
+
+### Water options
+
+* **-wtxt FILENAME.DDS**: Water normal map texture path in archives. Defaults to **textures/water/defaultwater.dds**. Setting the path to an empty string disables normal mapping on water.
+* **-watercolor UINT32**: Water color (A7R8G8B8), 0 disables water, 0x7FFFFFFF (the default) uses values from the ESM file. The alpha channel determines the depth at which water reaches maximum opacity, maxDepth = (128 - a) \* (128 - a) / 2.
+* **-wrefl FLOAT**: Water environment map scale, the default is 1.0.
+* **-wscale INT**: Water texture tile size, defaults to 2048.
+
+### Keyboard and mouse controls
+
+* **0** to **5**: Set debug render mode. 0: disabled (default), 1: reference and cell form IDs as RGB colors, 2: depth, 3: normals, 4: diffuse texture only with no lighting, 5: light only (white textures).
+* **+**, **-**: Zoom in or out.
+* **Keypad 1**, **3**, **9**, **7**: Set isometric view from the SW, SE, NE, or NW.
+* **Keypad 2**, **6**, **8**, **4**, **5**: Set view from the S, E, N, W, or top (default).
+* **A**, **D**: Move to the left or right.
+* **S**, **W**: Move backward or forward (-Z or +Z in the view space).
+* **E**, **X**: Move up or down (-Y or +Y in the view space).
+* **P**: Print current **-light** and **-view** parameters (for use with [render](render.md) or [markers](markers.md)), and camera position. The information printed is also copied to the clipboard.
+* **C**: Clear messages.
+* **`**: Open the console. In this mode, keyboard and mouse controls work similarly to [esmview](esmview.md) with SDL 2, and any of the command line options can be entered as a command (without the leading - character). Entering the hexadecimal form ID of a reference moves the camera position to its coordinates. The command **q** or **`** returns to view mode.
+* **Esc**: Quit program.
+
+##### Mouse controls in view mode
+
+* Double click with the left button: move camera position so that the selected pixel is at the center of the screen.
+* Double click with the right button: similar to above, but also adjust the Z coordinate in view space so that the selected pixel is just in front of the new camera position.
+* Single click with the left button, in debug mode 1 only: print the form ID of the selected object based on the color of the pixel, and also copy it to the clipboard.
+

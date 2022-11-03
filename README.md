@@ -7,14 +7,15 @@ Simple command line utilities for extracting data from Elder Scrolls and Fallout
 * [btddump](doc/btddump.md) - extract terrain data from Fallout 76 .BTD files to raw height map, land textures, ground cover, or terrain color.
 * [cubeview](doc/cubeview.md) - view a cube map from archive files. Does not work correctly with games older than Fallout 4.
 * [esmdump](doc/esmdump.md) - list records from .ESM files in text or TSV format.
-* [esmview](doc/esmview.md) - interactive version of esmdump.
+* [esmview](doc/esmview.md) - interactive version of esmdump, also includes a NIF viewer for objects with an associated model (MODL).
 * [findwater](doc/findwater.md) - create a height map of water bodies, optionally using .NIF meshes for Skyrim and newer games.
 * [fo4land](doc/fo4land.md) - extract landscape data from Oblivion, Fallout 3, Skyrim, and Fallout 4.
 * [landtxt](doc/landtxt.md) - create an RGB land texture from the output of btddump (formats 2, 4, 6, and 8) or fo4land (formats 2, 4, and 5), or directly from terrain data in ESM/BTD file(s), using a set of DDS texture files.
 * [markers](doc/markers.md) - find references to a set of form IDs defined in a text file, and mark their locations on an RGBA format map, optionally using DDS icon files.
 * [nif\_info](doc/nif_info.md) - list data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ format, or render the model to a DDS file, or display it.
-* [render](doc/render.md) - render a world, cell, or object from ESM file(s), terrain data, and archives.
+* [render](doc/render.md) - render a world, cell, or object from ESM file(s), terrain data, and archives. Supports Fallout 76 and Fallout 4, and partly the older games (TES4/FO3/FNV are limited to terrain and water only).
 * [terrain](doc/terrain.md) - older and simpler program to render terrain and water only to an RGB image, using files created by btddump, findwater, or fo4land. Includes 2D and isometric mode.
+* [wrldview](doc/wrldview.md) - interactive version of render.
 
 Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on Linux. Run "scons" to compile. mman.c and mman.h are from mman-win32 (https://github.com/alitrack/mman-win32). All source code is under the MIT license.
 
@@ -28,7 +29,7 @@ Running any of the programs without arguments prints detailed usage information.
         pacman -Su
         pacman -S --needed base-devel mingw-w64-x86_64-toolchain
         pacman -S msys/scons
-* Optionally, for cubeview and the view mode of nif\_info, install SDL 2, and matplotlib for plotting scripts:
+* Optionally, for cubeview, wrldview, and the NIF viewer mode of esmview and nif\_info, install SDL 2, and matplotlib for plotting scripts:
   *     pacman -S mingw64/mingw-w64-x86_64-SDL2
   *     pacman -S mingw64/mingw-w64-x86_64-python-matplotlib
 * The installed MSYS2 and MinGW packages can be updated anytime by running **pacman -Syu** again.
