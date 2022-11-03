@@ -843,8 +843,8 @@ void Renderer::sortObjectList()
     {
       if (!(objectList[i].flags & 0x08))
       {
-        objectList[i] = objectList[objectList.size() - 1];
-        objectList.resize(objectList.size() - 1);
+        objectList[i] = objectList.back();
+        objectList.pop_back();
       }
       else
       {

@@ -555,8 +555,8 @@ int main(int argc, char **argv)
           }
         }
         if ((i + 1) < fileNames.size())
-          fileNames[i] = fileNames[fileNames.size() - 1];
-        fileNames.resize(fileNames.size() - 1);
+          fileNames[i] = fileNames.back();
+        fileNames.pop_back();
       }
       if (fileNames.size() > 0)
       {

@@ -130,7 +130,7 @@ void loadTextures(std::vector< MarkerDef >& textures, const char *listFileName)
         if (v.size() == 4 || v.size() == 5)
         {
           textures.resize(textures.size() + 1);
-          MarkerDef&  m = textures[textures.size() - 1];
+          MarkerDef&  m = textures.back();
           m.formID =
               (unsigned int) parseInteger(v[0].c_str(), 0, "invalid form ID",
                                           0L, 0x0FFFFFFFL);

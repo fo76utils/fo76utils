@@ -985,8 +985,8 @@ int main(int argc, char **argv)
         {
           if (prvRecords.size() > 0)
           {
-            formID = prvRecords[prvRecords.size() - 1];
-            prvRecords.resize(prvRecords.size() - 1);
+            formID = prvRecords.back();
+            prvRecords.pop_back();
           }
         }
         else if (cmdBuf == "b")

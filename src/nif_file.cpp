@@ -905,7 +905,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       }
       getMesh(v, n, parentBlocks, switchActive, noRootNodeTransform);
     }
-    parentBlocks.resize(parentBlocks.size() - 1);
+    parentBlocks.pop_back();
     if (BRANCH_UNLIKELY(blockType == BlkTypeBSOrderedNode))
     {
       for (size_t i = firstTriShape + 1; i < v.size(); i++)

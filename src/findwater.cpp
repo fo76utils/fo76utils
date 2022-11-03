@@ -120,8 +120,7 @@ static void createMeshFromOBND(std::vector< NIFFile::NIFTriShape >& meshData,
 {
   meshData.resize(1);
   obndVertexBuf.push_back(std::vector< NIFFile::NIFVertex >());
-  std::vector< NIFFile::NIFVertex >&  vertexData =
-      obndVertexBuf[obndVertexBuf.size() - 1];
+  std::vector< NIFFile::NIFVertex >&  vertexData = obndVertexBuf.back();
   vertexData.resize(8);
   for (unsigned char i = 0; i < 8; i++)
   {

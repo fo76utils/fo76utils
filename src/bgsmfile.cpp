@@ -214,7 +214,7 @@ void BGSMFile::loadBGEMFile(FileBuffer& buf)
     if (buf[buf.size() - 2] && (texturePathMask & 0x0004))
       flags = flags | Flag_Glow;        // enable glow map
 #if 0
-    if (buf[buf.size() - 1])
+    if (buf.back())
       flags = flags | Flag_EffectSpecular;
 #endif
     e.specularSmoothness = 1.0f;
