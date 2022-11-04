@@ -11,6 +11,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **-debug INT**: Set debug render mode (0: disabled, 1: reference form IDs as 0xRRGGBB, 2: depth \* 16 or 64, 3: normals, 4: diffuse texture only, 5: light only).
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
 * **-rq INT**: Set render quality (0 to 15, defaults to 0). Normal mapping is enabled at 4 or above, specular/cube map reflections and PBR materials on objects from 8, and from 12 also on terrain. Adding 2 to the value enables rendering all supported object types, while adding 1 enables the use of pre-combined meshes.
+* **-ft INT**: Minimum frame time in milliseconds. The display is updated after this amount of time during rendering.
 
 ### Texture options
 
@@ -34,8 +35,13 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **-mlod INT**: Set level of detail for models, 0 (default and best) to 4.
 * **-vis BOOL**: Render only objects visible from distance.
 * **-ndis BOOL**: If zero, also render initially disabled objects.
+* **-minscale FLOAT**: Minimum view scale to render exterior objects at.
 * **-xm STRING**: Add excluded model path name pattern. **-xm meshes** disables all solid objects. Use **-xm babylon** to disable Nuclear Winter objects in Fallout 76.
 * **-xm_clear**: Clear any previously added excluded model path name patterns.
+
+### View options
+
+* **-cam SCALE DIR X Y Z**: Set view scale from world to image coordinates, view direction (0 to 9: NW, SW, SE, NE, top, S, E, N, W, bottom), and camera position.
 
 ### Lighting options
 
