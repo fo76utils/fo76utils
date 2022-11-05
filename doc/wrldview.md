@@ -68,7 +68,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **E**, **X**: Move up or down (-Y or +Y in the view space).
 * **P**: Print current **-light** and **-view** parameters (for use with [render](render.md) or [markers](markers.md)), and camera position. The information printed is also copied to the clipboard.
 * **C**: Clear messages.
-* **`**: Open the console. In this mode, keyboard and mouse controls work similarly to [esmview](esmview.md) with SDL 2, and any of the command line options can be entered as a command (without the leading - character). Entering the hexadecimal form ID of a reference moves the camera position to its coordinates. The command **q** or **`** returns to view mode.
+* **\`**: Open the console. In this mode, keyboard and mouse controls work similarly to [esmview](esmview.md) with SDL 2, and any of the command line options can be entered as a command (without the leading - character). Entering the hexadecimal form ID of a reference moves the camera position to its coordinates. The command **q** or **\`** returns to view mode.
 * **Esc**: Quit program.
 
 ##### Mouse controls in view mode
