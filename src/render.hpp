@@ -219,7 +219,7 @@ class Renderer : protected Renderer_Base
   {
     return outBufRGBA;
   }
-  inline const float *getZBufferData() const
+  inline float *getZBufferData()
   {
     return outBufZ;
   }
