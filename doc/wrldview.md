@@ -42,6 +42,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 ### View options
 
 * **-cam SCALE DIR X Y Z**: Set view scale from world to image coordinates, view direction (0 to 9: NW, SW, SE, NE, top, S, E, N, W, bottom), and camera position.
+* **-zrange FLOAT**: Limit Z range in view space to less than the specified value.
 
 ### Lighting options
 
@@ -75,4 +76,8 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * Double click with the left button: move camera position so that the selected pixel is at the center of the screen.
 * Double click with the right button: similar to above, but also adjust the Z coordinate in view space so that the selected pixel is just in front of the new camera position.
 * Single click with the left button, in debug mode 1 only: print the form ID of the selected object based on the color of the pixel, and also copy it to the clipboard.
+
+### Example
+
+./wrldview Fallout76/Data/SeventySix.esm 2304 1296 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -r -71 -71 71 71 -rq 10 -ltxtres 1024 -lcolor 1 -1 0.875 -1 -1 -light 1.6 70.5288 135 -cam 0.125 1 -29332.19 79373.61 115577.4
 

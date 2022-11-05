@@ -42,7 +42,8 @@ static const char *cmdOptsTable[] =
   "1wscale",            // 30
   "1wtxt",              // 31
   "1xm",                // 32
-  "0xm_clear"           // 33
+  "0xm_clear",          // 33
+  "1zrange"             // 34
 };
 
 static const char *usageStrings[] =
@@ -75,6 +76,7 @@ static const char *usageStrings[] =
   "                        set view scale from world to image coordinates,",
   "                        view direction (0 to 9: NW, SW, SE, NE, top,",
   "                        S, E, N, W, bottom), and camera position",
+  "    -zrange FLOAT       limit Z range in view space",
   "    -light SCALE RY RZ  set RGB scale and Y, Z rotation (0, 0 = top)",
   "    -lcolor LMULT LCOLOR EMULT ECOLOR ACOLOR",
   "                        set light source, environment, and ambient light",
@@ -147,9 +149,7 @@ struct WorldSpaceViewer
   float   camPositionX;
   float   camPositionY;
   float   camPositionZ;
-  float   viewOffsX;
-  float   viewOffsY;
-  float   viewOffsZ;
+  float   zMax;
   float   rgbScale;
   float   lightRotationY;
   float   lightRotationZ;
@@ -181,6 +181,7 @@ struct WorldSpaceViewer
   WorldSpaceViewer(int w, int h, const char *esmFiles, const char *archivePath,
                    int argc, const char * const *argv);
   virtual ~WorldSpaceViewer();
+  void calculateViewOffset(float& x, float& y, float& z) const;
   void setRenderParams(int argc, const char * const *argv);
 #ifdef __GNUC__
   __attribute__ ((__format__ (__printf__, 2, 3)))
@@ -223,9 +224,7 @@ WorldSpaceViewer::WorldSpaceViewer(
     camPositionX(0.0f),
     camPositionY(0.0f),
     camPositionZ(65536.0f),
-    viewOffsX(0.1f),
-    viewOffsY(0.1f),
-    viewOffsZ(4096.0f),
+    zMax(16777216.0f),
     rgbScale(1.0f),
     lightRotationY(70.5288f),
     lightRotationZ(135.0f),
@@ -269,6 +268,20 @@ WorldSpaceViewer::~WorldSpaceViewer()
 {
   if (renderer)
     delete renderer;
+}
+
+void WorldSpaceViewer::calculateViewOffset(float& x, float& y, float& z) const
+{
+  x = -camPositionX;
+  y = -camPositionY;
+  z = -camPositionZ;
+  float   rX = viewRotations[viewRotation * 3] * d;
+  float   rY = viewRotations[viewRotation * 3 + 1] * d;
+  float   rZ = viewRotations[viewRotation * 3 + 2] * d;
+  NIFFile::NIFVertexTransform vt(viewScale, rX, rY, rZ, 0.0f, 0.0f, 0.0f);
+  vt.transformXYZ(x, y, z);
+  x = float(roundFloat(x)) + 0.1f;
+  y = float(roundFloat(y)) + 0.1f;
 }
 
 void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
@@ -435,6 +448,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         display.consolePrint("cam: %.7g %d %.7g %.7g %.7g\n",
                              viewScale, int(viewRotation),
                              camPositionX, camPositionY, camPositionZ);
+        display.consolePrint("zrange: %.7g\n", zMax);
         display.consolePrint("light: %.1f %.4f %.4f\n",
                              rgbScale, lightRotationY, lightRotationZ);
         {
@@ -667,6 +681,11 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           }
         }
         break;
+      case 34:                  // "zrange"
+        zMax = float(parseFloat(argv[i + 1],
+                                "invalid Z range", 1.0, 16777216.0));
+        redrawWorldFlag = true;
+        break;
     }
     i = i + n;
   }
@@ -751,23 +770,22 @@ void WorldSpaceViewer::updateDisplay()
     redrawWorldFlag = false;
     renderPass = 0;
     renderPassCompleted = false;
-    renderer->clearImage();
+    std::memset(imageBuf.data(), 0, imageDataSize * sizeof(std::uint32_t));
+    float   *p = renderer->getZBufferData();
+    float   z = zMax;
+    for (size_t i = imageDataSize; i-- > 0; p++)
+      *p = z;
     display.clearTextBuffer();
     renderer->setRenderQuality(renderQuality
                                | (unsigned char) (debugMode == 1));
     renderer->setDebugMode(debugMode);
-    viewOffsX = -camPositionX;
-    viewOffsY = -camPositionY;
-    viewOffsZ = -camPositionZ;
-    float   rX = viewRotations[viewRotation * 3] * d;
-    float   rY = viewRotations[viewRotation * 3 + 1] * d;
-    float   rZ = viewRotations[viewRotation * 3 + 2] * d;
-    NIFFile::NIFVertexTransform vt(viewScale, rX, rY, rZ, 0.0f, 0.0f, 0.0f);
-    vt.transformXYZ(viewOffsX, viewOffsY, viewOffsZ);
-    viewOffsX = float(roundFloat(viewOffsX)) + 0.1f;
-    viewOffsY = float(roundFloat(viewOffsY)) + 0.1f;
+    float   viewOffsX, viewOffsY, viewOffsZ;
+    calculateViewOffset(viewOffsX, viewOffsY, viewOffsZ);
     renderer->setViewTransform(
-        viewScale, rX, rY, rZ, viewOffsX + (float(width) * 0.5f),
+        viewScale, viewRotations[viewRotation * 3] * d,
+        viewRotations[viewRotation * 3 + 1] * d,
+        viewRotations[viewRotation * 3 + 2] * d,
+        viewOffsX + (float(width) * 0.5f),
         viewOffsY + (float(height - 2) * 0.5f), viewOffsZ);
     renderer->setLightDirection(lightRotationY * d, lightRotationZ * d);
     renderer->setRenderParameters(
@@ -1003,18 +1021,22 @@ void WorldSpaceViewer::pollEvents()
         }
         break;
       case 'p':
-        std::sprintf(tmpBuf, "-light %.7g %.7g %.7g "
-                             "-view %.7g %.7g %.7g %.7g %.7g %.7g %.7g "
-                             "(cam: %.7g %.7g %.7g)",
-                     rgbScale, lightRotationY, lightRotationZ, viewScale,
-                     viewRotations[viewRotation * 3],
-                     viewRotations[viewRotation * 3 + 1],
-                     viewRotations[viewRotation * 3 + 2],
-                     viewOffsX, viewOffsY, viewOffsZ,
-                     camPositionX, camPositionY, camPositionZ);
-        display.consolePrint("%s\n", tmpBuf);
-        (void) SDL_SetClipboardText(tmpBuf);
-        redrawScreenFlag = true;
+        {
+          float   viewOffsX, viewOffsY, viewOffsZ;
+          calculateViewOffset(viewOffsX, viewOffsY, viewOffsZ);
+          std::sprintf(tmpBuf, "-light %.7g %.7g %.7g "
+                               "-view %.7g %.7g %.7g %.7g %.7g %.7g %.7g "
+                               "(cam: %.7g %.7g %.7g)",
+                       rgbScale, lightRotationY, lightRotationZ, viewScale,
+                       viewRotations[viewRotation * 3],
+                       viewRotations[viewRotation * 3 + 1],
+                       viewRotations[viewRotation * 3 + 2],
+                       viewOffsX, viewOffsY, viewOffsZ,
+                       camPositionX, camPositionY, camPositionZ);
+          display.consolePrint("%s\n", tmpBuf);
+          (void) SDL_SetClipboardText(tmpBuf);
+          redrawScreenFlag = true;
+        }
         break;
       case 'c':
         display.clearTextBuffer();
