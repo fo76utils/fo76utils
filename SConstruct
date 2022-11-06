@@ -29,6 +29,15 @@ libSources += ["src/esmdbase.cpp", "src/nif_file.cpp", "src/bgsmfile.cpp"]
 libSources += ["src/landdata.cpp", "src/plot3d.cpp", "src/landtxt.cpp"]
 libSources += ["src/terrmesh.cpp", "src/render.cpp", "src/rndrbase.cpp"]
 fo76utilsLib = env.StaticLibrary("fo76utils", libSources)
+
+if ARGUMENTS.get("pymodule", 0):
+    pyModuleEnv = env.Clone()
+    pyModuleEnv.Append(CXXFLAGS = Split("-fpic -I/usr/include/python3.8"))
+    pyModuleEnv["SWIGFLAGS"] = Split("-c++ -python -Isrc")
+    pyModuleEnv["SHLIBPREFIX"] = "_"
+    pythonInterface = pyModuleEnv.SharedLibrary(
+                          "fo76utils", ["scripts/fo76utils.i"] + libSources)
+
 env.Prepend(LIBS = [fo76utilsLib])
 nifViewEnv = env.Clone()
 buildCubeView = True
