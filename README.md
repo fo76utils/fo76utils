@@ -29,9 +29,10 @@ Running any of the programs without arguments prints detailed usage information.
         pacman -Su
         pacman -S --needed base-devel mingw-w64-x86_64-toolchain
         pacman -S msys/scons
-* Optionally, for cubeview, wrldview, and the NIF viewer mode of esmview and nif\_info, install SDL 2, and matplotlib for plotting scripts:
+* Optionally, install SDL 2 for cubeview, wrldview, and the NIF viewer mode of esmview and nif\_info, matplotlib for plotting scripts, and SWIG for building the Python interface to libfo76utils:
   *     pacman -S mingw64/mingw-w64-x86_64-SDL2
   *     pacman -S mingw64/mingw-w64-x86_64-python-matplotlib
+  *     pacman -S mingw64/mingw-w64-x86_64-swig
 * The installed MSYS2 and MinGW packages can be updated anytime by running **pacman -Syu** again.
 * In the MSYS2 MinGW x64 terminal, compile the utilities with **scons**. Use **scons -j 8** for building with 8 parallel jobs, and **scons -c** to clean up and delete the object files and executables.
 * Optionally, for the makemap and icon extraction scripts only, download and install [ImageMagick](https://imagemagick.org/script/download.php#windows) and [SWFTools](http://www.swftools.org/download.html).
