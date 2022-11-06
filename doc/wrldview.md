@@ -41,7 +41,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 
 ### View options
 
-* **-cam SCALE DIR X Y Z**: Set view scale from world to image coordinates, view direction (0 to 9: NW, SW, SE, NE, top, S, E, N, W, bottom), and camera position.
+* **-cam SCALE DIR X Y Z**: Set view scale from world to image coordinates, view direction (0 to 9: isometric NW, SW, SE, NE, top, side S, E, N, W, bottom), and camera position. Adding 10 to the view direction rotates around the Z axis by -45 degrees.
 * **-zrange FLOAT**: Limit Z range in view space to less than the specified value.
 
 ### Lighting options

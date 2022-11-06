@@ -74,7 +74,7 @@ static const char *usageStrings[] =
   "",
   "    -cam SCALE DIR X Y Z",
   "                        set view scale from world to image coordinates,",
-  "                        view direction (0 to 9: NW, SW, SE, NE, top,",
+  "                        view direction (0 to 19: NW, SW, SE, NE, top,",
   "                        S, E, N, W, bottom), and camera position",
   "    -zrange FLOAT       limit Z range in view space",
   "    -light SCALE RY RZ  set RGB scale and Y, Z rotation (0, 0 = top)",
@@ -98,18 +98,28 @@ static const char *usageStrings[] =
   (char *) 0
 };
 
-static const float  viewRotations[30] =
+static const float  viewRotations[60] =
 {
   54.73561f,  180.0f,     45.0f,        // isometric from NW
   54.73561f,  180.0f,     135.0f,       // isometric from SW
   54.73561f,  180.0f,     -135.0f,      // isometric from SE
   54.73561f,  180.0f,     -45.0f,       // isometric from NE
   180.0f,     0.0f,       0.0f,         // top
-  -90.0f,     0.0f,       0.0f,         // front
-  -90.0f,     0.0f,       90.0f,        // right
-  -90.0f,     0.0f,       180.0f,       // back
-  -90.0f,     0.0f,       -90.0f,       // left
-    0.0f,     0.0f,       0.0f          // bottom
+  -90.0f,     0.0f,       0.0f,         // S
+  -90.0f,     0.0f,       90.0f,        // E
+  -90.0f,     0.0f,       180.0f,       // N
+  -90.0f,     0.0f,       -90.0f,       // W
+    0.0f,     0.0f,       0.0f,         // bottom
+  54.73561f,  180.0f,     0.0f,         // isometric from N
+  54.73561f,  180.0f,     90.0f,        // isometric from W
+  54.73561f,  180.0f,     180.0f,       // isometric from S
+  54.73561f,  180.0f,     -90.0f,       // isometric from E
+  180.0f,     0.0f,       -45.0f,       // top (up = NE)
+  -90.0f,     0.0f,       -45.0f,       // SW
+  -90.0f,     0.0f,       45.0f,        // SE
+  -90.0f,     0.0f,       135.0f,       // NE
+  -90.0f,     0.0f,       -135.0f,      // NW
+    0.0f,     0.0f,       -45.0f        // bottom
 };
 
 struct WorldSpaceViewer
@@ -321,7 +331,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
                                      1.0f / 512.0f, 16.0f));
         viewRotation =
             (unsigned char) parseInteger(argv[i + 2], 10,
-                                         "invalid view direction", 0, 9);
+                                         "invalid view direction", 0, 19);
         camPositionX = float(parseFloat(argv[i + 3], "invalid camera position",
                                         -1000000.0, 1000000.0));
         camPositionY = float(parseFloat(argv[i + 4], "invalid camera position",
