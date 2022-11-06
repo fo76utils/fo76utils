@@ -32,11 +32,16 @@ fo76utilsLib = env.StaticLibrary("fo76utils", libSources)
 
 if ARGUMENTS.get("pymodule", 0):
     pyModuleEnv = env.Clone()
-    pyModuleEnv.Append(CXXFLAGS = Split("-fpic -I/usr/include/python3.8"))
-    pyModuleEnv["SWIGFLAGS"] = Split("-c++ -python -Isrc")
+    if "win" in sys.platform:
+        pyModuleEnv.ParseConfig("pkg-config --cflags --libs python3")
+        pyModuleEnv["SHLIBSUFFIX"] = ".pyd"
+    else:
+        pyModuleEnv.ParseConfig("pkg-config --cflags --libs python-3.8")
     pyModuleEnv["SHLIBPREFIX"] = "_"
+    pyModuleEnv["SWIGFLAGS"] = Split("-c++ -python -Isrc")
     pythonInterface = pyModuleEnv.SharedLibrary(
-                          "fo76utils", ["scripts/fo76utils.i"] + libSources)
+                          "scripts/fo76utils",
+                          ["scripts/fo76utils.i"] + libSources)
 
 env.Prepend(LIBS = [fo76utilsLib])
 nifViewEnv = env.Clone()
