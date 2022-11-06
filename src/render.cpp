@@ -345,26 +345,35 @@ void Renderer::addTerrainCell(const ESMFile::ESMRecord& r)
   int     y0 = landData->getOriginY() - ((cellY + 1) * n);
   int     x1 = x0 + n;
   int     y1 = y0 + n;
+  x0 = (x0 > 0 ? x0 : 0);
+  y0 = (y0 > 0 ? y0 : 0);
+  x1 = (x1 < w ? x1 : w);
+  y1 = (y1 < h ? y1 : h);
   if (debugMode == 1)
+  {
     n = n >> 1;
+  }
   else if (n > 24)
+  {
+    if (renderThreads.size() > 1 && n >= 64)
+    {
+      int     m = roundFloat(float(width) * float(height) * (1.0f / 16777216.0f)
+                             / (viewTransform.scale * viewTransform.scale));
+      if (n >= 128 && m < int(renderThreads.size() << 2))
+        n = n >> 1;
+      if (m < int(renderThreads.size()))
+        n = n >> 1;
+    }
     n = n - 8;
-  int     y = y0 - (y0 % n);
-  y = (y >= 0 ? y : (y - n));
-  for (int i = 0; i < 3; i++, y = y + n)
+  }
+  for (int y = ((y0 + (n - 1)) / n) * n; y < y1; y = y + n)
   {
     int     y2 = y + n;
-    if (!(y >= y0 && y < y1 && y < h && y2 > 0))
-      continue;
-    int     x = x0 - (x0 % n);
-    x = (x >= 0 ? x : (x - n));
-    for (int j = 0; j < 3; j++, x = x + n)
+    for (int x = ((x0 + (n - 1)) / n) * n; x < x1; x = x + n)
     {
       int     x2 = x + n;
-      if (!(x >= x0 && x < x1 && x < w && x2 > 0))
-        continue;
-      tmp.model.t.x0 = (signed short) (x > 0 ? x : 0);
-      tmp.model.t.y0 = (signed short) (y > 0 ? y : 0);
+      tmp.model.t.x0 = (signed short) x;
+      tmp.model.t.y0 = (signed short) y;
       tmp.model.t.x1 = (signed short) (x2 < w ? x2 : w);
       tmp.model.t.y1 = (signed short) (y2 < h ? y2 : h);
       if (setScreenAreaUsed(tmp) >= 0)
