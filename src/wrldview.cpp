@@ -786,6 +786,8 @@ void WorldSpaceViewer::updateDisplay()
     for (size_t i = imageDataSize; i-- > 0; p++)
       *p = z;
     display.clearTextBuffer();
+    renderer->setEnableSCOL(false);
+    renderer->setEnableAllObjects(false);
     renderer->setRenderQuality(renderQuality
                                | (unsigned char) (debugMode == 1));
     renderer->setDebugMode(debugMode);
@@ -813,8 +815,8 @@ void WorldSpaceViewer::updateDisplay()
       ltxtResolution = std::min(ltxtResolution, ltxtMaxResolution);
       ltxtResolution = std::max(ltxtResolution, 128 >> btdLOD);
       renderer->setLandTxtResolution(ltxtResolution);
-      int     ltxtMip = textureMip + (esmFile.getESMVersion() < 0x80U ? 9 : 10);
-      ltxtMip = ltxtMip - FloatVector4::log2Int(ltxtResolution);
+      int     ltxtMip = (esmFile.getESMVersion() < 0x80U ? 13 : 14)
+                        - (textureMip + FloatVector4::log2Int(ltxtResolution));
       ltxtMip = std::max(std::min(ltxtMip, 15 - textureMip), 0);
       renderer->setLandTextureMip(float(ltxtMip));
       renderer->loadTerrain(btdPath.c_str(), worldID, defTxtID, btdLOD,
