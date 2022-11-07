@@ -1124,13 +1124,13 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       {
         if (p.model.o->mswpFormID && p.mswpFormID != p.model.o->mswpFormID)
           materialSwaps.materialSwap(*(t.renderer), p.model.o->mswpFormID);
-        if (p.mswpFormID)
-          materialSwaps.materialSwap(*(t.renderer), p.mswpFormID);
         if (p.flags & 0x80)
         {
           t.renderer->m.s.gradientMapV =
               float(int(p.flags >> 8)) * (1.0f / 255.0f);
         }
+        if (p.mswpFormID)
+          materialSwaps.materialSwap(*(t.renderer), p.mswpFormID);
         unsigned int  texturePathMask = t.renderer->m.texturePathMask;
         texturePathMask &= ((((unsigned int) t.renderer->m.flags & 0x80U) >> 5)
                             | texturePathMaskBase);
