@@ -1050,6 +1050,13 @@ void WorldSpaceViewer::pollEvents()
           redrawScreenFlag = true;
         }
         break;
+      case 'v':
+        {
+          const char  *tmp = "list";
+          setRenderParams(1, &tmp);
+          redrawScreenFlag = true;
+        }
+        break;
       case 'c':
         display.clearTextBuffer();
         redrawScreenFlag = true;
