@@ -123,15 +123,9 @@ size_t Plot3D_TriShape::transformVertexData(
       v.tangent[3] = txtV * m.textureScaleV + m.textureOffsetV;
       v.normal = xt.rotateXYZ(normal);
     }
-    v.vertexColor = FloatVector4(&(r.vertexColor));
-    // tree: ignore vertex alpha
-    float   a = (!(m.flags & BGSMFile::Flag_IsTree) ?
-                 (v.vertexColor[3] * (1.0f / 255.0f)) : 1.0f);
-    if (usingSRGBColorSpace)
-      v.vertexColor *= (1.0f / 255.0f);
-    else
-      v.vertexColor.srgbExpand();
-    v.vertexColor[3] = a;
+    v.vertexColor = FloatVector4(&(r.vertexColor)) * (1.0f / 255.0f);
+    if (m.flags & BGSMFile::Flag_IsTree)
+      v.vertexColor[3] = 1.0f;          // tree: ignore vertex alpha
   }
   for (size_t i = 0; i < triangleCnt; i++)
   {
@@ -726,11 +720,12 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
     if (a < p.m.alphaThresholdFloat)
       return false;
     baseColor *= p.m.e.baseColorScale;
+    tmp *= vColor;
     if (p.usingSRGBColorSpace)
       tmp *= (1.0f / 255.0f);
     else
       tmp.srgbExpand();
-    tmp = tmp * baseColor * vColor;
+    tmp *= baseColor;
   }
   tmp[3] = a;                   // alpha * 255
   c = tmp;
@@ -791,12 +786,11 @@ bool Plot3D_TriShape::getDiffuseColor_Linear(
     const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
   FloatVector4  tmp(p.textureD->getPixelT_Inline(z.u(), z.v(), z.mipLevel));
-  FloatVector4  vColor(z.vertexColor);
-  float   a = (tmp * vColor)[3];
+  tmp *= z.vertexColor;
+  float   a = tmp[3];
   if (BRANCH_UNLIKELY(a < p.m.alphaThresholdFloat))
     return false;
   tmp.srgbExpand();
-  tmp *= vColor;
   tmp[3] = a;                   // alpha * 255
   c = tmp;
   return true;
