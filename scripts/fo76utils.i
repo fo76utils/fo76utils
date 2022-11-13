@@ -13,6 +13,7 @@
 #include "downsamp.hpp"
 #include "ba2file.hpp"
 #include "esmfile.hpp"
+#include "markers.hpp"
 #include "render.hpp"
 enum
 {
@@ -24,6 +25,7 @@ enum
 %include "downsamp.hpp"
 %include "ba2file.hpp"
 %include "esmfile.hpp"
+%include "markers.hpp"
 %include "render.hpp"
 
 enum
