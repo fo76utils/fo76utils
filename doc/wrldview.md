@@ -12,6 +12,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
 * **-rq INT**: Set render quality (0 to 15, defaults to 0). Normal mapping is enabled at 4 or above, specular/cube map reflections and PBR materials on objects from 8, and from 12 also on terrain. Adding 2 to the value enables rendering all supported object types, while adding 1 enables the use of pre-combined meshes.
 * **-ft INT**: Minimum frame time in milliseconds. The display is updated after this amount of time during rendering.
+* **-markers FILENAME**: Read marker definitions from the specified file, see [markers](markers.md) for details on the file format.
 
 ### Texture options
 
