@@ -239,7 +239,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   const float *p = &(fresnelRoughTable[0]) + (s_i << 2);
   float   f = FloatVector4::polynomial3(p, nDotV);
   c += ((e - c) * (f0 + ((FloatVector4(1.0f) - f0) * (f * f))));
-  c += (specular * m.s.specularColor * lightColor);
+  c += (specular * FloatVector4(m.s.specularColor[3]) * lightColor);
   if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
     c = alphaBlend(c, a, z);
   if (BRANCH_UNLIKELY(glowEnabled()))
@@ -298,7 +298,7 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   float   l = std::max(nDotL, 0.0f);
   // assume roughness = 1.0, f0 = 0.04, specular = 0.25
   FloatVector4  e(ambientLight);
-  FloatVector4  s(m.s.specularColor * 0.5625f);
+  FloatVector4  s(m.s.specularColor[3] * 0.5625f);
   s *= lightColor;
   // geometry function (kEnv = kSpec = 0.5), multiplied with ao = 8.0 / 9.0
   FloatVector4  g(nDotV / (nDotV * 0.5625f + 0.5625f));
@@ -1330,8 +1330,9 @@ Plot3D_TriShape& Plot3D_TriShape::operator=(const NIFFile::NIFTriShape& t)
   if (BRANCH_LIKELY(!(m.flags
                       & (BGSMFile::Flag_IsEffect | BGSMFile::Flag_TSWater))))
   {
-    m.s.specularColor *= m.s.specularColor[3];
-    m.s.specularColor[3] = 1.0f;
+    float   tmp = m.s.specularColor[3];
+    m.s.specularColor *= tmp;
+    m.s.specularColor[3] = tmp;
   }
   return (*this);
 }

@@ -319,8 +319,7 @@ void BGSMFile::loadBGSMFile(FileBuffer& buf)
   s.specularColor = readFP32Vec4Clamped(buf, FloatVector4(0.0f),
                                         FloatVector4(1.0f, 1.0f, 1.0f, 8.0f));
   s.envMapScale = std::min(envScale * s.specularColor[3], 8.0f);
-  if (!specularEnabled)
-    s.specularColor[3] = 0.0f;
+  s.specularColor[3] = (!specularEnabled ? 0.0f : 1.0f);
   s.specularSmoothness = readFloatClamped(buf, 0.0f, 1.0f);
   buf.setPosition(buf.getPosition() + (version == 2 ? 28 : 30));
   size_t  len = buf.readUInt32();                       // root material,
