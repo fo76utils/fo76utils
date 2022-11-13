@@ -235,14 +235,12 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   e *= g;
   float   a = c[3];
   c *= ((lightColor * std::max(nDotL, 0.0f)) + (ambientLight * g));
-  if (BRANCH_UNLIKELY(alphaBlendingEnabled()) && textureS)
-    c = alphaBlend(c, a, z);
   // Fresnel (coefficients are optimized for glass) with roughness
   const float *p = &(fresnelRoughTable[0]) + (s_i << 2);
   float   f = FloatVector4::polynomial3(p, nDotV);
   c += ((e - c) * (f0 + ((FloatVector4(1.0f) - f0) * (f * f))));
   c += (specular * m.s.specularColor * lightColor);
-  if (BRANCH_UNLIKELY(alphaBlendingEnabled()) && !textureS)
+  if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
     c = alphaBlend(c, a, z);
   if (BRANCH_UNLIKELY(glowEnabled()))
     c += glowMap(z);
@@ -358,11 +356,8 @@ inline FloatVector4 Plot3D_TriShape::Fragment::normalMap(FloatVector4 n)
 {
   n -= 127.5f;
   // calculate Z normal
-  float   z = (127.5f * 127.5f) - n.dotProduct2(n);
-  if (BRANCH_LIKELY(z > 0.0f))
-    z = float(std::sqrt(z));
-  else
-    z = 0.0f;
+  float   z = 16256.25f - std::min(n.dotProduct2(n), 16256.25f);    // 127.5^2
+  z = float(std::sqrt(z));
   FloatVector4  tmpN(FloatVector4::normalize3x3Fast(
                          bitangent, tangent, normal));
   n *= tmpN;
