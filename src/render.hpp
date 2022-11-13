@@ -233,6 +233,18 @@ class Renderer : protected Renderer_Base
   }
   void clear();
   void clearImage();
+  inline void clearTextureCache()
+  {
+    textureCache.clear();
+  }
+  inline void clearObjectPropertyCache()
+  {
+    baseObjects.clear();
+  }
+  inline void clearExcludeModelPatterns()
+  {
+    excludeModelPatterns.clear();
+  }
   void deallocateBuffers(unsigned int mask);    // mask & 1: RGBA, 2: depth
   // rotations are in radians
   void setViewTransform(float scale,
