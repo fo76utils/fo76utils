@@ -26,3 +26,7 @@ The icon file must be either a DDS texture in a supported format, or a 32-bit in
 
 Any invalid type defaults to TA = 0x4F.
 
+#### Note
+
+If markers is built with the rgb10a2=1 option, the alpha channel of the output file is limited to 2 bits of precision.
+
