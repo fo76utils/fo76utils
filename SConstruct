@@ -28,6 +28,7 @@ libSources += ["src/btdfile.cpp", "src/ddstxt.cpp", "src/downsamp.cpp"]
 libSources += ["src/esmdbase.cpp", "src/nif_file.cpp", "src/bgsmfile.cpp"]
 libSources += ["src/landdata.cpp", "src/plot3d.cpp", "src/landtxt.cpp"]
 libSources += ["src/terrmesh.cpp", "src/render.cpp", "src/rndrbase.cpp"]
+libSources += ["src/markers.cpp"]
 fo76utilsLib = env.StaticLibrary("fo76utils", libSources)
 
 if ARGUMENTS.get("pymodule", 0):
@@ -63,7 +64,7 @@ esmdump = env.Program("esmdump", ["src/esmdump.cpp"])
 findwater = env.Program("findwater", ["src/findwater.cpp"])
 fo4land = env.Program("fo4land", ["src/fo4land.cpp"])
 landtxt = env.Program("landtxt", ["src/ltxtmain.cpp"])
-markers = env.Program("markers", ["src/markers.cpp"])
+markers = env.Program("markers", ["src/markmain.cpp"])
 nif_info = nifViewEnv.Program("nif_info", ["src/nif_info.cpp"])
 esm_view_o = env.Object("esm_view", ["src/esmview.cpp"])
 sdlvstub_o = env.Object("sdlvstub", ["src/sdlvideo.cpp"])
