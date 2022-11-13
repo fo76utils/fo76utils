@@ -478,7 +478,7 @@ void NIFFile::NIFBlkBSLightingShaderProperty::readLightingShaderProperty(
     if (f.bsVersion < 0x90)
       f.setPosition(f.getPosition() + 12);
     else
-      flags = flags | (unsigned long long) (material.s.specularColor[3] > 0.0f);
+      flags = flags | 1ULL;
     material.s.gradientMapV = f.readFloat();
     material.s.gradientMapV =
         std::min(std::max(material.s.gradientMapV, 0.0f), 1.0f);
@@ -500,6 +500,8 @@ void NIFFile::NIFBlkBSLightingShaderProperty::readLightingShaderProperty(
   }
   if (!(flags & 0x01U))                 // specular enabled
     material.s.specularColor[3] = 0.0f;
+  else if (f.bsVersion >= 0x90)
+    material.s.specularColor[3] = 1.0f;
 }
 
 static const std::uint32_t fo76ShaderFlagsTable[] =
