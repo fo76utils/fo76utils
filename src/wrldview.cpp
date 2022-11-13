@@ -527,7 +527,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
                                       "invalid texture mip level", 0, 15));
         if (renderer)
         {
-          renderer->clear();
+          renderer->clearTextureCache();
           renderer->setTextureMipLevel(textureMip);
           redrawWorldFlag = true;
         }
@@ -630,17 +630,21 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         }
         break;
       case 28:                  // "watercolor"
-        waterColor =
-            std::uint32_t(parseInteger(argv[i + 1], 0,
-                                       "invalid water color", 0, 0x7FFFFFFF));
-        waterColor = waterColor
-                     + (waterColor & 0x7F000000U) + ((waterColor >> 30) << 24);
-        if (!(waterColor & 0xFF000000U))
-          waterColor = 0U;
-        if (renderer)
         {
-          renderer->setWaterColor(waterColor);
-          redrawWorldFlag = true;
+          std::uint32_t tmp =
+              std::uint32_t(parseInteger(argv[i + 1], 0, "invalid water color",
+                                         0, 0x7FFFFFFF));
+          tmp = tmp + (tmp & 0x7F000000U) + ((tmp >> 30) << 24);
+          if (!(tmp & 0xFF000000U))
+            tmp = 0U;
+          if (renderer)
+          {
+            renderer->setWaterColor(tmp);
+            if ((tmp == 0U) != (waterColor == 0U))
+              renderer->clearObjectPropertyCache();
+            redrawWorldFlag = true;
+          }
+          waterColor = tmp;
         }
         break;
       case 29:                  // "wrefl"
@@ -674,7 +678,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           if (renderer)
           {
             renderer->addExcludeModelPattern(excludeModelPatterns.back());
-            renderer->clear();
+            renderer->clearObjectPropertyCache();
             redrawWorldFlag = true;
           }
         }
@@ -685,8 +689,8 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           excludeModelPatterns.clear();
           if (renderer)
           {
-            delete renderer;
-            renderer = (Renderer *) 0;
+            renderer->clearExcludeModelPatterns();
+            renderer->clearObjectPropertyCache();
             redrawWorldFlag = true;
           }
         }
