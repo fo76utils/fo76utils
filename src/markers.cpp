@@ -63,12 +63,12 @@ void MapImage::createIcon256(std::vector< unsigned char >& buf, unsigned int c)
         cTmp[3] = (d > 128.0f ? 0.0f : 255.0f);
         break;
       case 0x30:                                // filled black or white outline
-        if (d > 128.0f)
-          cTmp[3] = 0.0f;
-        else if (d > 108.0f)
+        if (d > 108.0f)
           cTmp = c0;
         else if (d > 92.0f)
           cTmp += ((c0 - cTmp) * ((d - 92.0f) * (1.0f / 16.0f)));
+        if (d > 128.0f)
+          cTmp[3] = 0.0f;
         break;
     }
     cTmp[3] = (cTmp[3] > 0.0f ? (cTmp[3] < 255.0f ? cTmp[3] : 255.0f) : 0.0f);
