@@ -15,7 +15,10 @@ class MapImage
     unsigned int  formID;
     unsigned int  name;
     unsigned int  xtel;
-    unsigned int  tnam;
+    // flags = TNAM for map markers, reference flags otherwise:
+    // bit 0 = not interior
+    // bit 1 = not exterior
+    unsigned int  flags;
     bool    isInterior;
     bool    isChildWorld;
     bool    isMapMarker;
@@ -24,7 +27,7 @@ class MapImage
     float   y;
     float   z;
     REFRRecord(unsigned int n = 0U)
-      : formID(n), name(0U), xtel(0U), tnam(0xFFFFU),
+      : formID(n), name(0U), xtel(0U), flags(0xFFFFU),
         isInterior(false), isChildWorld(false),
         isMapMarker(false), isDoor(false),
         x(0.0f), y(0.0f), z(0.0f)

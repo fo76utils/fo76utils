@@ -82,123 +82,162 @@ void MapImage::createIcon256(std::vector< unsigned char >& buf, unsigned int c)
   }
 }
 
+static void readMarkerDefLine(
+    std::vector< std::string >& v,
+    std::map< std::string, std::vector< std::string > >& macroDefs,
+    FileBuffer& inFile, std::string& s)
+{
+  v.clear();
+  s.clear();
+  std::map< std::string, std::vector< std::string > >::iterator i;
+  bool    commentFlag = false;
+  char    c;
+  do
+  {
+    c = '\n';
+    if (inFile.getPosition() < inFile.size())
+      c = char(inFile.readUInt8Fast());
+    if (!(c == '\0' || c == '\t' || c == '\n' || c == '\r'))
+    {
+      if (!commentFlag)
+      {
+        if (c == '#' || c == ';' ||
+            (c == '/' && inFile.getPosition() < inFile.size() &&
+             inFile[inFile.getPosition()] == '/'))
+        {
+          commentFlag = true;
+        }
+        else if (!s.empty() || (unsigned char) c > ' ')
+        {
+          s += c;
+        }
+      }
+      continue;
+    }
+    if (c == '\t' && commentFlag)
+      continue;
+    while (s.length() > 0 && (unsigned char) s[s.length() - 1] <= ' ')
+      s.resize(s.length() - 1);
+    if (!s.empty())
+    {
+      if (v.size() > 0 && (i = macroDefs.find(s)) != macroDefs.end())
+      {
+        for (size_t j = 0; j < i->second.size(); j++)
+          v.push_back(i->second[j]);
+      }
+      else
+      {
+        v.push_back(s);
+      }
+      s.clear();
+    }
+  }
+  while (c != '\n');
+  if (v.size() >= 2 && v[1] == "=")
+  {
+    c = v[0][0];
+    if (!((c >= 'A' && c <= 'Z') || c == '_' || (c >= 'a' && c <= 'z')))
+      throw FO76UtilsError("invalid macro name: %s", v[0].c_str());
+    i = macroDefs.find(v[0]);
+    if (i != macroDefs.end())
+    {
+      if (v.size() > 2)
+        throw FO76UtilsError("macro %s is already defined", v[0].c_str());
+      macroDefs.erase(i);
+    }
+    else if (v.size() > 2)
+    {
+      s = v[0];
+      v.erase(v.begin(), v.begin() + 2);
+      macroDefs.insert(std::pair< std::string, std::vector< std::string > >(
+                           s, v));
+    }
+    v.clear();
+  }
+}
+
 void MapImage::loadTextures(const char *listFileName)
 {
   markerDefs.clear();
   FileBuffer  inFile(listFileName);
   std::map< std::string, DDSTexture * > textureFiles;
   std::vector< unsigned char >  iconBuf;
+  std::map< std::string, std::vector< std::string > > macroDefs;
   std::vector< std::string >  v;
   std::string s;
-  int     lineNumber = 1;
-  bool    commentFlag = false;
-  bool    eofFlag = false;
-  do
+  int     lineNumber = 0;
+  try
   {
-    char    c = '\n';
-    if (inFile.getPosition() >= inFile.size())
-      eofFlag = true;
-    else
-      c = char(inFile.readUInt8Fast());
-    if (c == '\0' || c == '\r' || c == '\n')
+    while (inFile.getPosition() < inFile.size())
     {
-      while (s.length() > 0 && (unsigned char) s[s.length() - 1] <= ' ')
-        s.resize(s.length() - 1);
-      if (!s.empty())
-        v.push_back(s);
-      if (v.size() == 4 || v.size() == 5)
+      lineNumber++;
+      readMarkerDefLine(v, macroDefs, inFile, s);
+      if (v.size() < 1)
+        continue;
+      if (v.size() != 4 && v.size() != 5)
+        errorMessage("invalid number of fields");
+      markerDefs.resize(markerDefs.size() + 1);
+      MarkerDef&  m = markerDefs.back();
+      m.formID = (unsigned int) parseInteger(v[0].c_str(), 0, "invalid form ID",
+                                             0L, 0x0FFFFFFFL);
+      m.flags = int(parseInteger(v[1].c_str(), 0, "invalid marker flags",
+                                 -1, 0xFFFF));
+      m.mipLevel = float(parseFloat(v[3].c_str(), "invalid mip level",
+                                    0.0f, 16.0f));
+      if (v.size() > 4)
       {
-        markerDefs.resize(markerDefs.size() + 1);
-        MarkerDef&  m = markerDefs.back();
-        m.formID =
-            (unsigned int) parseInteger(v[0].c_str(), 0, "invalid form ID",
-                                        0L, 0x0FFFFFFFL);
-        m.flags = int(parseInteger(v[1].c_str(), 0, "invalid marker flags",
-                                   -1, 0xFFFF));
-        m.mipLevel = float(parseFloat(v[3].c_str(), "invalid mip level",
-                                      0.0f, 16.0f));
-        if (v.size() > 4)
+        m.priority = (unsigned char) parseInteger(v[4].c_str(), 0,
+                                                  "invalid priority", 0, 15);
+      }
+      std::map< std::string, DDSTexture * >::iterator i =
+          textureFiles.find(v[2]);
+      if (i != textureFiles.end())
+      {
+        m.texture = i->second;
+      }
+      else
+      {
+        unsigned int  iconColor = 0;
+        try
         {
-          m.priority = (unsigned char) parseInteger(v[4].c_str(), 0,
-                                                    "invalid priority", 0, 15);
+          iconColor = (unsigned int) parseInteger(v[2].c_str(), 0);
         }
-        std::map< std::string, DDSTexture * >::iterator i =
-            textureFiles.find(v[2]);
-        if (i != textureFiles.end())
+        catch (...)
         {
-          m.texture = i->second;
+          m.texture = new DDSTexture(v[2].c_str());
         }
-        else
+        if (!m.texture)
         {
-          unsigned int  iconColor = 0;
-          try
-          {
-            iconColor = (unsigned int) parseInteger(v[2].c_str(), 0);
-          }
-          catch (...)
-          {
-            m.texture = new DDSTexture(v[2].c_str());
-          }
-          if (!m.texture)
-          {
-            createIcon256(iconBuf, iconColor);
-            m.texture = new DDSTexture(iconBuf.data(), iconBuf.size());
-          }
-          m.uniqueTexture = true;
-          textureFiles.insert(std::pair< std::string, DDSTexture * >(
-                                  v[2], m.texture));
+          createIcon256(iconBuf, iconColor);
+          m.texture = new DDSTexture(iconBuf.data(), iconBuf.size());
         }
-        double  mipMult = std::pow(0.5, m.mipLevel);
-        double  alphaSum = 0.0;
-        for (int y = 0; y < m.texture->getHeight(); y++)
+        m.uniqueTexture = true;
+        textureFiles.insert(std::pair< std::string, DDSTexture * >(
+                                v[2], m.texture));
+      }
+      double  mipMult = std::pow(0.5, m.mipLevel);
+      double  alphaSum = 0.0;
+      for (int y = 0; y < m.texture->getHeight(); y++)
+      {
+        for (int x = 0; x < m.texture->getWidth(); x++)
         {
-          for (int x = 0; x < m.texture->getWidth(); x++)
-          {
-            int     a = int(m.texture->getPixelN(x, y, 0) >> 24);
-            m.xOffs = m.xOffs + float(x * a);
-            m.yOffs = m.yOffs + float(y * a);
-            alphaSum = alphaSum + double(a);
-          }
-        }
-        if (alphaSum > 0.0)
-        {
-          m.xOffs = m.xOffs * float(mipMult / alphaSum);
-          m.yOffs = m.yOffs * float(mipMult / alphaSum);
+          int     a = int(m.texture->getPixelN(x, y, 0) >> 24);
+          m.xOffs = m.xOffs + float(x * a);
+          m.yOffs = m.yOffs + float(y * a);
+          alphaSum = alphaSum + double(a);
         }
       }
-      else if (v.size() > 0)
+      if (alphaSum > 0.0)
       {
-        throw FO76UtilsError("invalid marker definition file format "
-                             "at line %d", lineNumber);
-      }
-      v.clear();
-      s.clear();
-      lineNumber += int(c == '\n');
-      commentFlag = false;
-    }
-    else if (c == '#' || c == ';' ||
-             (c == '/' && inFile.getPosition() < inFile.size() &&
-              inFile[inFile.getPosition()] == '/'))
-    {
-      commentFlag = true;
-    }
-    else if (!commentFlag)
-    {
-      if (c == '\t')
-      {
-        while (s.length() > 0 && (unsigned char) s[s.length() - 1] <= ' ')
-          s.resize(s.length() - 1);
-        if (!s.empty())
-          v.push_back(s);
-        s.clear();
-      }
-      else if (!s.empty() || (unsigned char) c > ' ')
-      {
-        s += c;
+        m.xOffs = m.xOffs * float(mipMult / alphaSum);
+        m.yOffs = m.yOffs * float(mipMult / alphaSum);
       }
     }
   }
-  while (!eofFlag);
+  catch (FO76UtilsError& e)
+  {
+    throw FO76UtilsError("%s: line %d: %s", listFileName, lineNumber, e.what());
+  }
 }
 
 bool MapImage::checkParentWorld(const ESMFile::ESMRecord& r)
@@ -415,12 +454,15 @@ bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
     }
     else if (f == "TNAM" && f.size() >= 2)
     {
-      r.tnam = f.readUInt16Fast();
+      r.flags = f.readUInt16Fast();
     }
   }
   while (f.next());
   r.isInterior = false;
   r.isChildWorld = false;
+  r.isMapMarker = (r.name == 0x00000010);       // MapMarker
+  if (!r.isMapMarker)
+    r.flags = (p->flags & 0xFFFCU) | 1U;        // bit 0 = not interior
   while (p->parent)
   {
     p = esmFile.getRecordPtr(p->parent);
@@ -431,6 +473,8 @@ bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
       if (p->formID == 2 || p->formID == 3)
       {
         r.isInterior = true;
+        if (!r.isMapMarker)
+          r.flags = r.flags ^ 3U;
         break;
       }
       else if (p->formID == 1)
@@ -440,7 +484,6 @@ bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
       }
     }
   }
-  r.isMapMarker = (r.name == 0x00000010);       // MapMarker
   if (r.isChildWorld && !r.isMapMarker)
     return false;
   if (r.xtel)
@@ -678,13 +721,13 @@ void MapImage::findMarkers(unsigned int worldID)
         {
           if (!refr.isMapMarker)
           {
-            if ((m->flags ^ (m->flags >> 1)) & 0x0001)
-            {
-              if (bool(m->flags & 0x0001) != refr.isInterior && !isInteriorMap)
-                continue;
-            }
+            unsigned int  tmp = (unsigned int) m->flags;
+            if ((tmp & 3U) == 3U || isInteriorMap)
+              tmp = tmp & ~3U;
+            if (refr.flags & tmp)
+              continue;
           }
-          else if (refr.tnam != (unsigned int) m->flags ||
+          else if (refr.flags != (unsigned int) m->flags ||
                    disabledMarkers.find(refr.formID) != disabledMarkers.end())
           {
             continue;

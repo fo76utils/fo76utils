@@ -23,8 +23,11 @@ static const char *usageStrings[] =
   "",
   "Form ID is the NAME field of the reference. Marker type is the TNAM field",
   "of the reference if it is a map marker (form ID = 0x00000010), or -1 for",
-  "any type of map marker. For other object types, if not 0 or -1, it can be",
-  "1 or 2 to show references from interior or exterior cells only.",
+  "any type of map marker. For other object types, if not -1, it is a flags",
+  "mask to filter references. Setting bit 0 or bit 1 disables exterior or",
+  "interior objects, respectively. If any of bits 2 to 15 is set both in the",
+  "mask and in the flags of the reference (for example, 0x0020 for deleted",
+  "records), the marker is not shown.",
   "",
   "The icon file must be either a DDS texture in a supported format, or a",
   "32-bit integer defining a basic shape and color for a 256x256 icon in",
@@ -32,6 +35,11 @@ static const char *usageStrings[] =
   "  shape: 1: circle, 5: square, 9: diamond",
   "  edges: 0: soft, 1: outline only, 2: hard, 3: filled black/white outline",
   "Any invalid type defaults to TA = 0x4F.",
+  "",
+  "Simple macros can be defined in NAME = VALUE format, which also must be",
+  "tab separated. VALUE can expand to multiple fields, and reference",
+  "previously defined macros. Macro expansion is not supported on the first",
+  "(form ID) field.",
   (char *) 0
 };
 

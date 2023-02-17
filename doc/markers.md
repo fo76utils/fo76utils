@@ -7,7 +7,7 @@ Find references to a set of form IDs defined in a text file, and mark their loca
 
 The format of **ICONLIST.TXT** is a tab separated list of form ID, marker type, icon file, icon mip level (0.0 = full size, 1.0 = half size, etc.), and an optional priority (0-15).
 
-Form ID is the NAME field of the reference. Marker type is the TNAM field of the reference if it is a map marker (form ID = 0x00000010), or -1 for any type of map marker. For other object types, if not 0 or -1, it can be 1 or 2 to show references from interior or exterior cells only.
+Form ID is the NAME field of the reference. Marker type is the TNAM field of the reference if it is a map marker (form ID = 0x00000010), or -1 for any type of map marker. For other object types, if not -1, it is a flags mask to filter references. Setting bit 0 or bit 1 disables exterior or interior objects, respectively. If any of bits 2 to 15 is set both in the mask and in the flags of the reference (for example, 0x0020 for deleted records), the marker is not shown.
 
 The icon file must be either a DDS texture in a supported format, or a 32-bit integer defining a basic shape and color for a 256x256 icon in 0xTARRGGBB format. A is the opacity (logarithmic scale from 1/32 to 1.0), T is the type as shape + edges:
 
@@ -25,6 +25,8 @@ The icon file must be either a DDS texture in a supported format, or a 32-bit in
 * **C**: Diamond with black/white outline.
 
 Any invalid type defaults to TA = 0x4F.
+
+Simple macros can be defined in NAME = VALUE format, which also must be tab separated. VALUE can expand to multiple fields, and reference previously defined macros. Macro expansion is not supported on the first (form ID) field.
 
 #### Note
 
