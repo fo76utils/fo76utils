@@ -584,9 +584,9 @@ void Plot3D_TriShape::drawPixel_Effect_G(Plot3D_TriShape& p, Fragment& z)
     ao = tmp[1] * (1.0f / 255.0f);
   }
   smoothness *= p.m.e.specularSmoothness;
-  float   roughness = 0.96875f - (smoothness * (0.9375f / 255.0f));
   int     s_i = roundFloat(smoothness) & 0xFF;
   smoothness = smoothness * (1.0f / 255.0f);
+  float   roughness = std::max(1.0f - smoothness, 0.03125f);
   float   nDotL = z.normal.dotProduct3(p.lightVector);
   float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
@@ -1008,9 +1008,9 @@ void Plot3D_TriShape::drawPixel_FO76(Plot3D_TriShape& p, Fragment& z)
   f0.maxValues(FloatVector4(0.015625f));
   float   smoothness = p.m.s.specularSmoothness * n[2];
   float   ao = n[3] * (1.0f / 255.0f);
-  float   roughness = 0.96875f - (smoothness * (0.9375f / 255.0f));
   int     s_i = roundFloat(smoothness) & 0xFF;
   smoothness = smoothness * (1.0f / 255.0f);
+  float   roughness = std::max(1.0f - smoothness, 0.03125f);
   float   nDotL = z.normalMap(n).dotProduct3(p.lightVector);
   float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
