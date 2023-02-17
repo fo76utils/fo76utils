@@ -10,7 +10,9 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "Usage:\n");
     std::fprintf(stderr,
                  "    bcdecode INFILE.DDS "
-                 "[MULT | OUTFILE.RGBA | OUTFILE.DDS [FACE [NOALPHA]]]\n");
+                 "[MULT | OUTFILE.RGBA | OUTFILE.DDS [FACE [FLAGS]]]\n\n");
+    std::fprintf(stderr, "    FLAGS & 1 = ignore alpha channel\n");
+    std::fprintf(stderr, "    FLAGS & 2 = calculate normal map blue channel\n");
     return 1;
   }
   OutputFile  *outFile = (OutputFile *) 0;
@@ -23,6 +25,7 @@ int main(int argc, char **argv)
     int     textureNum = 0;
     unsigned int  alphaMask = 0U;
     bool    ddsOutFmt = false;
+    bool    calculateNormalZ = false;
     if (argc > 2)
     {
       // TES5: 1.983
@@ -63,8 +66,10 @@ int main(int argc, char **argv)
       }
       if (argc > 4)
       {
-        if (bool(parseInteger(argv[4], 10, "invalid boolean value", 0, 1)))
+        int     tmp = int(parseInteger(argv[4], 0, "invalid flags", 0, 3));
+        if (tmp & 1)
           alphaMask = 0xFF000000U;
+        calculateNormalZ = bool(tmp & 2);
       }
     }
     const double  gamma = 2.2;
@@ -85,6 +90,14 @@ int main(int argc, char **argv)
         unsigned char g = (unsigned char) ((c >> 8) & 0xFF);
         unsigned char b = (unsigned char) ((c >> 16) & 0xFF);
         unsigned char a = (unsigned char) ((c >> 24) & 0xFF);
+        if (BRANCH_UNLIKELY(calculateNormalZ))
+        {
+          float   normalX = float(int(r)) * (1.0f / 127.5f) - 1.0f;
+          float   normalY = float(int(g)) * (1.0f / 127.5f) - 1.0f;
+          float   normalZ = 1.0f - ((normalX * normalX) + (normalY * normalY));
+          normalZ = float(std::sqrt(std::max(normalZ, 0.0f)));
+          b = (unsigned char) roundFloat(normalZ * 127.5f + 127.5f);
+        }
         if (outFile)
         {
           if (!ddsOutFmt)
