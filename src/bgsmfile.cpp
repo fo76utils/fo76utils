@@ -314,6 +314,12 @@ void BGSMFile::loadBGSMFile(FileBuffer& buf)
     buf.setPosition(60);
   }
   texturePathMask = texturePaths.readTexturePaths(buf, texturePathMap);
+  if (version != 2 && texturePaths[0].length() > 21 &&
+      std::strcmp(texturePaths[0].c_str() + (texturePaths[0].length() - 21),
+                  "hittechglass_01_d.dds") == 0)
+  {
+    flags = flags | Flag_IsDecal;
+  }
   buf.setPosition(buf.getPosition() + (version == 2 ? 15 : 24));
   bool    specularEnabled = bool(buf.readUInt8());
   s.specularColor = readFP32Vec4Clamped(buf, FloatVector4(0.0f),
