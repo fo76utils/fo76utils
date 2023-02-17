@@ -186,11 +186,11 @@ static inline FloatVector4 alphaBlendFunction(
     case 8:
       return c;
     case 2:
-      return (c * cSrc);
+    case 4:
+      // multiplicative blending hack to fix oil puddles in Fallout 4/76
+      return (cDst * ((cSrc * srcAlpha) + (1.0f - srcAlpha)));
     case 3:
       return (c - (c * cSrc));
-    case 4:
-      return (c * cDst);
     case 5:
       return (c - (c * cDst));
     case 6:
