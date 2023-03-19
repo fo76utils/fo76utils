@@ -287,19 +287,21 @@ def extractMapIcons(gameName, gamePath, baunpackFunc, swfToolFunc, magickFunc):
 
 def getMapMarkerDefs(gameName, markerMip, markerPriority):
     swfNames, iconList = getMapIconList(gameName)
-    markerDefs = ""
+    markerDefs = "mapIconMip\t=\t%g\n" % (markerMip)
+    markerDefs += "mapIconMipWS\t=\t%g\n" % (markerMip + 0.5)
+    markerDefs += "mapIconPriority\t=\t%d\n" % (markerPriority)
+    markerDefs += "mapIconPriorityWS\t=\t%d\n" % (markerPriority + 1)
     for i in iconList:
         n = i[0]
         iconFileName = "interface/%sicon_%02x.dds" % (gameName, n)
         if not (n == 0x001E and gameName == "fo76"):
-            markerDefs += "0x%08X\t0x%04X\t%s\t%g\t%d\t// %s\n" % (
-                              0x10, n, iconFileName, markerMip, markerPriority,
-                              i[2])
+            markerDefs += "0x%08X\t0x%04X\t%s" % (0x10, n, iconFileName)
+            markerDefs += "\tmapIconMip\tmapIconPriority\t// %s\n" % (i[2])
     if gameName == "fo76":
         # workshop
-        markerDefs += "0x003BD4F4\t2\t0x3E000000\t%g\t%d\t// workshop\n" % (
-                          markerMip + 0.5, markerPriority + 1)
-        markerDefs += "0x003BD4F4\t2\tinterface/fo76icon_1e.dds\t%g\t%d\n" % (
-                          markerMip, markerPriority + 1)
+        markerDefs += "0x003BD4F4\t2\t0x3E000000"
+        markerDefs += "\tmapIconMipWS\tmapIconPriorityWS\t// workshop\n"
+        markerDefs += "0x003BD4F4\t2\tinterface/fo76icon_1e.dds"
+        markerDefs += "\tmapIconMip\tmapIconPriorityWS\n"
     return markerDefs
 
