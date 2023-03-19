@@ -67,6 +67,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **A**, **D**: Move to the left or right.
 * **S**, **W**: Move backward or forward (-Z or +Z in the view space).
 * **E**, **X**: Move up or down (-Y or +Y in the view space).
+* **F12** or **Print Screen**: Save screenshot.
 * **P**: Print current **-light** and **-view** parameters (for use with [render](render.md) or [markers](markers.md)), and camera position. The information printed is also copied to the clipboard.
 * **V**: Print all current settings, similarly to the 'list' console command.
 * **C**: Clear messages.

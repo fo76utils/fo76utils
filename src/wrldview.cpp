@@ -204,6 +204,7 @@ struct WorldSpaceViewer
   void updateDisplay();
   void pollEvents();
   void consoleInput();
+  void saveScreenshot();
 };
 
 WorldSpaceViewer::WorldSpaceViewer(
@@ -1104,6 +1105,10 @@ void WorldSpaceViewer::pollEvents()
         display.clearTextBuffer();
         redrawScreenFlag = true;
         break;
+      case SDLDisplay::SDLKeySymF12:
+      case SDLDisplay::SDLKeySymPrintScr:
+        saveScreenshot();
+        break;
       case SDLDisplay::SDLKeySymEscape:
         quitFlag = true;
         break;
@@ -1217,6 +1222,50 @@ void WorldSpaceViewer::consoleInput()
                            e.what());
     }
   }
+}
+
+void WorldSpaceViewer::saveScreenshot()
+{
+  bool    screenSurfaceLocked = false;
+  try
+  {
+    std::string fileName("wrldview");
+    std::time_t t = std::time((std::time_t *) 0);
+    {
+      unsigned int  s = (unsigned int) (t % std::time_t(24 * 60 * 60));
+      unsigned int  m = s / 60U;
+      s = s % 60U;
+      unsigned int  h = m / 60U;
+      m = m % 60U;
+      h = h % 24U;
+      char    buf[16];
+      std::sprintf(buf, "_%02u%02u%02u.dds", h, m, s);
+      fileName += buf;
+    }
+    std::memcpy(display.lockDrawSurface(), imageBuf.data(),
+                imageDataSize * sizeof(std::uint32_t));
+    display.unlockDrawSurface();
+    display.blitSurface();
+    int     w = display.getWidth() >> int(display.getIsDownsampled());
+    int     h = display.getHeight() >> int(display.getIsDownsampled());
+    const std::uint32_t *p = display.lockScreenSurface();
+    screenSurfaceLocked = true;
+    DDSOutputFile f(fileName.c_str(), w, h, DDSInputFile::pixelFormatRGBA32);
+    size_t  pitch = display.getPitch();
+    for (int y = 0; y < h; y++, p = p + pitch)
+      f.writeImageData(p, size_t(w), DDSInputFile::pixelFormatRGBA32);
+    display.unlockScreenSurface();
+    screenSurfaceLocked = false;
+    display.consolePrint("Saved screenshot to %s\n", fileName.c_str());
+  }
+  catch (std::exception& e)
+  {
+    if (screenSurfaceLocked)
+      display.unlockScreenSurface();
+    display.consolePrint("\033[41m\033[33m\033[1mError: %s\033[m\n",
+                         e.what());
+  }
+  redrawScreenFlag = true;
 }
 
 int main(int argc, char **argv)
