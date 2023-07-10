@@ -3,6 +3,7 @@
 #include "filebuf.hpp"
 
 #if defined(_WIN32) || defined(_WIN64)
+#  include <windows.h>
 #  include <io.h>
 extern "C"
 {
@@ -10,9 +11,30 @@ extern "C"
 #  include "mman.c"
 }
 #else
+#  include <sys/stat.h>
+#  include <fcntl.h>
 #  include <unistd.h>
 #  include <sys/mman.h>
 #endif
+
+inline void FileBuffer::closeFileStream()
+{
+#if defined(_WIN32) || defined(_WIN64)
+  if (BRANCH_UNLIKELY(HANDLE(fileStream) != INVALID_HANDLE_VALUE))
+  {
+    munmap((void *) fileBuf, fileBufSize);
+    CloseHandle(HANDLE(fileStream));
+    fileStream = std::uintptr_t(INVALID_HANDLE_VALUE);
+  }
+#else
+  if (BRANCH_UNLIKELY(int(fileStream) >= 0))
+  {
+    munmap((void *) fileBuf, fileBufSize);
+    close(int(fileStream));
+    fileStream = std::uintptr_t(-1);
+  }
+#endif
+}
 
 unsigned char FileBuffer::readUInt8()
 {
@@ -260,12 +282,7 @@ std::uint32_t FileBuffer::readUInt32(size_t offs) const
 
 void FileBuffer::setBuffer(const unsigned char *fileData, size_t fileSize)
 {
-  if (fileStream)
-  {
-    munmap((void *) fileBuf, fileBufSize);
-    std::fclose(fileStream);
-    fileStream = (std::FILE *) 0;
-  }
+  closeFileStream();
   fileBuf = fileData;
   fileBufSize = fileSize;
   filePos = 0;
@@ -275,7 +292,11 @@ FileBuffer::FileBuffer()
   : fileBuf((unsigned char *) 0),
     fileBufSize(0),
     filePos(0),
-    fileStream((std::FILE *) 0)
+#if defined(_WIN32) || defined(_WIN64)
+    fileStream(std::uintptr_t(INVALID_HANDLE_VALUE))
+#else
+    fileStream(std::uintptr_t(-1))
+#endif
 {
 }
 
@@ -283,58 +304,67 @@ FileBuffer::FileBuffer(const unsigned char *fileData, size_t fileSize)
   : fileBuf(fileData),
     fileBufSize(fileSize),
     filePos(0),
-    fileStream((std::FILE *) 0)
+#if defined(_WIN32) || defined(_WIN64)
+    fileStream(std::uintptr_t(INVALID_HANDLE_VALUE))
+#else
+    fileStream(std::uintptr_t(-1))
+#endif
 {
 }
 
 FileBuffer::FileBuffer(const char *fileName)
   : filePos(0),
-    fileStream((std::FILE *) 0)
+#if defined(_WIN32) || defined(_WIN64)
+    fileStream(std::uintptr_t(INVALID_HANDLE_VALUE))
+#else
+    fileStream(std::uintptr_t(-1))
+#endif
 {
   if (!fileName || *fileName == '\0')
     errorMessage("empty input file name");
   try
   {
-    fileStream = openFileInDataPath(fileName, "rb");
-    if (!fileStream)
-      throw FO76UtilsError("error opening input file \"%s\"", fileName);
+    fileStream = openFileInDataPath(fileName);
 #if defined(_WIN32) || defined(_WIN64)
-    if (_fseeki64(fileStream, 0LL, SEEK_END) < 0)
+    if (HANDLE(fileStream) == INVALID_HANDLE_VALUE)
+      throw FO76UtilsError("error opening input file \"%s\"", fileName);
+    LARGE_INTEGER fsize;
+    fsize.QuadPart = -1L;
+    if (!GetFileSizeEx(HANDLE(fileStream), &fsize) || fsize.QuadPart < 0L)
       throw FO76UtilsError("error seeking input file \"%s\"", fileName);
-    long long fsize = _ftelli64(fileStream);
-    if (fsize < 0LL || _fseeki64(fileStream, 0LL, SEEK_SET) < 0)
-      throw FO76UtilsError("error seeking input file \"%s\"", fileName);
-    fileBufSize = size_t(fsize);
-    int     fileDesc = _fileno(fileStream);
-#else
-    if (std::fseek(fileStream, 0L, SEEK_END) < 0)
-      throw FO76UtilsError("error seeking input file \"%s\"", fileName);
-    long    fsize = std::ftell(fileStream);
-    if (fsize < 0L || std::fseek(fileStream, 0L, SEEK_SET) < 0)
-      throw FO76UtilsError("error seeking input file \"%s\"", fileName);
-    fileBufSize = size_t(fsize);
-    int     fileDesc = fileno(fileStream);
-#endif
+    fileBufSize = size_t(fsize.QuadPart);
     fileBuf = (unsigned char *) mmap(0, fileBufSize, PROT_READ, MAP_PRIVATE,
-                                     fileDesc, 0);
+                                     fileStream, 0);
+#else
+    if (int(fileStream) < 0)
+      throw FO76UtilsError("error opening input file \"%s\"", fileName);
+    std::int64_t  fsize =
+        std::int64_t(lseek(int(fileStream), off_t(0), SEEK_END));
+    if (fsize < 0L || lseek(int(fileStream), off_t(0), SEEK_SET) < 0L)
+      throw FO76UtilsError("error seeking input file \"%s\"", fileName);
+    fileBufSize = size_t(fsize);
+    fileBuf = (unsigned char *) mmap(0, fileBufSize, PROT_READ, MAP_PRIVATE,
+                                     int(fileStream), 0);
+#endif
     if ((void *) fileBuf == MAP_FAILED)
       throw FO76UtilsError("error mapping input file \"%s\"", fileName);
   }
   catch (...)
   {
-    if (fileStream)
-      std::fclose(fileStream);
+#if defined(_WIN32) || defined(_WIN64)
+    if (HANDLE(fileStream) != INVALID_HANDLE_VALUE)
+      CloseHandle(HANDLE(fileStream));
+#else
+    if (int(fileStream) >= 0)
+      close(int(fileStream));
+#endif
     throw;
   }
 }
 
 FileBuffer::~FileBuffer()
 {
-  if (fileStream)
-  {
-    munmap((void *) fileBuf, fileBufSize);
-    std::fclose(fileStream);
-  }
+  closeFileStream();
 }
 
 bool FileBuffer::getDefaultDataPath(std::string& dataPath)
@@ -363,11 +393,14 @@ bool FileBuffer::getDefaultDataPath(std::string& dataPath)
   return (dataPath.length() > 0);
 }
 
-std::FILE * FileBuffer::openFileInDataPath(const char *fileName,
-                                           const char *mode)
+std::uintptr_t FileBuffer::openFileInDataPath(const char *fileName)
 {
   if (!fileName)
-    return (std::FILE *) 0;
+#if defined(_WIN32) || defined(_WIN64)
+    return std::uintptr_t(INVALID_HANDLE_VALUE);
+#else
+    return std::uintptr_t(-1);
+#endif
   std::string nameBuf;
   size_t  dataPathOffset = 0;
   if (!(fileName[0] == '.' || fileName[0] == '/'
@@ -390,19 +423,23 @@ std::FILE * FileBuffer::openFileInDataPath(const char *fileName,
       fileName = nameBuf.c_str();
     }
   }
-  std::FILE *f;
+  std::uintptr_t  f;
 #if defined(_WIN32) || defined(_WIN64)
-  f = fopen64(fileName, mode);
-#else
-  f = std::fopen(fileName, mode);
-#endif
-  if (f || !dataPathOffset)
+  f = std::uintptr_t(CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ,
+                                 LPSECURITY_ATTRIBUTES(0), OPEN_EXISTING, 0,
+                                 HANDLE(0)));
+  if (HANDLE(f) != INVALID_HANDLE_VALUE || !dataPathOffset)
     return f;
   fileName = fileName + dataPathOffset;
-#if defined(_WIN32) || defined(_WIN64)
-  return fopen64(fileName, mode);
+  return std::uintptr_t(CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ,
+                                    LPSECURITY_ATTRIBUTES(0), OPEN_EXISTING, 0,
+                                    HANDLE(0)));
 #else
-  return std::fopen(fileName, mode);
+  f = std::uintptr_t(open(fileName, O_RDONLY));
+  if (int(f) >= 0 || !dataPathOffset)
+    return f;
+  fileName = fileName + dataPathOffset;
+  return std::uintptr_t(open(fileName, O_RDONLY));
 #endif
 }
 
@@ -626,13 +663,7 @@ void DDSInputFile::readDDSHeader(int& width, int& height, int& pixelFormat,
   }
   catch (...)
   {
-    if (fileStream)
-    {
-      munmap((void *) fileBuf, fileBufSize);
-      fileBuf = (unsigned char *) 0;
-      std::fclose(fileStream);
-      fileStream = (std::FILE *) 0;
-    }
+    closeFileStream();
     throw;
   }
   fileBuf = fileBuf + ddsHeaderSize;
@@ -659,13 +690,7 @@ DDSInputFile::DDSInputFile(const char *fileName,
 
 DDSInputFile::~DDSInputFile()
 {
-  if (fileStream)
-  {
-    munmap((void *) (fileBuf - ddsHeaderSize), fileBufSize + ddsHeaderSize);
-    fileBuf = (unsigned char *) 0;
-    std::fclose(fileStream);
-    fileStream = (std::FILE *) 0;
-  }
+  closeFileStream();
 }
 
 DDSOutputFile::DDSOutputFile(const char *fileName,

@@ -11,7 +11,8 @@ class FileBuffer
   const unsigned char *fileBuf;
   size_t  fileBufSize;
   size_t  filePos;
-  std::FILE *fileStream;
+  std::uintptr_t  fileStream;   // HANDLE on Windows, int on other systems
+  inline void closeFileStream();
  public:
   static inline std::uint32_t swapUInt32(unsigned int n);
   // the fast versions of the functions are inline
@@ -72,7 +73,10 @@ class FileBuffer
   FileBuffer(const char *fileName);
   virtual ~FileBuffer();
   static bool getDefaultDataPath(std::string& dataPath);
-  static std::FILE *openFileInDataPath(const char *fileName, const char *mode);
+ protected:
+  // on Windows: returns HANDLE from CreateFile(), INVALID_HANDLE_VALUE on error
+  // on other systems: returns int from open(), negative value on error
+  static std::uintptr_t openFileInDataPath(const char *fileName);
 };
 
 inline std::uint32_t FileBuffer::swapUInt32(unsigned int n)
