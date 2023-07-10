@@ -62,7 +62,8 @@ extern "C" {
 #define MS_SYNC         2
 #define MS_INVALIDATE   4
 
-MMANSHARED_EXPORT void*   mmap(void *addr, size_t len, int prot, int flags, int fildes, OffsetType off);
+/* fildes is expected to be a HANDLE from CreateFile() */
+MMANSHARED_EXPORT void*   mmap(void *addr, size_t len, int prot, int flags, uintptr_t fildes, OffsetType off);
 MMANSHARED_EXPORT int     munmap(void *addr, size_t len);
 MMANSHARED_EXPORT int     _mprotect(void *addr, size_t len, int prot);
 MMANSHARED_EXPORT int     msync(void *addr, size_t len, int flags);

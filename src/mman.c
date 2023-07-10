@@ -55,7 +55,7 @@ static DWORD __map_mmap_prot_file(const int prot)
     return desiredAccess;
 }
 
-void* mmap(void *addr, size_t len, int prot, int flags, int fildes, OffsetType off)
+void* mmap(void *addr, size_t len, int prot, int flags, uintptr_t fildes, OffsetType off)
 {
     HANDLE fm, h;
     
@@ -95,7 +95,7 @@ void* mmap(void *addr, size_t len, int prot, int flags, int fildes, OffsetType o
     }
     
     h = ((flags & MAP_ANONYMOUS) == 0) ? 
-                    (HANDLE)_get_osfhandle(fildes) : INVALID_HANDLE_VALUE;
+                    (HANDLE) fildes : INVALID_HANDLE_VALUE;
 
     if ((flags & MAP_ANONYMOUS) == 0 && h == INVALID_HANDLE_VALUE)
     {
