@@ -36,12 +36,12 @@ __attribute__ ((__format__ (__printf__, 2, 3)))
 #endif
 FO76UtilsError::FO76UtilsError(const char *fmt, ...) noexcept
 {
-  char    tmpBuf[512];
+  char    tmpBuf[2048];
   std::va_list  ap;
   va_start(ap, fmt);
-  std::vsnprintf(tmpBuf, 512, fmt, ap);
+  std::vsnprintf(tmpBuf, 2048, fmt, ap);
   va_end(ap);
-  tmpBuf[511] = '\0';
+  tmpBuf[2047] = '\0';
   storeMessage(tmpBuf, true);
 }
 

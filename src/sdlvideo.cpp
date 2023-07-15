@@ -1494,9 +1494,9 @@ __attribute__ ((__format__ (__printf__, 2, 3)))
 void SDLDisplay::consolePrint(const char *fmt, ...)
 {
 #ifdef HAVE_SDL2
-  if (BRANCH_UNLIKELY(textBuf.size() >= 1048576))
+  if (BRANCH_UNLIKELY(textBuf.size() >= 0x00200000))
   {
-    int     n = 524288 / textWidth;
+    int     n = 0x00080000 / textWidth;
     printYPos = (printYPos > n ? (printYPos - n) : 0);
     textBuf.erase(textBuf.begin(), textBuf.begin() + size_t(n * textWidth));
   }
@@ -1505,12 +1505,12 @@ void SDLDisplay::consolePrint(const char *fmt, ...)
     printString(fmt);
     return;
   }
-  char    tmpBuf[2048];
+  char    tmpBuf[4096];
   std::va_list  ap;
   va_start(ap, fmt);
-  std::vsnprintf(tmpBuf, 2048, fmt, ap);
+  std::vsnprintf(tmpBuf, 4096, fmt, ap);
   va_end(ap);
-  tmpBuf[2047] = '\0';
+  tmpBuf[4095] = '\0';
   printString(tmpBuf);
 #else
   std::va_list  ap;
