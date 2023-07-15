@@ -79,7 +79,8 @@ class MapImage
   std::map< unsigned int, CellOffset >  cellOffsets;
   std::set< unsigned int >  disabledMarkers;
   static void createIcon256(std::vector< unsigned char >& buf, unsigned int c);
-  void loadTextures(const char *listFileName);
+  void loadTextures(const char *listFileName,
+                    float mipOffset = 0.0f, int recursionDepth = 0);
   bool checkParentWorld(const ESMFile::ESMRecord& r);
   void setWorldCellOffsets(unsigned int formID, float x, float y, float z);
   void setInteriorCellOffset(const REFRRecord& refr);
@@ -87,7 +88,7 @@ class MapImage
  public:
   MapImage(ESMFile& esmFiles, const char *listFileName,
            std::uint32_t *outBufRGBA, int w, int h,
-           const NIFFile::NIFVertexTransform& vt);
+           const NIFFile::NIFVertexTransform& vt, float mipOffset = 0.0f);
   virtual ~MapImage();
   const ESMFile::ESMRecord *getParentCell(unsigned int formID) const;
   bool getREFRRecord(REFRRecord& r, unsigned int formID);

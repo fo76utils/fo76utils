@@ -3,7 +3,7 @@
 
 Find references to a set of form IDs defined in a text file, and mark their locations on an RGBA format map, optionally using DDS icon files.
 
-**LANDFILE.DDS** is the output of [fo4land](fo4land.md) or [btddump](btddump.md), to be used as reference for image size and mapping coordinates. Alternatively, a comma separated list of image width, height, view scale, X, Y, Z rotation, and X, Y, Z offsets can be specified, these parameters are used similarly to [render](render.md).
+**LANDFILE.DDS** is the output of [fo4land](fo4land.md) or [btddump](btddump.md), to be used as reference for image size and mapping coordinates. Alternatively, a comma separated list of image width, height, view scale, X, Y, Z rotation, and X, Y, Z offsets can be specified, these parameters are used similarly to [render](render.md). The view transform may optionally also include a mip offset parameter, this is added to all mip levels in the marker definitions.
 
 The format of **ICONLIST.TXT** is a tab separated list of form ID, marker type, icon file, icon mip level (0.0 = full size, 1.0 = half size, etc.), and an optional priority (0-15).
 
@@ -27,6 +27,8 @@ The icon file must be either a DDS texture in a supported format, or a 32-bit in
 Any invalid type defaults to TA = 0x4F.
 
 Simple macros can be defined in NAME = VALUE format, which also must be tab separated. VALUE can expand to multiple fields, and reference previously defined macros. Macro expansion is not supported on the first (form ID) field.
+
+The directives **include** and **mipoffset** can be used to read another marker definition file and to set a value to be added to all subsequent mip levels, respectively. These take a single tab separated argument, either a file name without quotes, or a floating point value between -16.0 and 16.0. If the mip offset is set again within the same file, the values are combined, but the result is limited to the allowed range. Mip offsets set in an included file are local to that file.
 
 #### Note
 

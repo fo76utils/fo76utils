@@ -16,6 +16,8 @@ static const char *usageStrings[] =
   "for image size and mapping coordinates. Alternatively, a comma separated",
   "list of image width, height, view scale, X, Y, Z rotation, and X, Y, Z",
   "offsets can be specified, these parameters are used similarly to render.",
+  "The view transform may optionally also include a mip offset parameter,",
+  "this is added to all mip levels in the marker definitions.",
   "",
   "The format of ICONLIST.TXT is a tab separated list of form ID, marker",
   "type, icon file, icon mip level (0.0 = full size, 1.0 = half size, etc.),",
@@ -40,6 +42,14 @@ static const char *usageStrings[] =
   "tab separated. VALUE can expand to multiple fields, and reference",
   "previously defined macros. Macro expansion is not supported on the first",
   "(form ID) field.",
+  "",
+  "The directives 'include' and 'mipoffset' can be used to read another",
+  "marker definition file and to set a value to be added to all subsequent",
+  "mip levels, respectively. These take a single tab separated argument,",
+  "either a file name without quotes, or a floating point value between",
+  "-16.0 and 16.0. If the mip offset is set again within the same file, the",
+  "values are combined, but the result is limited to the allowed range.",
+  "Mip offsets set in an included file are local to that file.",
   (char *) 0
 };
 
@@ -62,6 +72,7 @@ int main(int argc, char **argv)
     float   viewOffsX = 0.0f;
     float   viewOffsY = 0.0f;
     float   viewOffsZ = 0.0f;
+    float   mipOffset = 0.0f;
     {
       const char  *s = argv[3];
       size_t  n = std::strlen(s);
@@ -89,10 +100,11 @@ int main(int argc, char **argv)
         viewScale = float(cellSize) / 4096.0f;
         viewOffsX = float(-x0) * viewScale;
         viewOffsY = float(y1) * viewScale - 1.0f;
+        viewOffsZ = viewScale * 262144.0f;
       }
       else
       {
-        for (int i = 0; i < 9; i++)
+        for (int i = 0; i < 10; i++)
         {
           long    tmp1 = 0L;
           double  tmp2 = 0.0;
@@ -101,10 +113,11 @@ int main(int argc, char **argv)
             tmp1 = std::strtol(s, &endp, 0);
           else
             tmp2 = std::strtod(s, &endp);
-          if (!endp || endp == s || *endp != (i < 8 ? ',' : '\0'))
+          if (!endp || endp == s || (i < 8 && *endp != ',') ||
+              (i > 8 && *endp != '\0') || (*endp != '\0' && *endp != ','))
           {
             errorMessage("invalid view transform, "
-                         "must be 9 comma separated numbers");
+                         "must be 9 or 10 comma separated numbers");
           }
           if (i < 2 && (tmp1 < 2L || tmp1 > 65536L))
             errorMessage("invalid image dimensions");
@@ -118,8 +131,8 @@ int main(int argc, char **argv)
           }
           if (i >= 6 && !(tmp2 >= -1048576.0 && tmp2 <= 1048576.0))
             errorMessage("invalid view offset");
-          if (i < 8)
-            s = endp + 1;
+          if (i == 9 && !(tmp2 >= -16.0 && tmp2 <= 16.0))
+            errorMessage("invalid mip offset");
           if (i == 0)
             imageWidth = int(tmp1);
           else if (i == 1)
@@ -138,6 +151,11 @@ int main(int argc, char **argv)
             viewOffsY = float(tmp2) + (float(imageHeight - 2) * 0.5f);
           else if (i == 8)
             viewOffsZ = float(tmp2);
+          else if (i == 9)
+            mipOffset = float(tmp2);
+          if (*endp == '\0')
+            break;
+          s = endp + 1;
         }
       }
     }
@@ -149,7 +167,7 @@ int main(int argc, char **argv)
                        NIFFile::NIFVertexTransform(
                            viewScale,
                            viewRotationX, viewRotationY, viewRotationZ,
-                           viewOffsX, viewOffsY, viewOffsZ));
+                           viewOffsX, viewOffsY, viewOffsZ), mipOffset);
     unsigned int  worldID = 0U;
     if (argc > 5)
     {

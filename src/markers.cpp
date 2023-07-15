@@ -156,9 +156,9 @@ static void readMarkerDefLine(
   }
 }
 
-void MapImage::loadTextures(const char *listFileName)
+void MapImage::loadTextures(const char *listFileName,
+                            float mipOffset, int recursionDepth)
 {
-  markerDefs.clear();
   FileBuffer  inFile(listFileName);
   std::map< std::string, DDSTexture * > textureFiles;
   std::vector< unsigned char >  iconBuf;
@@ -175,7 +175,30 @@ void MapImage::loadTextures(const char *listFileName)
       if (v.size() < 1)
         continue;
       if (v.size() != 4 && v.size() != 5)
+      {
+        if (v.size() == 2)
+        {
+          if (v[0] == "include")
+          {
+            if (recursionDepth >= 16)
+              errorMessage("include recursion depth exceeds maximum");
+            loadTextures(v[1].c_str(), mipOffset, recursionDepth + 1);
+            continue;
+          }
+          else if (v[0] == "mipoffset")
+          {
+            mipOffset += float(parseFloat(v[1].c_str(), "invalid mip offset",
+                                          -16.0f, 16.0f));
+            mipOffset = std::min(std::max(mipOffset, -16.0f), 16.0f);
+            continue;
+          }
+          else
+          {
+            errorMessage("invalid directive");
+          }
+        }
         errorMessage("invalid number of fields");
+      }
       markerDefs.resize(markerDefs.size() + 1);
       MarkerDef&  m = markerDefs.back();
       m.formID = (unsigned int) parseInteger(v[0].c_str(), 0, "invalid form ID",
@@ -184,6 +207,7 @@ void MapImage::loadTextures(const char *listFileName)
                                  -1, 0xFFFF));
       m.mipLevel = float(parseFloat(v[3].c_str(), "invalid mip level",
                                     0.0f, 16.0f));
+      m.mipLevel = std::min(std::max(m.mipLevel + mipOffset, 0.0f), 16.0f);
       if (v.size() > 4)
       {
         m.priority = (unsigned char) parseInteger(v[4].c_str(), 0,
@@ -366,7 +390,7 @@ void MapImage::findDisabledMarkers(const ESMFile::ESMRecord& r)
 
 MapImage::MapImage(ESMFile& esmFiles, const char *listFileName,
                    std::uint32_t *outBufRGBA, int w, int h,
-                   const NIFFile::NIFVertexTransform& vt)
+                   const NIFFile::NIFVertexTransform& vt, float mipOffset)
   : esmFile(esmFiles),
     buf(outBufRGBA),
     imageWidth(size_t(w)),
@@ -378,7 +402,8 @@ MapImage::MapImage(ESMFile& esmFiles, const char *listFileName,
 {
   try
   {
-    loadTextures(listFileName);
+    markerDefs.clear();
+    loadTextures(listFileName, mipOffset);
     for (size_t i = 0; i < markerDefs.size(); i++)
     {
       if (formIDs.find(markerDefs[i].formID) == formIDs.end())
@@ -515,6 +540,8 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
   int     mipLevelI = int(m.mipLevel);
   float   mipMult = float(std::pow(2.0, m.mipLevel - float(mipLevelI)));
   viewTransform.transformXYZ(x, y, z);
+  if (z < 0.0f)
+    return;
   float   xf = x - m.xOffs;
   float   yf = y - m.yOffs;
   int     xi = int(xf) - int(xf < 0.0f);
