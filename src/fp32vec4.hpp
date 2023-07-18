@@ -181,6 +181,10 @@ inline FloatVector4::FloatVector4(const float *p)
 inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n)
 {
   XMM_Float v;
+#if ENABLE_X86_64_AVX2
+  __asm__ ("vmovq %1, %0" : "=x" (v) : "rm" (n));
+  __asm__ ("vcvtph2ps %0, %0" : "+x" (v));
+#else
   XMM_Int32 tmp1;
   XMM_Int32 tmp2 =
   {
@@ -198,6 +202,7 @@ inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n)
   __asm__ ("vsubps %0, %1, %0" : "+x" (tmp2) : "x" (v));
   __asm__ ("vaddps %0, %0, %0" : "+x" (tmp2));
   __asm__ ("vpminud %1, %0, %0" : "+x" (v) : "x" (tmp2));
+#endif
   return FloatVector4(v);
 }
 

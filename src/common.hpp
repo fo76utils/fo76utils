@@ -19,10 +19,16 @@
 #if defined(__GNUC__) && (defined(__x86_64__) || defined(__x86_64))
 #  if defined(__AVX__) && !defined(ENABLE_X86_64_AVX)
 #    define ENABLE_X86_64_AVX   1
+#    if defined(__AVX2__) && !defined(ENABLE_X86_64_AVX2)
+#      define ENABLE_X86_64_AVX2  1
+#    endif
 #  endif
 #endif
 #ifndef ENABLE_X86_64_AVX
 #  define ENABLE_X86_64_AVX     0
+#endif
+#ifndef ENABLE_X86_64_AVX2
+#  define ENABLE_X86_64_AVX2    0
 #endif
 
 class FO76UtilsError : public std::exception
@@ -121,7 +127,12 @@ inline std::int32_t uint32ToSigned(unsigned int x)
 
 inline float convertFloat16(unsigned short n)
 {
-#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+#if ENABLE_X86_64_AVX2
+  float   tmp __attribute__ ((__vector_size__ (16)));
+  __asm__ ("vmovq %1, %0" : "=x" (tmp) : "r" (std::uint64_t(n)));
+  __asm__ ("vcvtph2ps %0, %0" : "+x" (tmp));
+  return tmp[0];
+#elif defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   std::uint32_t m = (std::uint32_t) int((std::int16_t) n);
   union
   {
@@ -148,7 +159,16 @@ inline float convertFloat16(unsigned short n)
 #endif
 }
 
+#if ENABLE_X86_64_AVX2
+inline std::uint16_t convertToFloat16(float x)
+{
+  std::uint16_t tmp __attribute__ ((__vector_size__ (16)));
+  __asm__ ("vcvtps2ph $0x00, %1, %0" : "=x" (tmp) : "x" (x));
+  return tmp[0];
+}
+#else
 std::uint16_t convertToFloat16(float x);
+#endif
 
 inline unsigned long long rgba32ToRBGA64(unsigned int c)
 {

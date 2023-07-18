@@ -5,21 +5,25 @@ env = Environment(tools = [*filter(None, ARGUMENTS.get('tools','').split(','))] 
                   ENV = { "PATH" : os.environ["PATH"],
                           "HOME" : os.environ["HOME"] })
 env["CXXFLAGS"] = Split("-Wall -std=c++11 -Isrc")
-env.Append(CXXFLAGS = Split("-march=sandybridge -mtune=generic"))
+if int(ARGUMENTS.get("avx2", 0)):
+    env.Append(CXXFLAGS = ["-march=haswell"])
+elif int(ARGUMENTS.get("avx", 1)):
+    env.Append(CXXFLAGS = ["-march=sandybridge"])
+env.Append(CXXFLAGS = ["-mtune=generic"])
 env.Append(LIBS = ["m"])
 if "win" in sys.platform:
     buildPackage = ARGUMENTS.get("buildpkg", "")
 else:
     env.Append(LIBS = ["pthread"])
-if ARGUMENTS.get("debug", 0):
+if int(ARGUMENTS.get("debug", 0)):
     env.Append(CXXFLAGS = Split("-g -Og"))
-elif ARGUMENTS.get("profile", 0):
+elif int(ARGUMENTS.get("profile", 0)):
     env.Append(CXXFLAGS = Split("-g -pg -O"))
     env.Prepend(LINKFLAGS = ["-pg"])
 else:
     env.Append(CXXFLAGS = Split("-O3 -fomit-frame-pointer -ffast-math"))
     env.Append(LINKFLAGS = ["-s"])
-if ARGUMENTS.get("rgb10a2", 0):
+if int(ARGUMENTS.get("rgb10a2", 0)):
     env.Append(CXXFLAGS = ["-DUSE_PIXELFMT_RGB10A2=1"])
 
 libSources = ["src/common.cpp", "src/filebuf.cpp", "src/zlib.cpp"]
@@ -31,7 +35,7 @@ libSources += ["src/terrmesh.cpp", "src/render.cpp", "src/rndrbase.cpp"]
 libSources += ["src/markers.cpp"]
 fo76utilsLib = env.StaticLibrary("fo76utils", libSources)
 
-if ARGUMENTS.get("pymodule", 0):
+if int(ARGUMENTS.get("pymodule", 0)):
     pyModuleEnv = env.Clone()
     if "win" in sys.platform:
         pyModuleEnv.ParseConfig("pkg-config --cflags --libs python3")

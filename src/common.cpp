@@ -51,9 +51,10 @@ FO76UtilsError::~FO76UtilsError() noexcept
     std::free(buf);
 }
 
+#if !ENABLE_X86_64_AVX2
 std::uint16_t convertToFloat16(float x)
 {
-#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+#  if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   union
   {
     float   f;
@@ -72,7 +73,7 @@ std::uint16_t convertToFloat16(float x)
   n = (n - 0x37FFF000U) >> 13;
   n = (n < 0x7FFFU ? n : 0x7FFFU);
   return std::uint16_t(n | s);
-#else
+#  else
   int     e = 0;
   int     m = roundFloat(float(std::frexp(x, &e)) * 2048.0f);
   if (!m)
@@ -83,8 +84,9 @@ std::uint16_t convertToFloat16(float x)
   if (e <= 0 || e > 31)
     return std::uint16_t(s | (e <= 0 ? 0x0000 : 0x7FFF));
   return std::uint16_t(s | (e << 10) | (m & 0x03FF));
-#endif
+#  endif
 }
+#endif
 
 long parseInteger(const char *s, int base, const char *errMsg,
                   long minVal, long maxVal)
