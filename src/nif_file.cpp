@@ -469,7 +469,7 @@ void NIFFile::NIFBlkBSLightingShaderProperty::readLightingShaderProperty(
   float   s = f.readFloat();                    // glossiness or smoothness
   if (f.bsVersion < 0x80)
     s = (s > 2.0f ? ((float(std::log2(s)) - 1.0f) * (1.0f / 9.0f)) : 0.0f);
-  material.s.specularSmoothness = std::min(std::max(s, 0.0f), 1.0f);
+  material.s.specularSmoothness = std::min(std::max(s, 0.0f), 8.0f);
   material.s.specularColor = f.readFloatVector4();
   material.s.specularColor.maxValues(FloatVector4(0.0f));
   material.s.specularColor.minValues(FloatVector4(1.0f, 1.0f, 1.0f, 8.0f));

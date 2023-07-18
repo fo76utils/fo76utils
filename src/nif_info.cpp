@@ -391,7 +391,7 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     }
     specularColor *= specularScale;
     specularGlossiness =
-        float(std::pow(2.0f, specularGlossiness * 9.0f + 1.0f));
+        float(std::pow(2.0f, std::min(specularGlossiness, 1.0f) * 9.0f + 1.0f));
     std::fprintf(f, "Ks %.3f %.3f %.3f\n",
                  specularColor[0], specularColor[1], specularColor[2]);
     std::fprintf(f, "d 1.0\n");

@@ -329,7 +329,7 @@ void BGSMFile::loadBGSMFile(FileBuffer& buf)
     s.specularColor[3] = 0.0f;
   else if (version != 2)
     s.specularColor[3] = 1.0f;
-  s.specularSmoothness = readFloatClamped(buf, 0.0f, 1.0f);
+  s.specularSmoothness = readFloatClamped(buf, 0.0f, 8.0f);
   buf.setPosition(buf.getPosition() + (version == 2 ? 28 : 30));
   size_t  len = buf.readUInt32();                       // root material,
   buf.setPosition(buf.getPosition() + (len + 1));       // anisotropic lighting
