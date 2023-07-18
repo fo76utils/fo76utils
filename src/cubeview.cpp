@@ -27,7 +27,7 @@ static void renderCubeMapThread(std::uint32_t *outBuf, int w, int h,
         c *= (1.0f / 255.0f);
         c.srgbCompress();
       }
-      outBuf[xc] = (std::uint32_t) c;
+      outBuf[xc] = c.convertToRGBA32(false, true);
     }
     outBuf = outBuf + w;
   }
