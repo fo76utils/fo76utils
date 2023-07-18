@@ -239,7 +239,12 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   const float *p = &(fresnelRoughTable[0]) + (s_i << 2);
   float   f = FloatVector4::polynomial3(p, nDotV);
   c += ((e - c) * (f0 + ((FloatVector4(1.0f) - f0) * (f * f))));
+#if 0
   c += (specular * FloatVector4(m.s.specularColor[3]) * lightColor);
+#else
+  // ignore specular color/scale/smoothness set in material file
+  c += (specular * lightColor);
+#endif
   if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
     c = alphaBlend(c, a, z);
   if (BRANCH_UNLIKELY(glowEnabled()))
@@ -298,7 +303,12 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_FO76(
   float   l = std::max(nDotL, 0.0f);
   // assume roughness = 1.0, f0 = 0.04, specular = 0.25
   FloatVector4  e(ambientLight);
+#if 0
   FloatVector4  s(m.s.specularColor[3] * 0.5625f);
+#else
+  // ignore specular color/scale/smoothness set in material file
+  FloatVector4  s(0.5625f);
+#endif
   s *= lightColor;
   // geometry function (kEnv = kSpec = 0.5), multiplied with ao = 8.0 / 9.0
   FloatVector4  g(nDotV / (nDotV * 0.5625f + 0.5625f));
@@ -892,7 +902,7 @@ void Plot3D_TriShape::drawPixel_TES5(Plot3D_TriShape& p, Fragment& z)
   float   txtV = z.v();
   FloatVector4  n(p.textureN->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsetN));
   float   specLevel = n[3] * (1.0f / 255.0f);
-  float   smoothness = p.m.s.specularSmoothness;
+  float   smoothness = std::min(p.m.s.specularSmoothness, 1.0f);
   float   nDotL = z.normalMap(n).dotProduct3(p.lightVector);
   float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
@@ -946,7 +956,8 @@ void Plot3D_TriShape::drawPixel_FO4(Plot3D_TriShape& p, Fragment& z)
   FloatVector4  n(p.textureN->getPixelT_2(
                       z.u(), z.v(), z.mipLevel + p.mipOffsetN, *(p.textureS)));
   float   specLevel = n[2] * (1.0f / 255.0f);
-  float   smoothness = p.m.s.specularSmoothness * n[3] * (1.0f / 255.0f);
+  float   smoothness =
+      std::min(p.m.s.specularSmoothness * n[3] * (1.0f / 255.0f), 1.0f);
   float   nDotL = z.normalMap(n).dotProduct3(p.lightVector);
   float   nDotV = float(std::fabs(z.normal[2]));
   float   vDotL;
@@ -1006,7 +1017,12 @@ void Plot3D_TriShape::drawPixel_FO76(Plot3D_TriShape& p, Fragment& z)
   f0 = p.textureR->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsetR);
   f0.srgbExpand();
   f0.maxValues(FloatVector4(0.015625f));
-  float   smoothness = p.m.s.specularSmoothness * n[2];
+#if 0
+  float   smoothness = std::min(p.m.s.specularSmoothness * n[2], 255.0f);
+#else
+  // ignore specular color/scale/smoothness set in material file
+  float   smoothness = n[2];
+#endif
   float   ao = n[3] * (1.0f / 255.0f);
   int     s_i = roundFloat(smoothness) & 0xFF;
   smoothness = smoothness * (1.0f / 255.0f);
