@@ -61,7 +61,7 @@ static const char *usageStrings[] =
   "                        2: depth, 3: normals, 4: diffuse, 5: light only)",
   "    -textures BOOL      make all diffuse textures white if false",
   "    -txtcache INT       texture cache size in megabytes",
-  "    -rq INT             set render quality (0 to 15, see doc/render.md)",
+  "    -rq INT             set render quality (0 to 255, see doc/render.md)",
   "    -ft INT             minimum frame time in milliseconds",
   "    -markers FILENAME   read marker definitions from the specified file",
   "",
@@ -584,7 +584,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
       case 22:                  // "rq"
         renderQuality =
             (unsigned char) parseInteger(argv[i + 1], 0,
-                                         "invalid render quality", 0, 15);
+                                         "invalid render quality", 0, 255);
         redrawWorldFlag = true;
         break;
       case 23:                  // "rscale"
@@ -954,7 +954,11 @@ void WorldSpaceViewer::pollEvents()
                eventBuf[i].data3() == 1 && eventBuf[i].data4() == 1)
       {
         std::uint32_t c = imageBuf[size_t(y) * size_t(width) + size_t(x)];
+#if USE_PIXELFMT_RGB10A2
+        c = ((c >> 2) & 0xFFU) | ((c >> 4) & 0xFF00U) | ((c >> 6) & 0xFF0000U);
+#else
         c = ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU) | (c & 0xFF00U);
+#endif
         std::sprintf(tmpBuf, "0x%08X", (unsigned int) c);
         display.consolePrint("Reference form ID = %s\n", tmpBuf);
         (void) SDL_SetClipboardText(tmpBuf);
