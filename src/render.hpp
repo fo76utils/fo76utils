@@ -18,6 +18,10 @@
 #include <thread>
 #include <mutex>
 
+#ifndef ENABLE_TXST_DECALS
+#  define ENABLE_TXST_DECALS  1
+#endif
+
 class Renderer : protected Renderer_Base
 {
  protected:
@@ -28,19 +32,21 @@ class Renderer : protected Renderer_Base
     unsigned short  type;               // first 2 characters, or 0 if excluded
     unsigned short  flags;              // same as RenderObject flags
     unsigned int  modelID;
-    unsigned int  mswpFormID;
+    unsigned int  mswpFormID;           // TXST form ID for decals
     signed short  obndX0;
     signed short  obndY0;
     signed short  obndZ0;
     signed short  obndX1;
     signed short  obndY1;
     signed short  obndZ1;
-    std::string modelPath;
+    std::string modelPath;              // "~0x%08X" % formID for decals
   };
   struct RenderObject
   {
     // 1: terrain, 2: solid object, 4: water cell, 6: water mesh
     // 0x08: uses alpha blending
+    // 0x10: is decal (TXST object)
+    // 0x20: is marker
     // 0x40: high quality model
     // 0x80: upper byte is gradient map V from MODC
     unsigned short  flags;
@@ -125,12 +131,16 @@ class Renderer : protected Renderer_Base
   LandscapeData *landData;
   int     cellTextureResolution;
   float   defaultWaterLevel;
-  int     modelLOD;                     // 0 (maximum detail) to 4
+  unsigned char modelLOD;               // 0 (maximum detail) to 4
+  bool    enableMarkers;
   bool    distantObjectsOnly;           // ignore if not visible from distance
   bool    noDisabledObjects;            // ignore if initially disabled
+  bool    enableDecals;
   bool    enableSCOL;
   bool    enableAllObjects;
   bool    enableTextures;
+  // 0: diffuse only, 1: normal mapping, 2: PBR on objects only, 3: full PBR
+  unsigned char renderQuality;
   unsigned char renderMode;
   unsigned char debugMode;
   // 1: terrain, 2: objects, 4: objects with alpha blending
@@ -153,8 +163,8 @@ class Renderer : protected Renderer_Base
   std::uint32_t waterColor;
   float   waterReflectionLevel;
   int     zRangeMax;
-  // 0: diffuse only, 1: normal mapping, 2: PBR on objects only, 3: full PBR
-  unsigned char renderQuality;
+  bool    disableEffectMeshes;
+  bool    disableEffectFilters;
   bool    useESMWaterColors;
   unsigned char bufAllocFlags;          // bit 0: RGBA buffer, bit 1: Z buffer
   NIFFile::NIFBounds  worldBounds;
@@ -176,6 +186,7 @@ class Renderer : protected Renderer_Base
     else
       p.mswpFormID = Renderer_Base::getWaterColor(esmFile, r, waterColor);
   }
+  bool readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r);
   // returns NULL on excluded model or invalid object
   const BaseObject *readModelProperties(RenderObject& p,
                                         const ESMFile::ESMRecord& r);
@@ -280,15 +291,25 @@ class Renderer : protected Renderer_Base
   // 0: diffuse only, 4: normal mapping, 8: PBR on objects only, 12: full PBR
   // + 2: render references to any object type
   // + 1: do not split pre-combined meshes
+  // + 16: disable effect meshes
+  // + 32: disable built-in exclude patterns for effect meshes
+  // + 64: enable TXST decals
+  // + 128: enable marker objects
   void setRenderQuality(unsigned char n)
   {
-    renderQuality = (n >> 2) & 3;
+    enableMarkers = bool(n & 0x80);
+#if ENABLE_TXST_DECALS
+    enableDecals = bool(n & 0x40);
+#endif
     enableSCOL |= bool(n & 1);
     enableAllObjects |= bool(n & 2);
+    renderQuality = (n >> 2) & 3;
+    disableEffectMeshes = bool(n & 0x10);
+    disableEffectFilters = bool(n & 0x20);
   }
   void setModelLOD(int n)
   {
-    modelLOD = n;               // 0 (maximum detail) to 4
+    modelLOD = (unsigned char) n;       // 0 (maximum detail) to 4
   }
   void setDistantObjectsOnly(bool n)
   {

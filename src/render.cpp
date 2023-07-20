@@ -7,9 +7,9 @@
 
 bool Renderer::RenderObject::operator<(const RenderObject& r) const
 {
-  if ((flags & 2) != (r.flags & 2))
-    return bool(r.flags & 2);
-  if (flags & 2)
+  if ((flags & 0x12) != (r.flags & 0x12))
+    return bool(r.flags & 0x12);
+  if (flags & 0x12)
   {
     unsigned int  modelID1 = model.o->modelID;
     unsigned int  modelID2 = r.model.o->modelID;
@@ -200,7 +200,7 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
   p.tileIndex = -1;
   NIFFile::NIFVertexTransform vt;
   NIFFile::NIFBounds  modelBounds;
-  if (p.flags & 2)
+  if (p.flags & 0x12)
   {
     int     x0 = int(p.model.o->obndX0 < p.model.o->obndX1 ?
                      p.model.o->obndX0 : p.model.o->obndX1) - 2;
@@ -440,6 +440,14 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   }
 }
 
+bool Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
+{
+  // not implemented yet
+  (void) p;
+  (void) r;
+  return false;
+}
+
 const Renderer::BaseObject * Renderer::readModelProperties(
     RenderObject& p, const ESMFile::ESMRecord& r)
 {
@@ -449,7 +457,8 @@ const Renderer::BaseObject * Renderer::readModelProperties(
   {
     BaseObject  tmp;
     tmp.type = 0;
-    tmp.flags = 0x0000;
+    tmp.flags =
+        (unsigned short) ((r.flags >> 18) & (!enableMarkers ? 0U : 0x20U));
     tmp.modelID = 0xFFFFFFFFU;
     tmp.mswpFormID = 0U;
     tmp.obndX0 = 0;
@@ -463,28 +472,26 @@ const Renderer::BaseObject * Renderer::readModelProperties(
       switch (r.type)
       {
         case 0x49544341:                // "ACTI"
-          // ignore markers
-          if (r.flags & 0x00800000U)
-            continue;
+        case 0x5454534D:                // "MSTT"
+        case 0x54415750:                // "PWAT"
           break;
         case 0x4E525546:                // "FURN"
         case 0x4C4F4353:                // "SCOL"
         case 0x54415453:                // "STAT"
         case 0x45455254:                // "TREE"
-          // ignore markers and (optionally) objects not visible from distance
-          if ((r.flags | (!distantObjectsOnly ? 0xFF7FFFFFU : 0xFF7F7FFFU))
-              != 0xFF7FFFFFU)
-          {
+          // optionally ignore objects not visible from distance
+          if ((r.flags & 0x8000U) < std::uint32_t(distantObjectsOnly))
             continue;
-          }
           break;
-        case 0x5454534D:                // "MSTT"
-        case 0x54415750:                // "PWAT"
-          break;
+#if ENABLE_TXST_DECALS
+        case 0x54535854:                // "TXST"
+          if (!enableDecals || !readDecalProperties(tmp, r))
+            tmp.flags = 0;
+          continue;
+#endif
         default:
           if (!enableAllObjects ||
-              (r.flags | (!distantObjectsOnly ? 0xFF7FFFFFU : 0xFF7F7FFFU))
-              != 0xFF7FFFFFU)
+              (r.flags & 0x8000U) < std::uint32_t(distantObjectsOnly))
           {
             continue;
           }
@@ -543,8 +550,8 @@ const Renderer::BaseObject * Renderer::readModelProperties(
         }
         else if (f == "MODC" && f.size() >= 4)
         {
-          tmp.flags = (unsigned short) (((roundFloat(f.readFloat() * 255.0f)
-                                          & 0xFF) << 8) | 0x80);
+          tmp.flags |= (unsigned short) (((roundFloat(f.readFloat() * 255.0f)
+                                           & 0xFF) << 8) | 0x80);
         }
         else if (f == "WNAM" && r == "ACTI" && f.size() >= 4)
         {
@@ -569,7 +576,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
       tmp.modelPath = stringBuf;
     }
     while (false);
-    if (tmp.mswpFormID)
+    if (tmp.mswpFormID && !(tmp.flags & 0x0010))
     {
       tmp.mswpFormID =
           materialSwaps.loadMaterialSwap(ba2File, esmFile, tmp.mswpFormID);
@@ -577,7 +584,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
     i = baseObjects.insert(std::pair< unsigned int, BaseObject >(
                                r.formID, tmp)).first;
   }
-  if (!(i->second.flags & 7))
+  if (!(i->second.flags & 0x17))
     return (BaseObject *) 0;
   p.flags = i->second.flags;
   p.model.o = &(i->second);
@@ -614,12 +621,8 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
       if (f.size() >= 8)
         mswpFormID_ONAM = f.readUInt32Fast();
       const ESMFile::ESMRecord  *r3 = esmFile.getRecordPtr(modelFormID);
-      if (!r3 || (r3->flags | (!distantObjectsOnly ? 0xFF7FFFFFU : 0xFF7F7FFFU))
-                 != 0xFF7FFFFFU)
-      {
-        // ignore markers and (optionally) objects not visible from distance
+      if (!r3)
         continue;
-      }
       if (!(o = readModelProperties(tmp, *r3)) || (tmp.flags & 4))
       {
         o = (BaseObject *) 0;
@@ -866,13 +869,23 @@ void Renderer::sortObjectList()
   std::map< std::string, unsigned int > modelPathsUsed;
   for (size_t i = 0; i < objectList.size(); i++)
   {
-    if (objectList[i].flags & 0x02)
+    if (objectList[i].flags & 0x12)
       modelPathsUsed[objectList[i].model.o->modelPath] = 0U;
   }
   unsigned int  n = 0U;
+#if ENABLE_TXST_DECALS
+  bool    decalFlag = false;
+#endif
   for (std::map< std::string, unsigned int >::iterator
            i = modelPathsUsed.begin(); i != modelPathsUsed.end(); i++, n++)
   {
+#if ENABLE_TXST_DECALS
+    if (BRANCH_UNLIKELY(i->first.c_str()[0] == '~') && !decalFlag)
+    {
+      n = (n + modelBatchCnt - 1U) & ~(modelBatchCnt - 1U);
+      decalFlag = true;
+    }
+#endif
     i->second = n;
   }
   for (std::map< unsigned int, BaseObject >::iterator
@@ -969,18 +982,23 @@ void Renderer::loadModels(unsigned int t, unsigned long long modelIDMask)
     nifFiles[n].clear();
     if (o.modelID == 0xFFFFFFFFU || o.modelPath.empty())
       continue;
-    if (BRANCH_UNLIKELY(renderPass & 4))
+    if (BRANCH_UNLIKELY(renderPass & 4) && !(o.flags & 4))
     {
-      if (std::strncmp(o.modelPath.c_str(), "meshes/sky/", 11) == 0)
+      if (disableEffectMeshes)
         continue;
-      if (std::strncmp(o.modelPath.c_str(), "meshes/effects/", 15) == 0)
+      if (!disableEffectFilters)
       {
-        size_t  len = o.modelPath.length();
-        if (std::strncmp(o.modelPath.c_str() + 15, "ambient/", 8) == 0 ||
-            std::strcmp(o.modelPath.c_str() + (len - 7), "fog.nif") == 0 ||
-            std::strcmp(o.modelPath.c_str() + (len - 9), "cloud.nif") == 0)
-        {
+        if (std::strncmp(o.modelPath.c_str(), "meshes/sky/", 11) == 0)
           continue;
+        if (std::strncmp(o.modelPath.c_str(), "meshes/effects/", 15) == 0)
+        {
+          size_t  len = o.modelPath.length();
+          if (std::strncmp(o.modelPath.c_str() + 15, "ambient/", 8) == 0 ||
+              std::strcmp(o.modelPath.c_str() + (len - 7), "fog.nif") == 0 ||
+              std::strcmp(o.modelPath.c_str() + (len - 9), "cloud.nif") == 0)
+          {
+            continue;
+          }
         }
       }
     }
@@ -991,7 +1009,7 @@ void Renderer::loadModels(unsigned int t, unsigned long long modelIDMask)
                                         nifFiles[t].fileBuf.size(), &ba2File);
       bool    isHDModel = bool(o.flags & 0x0040);
       nifFiles[n].nifFile->getMesh(nifFiles[n].meshData, 0U,
-                                   (unsigned int) (modelLOD > 0 && !isHDModel),
+                                   (unsigned int) (modelLOD && !isHDModel),
                                    true);
       size_t  meshCnt = nifFiles[n].meshData.size();
       for (size_t i = 0; i < meshCnt; i++)
@@ -1045,7 +1063,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (((ts.m.flags >> 10) ^ renderPass) & 0x24U)
       {
         if ((ts.m.flags & BGSMFile::Flag_TSAlphaBlending) &&
-            (ts.m.texturePathMask | (ts.m.flags & BGSMFile::Flag_TSWater)))
+            (ts.m.texturePathMask | (p.flags & 0x0020)
+             | (ts.m.flags & BGSMFile::Flag_TSWater)))
         {
           objectList[i].flags |= (unsigned short) 0x08; // uses alpha blending
         }
@@ -1138,7 +1157,10 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
             t.renderer->m.texturePaths[0].find("/temp_ground")
             != std::string::npos)
         {
-          continue;
+          if ((texturePathMask & 0x0001U) || !(p.flags & 0x0020))
+            continue;
+          textures[0] = &whiteTexture;  // marker with vertex colors only
+          textureMask |= 0x0001U;
         }
         if (BRANCH_UNLIKELY(!enableTextures))
         {
@@ -1357,11 +1379,14 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     cellTextureResolution(256),
     defaultWaterLevel(0.0f),
     modelLOD(0),
+    enableMarkers(false),
     distantObjectsOnly(false),
     noDisabledObjects(false),
+    enableDecals(false),
     enableSCOL(false),
     enableAllObjects(false),
     enableTextures(true),
+    renderQuality(0),
     renderMode((unsigned char) ((masterFiles.getESMVersion() >> 4) & 0x0CU)),
     debugMode(0),
     renderPass(0),
@@ -1372,7 +1397,8 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     waterColor(0xFFFFFFFFU),
     waterReflectionLevel(1.0f),
     zRangeMax(zMax),
-    renderQuality(0),
+    disableEffectMeshes(false),
+    disableEffectFilters(false),
     useESMWaterColors(true),
     bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
     whiteTexture(0xFFFFFFFFU)
@@ -1667,7 +1693,7 @@ bool Renderer::renderObjects()
   }
   const RenderObject& o = objectList[i];
   unsigned int  modelIDMask = modelBatchCnt - 1U;
-  if ((o.flags & 0x02) && (o.model.o->modelID & ~modelIDMask) != modelIDBase)
+  if ((o.flags & 0x12) && (o.model.o->modelID & ~modelIDMask) != modelIDBase)
   {
     // load new set of models
     modelIDBase = o.model.o->modelID & ~modelIDMask;
@@ -1718,7 +1744,7 @@ bool Renderer::renderObjects()
     const RenderObject& p = objectList[j];
     if ((o.tileIndex ^ p.tileIndex) & ~63)
       break;
-    if ((p.flags & 2) && (p.model.o->modelID & ~modelIDMask) != modelIDBase)
+    if ((p.flags & 0x12) && (p.model.o->modelID & ~modelIDMask) != modelIDBase)
       break;
     size_t  triangleCnt = 2;
     if (p.flags & 0x02)
