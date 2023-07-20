@@ -21,7 +21,7 @@ static const char *usageStrings[] =
   "    -txtcache INT       texture cache size in megabytes",
   "    -ssaa INT           render at 2^N resolution and downsample",
   "    -f INT              output format, 0: RGB24, 1: A8R8G8B8, 2: RGB10A2",
-  "    -rq INT             set render quality (0 to 15, see doc/render.md)",
+  "    -rq INT             set render quality (0 to 255, see doc/render.md)",
   "    -q                  do not print messages other than errors",
   "",
   "    -btd FILENAME.BTD   read terrain data from Fallout 76 .btd file",
@@ -269,7 +269,7 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         renderQuality =
             (unsigned char) parseInteger(argv[i], 0,
-                                         "invalid render quality", 0, 15);
+                                         "invalid render quality", 0, 255);
       }
       else if (std::strcmp(argv[i], "-q") == 0)
       {
