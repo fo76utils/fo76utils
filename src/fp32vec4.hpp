@@ -105,6 +105,9 @@ struct FloatVector4
   inline FloatVector4& clearV3();
   inline FloatVector4& minValues(const FloatVector4& r);
   inline FloatVector4& maxValues(const FloatVector4& r);
+  inline FloatVector4& floorValues();
+  inline FloatVector4& ceilValues();
+  inline FloatVector4& roundValues();
   inline float dotProduct(const FloatVector4& r) const;
   // dot product of first three elements
   inline float dotProduct3(const FloatVector4& r) const;
@@ -341,6 +344,24 @@ inline FloatVector4& FloatVector4::minValues(const FloatVector4& r)
 inline FloatVector4& FloatVector4::maxValues(const FloatVector4& r)
 {
   __asm__ ("vmaxps %1, %0, %0" : "+x" (v) : "xm" (r.v));
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::floorValues()
+{
+  __asm__ ("vroundps $0x09, %0, %0" : "+x" (v));
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::ceilValues()
+{
+  __asm__ ("vroundps $0x0a, %0, %0" : "+x" (v));
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::roundValues()
+{
+  __asm__ ("vroundps $0x08, %0, %0" : "+x" (v));
   return (*this);
 }
 
@@ -786,6 +807,33 @@ inline FloatVector4& FloatVector4::maxValues(const FloatVector4& r)
   v[1] = (r.v[1] > v[1] ? r.v[1] : v[1]);
   v[2] = (r.v[2] > v[2] ? r.v[2] : v[2]);
   v[3] = (r.v[3] > v[3] ? r.v[3] : v[3]);
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::floorValues()
+{
+  v[0] = float(std::floor(v[0]));
+  v[1] = float(std::floor(v[1]));
+  v[2] = float(std::floor(v[2]));
+  v[3] = float(std::floor(v[3]));
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::ceilValues()
+{
+  v[0] = float(std::ceil(v[0]));
+  v[1] = float(std::ceil(v[1]));
+  v[2] = float(std::ceil(v[2]));
+  v[3] = float(std::ceil(v[3]));
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::roundValues()
+{
+  v[0] = float(std::round(v[0]));
+  v[1] = float(std::round(v[1]));
+  v[2] = float(std::round(v[2]));
+  v[3] = float(std::round(v[3]));
   return (*this);
 }
 
