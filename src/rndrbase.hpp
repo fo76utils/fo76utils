@@ -96,8 +96,13 @@ struct Renderer_Base
         std::vector< TriShapeSortObject >& sortBuf,
         const std::vector< NIFFile::NIFTriShape >& meshData);
   };
-  static std::uint32_t getWaterColor(
-      ESMFile& esmFile, const ESMFile::ESMRecord& r, unsigned int defaultColor);
+  // Store water parameters in 'm', and return the form ID of the WATR record
+  // associated with 'r'. On error, 0 is returned and the material is
+  // initialized using the default color.
+  static unsigned int getWaterMaterial(
+      std::map< unsigned int, BGSMFile >& m,
+      ESMFile& esmFile, const ESMFile::ESMRecord *r,
+      unsigned int defaultColor, bool storeAsDefault = false);
   static inline std::uint32_t bgraToRGBA(std::uint32_t c)
   {
     return ((c & 0xFF00FF00U) | ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU));

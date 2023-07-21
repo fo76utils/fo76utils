@@ -388,7 +388,7 @@ void Renderer::addTerrainCell(const ESMFile::ESMRecord& r)
 
 void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
 {
-  if (!waterColor)
+  if (!waterRenderMode)
     return;
   int     cellX = 0;
   int     cellY = 0;
@@ -435,7 +435,8 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   {
     if (debugMode == 1)
       tmp.z = int(r.formID);
-    getWaterColor(tmp, r);
+    if (waterRenderMode < 0)
+      tmp.mswpFormID = getWaterMaterial(materials, esmFile, &r, 0U);
     objectList.push_back(tmp);
   }
 }
@@ -568,8 +569,11 @@ const Renderer::BaseObject * Renderer::readModelProperties(
           isWater = true;
         }
       }
-      if ((!isWater && isExcludedModel(stringBuf)) || (isWater && !waterColor))
+      if ((!isWater && isExcludedModel(stringBuf)) ||
+          (isWater && !waterRenderMode))
+      {
         continue;
+      }
       tmp.type = (unsigned short) (r.type & 0xFFFFU);
       tmp.flags = tmp.flags | (unsigned short) ((!isWater ? 0x02 : 0x06)
                                                 | (!isHDModel ? 0x00 : 0x40));
@@ -721,10 +725,11 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
         }
         else if (f == "DATA" && f.size() >= 24)
         {
-          offsX = f.readFloat();
-          offsY = f.readFloat();
-          offsZ = f.readFloat();
-          rX = f.readFloat();
+          FloatVector4  tmp(f.readFloatVector4());
+          offsX = tmp[0];
+          offsY = tmp[1];
+          offsZ = tmp[2];
+          rX = tmp[3];
           rY = f.readFloat();
           rZ = f.readFloat();
         }
@@ -760,7 +765,10 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
       tmp.z = int(r->formID);
     if (tmp.flags & 4)
     {
-      getWaterColor(tmp, *r2);
+      if (waterRenderMode >= 0)
+        tmp.mswpFormID = 0U;
+      else
+        tmp.mswpFormID = getWaterMaterial(materials, esmFile, r2, 0U);
     }
     else if (refrMSWPFormID)
     {
@@ -1129,7 +1137,12 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       if (BRANCH_UNLIKELY(t.renderer->m.flags & BGSMFile::Flag_TSWater))
       {
         t.renderer->setRenderMode(3U | renderMode);
-        t.renderer->m.setWaterColor(p.mswpFormID, waterReflectionLevel);
+        std::map< unsigned int, BGSMFile >::const_iterator  k =
+            materials.find(p.mswpFormID);
+        if (k == materials.end())
+          continue;
+        t.renderer->setMaterial(k->second);
+        t.renderer->m.w.envMapScale = waterReflectionLevel;
         textures[1] = textureCache.loadTexture(ba2File, defaultWaterTexture,
                                                t.fileBuf, 0);
         if (textures[1])
@@ -1268,8 +1281,12 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
     tmp.triangleCnt = 2;
     tmp.vertexData = vTmp;
     tmp.triangleData = tTmp;
-    tmp.m.nifVersion = (esmFile.getESMVersion() < 0xC0U ? 130U : 155U);
-    tmp.m.setWaterColor(p.mswpFormID, waterReflectionLevel);
+    std::map< unsigned int, BGSMFile >::const_iterator  j =
+        materials.find(p.mswpFormID);
+    if (j == materials.end())
+      return true;
+    tmp.m = j->second;
+    tmp.m.w.envMapScale = waterReflectionLevel;
     t.renderer->setRenderMode(3U | renderMode);
     *(t.renderer) = tmp;
     const DDSTexture  *textures[5];
@@ -1394,12 +1411,11 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     landTextures((LandscapeTextureSet *) 0),
     objectListPos(0),
     modelIDBase(0xFFFFFFFFU),
-    waterColor(0xFFFFFFFFU),
     waterReflectionLevel(1.0f),
     zRangeMax(zMax),
     disableEffectMeshes(false),
     disableEffectFilters(false),
-    useESMWaterColors(true),
+    waterRenderMode(0),
     bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
     whiteTexture(0xFFFFFFFFU)
 {
@@ -1414,6 +1430,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
   renderThreads.reserve(16);
   nifFiles.resize(modelBatchCnt);
   setThreadCount(-1);
+  setWaterColor(0xFFFFFFFFU);
 }
 
 Renderer::~Renderer()
@@ -1549,6 +1566,16 @@ void Renderer::setWaterTexture(const std::string& s)
   defaultWaterTexture = s;
 }
 
+void Renderer::setWaterColor(std::uint32_t n)
+{
+  waterRenderMode = (signed char) (n == 0xFFFFFFFFU ? -1 : (!n ? 0 : 1));
+  if (waterRenderMode <= 0)
+    n = 0xC0302010U;                    // default water color if not specified
+  else
+    n = bgraToRGBA(n);
+  getWaterMaterial(materials, esmFile, (ESMFile::ESMRecord *) 0, n, true);
+}
+
 void Renderer::setRenderParameters(
     int lightColor, int ambientColor, int envColor,
     float lightLevel, float envLevel, float rgbScale,
@@ -1602,13 +1629,6 @@ void Renderer::loadTerrain(const char *btdFileName,
     landData = new LandscapeData(&esmFile, btdFileName, &ba2File, 0x0B, worldID,
                                  defTxtID, mipLevel, xMin, yMin, xMax, yMax);
     defaultWaterLevel = landData->getWaterLevel();
-    if (useESMWaterColors)
-    {
-      const ESMFile::ESMRecord  *r =
-          esmFile.getRecordPtr(landData->getWaterFormID());
-      if (r && *r == "WATR")
-        waterColor = Renderer_Base::getWaterColor(esmFile, *r, waterColor);
-    }
   }
   size_t  textureCnt = landData->getTextureCount();
   if (!landTextures)
@@ -1650,8 +1670,6 @@ void Renderer::initRenderPass(int n, unsigned int formID)
 {
   if (!formID)
     formID = getDefaultWorldID();
-  if (useESMWaterColors && waterColor == 0xFFFFFFFFU)
-    waterColor = 0xC0302010U;           // default water color
   clear(n != 2 ? 0x38U : 0x30U);
   objectListPos = 0;
   switch (n)
@@ -1673,6 +1691,13 @@ void Renderer::initRenderPass(int n, unsigned int formID)
       break;
     case 2:
       renderPass = 4;
+      if (waterRenderMode < 0 && landData)
+      {
+        const ESMFile::ESMRecord  *r =
+            esmFile.getRecordPtr(landData->getWaterFormID());
+        if (r && *r == "WATR")
+          getWaterMaterial(materials, esmFile, r, 0xC0302010U, true);
+      }
       break;
     default:
       return;

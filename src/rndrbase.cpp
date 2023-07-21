@@ -293,55 +293,95 @@ void Renderer_Base::TriShapeSortObject::orderedNodeFix(
   }
 }
 
-std::uint32_t Renderer_Base::getWaterColor(
-    ESMFile& esmFile, const ESMFile::ESMRecord& r, unsigned int defaultColor)
+unsigned int Renderer_Base::getWaterMaterial(
+    std::map< unsigned int, BGSMFile >& m,
+    ESMFile& esmFile, const ESMFile::ESMRecord *r,
+    unsigned int defaultColor, bool storeAsDefault)
 {
-  if (esmFile.getESMVersion() < 0x28)           // not implemented for
-    return std::uint32_t(defaultColor);         // games older than Skyrim
-  unsigned int  waterFormID = r.formID;
-  ESMFile::ESMField f(esmFile, r);
+  std::uint32_t nifVersion = 155U;      // Fallout 76
+  if (esmFile.getESMVersion() < 0x80U)
+    nifVersion = 100U;                  // Skyrim or older
+  else if (esmFile.getESMVersion() < 0xC0U)
+    nifVersion = 130U;                  // Fallout 4
+  if (!r)
+  {
+    if (storeAsDefault)
+    {
+      BGSMFile& tmp = m[0U];
+      tmp.nifVersion = nifVersion;
+      tmp.setWaterColor(std::uint32_t(defaultColor), 1.0f);
+    }
+    return 0U;
+  }
+  unsigned int  waterFormID = r->formID;
+  ESMFile::ESMField f(esmFile, *r);
   while (f.next())
   {
-    if (((f == "WNAM" && r == "ACTI") || (f == "XCWT" && r == "CELL") ||
-         (f == "NAM2" && r == "WRLD")) && f.size() >= 4)
+    if (((f == "WNAM" && *r == "ACTI") || (f == "XCWT" && *r == "CELL") ||
+         (f == "NAM2" && *r == "WRLD")) && f.size() >= 4)
     {
       waterFormID = f.readUInt32Fast();
     }
+    else if (f == "DNAM" && *r == "PWAT" && f.size() >= 8)  // Fallout 3 water
+    {
+      (void) f.readUInt32Fast();        // ignore flags
+      waterFormID = f.readUInt32Fast();
+    }
   }
+  std::map< unsigned int, BGSMFile >::iterator  i = m.find(waterFormID);
+  if (i != m.end())
+  {
+    if (storeAsDefault && waterFormID)
+      m[0U] = i->second;
+    return waterFormID;
+  }
+  BGSMFile  tmp;
+  tmp.nifVersion = nifVersion;
+  tmp.setWaterColor(std::uint32_t(defaultColor), 1.0f);
   const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(waterFormID);
   if (r2 && *r2 == "WATR")
   {
     ESMFile::ESMField f2(esmFile, *r2);
     while (f2.next())
     {
-      if (!(f2 == "DNAM" && f2.size() >= 64))
+      if (!(f2 == (esmFile.getESMVersion() < 0x02 ? "DATA" : "DNAM")))
         continue;
-      FloatVector4  c;
-      float   d = 0.0f;
-      if (esmFile.getESMVersion() < 0x80)       // Skyrim
+      if (f2.size() < 64)
+        continue;
+      if (esmFile.getESMVersion() < 0xC0)
       {
-        f2.setPosition(36);
-        d = f2.readFloat();                     // fog distance (far plane)
-        (void) f2.readUInt32Fast();             // shallow color
-        c = FloatVector4(f2.readUInt32Fast());  // deep color
+        // Oblivion, Fallout 3/NV, Skyrim, Fallout 4
+        if (esmFile.getESMVersion() < 0x80)
+          f2.setPosition(esmFile.getESMVersion() < 0x02 ? 40 : 36);
+        // fog distance (far plane), or depth amount for Fallout 4
+        tmp.w.maxDepth = f2.readFloat();
+        tmp.w.shallowColor =
+            FloatVector4(f2.readUInt32Fast()) * (1.0f / 255.0f);
+        tmp.w.shallowColor[3] = 0.5f;
+        tmp.w.deepColor = FloatVector4(f2.readUInt32Fast()) * (1.0f / 255.0f);
+        tmp.w.deepColor[3] = 0.9375f;
       }
-      else if (esmFile.getESMVersion() < 0xC0)  // Fallout 4
+      else
       {
-        d = f2.readFloat();                     // depth amount
-        (void) f2.readUInt32Fast();             // shallow color
-        c = FloatVector4(f2.readUInt32Fast());  // deep color
+        // Fallout 76
+        tmp.w.maxDepth = f2.readFloat();
+        tmp.w.shallowColor = f2.readFloatVector4(); // opacity for each channel
+        tmp.w.shallowColor[3] = 0.5f;
+        f2.setPosition(f2.getPosition() - 4);
+        tmp.w.deepColor = f2.readFloatVector4();    // base color
+        tmp.w.deepColor[3] = 0.9375f;
       }
-      else                                      // Fallout 76
-      {
-        d = f2.readFloat();
-        f2.setPosition(16);
-        c = f2.readFloatVector4().srgbCompress();
-      }
-      d = (d > 0.125f ? (d < 8128.0f ? d : 8128.0f) : 0.125f);
-      c[3] = 256.0f - float(std::sqrt(d * 8.0f));
-      return std::uint32_t(c);
+      tmp.w.maxDepth = std::min(std::max(tmp.w.maxDepth, 0.125f), 8128.0f);
+      tmp.w.shallowColor.maxValues(FloatVector4(0.0f));
+      tmp.w.shallowColor.minValues(FloatVector4(1.0f));
+      tmp.w.deepColor.maxValues(FloatVector4(0.0f));
+      tmp.w.deepColor.minValues(FloatVector4(1.0f));
+      m.insert(std::pair< unsigned int, BGSMFile >(waterFormID, tmp));
+      if (storeAsDefault)
+        m[0U] = tmp;
+      return waterFormID;
     }
   }
-  return std::uint32_t(defaultColor);
+  return 0U;
 }
 

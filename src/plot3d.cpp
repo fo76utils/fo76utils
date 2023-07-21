@@ -490,12 +490,16 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_Water(
   }
   FloatVector4  c(m.w.deepColor);
   if (!isFO76)
-    c0 *= (a * (1.0f / 255.0f));
-  else
-    c0 = c0.srgbExpand() * a;
+  {
+    c += ((m.w.shallowColor - c)
+          * std::min(std::max(a * 2.285714f - 0.1428571f, 0.0f), 1.0f));
+  }
   c *= ((lightColor * std::max(nDotL, 0.0f)) + (ambientLight * envColor));
-  c *= (lightColor[3] * (1.0f - a));
-  c += c0;
+  c *= lightColor[3];
+  if (!isFO76)
+    c += ((c0 * (1.0f / 255.0f) - c) * a);
+  else
+    c += ((c0.srgbExpand() - c) * a * (FloatVector4(1.0f) - m.w.shallowColor));
   e *= envColor;
   specular *= lightColor;
   e *= (m.w.envMapScale * lightColor[3]);
@@ -573,9 +577,9 @@ void Plot3D_TriShape::drawPixel_Water_G(Plot3D_TriShape& p, Fragment& z)
   FloatVector4  c0(FloatVector4::convertRGBA32(*(z.cPtr)));
   a = a * p.m.w.unused;         // -3.0 / maximum depth in pixels
   if (a > -3.0f)
-    a = FloatVector4::exp2Fast(a - 1.0f);
+    a = FloatVector4::exp2Fast(a - 0.75f);
   else
-    a = 0.0625f;
+    a = 0.07432544f;
   FloatVector4  c(p.calculateLighting_Water(c0, a, z, true));
   *(z.cPtr) = c.convertToRGBA32(true, true);
 }

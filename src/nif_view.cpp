@@ -80,7 +80,10 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
           textureMask |= 0x0002U;
         if (bool(textures[4] = p->loadTexture(p->defaultEnvMap, n)))
           textureMask |= 0x0010U;
-        ts.m.setWaterColor(p->waterColor, p->waterEnvMapLevel);
+        if (p->waterFormID)
+          ts.setMaterial(p->waterMaterials[p->waterFormID]);
+        else
+          ts.m.setWaterColor(defaultWaterColor, p->waterEnvMapLevel);
       }
       else
       {
@@ -184,7 +187,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
     rgbScale(1.0f),
     reflZScale(1.0f),
     waterEnvMapLevel(1.0f),
-    waterColor(defaultWaterColor),
+    waterFormID(0U),
     defaultEnvMapNum(0),
     debugMode(0)
 {
@@ -411,14 +414,16 @@ void NIF_View::clearMaterialSwaps()
 
 void NIF_View::setWaterColor(unsigned int watrFormID)
 {
-  std::uint32_t c = defaultWaterColor;
   if (watrFormID && esmFile)
   {
     const ESMFile::ESMRecord  *r = esmFile->getRecordPtr(watrFormID);
     if (r && *r == "WATR")
-      c = getWaterColor(*esmFile, *r, c);
+    {
+      waterFormID = getWaterMaterial(waterMaterials, *esmFile, r, 0U);
+      return;
+    }
   }
-  waterColor = c;
+  waterFormID = 0U;
 }
 
 void NIF_View::renderModelToFile(const char *outFileName,

@@ -73,7 +73,7 @@ class Renderer : protected Renderer_Base
     }
     model;
     // for solid objects: material swap form ID if non-zero
-    // for water (flags & 4 set): water color in 0xAABBGGRR format
+    // for water and decals: form ID of base object (WATR or TXST)
     unsigned int  mswpFormID;
     NIFFile::NIFVertexTransform modelTransform;
     bool operator<(const RenderObject& r) const;
@@ -160,16 +160,18 @@ class Renderer : protected Renderer_Base
   MaterialSwaps materialSwaps;
   std::vector< RenderThread > renderThreads;
   std::string stringBuf;
-  std::uint32_t waterColor;
   float   waterReflectionLevel;
   int     zRangeMax;
   bool    disableEffectMeshes;
   bool    disableEffectFilters;
-  bool    useESMWaterColors;
+  // 0: disable water, 1: default color, -1: use water parameters from the ESM
+  signed char   waterRenderMode;
   unsigned char bufAllocFlags;          // bit 0: RGBA buffer, bit 1: Z buffer
   NIFFile::NIFBounds  worldBounds;
   std::map< unsigned int, BaseObject >  baseObjects;
   DDSTexture  whiteTexture;
+  // for TXST and WATR objects, materials[0] is the default water
+  std::map< unsigned int, BGSMFile >  materials;
   // bit Y * 8 + X of the return value is set if the bounds of the object
   // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
   // in the top left corner
@@ -179,13 +181,6 @@ class Renderer : protected Renderer_Base
   unsigned int getDefaultWorldID() const;
   void addTerrainCell(const ESMFile::ESMRecord& r);
   void addWaterCell(const ESMFile::ESMRecord& r);
-  inline void getWaterColor(RenderObject& p, const ESMFile::ESMRecord& r)
-  {
-    if (!useESMWaterColors)
-      p.mswpFormID = waterColor;
-    else
-      p.mswpFormID = Renderer_Base::getWaterColor(esmFile, r, waterColor);
-  }
   bool readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r);
   // returns NULL on excluded model or invalid object
   const BaseObject *readModelProperties(RenderObject& p,
@@ -350,12 +345,8 @@ class Renderer : protected Renderer_Base
   void setDefaultEnvMap(const std::string& s);
   // water normal map texture path
   void setWaterTexture(const std::string& s);
-  // 0xAARRGGBB
-  void setWaterColor(std::uint32_t n)
-  {
-    useESMWaterColors = (n == 0xFFFFFFFFU);
-    waterColor = bgraToRGBA(n);
-  }
+  // 0xAARRGGBB, -1 to use ESM water parameters, 0 to disable water
+  void setWaterColor(std::uint32_t n);
   void setWaterEnvMapScale(float n)
   {
     waterReflectionLevel = n;
