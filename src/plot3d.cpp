@@ -87,12 +87,14 @@ size_t Plot3D_TriShape::transformVertexData(
     const NIFFile::NIFVertex& r = vertexData[i];
     Vertex& v = vertexBuf[i];
 #ifdef VERTEX_XY_SNAP
-    float   x = float(roundFloat(v.xyz[0]));
-    float   y = float(roundFloat(v.xyz[1]));
-    if (float(std::fabs(v.xyz[0] - x)) < VERTEX_XY_SNAP)
-      v.xyz[0] = x;
-    if (float(std::fabs(v.xyz[1] - y)) < VERTEX_XY_SNAP)
-      v.xyz[1] = y;
+    FloatVector4  xyzRounded(v.xyz);
+    xyzRounded.roundValues();
+    FloatVector4  xyzDiffSqr = v.xyz - xyzRounded;
+    xyzDiffSqr *= xyzDiffSqr;
+    if (xyzDiffSqr[0] < (VERTEX_XY_SNAP * VERTEX_XY_SNAP))
+      v.xyz[0] = xyzRounded[0];
+    if (xyzDiffSqr[1] < (VERTEX_XY_SNAP * VERTEX_XY_SNAP))
+      v.xyz[1] = xyzRounded[1];
 #endif
     FloatVector4  normal(r.getNormal());
     float   txtU, txtV;
@@ -158,10 +160,12 @@ size_t Plot3D_TriShape::transformVertexData(
       continue;                 // out of bounds
     }
 #ifdef VERTEX_XY_SNAP
-    int     xMin = int(boundsMin[0]);
-    int     yMin = int(boundsMin[1]);
-    if ((xMin == int(boundsMax[0]) && boundsMin[0] != float(xMin)) ||
-        (yMin == int(boundsMax[1]) && boundsMin[1] != float(yMin)))
+    FloatVector4  bndsMinInt(boundsMin);
+    FloatVector4  bndsMaxInt(boundsMax);
+    bndsMinInt.floorValues();
+    bndsMaxInt.floorValues();
+    if ((bndsMinInt[0] == bndsMaxInt[0] && boundsMin[0] != bndsMinInt[0]) ||
+        (bndsMinInt[1] == bndsMaxInt[1] && boundsMin[1] != bndsMinInt[1]))
     {
       continue;                 // no sampling point within the triangle bounds
     }
