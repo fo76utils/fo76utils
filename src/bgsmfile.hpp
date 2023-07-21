@@ -134,6 +134,7 @@ struct BGSMFile
       float   unused;
       float   envMapScale;
       float   specularSmoothness;
+      // for Fallout 76, shallowColor is the opacity separately for each channel
       FloatVector4  shallowColor;       // shallowColor[3] = alpha at 0 depth
       FloatVector4  deepColor;          // deepColor[3] = alpha at maximum depth
     }
