@@ -18,10 +18,6 @@
 #include <thread>
 #include <mutex>
 
-#ifndef ENABLE_TXST_DECALS
-#  define ENABLE_TXST_DECALS  1
-#endif
-
 class Renderer : protected Renderer_Base
 {
  protected:

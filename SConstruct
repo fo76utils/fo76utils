@@ -25,6 +25,8 @@ else:
     env.Append(LINKFLAGS = ["-s"])
 if int(ARGUMENTS.get("rgb10a2", 0)):
     env.Append(CXXFLAGS = ["-DUSE_PIXELFMT_RGB10A2=1"])
+if int(ARGUMENTS.get("decals", 0)):
+    env.Append(CXXFLAGS = ["-DENABLE_TXST_DECALS=1"])
 
 libSources = ["src/common.cpp", "src/filebuf.cpp", "src/zlib.cpp"]
 libSources += ["src/ba2file.cpp", "src/esmfile.cpp", "src/stringdb.cpp"]
