@@ -8,7 +8,7 @@
 bool Renderer::RenderObject::operator<(const RenderObject& r) const
 {
   if ((flags & 0x12) != (r.flags & 0x12))
-    return bool(r.flags & 0x12);
+    return ((flags & 0x12) < (r.flags & 0x12));
   if (flags & 0x12)
   {
     unsigned int  modelID1 = model.o->modelID;
@@ -441,12 +441,111 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   }
 }
 
-bool Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
+void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
 {
-  // not implemented yet
+#if ENABLE_TXST_DECALS
+  if (!(r == "TXST"))
+    return;
+  ESMFile::ESMField f(esmFile, r);
+  float   specularSmoothness = 0.0f;
+  bool    haveDODT = false;
+  while (f.next())
+  {
+    if (f == "DODT" && f.size() >= 24)
+    {
+      FloatVector4  decalBounds(f.readFloatVector4());
+      float   decalWidth = (decalBounds[0] + decalBounds[1]) * 0.5f;
+      float   decalHeight = (decalBounds[2] + decalBounds[3]) * 0.5f;
+      float   decalDepth = f.readFloat();
+      decalWidth = std::min(std::max(decalWidth, 0.0f), 4096.0f);
+      decalHeight = std::min(std::max(decalHeight, 0.0f), 4096.0f);
+      decalDepth = std::min(std::max(decalDepth, 0.0f), 4096.0f);
+      p.obndX0 = (signed short) roundFloat(decalWidth * -0.5f);
+      p.obndY0 = (signed short) roundFloat(decalHeight * -0.5f);
+      p.obndZ0 = (signed short) roundFloat(decalDepth * -1.0f);
+      p.obndX1 = p.obndX0 + (signed short) roundFloat(decalWidth);
+      p.obndY1 = p.obndY0 + (signed short) roundFloat(decalHeight);
+      p.obndZ1 = p.obndZ0 + (signed short) roundFloat(decalDepth * 2.0f);
+      if (!(p.obndX1 > p.obndX0 && p.obndY1 > p.obndY0 && p.obndZ1 > p.obndZ0))
+        return;
+      float   s = f.readFloat();        // shininess
+      if (esmFile.getESMVersion() < 0x80)
+        s = (s > 2.0f ? ((float(std::log2(s)) - 1.0f) * (1.0f / 9.0f)) : 0.0f);
+      specularSmoothness = std::min(std::max(s, 0.0f), 8.0f);
+      haveDODT = true;
+      break;
+    }
+  }
+  if (!haveDODT)
+    return;
+  unsigned int  formID = r.formID;
+  std::map< unsigned int, BGSMFile >::iterator  i = materials.find(formID);
+  if (i == materials.end())
+  {
+    BGSMFile  m;
+    m.nifVersion = 155U;                // Fallout 76
+    if (esmFile.getESMVersion() < 0x80)
+      m.nifVersion = 100U;              // Skyrim or older
+    else if (esmFile.getESMVersion() < 0xC0)
+      m.nifVersion = 130U;              // Fallout 4
+    m.alphaThreshold = 128;
+    m.alphaFlags = 0x12EC;
+    m.alpha = 1.0f;
+    m.alphaThresholdFloat = 128.0f;
+    m.s.specularSmoothness = specularSmoothness;
+    ESMFile::ESMField f2(esmFile, r);
+    while (f2.next())
+    {
+      if (f2 == "MNAM" && f2.size() > 0)
+      {
+        f2.readPath(stringBuf, std::string::npos, "materials/", ".bgsm");
+        if (!stringBuf.empty())
+          m.texturePaths.setMaterialPath(stringBuf);
+      }
+      else if ((f2.type & 0xF0FFFFFFU) == 0x30305854U)  // "TX00"
+      {
+        size_t  n = (f2.type >> 24) & 0x0F;
+        if (n < 10 && f2.size() > 0)
+        {
+          if (n == 3 || n == 5 || n == 7)   // glow, environment, FO4 specular
+            n--;
+          else if (n == 2 && esmFile.getESMVersion() < 0x80)
+            n = 5;                          // Skyrim environment mask
+          f2.readPath(stringBuf, std::string::npos, "textures/", ".dds");
+          if (!stringBuf.empty())
+          {
+            m.texturePaths.setTexturePath(n, stringBuf.c_str());
+            m.texturePathMask = m.texturePathMask | std::uint32_t(1U << n);
+          }
+        }
+      }
+    }
+    if (m.texturePaths && !m.texturePaths.materialPath().empty())
+    {
+      try
+      {
+        m.loadBGSMFile(ba2File, m.texturePaths.materialPath());
+      }
+      catch (FO76UtilsError&)
+      {
+        return;
+      }
+    }
+    if (!(m.texturePathMask & 0x0001))
+      return;
+    materials.insert(std::pair< unsigned int, BGSMFile >(formID, m));
+  }
+  p.type = 0x5854;                      // "TX"
+  p.flags = 0x0010;                     // is decal
+  p.modelID = 0U;
+  p.mswpFormID = formID;
+  char    tmpBuf[32];
+  std::sprintf(tmpBuf, "~0x%08X", formID);
+  p.modelPath = tmpBuf;
+#else
   (void) p;
   (void) r;
-  return false;
+#endif
 }
 
 const Renderer::BaseObject * Renderer::readModelProperties(
@@ -458,8 +557,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
   {
     BaseObject  tmp;
     tmp.type = 0;
-    tmp.flags =
-        (unsigned short) ((r.flags >> 18) & (!enableMarkers ? 0U : 0x20U));
+    tmp.flags = (unsigned short) ((r.flags >> 18) & 0x20U);     // is marker
     tmp.modelID = 0xFFFFFFFFU;
     tmp.mswpFormID = 0U;
     tmp.obndX0 = 0;
@@ -470,6 +568,8 @@ const Renderer::BaseObject * Renderer::readModelProperties(
     tmp.obndZ1 = 0;
     do
     {
+      if (tmp.flags && !enableMarkers)
+        continue;
       switch (r.type)
       {
         case 0x49544341:                // "ACTI"
@@ -486,8 +586,8 @@ const Renderer::BaseObject * Renderer::readModelProperties(
           break;
 #if ENABLE_TXST_DECALS
         case 0x54535854:                // "TXST"
-          if (!enableDecals || !readDecalProperties(tmp, r))
-            tmp.flags = 0;
+          if (enableDecals)
+            readDecalProperties(tmp, r);
           continue;
 #endif
         default:
@@ -1052,6 +1152,133 @@ void Renderer::loadModelsThread(Renderer *p,
   }
 }
 
+void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
+{
+#if ENABLE_TXST_DECALS
+  NIFFile::NIFVertexTransform vt(p.modelTransform);
+  vt *= viewTransform;
+  NIFFile::NIFBounds  b;
+  NIFFile::NIFVertex  v;
+  for (int i = 0; i < 8; i++)
+  {
+    v.x = float(!(i & 1) ? p.model.o->obndX0 : p.model.o->obndX1);
+    v.y = float(!(i & 2) ? p.model.o->obndY0 : p.model.o->obndY1);
+    v.z = float(!(i & 4) ? p.model.o->obndZ0 : p.model.o->obndZ1);
+    vt.transformXYZ(v.x, v.y, v.z);
+    b += v;
+  }
+  int     x0 = roundFloat(b.xMin());
+  int     y0 = roundFloat(b.yMin());
+  int     z0 = roundFloat(b.zMin());
+  int     x1 = roundFloat(b.xMax());
+  int     y1 = roundFloat(b.yMax());
+  int     z1 = roundFloat(b.zMax());
+  if (x0 >= width || x1 < 0 || y0 >= height || y1 < 0 ||
+      z0 >= zRangeMax || z1 < 0)
+  {
+    return;
+  }
+  x0 = (x0 > 0 ? x0 : 0);
+  y0 = (y0 > 0 ? y0 : 0);
+  x1 = (x1 < (width - 1) ? x1 : (width - 1)) + 1;
+  y1 = (y1 < (height - 1) ? y1 : (height - 1)) + 1;
+  bool    isVisible = false;
+  for (int y = y0; y < y1; y++)
+  {
+    FloatVector4  zMax(0.0f);
+    const float *zPtr = outBufZ + (size_t(y) * size_t(width) + size_t(x0));
+    int     w = x1 + 1 - x0;
+    for ( ; w >= 4; w = w - 4, zPtr = zPtr + 4)
+      zMax.maxValues(FloatVector4(zPtr));
+    zMax.maxValues(FloatVector4(zMax[1], zMax[0], zMax[3], zMax[2]));
+    float   tmp = (zMax[0] > zMax[2] ? zMax[0] : zMax[2]);
+    for ( ; w > 0; w--, zPtr++)
+      tmp = (*zPtr > tmp ? *zPtr : tmp);
+    if (tmp < b.zMin())
+      continue;
+    isVisible = true;
+    break;
+  }
+  if (!isVisible)
+    return;
+  std::uint16_t renderModeQuality =
+      renderMode | renderQuality | ((p.flags >> 5) & 2);
+  std::uint16_t texturePathMaskBase = 0x0009;
+  if (renderModeQuality & 2)
+    texturePathMaskBase = 0x037B;
+  else if (renderQuality >= 1)
+    texturePathMaskBase = 0x000B;
+  std::map< unsigned int, BGSMFile >::const_iterator  i =
+      materials.find(p.model.o->mswpFormID);
+  if (i == materials.end())
+    return;
+  t.renderer->m = i->second;
+  const DDSTexture  *textures[10];
+  unsigned int  textureMask = 0U;
+  if (p.flags & 0x80)
+    t.renderer->m.s.gradientMapV = float(int(p.flags >> 8)) * (1.0f / 255.0f);
+  unsigned int  texturePathMask = t.renderer->m.texturePathMask;
+  texturePathMask &= ((((unsigned int) t.renderer->m.flags & 0x80U) >> 5)
+                      | texturePathMaskBase);
+  if (!(texturePathMask & 0x0001U) ||
+      t.renderer->m.texturePaths[0].find("/temp_ground") != std::string::npos)
+  {
+    return;
+  }
+  if (BRANCH_UNLIKELY(!enableTextures))
+  {
+    if (t.renderer->m.alphaThresholdFloat > 0.0f || (texturePathMask & 0x0008U))
+    {
+      texturePathMask &= ~0x0008U;
+      textures[3] = &whiteTexture;
+      textureMask |= 0x0008U;
+    }
+    else
+    {
+      texturePathMask &= ~0x0001U;
+      textures[0] = &whiteTexture;
+      textureMask |= 0x0001U;
+    }
+  }
+  for (unsigned int m = 0x00080200U; texturePathMask; m = m >> 1)
+  {
+    unsigned int  tmp = texturePathMask & m;
+    if (!tmp)
+      continue;
+    int     k = FloatVector4::log2Int(int(tmp));
+    bool    waitFlag = false;
+    textures[k] = textureCache.loadTexture(
+                      ba2File, t.renderer->m.texturePaths[k], t.fileBuf,
+                      (!(m & 0x0018U) ? textureMip : 0),
+                      (m > 0x03FFU ? &waitFlag : (bool *) 0));
+    if (!waitFlag)
+    {
+      texturePathMask &= ~tmp;
+      if (textures[k])
+        textureMask |= tmp;
+    }
+  }
+  if (((textureMask ^ texturePathMaskBase) & 0x0010U) &&
+      t.renderer->m.s.envMapScale > 0.0f)
+  {
+    textures[4] = textureCache.loadTexture(ba2File, defaultEnvMap,
+                                           t.fileBuf, 0);
+    if (textures[4])
+      textureMask |= 0x0010U;
+  }
+  t.renderer->setRenderMode(renderModeQuality);
+  // TODO: implement drawing the decal
+#  if 0
+  t.renderer->drawTriShape(
+      p.modelTransform, viewTransform, lightX, lightY, lightZ,
+      textures, textureMask);
+#  endif
+#else
+  (void) t;
+  (void) p;
+#endif
+}
+
 bool Renderer::renderObject(RenderThread& t, size_t i,
                             unsigned long long tileMask)
 {
@@ -1100,7 +1327,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       {
         FloatVector4  zMax(0.0f);
         const float *zPtr = outBufZ + (size_t(y) * size_t(width) + size_t(x0));
-        int     w = x1 - x0;
+        int     w = x1 + 1 - x0;
         for ( ; w >= 4; w = w - 4, zPtr = zPtr + 4)
           zMax.maxValues(FloatVector4(zPtr));
         zMax.maxValues(FloatVector4(zMax[1], zMax[0], zMax[3], zMax[2]));
@@ -1303,6 +1530,12 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         p.modelTransform, viewTransform, lightX, lightY, lightZ,
         textures, textureMask);
   }
+#if ENABLE_TXST_DECALS
+  else if ((p.flags & 0x10) && !(renderPass & 0x04))    // decal
+  {
+    renderDecal(t, p);
+  }
+#endif
   return true;
 }
 

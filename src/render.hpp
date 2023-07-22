@@ -181,7 +181,7 @@ class Renderer : protected Renderer_Base
   unsigned int getDefaultWorldID() const;
   void addTerrainCell(const ESMFile::ESMRecord& r);
   void addWaterCell(const ESMFile::ESMRecord& r);
-  bool readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r);
+  void readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r);
   // returns NULL on excluded model or invalid object
   const BaseObject *readModelProperties(RenderObject& p,
                                         const ESMFile::ESMRecord& r);
@@ -207,6 +207,7 @@ class Renderer : protected Renderer_Base
   static void loadModelsThread(Renderer *p,
                                unsigned int t, unsigned long long modelIDMask);
   void renderObjectList();
+  void renderDecal(RenderThread& t, const RenderObject& p);
   bool renderObject(RenderThread& t, size_t i,
                     unsigned long long tileMask = ~0ULL);
   void renderThread(size_t threadNum, size_t startPos, size_t endPos,
