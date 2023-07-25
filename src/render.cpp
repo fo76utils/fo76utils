@@ -495,11 +495,6 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
       m.nifVersion = 100U;              // Skyrim or older
     else if (esmFile.getESMVersion() < 0xC0)
       m.nifVersion = 130U;              // Fallout 4
-    m.flags = BGSMFile::Flag_TSAlphaBlending;
-    m.alphaThreshold = 1;
-    m.alphaFlags = 0x12ED;
-    m.alpha = 1.0f;
-    m.alphaThresholdFloat = 1.0f;
     m.s.specularSmoothness = specularSmoothness;
     ESMFile::ESMField f2(esmFile, r);
     while (f2.next())
@@ -541,6 +536,15 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
     }
     if (!(m.texturePathMask & 0x0001))
       return;
+    if (!(m.flags & BGSMFile::Flag_TSAlphaBlending) && (~m.alphaFlags & 0x1200))
+    {
+      // default alpha testing and blending
+      m.flags = m.flags | BGSMFile::Flag_TSAlphaBlending;
+      m.alphaThreshold = 1;
+      m.alphaFlags = 0x12ED;
+      m.alpha = 1.0f;
+      m.alphaThresholdFloat = 1.0f;
+    }
     materials.insert(std::pair< unsigned int, BGSMFile >(formID, m));
   }
   p.type = 0x5854;                      // "TX"
@@ -1512,7 +1516,8 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           *landData, landTxtScale,
           p.model.t.x0, p.model.t.y0, p.model.t.x1, p.model.t.y1,
           landTextures, landData->getTextureCount(), ltexMask,
-          landTextureMip, landTxtRGBScale, landTxtDefColor);
+          landTextureMip - float(int(landTextureMip)),
+          landTxtRGBScale, landTxtDefColor);
       t.renderer->setRenderMode(
           (((ltexMask >> 1) | (ltexMask >> 5) | (ltexMask >> 8)) & 3U)
           | renderMode);
@@ -1914,7 +1919,7 @@ void Renderer::loadTerrain(const char *btdFileName,
   if (!landTextures)
     landTextures = new LandscapeTextureSet[textureCnt];
   std::vector< unsigned char >& fileBuf(renderThreads[0].fileBuf);
-  int     mipLevelD = textureMip;
+  int     mipLevelD = std::min(textureMip + int(landTextureMip), 15);
   for (size_t i = 0; i < textureCnt; i++)
   {
     if (!enableTextures)
