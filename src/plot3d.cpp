@@ -1647,13 +1647,34 @@ void Plot3D_TriShape::drawDecal(
   NIFFile::NIFVertexTransform vt(modelTransform);
   vt *= viewTransform;
   NIFFile::NIFBounds  screenBounds;
-  for (int i = 0; i < 8; i++)
+  float   mipScale = 1.0f;
   {
-    float   x = (!(i & 1) ? b.boundsMin[0] : b.boundsMax[0]);
-    float   y = (!(i & 2) ? b.boundsMin[1] : b.boundsMax[1]);
-    float   z = (!(i & 4) ? b.boundsMin[2] : b.boundsMax[2]);
-    vt.transformXYZ(x, y, z);
-    screenBounds += FloatVector4(x, y, z, 0.0f);
+    FloatVector4  v0(0.0f);
+    FloatVector4  v1(0.0f);
+    FloatVector4  v2(0.0f);
+    for (int i = 0; i < 8; i++)
+    {
+      float   x = (!(i & 1) ? b.boundsMin[0] : b.boundsMax[0]);
+      float   y = (!(i & 2) ? b.boundsMin[1] : b.boundsMax[1]);
+      float   z = (!(i & 4) ? b.boundsMin[2] : b.boundsMax[2]);
+      FloatVector4  tmp(x, y, z, 0.0f);
+      tmp = vt.transformXYZ(tmp);
+      screenBounds += tmp;
+      if (!i)
+        v0 = tmp;
+      else if (i == 1)
+        v1 = tmp;
+      else if (i == 4)
+        v2 = tmp;
+    }
+    v1 -= v0;
+    v2 -= v0;
+    float   xyArea = float(std::fabs((v1[0] * v2[1]) - (v2[0] * v1[1])));
+    if (xyArea < 0.25f)
+      return;
+    float   uvArea = float(textures[0]->getWidth() - 1)
+                     * float(textures[0]->getHeight() - 1);
+    mipScale = float(std::sqrt(std::max(uvArea * 0.5f / xyArea, 1.0f)));
   }
   int     x0 = roundFloat(screenBounds.boundsMin[0]);
   int     y0 = roundFloat(screenBounds.boundsMin[1]);
@@ -1767,8 +1788,9 @@ void Plot3D_TriShape::drawDecal(
   viewToModelSpace.rotateXZ = vt.rotateZX;
   viewToModelSpace.rotateYZ = vt.rotateZY;
   viewToModelSpace.scale = 1.0f / viewToModelSpace.scale;
-  float   uScale = float(textures[0]->getWidth());
-  float   vScale = float(textures[0]->getHeight());
+  float   uScale, vScale;
+  uScale = std::max(float(textures[0]->getWidth()) * (1.0f / mipScale), 1.0f);
+  vScale = std::max(float(textures[0]->getHeight()) * (1.0f / mipScale), 1.0f);
   uScale = (uScale - 1.0f) / (uScale * (b.boundsMax[0] - b.boundsMin[0]));
   vScale = (vScale - 1.0f) / (vScale * (b.boundsMin[2] - b.boundsMax[2]));
   float   uOffset = -(b.boundsMin[0] * uScale);
@@ -1784,10 +1806,13 @@ void Plot3D_TriShape::drawDecal(
     v.vertexColor *= (1.0f / 255.0f);
   else
     v.vertexColor.srgbExpand();
-  v.mipLevel = 0.0f;                    // TODO: calculate mip level
+  v.mipLevel =
+      std::min(std::max(FloatVector4::log2Fast(mipScale), 0.0f), 15.0f);
   v.invNormals = false;
   FloatVector4  decalDir(vt.rotateXY, vt.rotateYY, vt.rotateZY, vt.rotateXZ);
   decalDir *= -1.0f;
+  std::uint32_t *bufNSaved = bufN;
+  bufN = (std::uint32_t *) 0;
   for (int y = y0; y <= y1; y++)
   {
     size_t  offs = size_t(y) * size_t(width) + size_t(x0);
@@ -1807,15 +1832,15 @@ void Plot3D_TriShape::drawDecal(
       {
         continue;
       }
-      if (BRANCH_UNLIKELY(!(bufN && !debugMode)))
+      if (BRANCH_UNLIKELY(!(bufNSaved && !debugMode)))
       {
         v.normal = decalDir;
       }
       else
       {
-        v.normal = FloatVector4::uint32ToNormal(bufN[offs]);
-        // cull if surface normal differs from decal direction by > 60 degrees
-        if (v.normal.dotProduct3(decalDir) < 0.5f)
+        v.normal = FloatVector4::uint32ToNormal(bufNSaved[offs]);
+        // cull if surface normal differs from decal direction by >= 68 degrees
+        if (v.normal.dotProduct3(decalDir) < 0.375f)
           continue;
       }
       v.bitangent[3] = modelXYZ[0] * uScale + uOffset;
@@ -1823,6 +1848,7 @@ void Plot3D_TriShape::drawDecal(
       drawPixelFunction(*this, v);
     }
   }
+  bufN = bufNSaved;
 #else
   (void) modelTransform;
   (void) textures;
