@@ -57,6 +57,15 @@ class BA2File
           const char *excludePatterns = 0, const char *fileNames = 0);
   virtual ~BA2File();
   void getFileList(std::vector< std::string >& fileList) const;
+  // returns pointer to stored file name, or NULL if the file is not found
+  const std::string *findFile(const std::string& fileName) const
+  {
+    std::map< std::string, FileDeclaration >::const_iterator  i =
+        fileMap.find(fileName);
+    if (i == fileMap.end())
+      return (std::string *) 0;
+    return &(i->first);
+  }
   // returns -1 if the file is not found
   long getFileSize(const std::string& fileName, bool packedSize = false) const;
  protected:
