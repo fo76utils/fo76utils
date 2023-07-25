@@ -19,7 +19,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
   * 0, 4, 8, or 12: Render quality from lowest to highest, 0 uses diffuse textures only on terrain and objects, 4 enables normal mapping, 8 also enables PBR on objects only, 12 enables PBR on terrain as well.
   * 16: Disable the use of effect materials.
   * 32: Disable built-in exclude patterns for effect meshes.
-  * 64: Enable the rendering of decals (TXST objects), only if **render** has been built with the ENABLE\_TXST\_DECALS macro set to 1.
+  * 64: Enable the rendering of decals (TXST objects), only if **render** has been built with the ENABLE\_TXST\_DECALS macro set to 1. This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
   * 128: Enable marker objects.
 
 Values in hexadecimal format (prefixed with 0x) are accepted by **-w** and **-rq**.
