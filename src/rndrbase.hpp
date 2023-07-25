@@ -18,10 +18,24 @@ struct Renderer_Base
 {
   struct TextureCache
   {
+    struct CachedTextureKey
+    {
+      const std::string *fileName;      // pointer from BA2File
+      int     mipLevel;
+      inline bool operator<(const CachedTextureKey& r) const
+      {
+        return (fileName < r.fileName ||
+                (fileName == r.fileName && mipLevel < r.mipLevel));
+      }
+      inline bool operator==(const CachedTextureKey& r) const
+      {
+        return (fileName == r.fileName && mipLevel == r.mipLevel);
+      }
+    };
     struct CachedTexture
     {
       DDSTexture    *texture;
-      std::map< std::string, CachedTexture >::iterator  i;
+      std::map< CachedTextureKey, CachedTexture >::iterator i;
       CachedTexture *prv;
       CachedTexture *nxt;
       std::mutex    *textureLoadMutex;
@@ -31,7 +45,7 @@ struct Renderer_Base
     CachedTexture *firstTexture;
     CachedTexture *lastTexture;
     std::mutex  textureCacheMutex;
-    std::map< std::string, CachedTexture >  textureCache;
+    std::map< CachedTextureKey, CachedTexture > textureCache;
     static size_t getTextureDataSize(const DDSTexture *t);
     TextureCache(size_t n = 0x40000000)
       : textureDataSize(0),

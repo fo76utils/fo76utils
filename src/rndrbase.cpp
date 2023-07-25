@@ -22,9 +22,14 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
 {
   if (fileName.empty())
     return (DDSTexture *) 0;
+  CachedTextureKey  k;
+  k.fileName = ba2File.findFile(fileName);
+  if (!k.fileName)
+    return (DDSTexture *) 0;
+  k.mipLevel = mipLevel;
   textureCacheMutex.lock();
-  std::map< std::string, CachedTexture >::iterator  i =
-      textureCache.find(fileName);
+  std::map< CachedTextureKey, CachedTexture >::iterator i =
+      textureCache.find(k);
   if (i != textureCache.end())
   {
     CachedTexture *cachedTexture = &(i->second);
@@ -61,8 +66,8 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
       tmp.prv = (CachedTexture *) 0;
       tmp.nxt = (CachedTexture *) 0;
       tmp.textureLoadMutex = textureLoadMutex;
-      i = textureCache.insert(std::pair< std::string, CachedTexture >(
-                                  fileName, tmp)).first;
+      i = textureCache.insert(std::pair< CachedTextureKey, CachedTexture >(
+                                  k, tmp)).first;
     }
     textureLoadMutex = (std::mutex *) 0;
     cachedTexture = &(i->second);
@@ -114,7 +119,7 @@ void Renderer_Base::TextureCache::shrinkTextureCache()
     if (firstTexture->texture)
       delete firstTexture->texture;
     delete firstTexture->textureLoadMutex;
-    std::map< std::string, CachedTexture >::iterator  i = firstTexture->i;
+    std::map< CachedTextureKey, CachedTexture >::iterator i = firstTexture->i;
     if (firstTexture->nxt)
       firstTexture->nxt->prv = (CachedTexture *) 0;
     else
