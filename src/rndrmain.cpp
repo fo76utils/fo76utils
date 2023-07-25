@@ -583,6 +583,7 @@ int main(int argc, char **argv)
     renderer.setLandDefaultColor(ltxtDefColor);
     renderer.setLandTxtResolution(ltxtResolution);
     renderer.setTextureMipLevel(textureMip);
+    renderer.setLandTextureMip(landTextureMip);
     renderer.setLandTxtRGBScale(landTextureMult);
     renderer.setModelLOD(modelLOD);
     renderer.setWaterColor(waterColor);
@@ -615,11 +616,8 @@ int main(int argc, char **argv)
     {
       if (verboseMode)
         std::fprintf(stderr, "Loading terrain data and landscape textures\n");
-      renderer.setTextureMipLevel(textureMip + int(landTextureMip));
-      renderer.setLandTextureMip(landTextureMip - float(int(landTextureMip)));
       renderer.loadTerrain(btdPath, worldID, defTxtID,
                            btdLOD, terrainX0, terrainY0, terrainX1, terrainY1);
-      renderer.setTextureMipLevel(textureMip);
       renderPass = 0;
     }
     do
