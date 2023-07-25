@@ -45,9 +45,11 @@ class LandscapeData
   unsigned char findTextureID(unsigned int formID);
   void loadESMFile(ESMFile& esmFile,
                    unsigned int formatMask, unsigned int worldID,
-                   unsigned int defTxtID, unsigned char mipLevel);
+                   unsigned int defTxtID, unsigned char mipLevel,
+                   unsigned int parentWorldID = 0U);
   void loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File, size_t n);
-  void loadWorldInfo(ESMFile& esmFile, unsigned int worldID);
+  // returns the form ID of the parent world, or 0 if there is none
+  unsigned int loadWorldInfo(ESMFile& esmFile, unsigned int worldID);
  public:
   // formatMask & 1:  set to load height map (pixelFormatGRAY16)
   // formatMask & 2:  set to load land textures (pixelFormatL8A24)

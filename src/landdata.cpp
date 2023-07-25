@@ -300,7 +300,8 @@ unsigned char LandscapeData::findTextureID(unsigned int formID)
 
 void LandscapeData::loadESMFile(ESMFile& esmFile,
                                 unsigned int formatMask, unsigned int worldID,
-                                unsigned int defTxtID, unsigned char mipLevel)
+                                unsigned int defTxtID, unsigned char mipLevel,
+                                unsigned int parentWorldID)
 {
   if (mipLevel != 2)
     errorMessage("LandscapeData: invalid mip level");
@@ -314,24 +315,34 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
         findESMLand(esmFile, landList, r->children);
     }
   }
-  cellMinX = 32767;
-  cellMinY = 32767;
-  cellMaxX = -32768;
-  cellMaxY = -32768;
+  int     xMin = 32767;
+  int     yMin = 32767;
+  int     xMax = -32768;
+  int     yMax = -32768;
   for (size_t i = 0; i < landList.size(); i++)
   {
     int     x = int((landList[i] >> 32) & 0xFFFFU) - 32768;
     int     y = int((landList[i] >> 48) & 0xFFFFU) - 32768;
-    cellMinX = (x < cellMinX ? x : cellMinX);
-    cellMinY = (y < cellMinY ? y : cellMinY);
-    cellMaxX = (x > cellMaxX ? x : cellMaxX);
-    cellMaxY = (y > cellMaxY ? y : cellMaxY);
+    xMin = (x < xMin ? x : xMin);
+    yMin = (y < yMin ? y : yMin);
+    xMax = (x > xMax ? x : xMax);
+    yMax = (y > yMax ? y : yMax);
   }
-  if (!(cellMaxX >= cellMinX && cellMaxY >= cellMinY))
+  if (!(xMax >= xMin && yMax >= yMin))
   {
+    if (parentWorldID)
+    {
+      // if this worldspace has no landscape data, try the parent world
+      loadESMFile(esmFile, formatMask, parentWorldID, defTxtID, mipLevel, 0U);
+      return;
+    }
     errorMessage("LandscapeData: "
                  "landscape data not found for world in ESM file");
   }
+  cellMinX = xMin;
+  cellMinY = yMin;
+  cellMaxX = xMax;
+  cellMaxY = yMax;
   allocateDataBuf(formatMask, false);
   std::map< unsigned int, unsigned int >  emptyCells;
   std::map< unsigned int, float > cellHeightOffsets;
@@ -625,11 +636,13 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
   }
 }
 
-void LandscapeData::loadWorldInfo(ESMFile& esmFile, unsigned int worldID)
+unsigned int LandscapeData::loadWorldInfo(ESMFile& esmFile,
+                                          unsigned int worldID)
 {
   const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(worldID);
   if (!(r && *r == "WRLD"))
     errorMessage("LandscapeData: world not found in ESM file");
+  unsigned int  parentID = 0U;
   ESMFile::ESMField f(esmFile, *r);
   while (f.next())
   {
@@ -644,11 +657,15 @@ void LandscapeData::loadWorldInfo(ESMFile& esmFile, unsigned int worldID)
     }
     else if (f == "WNAM" && f.size() >= 4)
     {
-      unsigned int  parentID = f.readUInt32Fast();
-      if (parentID && parentID < worldID)
+      unsigned int  tmp = f.readUInt32Fast();
+      if (tmp && tmp < worldID)
+      {
+        parentID = tmp;
         loadWorldInfo(esmFile, parentID);
+      }
     }
   }
+  return parentID;
 }
 
 LandscapeData::LandscapeData(
@@ -678,16 +695,17 @@ LandscapeData::LandscapeData(
   unsigned char l = (unsigned char) mipLevel;
   if (!worldID)
     worldID = (btdFileName && *btdFileName ? 0x0025DA15U : 0x0000003CU);
+  unsigned int  parentID = 0U;
   if (esmFile)
   {
     waterLevel = 0.0f;          // defaults for Oblivion
     landLevel = -8192.0f;
-    loadWorldInfo(*esmFile, worldID);
+    parentID = loadWorldInfo(*esmFile, worldID);
   }
   if (btdFileName && *btdFileName)
     loadBTDFile(btdFileName, formatMask & 0x1B, l);
   else if (esmFile)
-    loadESMFile(*esmFile, formatMask & 0x0F, worldID, defTxtID, l);
+    loadESMFile(*esmFile, formatMask & 0x0F, worldID, defTxtID, l, parentID);
   else
     errorMessage("LandscapeData: no input file");
   if (esmFile)
