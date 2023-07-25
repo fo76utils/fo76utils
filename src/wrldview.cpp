@@ -582,9 +582,14 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         }
         break;
       case 22:                  // "rq"
-        renderQuality =
-            (unsigned char) parseInteger(argv[i + 1], 0,
-                                         "invalid render quality", 0, 255);
+        {
+          unsigned char tmp = renderQuality;
+          renderQuality =
+              (unsigned char) parseInteger(argv[i + 1], 0,
+                                           "invalid render quality", 0, 255);
+          if (renderer && ((tmp ^ renderQuality) & 0xC3))
+            renderer->clearObjectPropertyCache();
+        }
         redrawWorldFlag = true;
         break;
       case 23:                  // "rscale"
