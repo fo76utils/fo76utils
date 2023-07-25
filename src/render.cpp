@@ -202,20 +202,27 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
   NIFFile::NIFBounds  modelBounds;
   if (p.flags & 0x12)
   {
-    int     x0 = int(p.model.o->obndX0 < p.model.o->obndX1 ?
-                     p.model.o->obndX0 : p.model.o->obndX1) - 2;
-    int     x1 =
-        x0 + std::abs(int(p.model.o->obndX1) - int(p.model.o->obndX0)) + 4;
-    int     y0 = int(p.model.o->obndY0 < p.model.o->obndY1 ?
-                     p.model.o->obndY0 : p.model.o->obndY1) - 2;
-    int     y1 =
-        y0 + std::abs(int(p.model.o->obndY1) - int(p.model.o->obndY0)) + 4;
-    int     z0 = int(p.model.o->obndZ0 < p.model.o->obndZ1 ?
-                     p.model.o->obndZ0 : p.model.o->obndZ1) - 2;
-    int     z1 =
-        z0 + std::abs(int(p.model.o->obndZ1) - int(p.model.o->obndZ0)) + 4;
-    modelBounds.boundsMin = FloatVector4(float(x0), float(y0), float(z0), 0.0f);
-    modelBounds.boundsMax = FloatVector4(float(x1), float(y1), float(z1), 0.0f);
+    FloatVector4  b0(float(p.model.o->obndX0), float(p.model.o->obndY0),
+                     float(p.model.o->obndZ0), 0.0f);
+    FloatVector4  b1(float(p.model.o->obndX1), float(p.model.o->obndY1),
+                     float(p.model.o->obndZ1), 0.0f);
+    modelBounds.boundsMin = b0;
+    modelBounds.boundsMin.minValues(b1);
+    modelBounds.boundsMin -= 2.0f;
+    modelBounds.boundsMax = b0;
+    modelBounds.boundsMax.maxValues(b1);
+    modelBounds.boundsMax += 2.0f;
+    FloatVector4  tmp(1.0f, 1.0f, 1.0f, 0.0f);
+#if ENABLE_TXST_DECALS
+    if (BRANCH_UNLIKELY(p.flags & 0x10))
+    {
+      tmp = FloatVector4::convertFloat16(std::uint64_t(p.mswpFormID));
+      tmp[2] = tmp[1];
+      tmp[1] = 1.0f;
+    }
+#endif
+    modelBounds.boundsMin *= tmp;
+    modelBounds.boundsMax *= tmp;
     vt = p.modelTransform;
     vt *= viewTransform;
   }
@@ -461,11 +468,11 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
       decalHeight = std::min(std::max(decalHeight, 0.0f), 4096.0f);
       decalDepth = std::min(std::max(decalDepth, 0.0f), 4096.0f);
       p.obndX0 = (signed short) roundFloat(decalWidth * -0.5f);
-      p.obndY0 = (signed short) roundFloat(decalHeight * -0.5f);
-      p.obndZ0 = (signed short) roundFloat(decalDepth * -1.0f);
+      p.obndY0 = (signed short) roundFloat(decalDepth * -0.25f);
+      p.obndZ0 = (signed short) roundFloat(decalHeight * -0.5f);
       p.obndX1 = p.obndX0 + (signed short) roundFloat(decalWidth);
-      p.obndY1 = p.obndY0 + (signed short) roundFloat(decalHeight);
-      p.obndZ1 = p.obndZ0 + (signed short) roundFloat(decalDepth * 2.0f);
+      p.obndY1 = p.obndY0 + (signed short) roundFloat(decalDepth * 1.25f);
+      p.obndZ1 = p.obndZ0 + (signed short) roundFloat(decalHeight);
       if (!(p.obndX1 > p.obndX0 && p.obndY1 > p.obndY0 && p.obndZ1 > p.obndZ0))
         return;
       float   s = f.readFloat();        // shininess
@@ -488,10 +495,11 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
       m.nifVersion = 100U;              // Skyrim or older
     else if (esmFile.getESMVersion() < 0xC0)
       m.nifVersion = 130U;              // Fallout 4
-    m.alphaThreshold = 128;
-    m.alphaFlags = 0x12EC;
+    m.flags = BGSMFile::Flag_TSAlphaBlending;
+    m.alphaThreshold = 1;
+    m.alphaFlags = 0x12ED;
     m.alpha = 1.0f;
-    m.alphaThresholdFloat = 128.0f;
+    m.alphaThresholdFloat = 1.0f;
     m.s.specularSmoothness = specularSmoothness;
     ESMFile::ESMField f2(esmFile, r);
     while (f2.next())
@@ -727,7 +735,7 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
       const ESMFile::ESMRecord  *r3 = esmFile.getRecordPtr(modelFormID);
       if (!r3)
         continue;
-      if (!(o = readModelProperties(tmp, *r3)) || (tmp.flags & 4))
+      if (!(o = readModelProperties(tmp, *r3)) || (tmp.flags & 0x14))
       {
         o = (BaseObject *) 0;
         continue;
@@ -815,6 +823,9 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     float   offsY = 0.0f;
     float   offsZ = 0.0f;
     unsigned int  refrMSWPFormID = 0U;
+#if ENABLE_TXST_DECALS
+    unsigned int  xpddScale = 0x3C003C00U;      // 1.0, 1.0 in FP16 format
+#endif
     {
       ESMFile::ESMField f(esmFile, *r);
       while (f.next())
@@ -841,6 +852,18 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
         {
           refrMSWPFormID = f.readUInt32Fast();
         }
+#if ENABLE_TXST_DECALS
+        else if (BRANCH_UNLIKELY(f == "XPDD") && r2 && *r2 == "TXST" &&
+                 f.size() >= 8)
+        {
+          float   xScale = f.readFloat();
+          float   zScale = f.readFloat();
+          xScale = std::min(std::max(xScale, 0.125f), 8.0f);
+          zScale = std::min(std::max(zScale, 0.125f), 8.0f);
+          xpddScale = std::uint32_t(convertToFloat16(xScale))
+                      | (std::uint32_t(convertToFloat16(zScale)) << 16);
+        }
+#endif
       }
     }
     if (!r2)
@@ -857,6 +880,13 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     const BaseObject  *o = readModelProperties(tmp, *r2);
     if (!o)
       continue;
+#if ENABLE_TXST_DECALS
+    if (BRANCH_UNLIKELY(tmp.flags & 0x10))
+    {
+      tmp.mswpFormID = xpddScale;
+      refrMSWPFormID = 0U;
+    }
+#endif
     tmp.modelTransform = NIFFile::NIFVertexTransform(scale, rX, rY, rZ,
                                                      offsX, offsY, offsZ);
     if (setScreenAreaUsed(tmp) < 0)
@@ -1024,6 +1054,11 @@ void Renderer::clear(unsigned int flags)
       float   tmp = float(zRangeMax);
       for (size_t i = 0; i < imageDataSize; i++)
         outBufZ[i] = tmp;
+      if (outBufN)
+      {
+        for (size_t i = 0; i < imageDataSize; i++)
+          outBufN[i] = 0U;
+      }
     }
   }
   if (flags & 0x04)
@@ -1157,13 +1192,24 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
 #if ENABLE_TXST_DECALS
   NIFFile::NIFVertexTransform vt(p.modelTransform);
   vt *= viewTransform;
+  FloatVector4  xpddScale(FloatVector4::convertFloat16(
+                              std::uint64_t(p.mswpFormID)));
+  xpddScale[2] = xpddScale[1];
+  xpddScale[1] = 1.0f;
+  NIFFile::NIFBounds  decalBounds;
+  decalBounds.boundsMin =
+      FloatVector4(float(p.model.o->obndX0), float(p.model.o->obndY0),
+                   float(p.model.o->obndZ0), 0.0f) * xpddScale;
+  decalBounds.boundsMax =
+      FloatVector4(float(p.model.o->obndX1), float(p.model.o->obndY1),
+                   float(p.model.o->obndZ1), 0.0f) * xpddScale;
   NIFFile::NIFBounds  b;
   NIFFile::NIFVertex  v;
   for (int i = 0; i < 8; i++)
   {
-    v.x = float(!(i & 1) ? p.model.o->obndX0 : p.model.o->obndX1);
-    v.y = float(!(i & 2) ? p.model.o->obndY0 : p.model.o->obndY1);
-    v.z = float(!(i & 4) ? p.model.o->obndZ0 : p.model.o->obndZ1);
+    v.x = float(!(i & 1) ? decalBounds.boundsMin[0] : decalBounds.boundsMax[0]);
+    v.y = float(!(i & 2) ? decalBounds.boundsMin[1] : decalBounds.boundsMax[1]);
+    v.z = float(!(i & 4) ? decalBounds.boundsMin[2] : decalBounds.boundsMax[2]);
     vt.transformXYZ(v.x, v.y, v.z);
     b += v;
   }
@@ -1267,12 +1313,8 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
       textureMask |= 0x0010U;
   }
   t.renderer->setRenderMode(renderModeQuality);
-  // TODO: implement drawing the decal
-#  if 0
-  t.renderer->drawTriShape(
-      p.modelTransform, viewTransform, lightX, lightY, lightZ,
-      textures, textureMask);
-#  endif
+  t.renderer->drawDecal(p.modelTransform, textures, textureMask,
+                        decalBounds, 0xFFFFFFFFU);
 #else
   (void) t;
   (void) p;
@@ -1446,9 +1488,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
         }
       }
       t.renderer->setRenderMode(renderModeQuality);
-      t.renderer->drawTriShape(
-          p.modelTransform, viewTransform, lightX, lightY, lightZ,
-          textures, textureMask);
+      t.renderer->drawTriShape(p.modelTransform, textures, textureMask);
     }
   }
   else if (p.flags & 0x01)              // terrain
@@ -1478,7 +1518,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
           | renderMode);
       *(t.renderer) = *(t.terrainMesh);
       t.renderer->drawTriShape(
-          p.modelTransform, viewTransform, lightX, lightY, lightZ,
+          p.modelTransform,
           t.terrainMesh->getTextures(), t.terrainMesh->getTextureMask());
     }
   }
@@ -1526,9 +1566,7 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
                                            t.fileBuf, 0);
     if (textures[4])
       textureMask |= 0x0010U;
-    t.renderer->drawTriShape(
-        p.modelTransform, viewTransform, lightX, lightY, lightZ,
-        textures, textureMask);
+    t.renderer->drawTriShape(p.modelTransform, textures, textureMask);
   }
 #if ENABLE_TXST_DECALS
   else if ((p.flags & 0x10) && !(renderPass & 0x04))    // decal
@@ -1650,7 +1688,8 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     disableEffectFilters(false),
     waterRenderMode(0),
     bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
-    whiteTexture(0xFFFFFFFFU)
+    whiteTexture(0xFFFFFFFFU),
+    outBufN((std::uint32_t *) 0)
 {
   if (!renderMode)
     renderMode = 4;
@@ -1708,10 +1747,18 @@ void Renderer::clearImage()
 
 void Renderer::deallocateBuffers(unsigned int mask)
 {
-  if (((bufAllocFlags & mask) & 0x02) && outBufZ)
+  if ((bufAllocFlags & mask) & 0x02)
   {
-    delete[] outBufZ;
-    outBufZ = (float *) 0;
+    if (outBufZ)
+    {
+      delete[] outBufZ;
+      outBufZ = (float *) 0;
+    }
+    if (outBufN)
+    {
+      delete[] outBufN;
+      outBufN = (std::uint32_t *) 0;
+    }
   }
   if (((bufAllocFlags & mask) & 0x01) && outBufRGBA)
   {
@@ -1937,6 +1984,22 @@ void Renderer::initRenderPass(int n, unsigned int formID)
   }
   sortObjectList();
   threadSortBuf.resize(64);
+#if ENABLE_TXST_DECALS
+  if (enableDecals && !debugMode && !outBufN)
+  {
+    size_t  imageDataSize = size_t(width) * size_t(height);
+    outBufN = new std::uint32_t[imageDataSize];
+    for (size_t i = 0; i < imageDataSize; i++)
+      outBufN[i] = 0U;
+  }
+#endif
+  for (size_t i = 0; i < renderThreads.size(); i++)
+  {
+    renderThreads[i].renderer->setBuffers(outBufRGBA, outBufZ, width, height,
+                                          outBufN);
+    renderThreads[i].renderer->setViewAndLightVector(viewTransform,
+                                                     lightX, lightY, lightZ);
+  }
 }
 
 bool Renderer::renderObjects()

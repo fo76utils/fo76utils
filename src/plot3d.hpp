@@ -93,11 +93,15 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   void    (*drawPixelFunction)(Plot3D_TriShape& p, Fragment& z);
   bool    (*getDiffuseColorFunc)(const Plot3D_TriShape& p,
                                  FloatVector4& c, Fragment& z);
+  FloatVector4  halfwayVector;          // V + L normalized
+  float   vDotL;
+  float   vDotH;
+  std::uint32_t *bufN;                  // normals for decal rendering
   std::vector< Vertex > vertexBuf;
   std::vector< Triangle > triangleBuf;
+  NIFFile::NIFVertexTransform viewTransform;
   static FloatVector4 colorToSRGB(FloatVector4 c);
-  size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform,
-                             const NIFFile::NIFVertexTransform& viewTransform);
+  size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform);
   inline bool glowEnabled() const
   {
     return bool(m.flags & BGSMFile::Flag_Glow);
@@ -106,6 +110,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   {
     return bool(m.flags & BGSMFile::Flag_TSAlphaBlending);
   }
+  inline void storeNormal(FloatVector4 n, const std::uint32_t *cPtr);
   // a = alpha * 255
   FloatVector4 alphaBlend(FloatVector4 c, float a, const Fragment& z) const;
   // c = albedo, e = environment, f0 = reflectance
@@ -129,17 +134,17 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   inline FloatVector4 calculateLighting_TES5(
       FloatVector4 c, const Fragment& z) const;
   // returns reflected view vector
-  inline FloatVector4 calculateReflection(float& vDotL, const Vertex& v) const;
+  inline FloatVector4 calculateReflection(const Vertex& v) const;
   inline FloatVector4 environmentMap(
       FloatVector4 reflectedView, float smoothness,
       bool isSRGB, bool invZ) const;
   // fresnelPoly != NULL also enables normalization
   inline float specularPhong(
       FloatVector4 reflectedView, float smoothness, float nDotL, float nDotV,
-      float vDotL, const float *fresnelPoly = (float *) 0) const;
+      const float *fresnelPoly = (float *) 0) const;
   inline FloatVector4 specularGGX(
       FloatVector4 reflectedView, float roughness, float nDotL, float nDotV,
-      float vDotL, const float *fresnelPoly, FloatVector4 f0) const;
+      const float *fresnelPoly, FloatVector4 f0) const;
   // c0 = terrain color, a = water transparency
   inline FloatVector4 calculateLighting_Water(
       FloatVector4 c0, float a, Fragment& z, bool isFO76) const;
@@ -191,19 +196,25 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   Plot3D_TriShape(std::uint32_t *outBufRGBA, float *outBufZ,
                   int imageWidth, int imageHeight, unsigned int mode);
   virtual ~Plot3D_TriShape();
+  // outBufN (optional for decal rendering) contains normals in a format
+  // that can be decoded with FloatVector4::uint32ToNormal().
   inline void setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
-                         int imageWidth, int imageHeight)
+                         int imageWidth, int imageHeight,
+                         std::uint32_t *outBufN = (std::uint32_t *) 0)
   {
     bufZ = outBufZ;
     bufRGBA = outBufRGBA;
     width = imageWidth;
     height = imageHeight;
+    bufN = outBufN;
   }
   inline void setRenderMode(unsigned int mode)
   {
     renderMode = (unsigned char) (mode & 15U);
     usingSRGBColorSpace = (renderMode < 12);
   }
+  void setViewAndLightVector(const NIFFile::NIFVertexTransform& vt,
+                             float lightX, float lightY, float lightZ);
   // Vector to be added to (image X, image Y, 0.0) for cube mapping.
   // Defaults to -(imageWidth / 2), -(imageHeight / 2), imageHeight.
   inline void setEnvMapOffset(float x, float y, float z)
@@ -233,8 +244,6 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // textures[8] = Fallout 76 reflection map
   // textures[9] = Fallout 76 lighting map
   void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,
-                    const NIFFile::NIFVertexTransform& viewTransform,
-                    float lightX, float lightY, float lightZ,
                     const DDSTexture * const *textures,
                     unsigned int textureMask);
  protected:
@@ -248,12 +257,17 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // n = 3: normal map
   // n = 4: disable lighting and reflections
   // n = 5: lighting only (white texture)
-  void setDebugMode(unsigned int n, std::uint32_t c)
+  inline void setDebugMode(unsigned int n, std::uint32_t c)
   {
     debugMode = (n <= 5U ? (n != 1U ? n : (0x80000000U | c)) : 0U);
   }
   // Calculate ambient light from the average color of a cube map.
   FloatVector4 cubeMapToAmbient(const DDSTexture *e) const;
+  // b = decal bounds (model space)
+  // c = color (sRGB)
+  void drawDecal(const NIFFile::NIFVertexTransform& modelTransform,
+                 const DDSTexture * const *textures, unsigned int textureMask,
+                 const NIFFile::NIFBounds& b, std::uint32_t c = 0xFFFFFFFFU);
 };
 
 template< typename T, typename ColorType > class Plot3D : public T

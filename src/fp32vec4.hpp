@@ -137,6 +137,10 @@ struct FloatVector4
   // convert to the pixel format selected with USE_PIXELFMT_RGB10A2
   inline std::uint32_t convertToRGBA32(bool noAlpha = false,
                                        bool noClamp = false) const;
+  // encode a three-dimensional unit vector (Z <= 0) as a 32-bit integer
+  inline std::uint32_t normalToUInt32() const;
+  // decode the output of normalToUInt32()
+  static inline FloatVector4 uint32ToNormal(const std::uint32_t& n);
 };
 
 #if ENABLE_X86_64_AVX
@@ -1106,6 +1110,75 @@ inline std::uint32_t FloatVector4::convertToRGBA32(
 #else
   (void) noClamp;
   return (std::uint32_t(*this) | (!noAlpha ? 0U : 0xFF000000U));
+#endif
+}
+
+inline std::uint32_t FloatVector4::normalToUInt32() const
+{
+#if ENABLE_X86_64_AVX2
+  static const XMM_UInt32 signMask =
+  {
+    0x80000000U, 0x80000000U, 0x80000000U, 0x80000000U
+  };
+  XMM_UInt32  tmp;
+  // negate if Z < 0
+  __asm__ ("vpand %2, %1, %0" : "=x" (tmp) : "x" (v), "m" (signMask));
+  __asm__ ("vpshufd $0xaa, %0, %0" : "+x" (tmp));
+  __asm__ ("vpxor %1, %0, %0" : "+x" (tmp) : "x" (v));
+  // use FP16 format if F16C instructions are available
+  __asm__ ("vcvtps2ph $0x00, %0, %0" : "+x" (tmp));
+  return tmp[0];
+#elif ENABLE_X86_64_AVX
+  // use 16-bit signed integers otherwise
+  static const float  int16MultTable[2] = { -32767.0f, 32767.0f };
+  size_t  n;
+  __asm__ ("vmovmskps %1, %0" : "=r" (n) : "x" (v));
+  union
+  {
+    XMM_Float   f;
+    XMM_UInt32  i;
+  }
+  tmp;
+  tmp.f = v * int16MultTable[(n & 4) >> 2];
+  __asm__ ("vcvtps2dq %0, %0" : "+x" (tmp.i));
+  __asm__ ("vpackssdw %0, %0, %0" : "+x" (tmp.i));
+  return tmp.i[0];
+#else
+  int     x, y;
+  x = roundFloat(std::min(std::max(v[0], -1.0f), 1.0f) * 32767.0f);
+  y = roundFloat(std::min(std::max(v[1], -1.0f), 1.0f) * 32767.0f);
+  if (BRANCH_UNLIKELY(v[2] > 0.0f))
+  {
+    x = -x;
+    y = -y;
+  }
+  return (std::uint32_t(x & 0xFFFF) | (std::uint32_t(y & 0xFFFF) << 16));
+#endif
+}
+
+inline FloatVector4 FloatVector4::uint32ToNormal(const std::uint32_t& n)
+{
+#if ENABLE_X86_64_AVX2
+  FloatVector4  tmp;
+  __asm__ ("vmovd %1, %0" : "=x" (tmp.v) : "rm" (n));
+  __asm__ ("vcvtph2ps %0, %0" : "+x" (tmp.v));
+  tmp[2] = float(std::sqrt(std::max(1.0f - tmp.dotProduct2(tmp), 0.0f)));
+  tmp *= -1.0f;
+  return tmp.normalize3Fast();
+#elif ENABLE_X86_64_AVX
+  FloatVector4  tmp;
+  __asm__ ("vmovd %1, %0" : "=x" (tmp.v) : "rm" (n));
+  __asm__ ("vpmovsxwd %0, %0" : "+x" (tmp.v));
+  __asm__ ("vcvtdq2ps %0, %0" : "+x" (tmp.v));
+  tmp[2] = -(float(std::sqrt(std::max((32767.0f * 32767.0f)
+                                      - tmp.dotProduct2(tmp), 0.0f))));
+  return tmp.normalize3Fast();
+#else
+  float   x = float(std::int16_t(n & 0xFFFFU));
+  float   y = float(std::int16_t(n >> 16));
+  float   z = -(float(std::sqrt(std::max((32767.0f * 32767.0f)
+                                         - ((x * x) + (y * y)), 0.0f))));
+  return FloatVector4(x, y, z, 0.0f).normalize3Fast();
 #endif
 }
 

@@ -46,6 +46,7 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
     NIFFile::NIFVertexTransform vt(p->viewTransform);
     mt *= vt;
     vt.offsY = vt.offsY - float(p->viewOffsetY[n]);
+    p->renderers[n]->setViewAndLightVector(vt, p->lightX, p->lightY, p->lightZ);
     for (size_t i = 0; i < p->meshData.size(); i++)
     {
       const NIFFile::NIFTriShape& ts = p->meshData[i];
@@ -123,8 +124,7 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
             textureMask |= 0x0010U;
         }
       }
-      ts.drawTriShape(p->modelTransform, vt, p->lightX, p->lightY, p->lightZ,
-                      textures, textureMask);
+      ts.drawTriShape(p->modelTransform, textures, textureMask);
     }
   }
   catch (std::exception& e)

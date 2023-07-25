@@ -57,7 +57,7 @@ class Renderer : protected Renderer_Base
     int     z;                  // Z coordinate for sorting / debugMode 1 formID
     union
     {
-      const BaseObject  *o;     // valid if flags & 2 is set
+      const BaseObject  *o;     // valid if flags & 2 or flags & 16 is set
       struct
       {
         signed short  x0;       // terrain area, or water cell bounds
@@ -69,7 +69,8 @@ class Renderer : protected Renderer_Base
     }
     model;
     // for solid objects: material swap form ID if non-zero
-    // for water and decals: form ID of base object (WATR or TXST)
+    // for water: form ID of WATR object
+    // for decals: XPDD data (X and Z scale) as packed 16-bit floats
     unsigned int  mswpFormID;
     NIFFile::NIFVertexTransform modelTransform;
     bool operator<(const RenderObject& r) const;
@@ -168,6 +169,7 @@ class Renderer : protected Renderer_Base
   DDSTexture  whiteTexture;
   // for TXST and WATR objects, materials[0] is the default water
   std::map< unsigned int, BGSMFile >  materials;
+  std::uint32_t *outBufN;               // normals for decal rendering
   // bit Y * 8 + X of the return value is set if the bounds of the object
   // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
   // in the top left corner
