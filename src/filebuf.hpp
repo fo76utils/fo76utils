@@ -46,6 +46,7 @@ class FileBuffer
   std::uint32_t readUInt32(size_t offs) const;
   static inline std::uint16_t readUInt16Fast(const void *p);
   static inline std::uint32_t readUInt32Fast(const void *p);
+  static inline std::uint64_t readUInt64Fast(const void *p);
   static inline bool checkType(unsigned int id, const char *s);
   inline size_t size() const
   {
@@ -98,7 +99,7 @@ inline std::uint16_t FileBuffer::readUInt16Fast()
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   return *(reinterpret_cast< const std::uint16_t * >(p));
 #else
-  return ((std::uint16_t) p[0] | ((std::uint16_t) p[1] << 8));
+  return (std::uint16_t(p[0]) | (std::uint16_t(p[1]) << 8));
 #endif
 }
 
@@ -109,8 +110,8 @@ inline std::uint32_t FileBuffer::readUInt32Fast()
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   return *(reinterpret_cast< const std::uint32_t * >(p));
 #else
-  return ((std::uint32_t) p[0] | ((std::uint32_t) p[1] << 8)
-          | ((std::uint32_t) p[2] << 16) | ((std::uint32_t) p[3] << 24));
+  return (std::uint32_t(p[0]) | (std::uint32_t(p[1]) << 8)
+          | (std::uint32_t(p[2]) << 16) | (std::uint32_t(p[3]) << 24));
 #endif
 }
 
@@ -120,7 +121,7 @@ inline std::uint16_t FileBuffer::readUInt16Fast(const void *p)
   return *(reinterpret_cast< const std::uint16_t * >(p));
 #else
   const unsigned char *q = reinterpret_cast< const unsigned char * >(p);
-  return ((std::uint16_t) q[0] | ((std::uint16_t) q[1] << 8));
+  return (std::uint16_t(q[0]) | (std::uint16_t(q[1]) << 8));
 #endif
 }
 
@@ -130,8 +131,21 @@ inline std::uint32_t FileBuffer::readUInt32Fast(const void *p)
   return *(reinterpret_cast< const std::uint32_t * >(p));
 #else
   const unsigned char *q = reinterpret_cast< const unsigned char * >(p);
-  return ((std::uint32_t) q[0] | ((std::uint32_t) q[1] << 8)
-          | ((std::uint32_t) q[2] << 16) | ((std::uint32_t) q[3] << 24));
+  return (std::uint32_t(q[0]) | (std::uint32_t(q[1]) << 8)
+          | (std::uint32_t(q[2]) << 16) | (std::uint32_t(q[3]) << 24));
+#endif
+}
+
+inline std::uint64_t FileBuffer::readUInt64Fast(const void *p)
+{
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  return *(reinterpret_cast< const std::uint64_t * >(p));
+#else
+  const unsigned char *q = reinterpret_cast< const unsigned char * >(p);
+  return (std::uint64_t(q[0]) | (std::uint64_t(q[1]) << 8)
+          | (std::uint64_t(q[2]) << 16) | (std::uint64_t(q[3]) << 24)
+          | (std::uint64_t(q[4]) << 32) | (std::uint64_t(q[5]) << 40)
+          | (std::uint64_t(q[6]) << 48) | (std::uint64_t(q[7]) << 56));
 #endif
 }
 
