@@ -20,16 +20,15 @@ struct Renderer_Base
   {
     struct CachedTextureKey
     {
-      const std::string *fileName;      // pointer from BA2File
+      const BA2File::FileDeclaration  *fd;      // pointer from BA2File
       int     mipLevel;
       inline bool operator<(const CachedTextureKey& r) const
       {
-        return (fileName < r.fileName ||
-                (fileName == r.fileName && mipLevel < r.mipLevel));
+        return (fd < r.fd || (fd == r.fd && mipLevel < r.mipLevel));
       }
       inline bool operator==(const CachedTextureKey& r) const
       {
-        return (fileName == r.fileName && mipLevel == r.mipLevel);
+        return (fd == r.fd && mipLevel == r.mipLevel);
       }
     };
     struct CachedTexture

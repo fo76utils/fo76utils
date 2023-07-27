@@ -23,8 +23,8 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
   if (fileName.empty())
     return (DDSTexture *) 0;
   CachedTextureKey  k;
-  k.fileName = ba2File.findFile(fileName);
-  if (!k.fileName)
+  k.fd = ba2File.findFile(fileName);
+  if (!k.fd)
     return (DDSTexture *) 0;
   k.mipLevel = mipLevel;
   textureCacheMutex.lock();

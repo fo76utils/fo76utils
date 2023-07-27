@@ -36,7 +36,7 @@ bool StringDB::loadFile(const BA2File& ba2File, const char *stringsPrefix)
   }
   std::vector< unsigned char >  buf;
   std::vector< std::string >    namesFound;
-  ba2File.getFileList(namesFound);
+  ba2File.getFileList(namesFound, true);
   for (int k = 0; k < 3; k++)
   {
     tmpName.clear();
