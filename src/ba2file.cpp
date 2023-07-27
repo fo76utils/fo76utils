@@ -7,13 +7,57 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-inline BA2File::FileDeclaration::FileDeclaration()
+inline BA2File::FileDeclaration::FileDeclaration(
+    const std::string& fName, std::uint32_t h, std::int32_t p)
   : fileData((unsigned char *) 0),
-    packedSize(0),
-    unpackedSize(0),
+    packedSize(0U),
+    unpackedSize(0U),
     archiveType(0),
-    archiveFile(0)
+    archiveFile(0U),
+    hashValue(h),
+    prv(p),
+    fileName(fName)
 {
+}
+
+inline bool BA2File::FileDeclaration::compare(
+    const std::string& fName, std::uint32_t h) const
+{
+  return (hashValue == h && fileName == fName);
+}
+
+static inline void hashFunctionUInt64(std::uint64_t& h, std::uint64_t m)
+{
+#if ENABLE_X86_64_AVX
+  __asm__ ("crc32 %1, %0" : "+r" (h) : "r" (m));
+#else
+  static const std::uint64_t  multValue = 0xEE088D97U;
+  h = std::uint32_t((h ^ m) & 0xFFFFFFFFU) * multValue;
+  h = h + (h >> 32);
+  h = std::uint32_t((h ^ (m >> 32)) & 0xFFFFFFFFU) * multValue;
+  h = h + (h >> 32);
+#endif
+}
+
+inline std::uint32_t BA2File::hashFunction(const std::string& s)
+{
+  std::uint64_t h = 0xFFFFFFFFU;
+  size_t  n = s.length();
+  const std::uint8_t  *p = reinterpret_cast< const std::uint8_t * >(s.c_str());
+  for ( ; n >= 8; n = n - 8, p = p + 8)
+    hashFunctionUInt64(h, FileBuffer::readUInt64Fast(p));
+  if (n)
+  {
+    std::uint64_t m = 0U;
+    if (n & 1)
+      m = p[n & 6];
+    if (n & 2)
+      m = (m << 16) | FileBuffer::readUInt16Fast(p + (n & 4));
+    if (n & 4)
+      m = (m << 32) | FileBuffer::readUInt32Fast(p);
+    hashFunctionUInt64(h, m);
+  }
+  return std::uint32_t(h & 0xFFFFFFFFU);
 }
 
 BA2File::FileDeclaration * BA2File::addPackedFile(const std::string& fileName)
@@ -50,8 +94,25 @@ BA2File::FileDeclaration * BA2File::addPackedFile(const std::string& fileName)
         return (FileDeclaration *) 0;
     }
   }
-  FileDeclaration&  fd = fileMap[fileName];
-  return &fd;
+  std::uint32_t h = hashFunction(fileName);
+  for (std::int32_t n = fileMap[h & nameHashMask]; n >= 0; )
+  {
+    FileDeclaration&  fd = getFileDecl(std::uint32_t(n));
+    if (fd.compare(fileName, h))
+      return &fd;
+    n = fd.prv;
+  }
+  if (fileDeclBufs.size() < 1 ||
+      fileDeclBufs.back().size() >= (fileDeclBufMask + 1U))
+  {
+    fileDeclBufs.emplace_back();
+    fileDeclBufs.back().reserve(fileDeclBufMask + 1U);
+  }
+  std::vector< FileDeclaration >& fdBuf = fileDeclBufs.back();
+  size_t  n = ((fileDeclBufs.size() - 1) << fileDeclBufShift) | fdBuf.size();
+  fdBuf.emplace_back(fileName, h, fileMap[h & nameHashMask]);
+  fileMap[h & nameHashMask] = std::int32_t(n);
+  return &(fdBuf.back());
 }
 
 void BA2File::loadBA2General(FileBuffer& buf, size_t archiveFile)
@@ -409,6 +470,8 @@ void BA2File::loadArchiveFile(const char *fileName)
     }
   }
 
+  if (fileMap.size() < size_t(nameHashMask + 1))
+    fileMap.resize(size_t(nameHashMask + 1), std::int32_t(-1));
   FileBuffer  *bufp = new FileBuffer(fileName);
   try
   {
@@ -544,31 +607,46 @@ BA2File::~BA2File()
     delete archiveFiles[i];
 }
 
-void BA2File::getFileList(std::vector< std::string >& fileList) const
+void BA2File::getFileList(
+    std::vector< std::string >& fileList, bool disableSorting) const
 {
   fileList.clear();
-  for (std::map< std::string, FileDeclaration >::const_iterator
-           i = fileMap.begin(); i != fileMap.end(); i++)
+  for (size_t i = 0; i < fileDeclBufs.size(); i++)
   {
-    fileList.push_back(i->first);
+    for (size_t j = 0; j < fileDeclBufs[i].size(); j++)
+      fileList.emplace_back(fileDeclBufs[i][j].fileName);
   }
+  if (fileList.size() > 1 && !disableSorting)
+    std::sort(fileList.begin(), fileList.end());
+}
+
+const BA2File::FileDeclaration * BA2File::findFile(
+    const std::string& fileName) const
+{
+  std::uint32_t h = hashFunction(fileName);
+  for (std::int32_t n = fileMap[h & nameHashMask]; n >= 0; )
+  {
+    const FileDeclaration&  fd = getFileDecl(std::uint32_t(n));
+    if (fd.compare(fileName, h))
+      return &fd;
+    n = fd.prv;
+  }
+  return (FileDeclaration *) 0;
 }
 
 long BA2File::getFileSize(const std::string& fileName, bool packedSize) const
 {
-  std::map< std::string, FileDeclaration >::const_iterator  i =
-      fileMap.find(fileName);
-  if (i == fileMap.end())
+  const FileDeclaration *fd = findFile(fileName);
+  if (!fd)
     return -1L;
-  const FileDeclaration&  fd = i->second;
-  if (packedSize && fd.packedSize)
-    return long(fd.packedSize);
-  if (fd.archiveType & 0x40000000)      // compressed BSA
+  if (packedSize && fd->packedSize)
+    return long(fd->packedSize);
+  if (fd->archiveType & 0x40000000)     // compressed BSA
   {
-    const unsigned char *p = fd.fileData;
-    return long(getBSAUnpackedSize(p, fd));
+    const unsigned char *p = fd->fileData;
+    return long(getBSAUnpackedSize(p, *fd));
   }
-  return long(fd.unpackedSize);
+  return long(fd->unpackedSize);
 }
 
 int BA2File::extractBA2Texture(std::vector< unsigned char >& buf,
@@ -726,11 +804,10 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
                           const std::string& fileName) const
 {
   buf.clear();
-  std::map< std::string, FileDeclaration >::const_iterator  i =
-      fileMap.find(fileName);
-  if (i == fileMap.end())
+  const FileDeclaration *fd = findFile(fileName);
+  if (!fd)
     throw FO76UtilsError("file %s not found in archive", fileName.c_str());
-  const FileDeclaration&  fileDecl = i->second;
+  const FileDeclaration&  fileDecl = *fd;
   const unsigned char *p = fileDecl.fileData;
   unsigned int  packedSize = fileDecl.packedSize;
   unsigned int  unpackedSize = fileDecl.unpackedSize;
@@ -757,11 +834,10 @@ int BA2File::extractTexture(std::vector< unsigned char >& buf,
                             const std::string& fileName, int mipOffset) const
 {
   buf.clear();
-  std::map< std::string, FileDeclaration >::const_iterator  i =
-      fileMap.find(fileName);
-  if (i == fileMap.end())
+  const FileDeclaration *fd = findFile(fileName);
+  if (!fd)
     throw FO76UtilsError("file %s not found in archive", fileName.c_str());
-  const FileDeclaration&  fileDecl = i->second;
+  const FileDeclaration&  fileDecl = *fd;
   const unsigned char *p = fileDecl.fileData;
   unsigned int  packedSize = fileDecl.packedSize;
   unsigned int  unpackedSize = fileDecl.unpackedSize;

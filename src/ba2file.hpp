@@ -7,20 +7,33 @@
 
 class BA2File
 {
- protected:
+ public:
   struct FileDeclaration
   {
     const unsigned char *fileData;
-    unsigned int  packedSize;
-    unsigned int  unpackedSize;
+    unsigned int  packedSize;           // 0 if the file is uncompressed
+    unsigned int  unpackedSize;         // not valid for compressed BSA files
     // 0: BA2 general, 1: BA2 textures,
     // >= 103: BSA (version + flags, 0x40000000: compressed, 0x0100: full name)
     int           archiveType;
     unsigned int  archiveFile;
-    inline FileDeclaration();
+    std::uint32_t hashValue;            // 32-bit hash value
+    std::int32_t  prv;                  // index of previous file with same hash
+    std::string   fileName;
+    inline FileDeclaration(const std::string& fName,
+                           std::uint32_t h, std::int32_t p);
+    inline bool compare(const std::string& fName, std::uint32_t h) const;
   };
-  std::map< std::string, FileDeclaration >  fileMap;
-  std::vector< FileBuffer * >       archiveFiles;
+ protected:
+  enum
+  {
+    fileDeclBufShift = 12,
+    fileDeclBufMask = 0x0FFF,
+    nameHashMask = 0x000FFFFF
+  };
+  std::vector< std::int32_t >   fileMap;        // nameHashMask + 1 elements
+  std::vector< std::vector< FileDeclaration > > fileDeclBufs;
+  std::vector< FileBuffer * >   archiveFiles;
   const std::vector< std::string >  *includePatternsPtr;
   const std::vector< std::string >  *excludePatternsPtr;
   const std::set< std::string > *fileNamesPtr;
@@ -34,6 +47,15 @@ class BA2File
       return '/';
     return char(c);
   }
+  inline FileDeclaration& getFileDecl(std::uint32_t n)
+  {
+    return fileDeclBufs[n >> fileDeclBufShift][n & fileDeclBufMask];
+  }
+  inline const FileDeclaration& getFileDecl(std::uint32_t n) const
+  {
+    return fileDeclBufs[n >> fileDeclBufShift][n & fileDeclBufMask];
+  }
+  static inline std::uint32_t hashFunction(const std::string& s);
   FileDeclaration *addPackedFile(const std::string& fileName);
   void loadBA2General(FileBuffer& buf, size_t archiveFile);
   void loadBA2Textures(FileBuffer& buf, size_t archiveFile);
@@ -56,16 +78,10 @@ class BA2File
   BA2File(const char *pathName, const char *includePatterns,
           const char *excludePatterns = 0, const char *fileNames = 0);
   virtual ~BA2File();
-  void getFileList(std::vector< std::string >& fileList) const;
-  // returns pointer to stored file name, or NULL if the file is not found
-  const std::string *findFile(const std::string& fileName) const
-  {
-    std::map< std::string, FileDeclaration >::const_iterator  i =
-        fileMap.find(fileName);
-    if (i == fileMap.end())
-      return (std::string *) 0;
-    return &(i->first);
-  }
+  void getFileList(std::vector< std::string >& fileList,
+                   bool disableSorting = false) const;
+  // returns pointer to file information, or NULL if the file is not found
+  const FileDeclaration *findFile(const std::string& fileName) const;
   // returns -1 if the file is not found
   long getFileSize(const std::string& fileName, bool packedSize = false) const;
  protected:
