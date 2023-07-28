@@ -32,7 +32,8 @@ class ESMView : public ESMDump, public SDLDisplay
   void dumpRecord(unsigned int formID = 0U, bool noUnknownFields = false);
 #ifdef HAVE_SDL2
   // the following functions return false if the window is closed
-  bool viewModel(unsigned int formID);
+  bool viewModel(unsigned int formID,
+                 unsigned int mswpFormID = 0U, float gradientMapV = -1.0f);
   bool browseRecord(unsigned int& formID);
 #endif
 };
@@ -484,7 +485,8 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
 }
 
 #ifdef HAVE_SDL2
-bool ESMView::viewModel(unsigned int formID)
+bool ESMView::viewModel(unsigned int formID,
+                        unsigned int mswpFormID, float gradientMapV)
 {
   if (!renderer)
   {
@@ -548,6 +550,10 @@ bool ESMView::viewModel(unsigned int formID)
     errorMessage("model path not found in record");
   if (refrMSWPFormID)
     renderer->addMaterialSwap(refrMSWPFormID);
+  if (mswpFormID)
+    renderer->addMaterialSwap(mswpFormID);
+  if (gradientMapV >= 0.0f)
+    renderer->addColorSwap(gradientMapV);
   clearTextBuffer();
   std::uint32_t savedTextColor = defaultTextColor;
   bool    noQuitFlag = true;
@@ -767,7 +773,7 @@ static const char *usageString =
     "U:              toggle hexadecimal display of unknown field types\n"
     "V:              previous record in current group\n"
 #ifdef HAVE_SDL2
-    "W:              view model (MODL) of current record, if present\n"
+    "W [MODS [MODC]] view model (MODL) of current record, if present\n"
 #endif
     "Q or Ctrl-D:    quit\n\n"
     "C, N, P, and V can be grouped and used as a single command\n\n"
@@ -1245,9 +1251,32 @@ int main(int argc, char **argv)
             prvRecords.push_back(prvFormID);
         }
 #ifdef HAVE_SDL2
-        else if (cmdBuf == "w")
+        else if (cmdBuf[0] == 'w')
         {
-          if (!esmFile.viewModel(formID))
+          unsigned int  mswpFormID = 0U;
+          float   gradientMapV = -1.0f;
+          const char  *s = cmdBuf.c_str() + 1;
+          while (*s == '\t' || *s == '\r' || *s == ' ')
+            s++;
+          for ( ; *s != '\0'; s++)
+          {
+            if (*s >= '0' && *s <= '9')
+              mswpFormID = (mswpFormID << 4) | (unsigned int) (*s - '0');
+            else if (*s >= 'a' && *s <= 'f')
+              mswpFormID = (mswpFormID << 4) | (unsigned int) (*s - 'W');
+            else
+              break;
+          }
+          while (*s == '\t' || *s == '\r' || *s == ' ')
+            s++;
+          if (*s != '\0')
+          {
+            char    *endp = (char *) 0;
+            float   tmp = float(std::strtod(s, &endp));
+            if (endp && endp != s && tmp >= 0.0f && tmp <= 1.0f)
+              gradientMapV = tmp;
+          }
+          if (!esmFile.viewModel(formID, mswpFormID, gradientMapV))
           {
             delete esmFilePtr;
             esmFilePtr = (ESMView *) 0;
