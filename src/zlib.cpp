@@ -385,33 +385,19 @@ inline unsigned int ZLibDecompressor::huffmanDecode(
 
 unsigned char * ZLibDecompressor::decompressZLibBlock(
     unsigned long long& srRef, unsigned char *wp,
-    unsigned char *buf, unsigned char *bufEnd,
-    unsigned int& a1, unsigned int& a2)
+    unsigned char *buf, unsigned char *bufEnd)
 {
   unsigned int  *huffTableL = getHuffTable(2);  // literals and length codes
   unsigned int  *huffTableD = getHuffTable(1);  // distance codes
-  unsigned int  s1 = a1;
-  unsigned int  s2 = a2;
   unsigned long long  sr = srRef;
   while (true)
   {
-    if (BRANCH_UNLIKELY(s2 & 0x80000000U))
-    {
-      // update Adler-32 checksum
-      s1 = s1 % 65521U;
-      s2 = s2 % 65521U;
-    }
     unsigned int  c = huffmanDecode(sr, huffTableL);
     if (c < 256)                    // literal byte
     {
       if (wp >= bufEnd)
-      {
         errorMessage("uncompressed ZLib data larger than output buffer");
-      }
-      *wp = (unsigned char) c;
-      s1 = s1 + c;
-      s2 = s2 + s1;
-      wp++;
+      *(wp++) = (unsigned char) c;
       continue;
     }
     size_t  lzLen = c - 254;
@@ -457,34 +443,18 @@ unsigned char * ZLibDecompressor::decompressZLibBlock(
     // copy LZ77 sequence
     do
     {
-      s1 = s1 + *rp;
-      s2 = s2 + s1;
       *(wp++) = *(rp++);
-      s1 = s1 + *rp;
-      s2 = s2 + s1;
       *(wp++) = *(rp++);
-      s1 = s1 + *rp;
-      s2 = s2 + s1;
       *(wp++) = *(rp++);
       lzLen = lzLen - 3;
     }
     while (BRANCH_UNLIKELY(lzLen >= 3));
     if (BRANCH_UNLIKELY(lzLen == 2))
-    {
-      s1 = s1 + *rp;
-      s2 = s2 + s1;
       *(wp++) = *(rp++);
-    }
     if (BRANCH_UNLIKELY(lzLen >= 1))
-    {
-      s1 = s1 + *rp;
-      s2 = s2 + s1;
       *(wp++) = *(rp++);
-    }
   }
   srRef = sr;
-  a1 = s1;
-  a2 = s2;
   return wp;
 }
 
@@ -493,11 +463,11 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
 {
   unsigned char *wp = buf;
   unsigned char *bufEnd = buf + uncompressedSize;
-  unsigned int  s1 = 1;                 // Adler-32 checksum
-  unsigned int  s2 = 0;
   unsigned long long  sr = 1;
+  unsigned int  a = 1U;                 // Adler-32 checksum
   while (true)
   {
+    unsigned char *wpPrv = wp;
     // read Deflate block header
     unsigned char bhdr = (unsigned char) readBitsRR(sr, 3);
     if (!(bhdr & 6))                    // no compression
@@ -515,14 +485,6 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
       for ( ; len; wp++, len--)
       {
         *wp = readU8();
-        // update Adler-32 checksum
-        s1 = s1 + *wp;
-        s2 = s2 + s1;
-        if (BRANCH_UNLIKELY(s2 & 0x80000000U))
-        {
-          s1 = s1 % 65521U;
-          s2 = s2 % 65521U;
-        }
       }
     }
     else if ((bhdr & 6) == 6)           // reserved (invalid)
@@ -532,10 +494,10 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
     else                                // compressed block
     {
       sr = huffmanInit(sr, !(bhdr & 4));
-      wp = decompressZLibBlock(sr, wp, buf, bufEnd, s1, s2);
+      wp = decompressZLibBlock(sr, wp, buf, bufEnd);
     }
-    s1 = s1 % 65521U;
-    s2 = s2 % 65521U;
+    // update Adler-32 checksum
+    a = calculateAdler32(wpPrv, size_t(wp - wpPrv), a);
     if (bhdr & 1)
     {
       // final block
@@ -544,12 +506,80 @@ size_t ZLibDecompressor::decompressZLib(unsigned char *buf,
   }
   srReset(sr);
   // verify Adler-32 checksum
-  if (readU32BE() != ((s2 << 16) | s1))
+  if (readU32BE() != a)
   {
     errorMessage("checksum error in ZLib compressed data");
   }
 
   return size_t(wp - buf);
+}
+
+unsigned int ZLibDecompressor::calculateAdler32(
+    const unsigned char *buf, size_t bufSize, unsigned int a)
+{
+  unsigned int  s1 = a & 0xFFFFU;
+  unsigned int  s2 = a >> 16;
+  size_t  i = 0;
+#if ENABLE_X86_64_AVX
+  while ((i + 8) <= bufSize)
+  {
+    static const XMM_UInt16 multTbl = { 8, 7, 6, 5, 4, 3, 2, 1 };
+    XMM_UInt32  aTmp = { s1, 0U, s2, 0U };
+    size_t  n = std::min((bufSize - i) >> 3, 256UL);
+    do
+    {
+      XMM_UInt16  tmp1, tmp2, tmp3;
+      const std::uint64_t *p =
+          reinterpret_cast< const std::uint64_t * >(buf + i);
+      __asm__ ("vpmovzxbw %1, %0" : "=x" (tmp1) : "m" (*p));
+      __asm__ ("vpslldq $0x08, %1, %0" : "=x" (tmp3) : "x" (aTmp));
+      __asm__ ("vpslld $0x03, %0, %0" : "+x" (tmp3));
+      __asm__ ("vpaddd %1, %0, %0" : "+x" (aTmp) : "x" (tmp3));
+      __asm__ ("vpmullw %2, %1, %0" : "=x" (tmp2) : "x" (tmp1), "xm" (multTbl));
+      __asm__ ("vpshufd $0x4e, %1, %0" : "=x" (tmp3) : "x" (tmp1));
+      __asm__ ("vpaddw %1, %0, %0" : "+x" (tmp1) : "x" (tmp3));
+      __asm__ ("vpshufd $0x4e, %1, %0" : "=x" (tmp3) : "x" (tmp2));
+      __asm__ ("vpaddw %1, %0, %0" : "+x" (tmp2) : "x" (tmp3));
+      __asm__ ("vpblendw $0xf0, %1, %0, %0" : "+x" (tmp1) : "x" (tmp2));
+      __asm__ ("vpshufd $0xb1, %1, %0" : "=x" (tmp3) : "x" (tmp1));
+      __asm__ ("vpaddw %1, %0, %0" : "+x" (tmp1) : "x" (tmp3));
+      __asm__ ("vpslld $0x10, %1, %0" : "=x" (tmp3) : "x" (tmp1));
+      __asm__ ("vpaddd %1, %0, %0" : "+x" (tmp1) : "x" (tmp3));
+      __asm__ ("vpsrld $0x10, %0, %0" : "+x" (tmp1));
+      __asm__ ("vpaddd %1, %0, %0" : "+x" (aTmp) : "x" (tmp1));
+      i = i + 8;
+    }
+    while (--n);
+    s1 = aTmp[0] % 65521U;
+    s2 = aTmp[2] % 65521U;
+  }
+#else
+  while ((i + 4) <= bufSize)
+  {
+    size_t  n = std::min((bufSize - i) >> 2, 256UL);
+    do
+    {
+      s1 = s1 + buf[i];
+      s2 = s2 + s1;
+      s1 = s1 + buf[i + 1];
+      s2 = s2 + s1;
+      s1 = s1 + buf[i + 2];
+      s2 = s2 + s1;
+      s1 = s1 + buf[i + 3];
+      s2 = s2 + s1;
+      i = i + 4;
+    }
+    while (--n);
+    s1 = s1 % 65521U;
+    s2 = s2 % 65521U;
+  }
+#endif
+  for ( ; i < bufSize; i++)
+  {
+    s1 = s1 + buf[i];
+    s2 = s2 + s1;
+  }
+  return ((s1 % 65521U) | ((s2 % 65521U) << 16));
 }
 
 size_t ZLibDecompressor::decompressData(unsigned char *buf,

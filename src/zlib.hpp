@@ -60,9 +60,10 @@ class ZLibDecompressor
                                     const unsigned int *huffTable);
   unsigned char *decompressZLibBlock(unsigned long long& srRef,
                                      unsigned char *wp,
-                                     unsigned char *buf, unsigned char *bufEnd,
-                                     unsigned int& a1, unsigned int& a2);
+                                     unsigned char *buf, unsigned char *bufEnd);
   size_t decompressZLib(unsigned char *buf, size_t uncompressedSize);
+  static unsigned int calculateAdler32(const unsigned char *buf, size_t bufSize,
+                                       unsigned int a);
   ZLibDecompressor(const unsigned char *inBuf, size_t compressedSize)
     : inPtr(inBuf),
       inBufEnd(inBuf + compressedSize)
