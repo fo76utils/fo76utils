@@ -33,7 +33,7 @@ C, N, P, and V can be grouped and used as a single command.
 * **R \*:xxxxxxxx**: Find next reference to form ID.
 * **S pattern**: Find next record with EDID matching pattern.
 * **S**: Select record interactively (requires SDL).
-* **W**: View the model (MODL) of the current record, if present. This command is not available if esmview is built without SDL support. Pressing H while in the NIF viewer prints the list of keyboard controls, Esc returns to the esmview console.
+* **W [MODS [MODC]]**: View the model (MODL) of the current record, if present. This command is not available if esmview is built without SDL support. Pressing H while in the NIF viewer prints the list of keyboard controls, Esc returns to the esmview console. The optional MODS and MODC parameters can be used to add a material swap form ID (if non-zero) and/or set the grayscale to palette map scale.
 * **Q** or **Ctrl-D**: Quit.
 
 ##### Mouse controls

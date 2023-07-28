@@ -1,12 +1,12 @@
     cubeview WIDTH HEIGHT ARCHIVEPATH TEXTURE.DDS [MIPLEVEL]
 
-View a Fallout 4 or 76 cube map from archive files.
+View Fallout 4 or 76 cube maps from archive files. Can also be used to view any textures in supported formats.
 
 ### Options
 
 * **WIDTH**, **HEIGHT**: Image dimensions to display, matching the current screen resolution enables full screen mode.
 * **ARCHIVEPATH**: Path to archive(s) containing the cube map texture.
-* **TEXTURE.DDS**: Full path to texture file within the archives, it is expected to be a cube map with the faces in the order used by Fallout 4 and 76. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures.
+* **TEXTURE.DDS**: File name pattern to search for within the archives. Cube map textures are expected to have the faces in the order used by Fallout 4 and 76. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures.
 * **MIPLEVEL**: Initial mip level to display.
 
 ### Keyboard controls
@@ -19,6 +19,17 @@ View a Fallout 4 or 76 cube map from archive files.
 * **Page Up**, **Page Down**: Enable or disable conversion to sRGB color space.
 * **0** to **9**: Set mip level.
 * **+**, **-**: Increase or decrease mip level by 0.125.
+* **Space**, **Backspace**: Load the next or previous file matching the pattern.
+* **F1**: Switch to cube map view mode.
+* **F2**: Switch to 2D texture view mode (disables view controls).
+* **F3**: Disable normal map Z channel fix.
+* **F4**: Enable normal map Z channel fix (texture view only).
+* **F5**: Disable alpha blending.
+* **F6**: Enable alpha blending (texture view only).
+* **F9**: Select file from list.
+* **F12** or **Print Screen**: Save screenshot.
+* **H**: Show help screen.
+* **C**: Clear messages.
 * **Esc**: Quit program.
 
 ### Example

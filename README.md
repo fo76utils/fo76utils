@@ -5,7 +5,7 @@ Simple command line utilities for extracting data from Elder Scrolls and Fallout
 * [baunpack](doc/baunpack.md) - list the contents of, or extract from .BA2 or .BSA archives.
 * [bcdecode](doc/bcdecode.md) - convert BC1 to BC5 block compressed DDS textures to uncompressed RGBA image data in raw or DDS format.
 * [btddump](doc/btddump.md) - extract terrain data from Fallout 76 .BTD files to raw height map, land textures, ground cover, or terrain color.
-* [cubeview](doc/cubeview.md) - view a cube map from archive files. Does not work correctly with games older than Fallout 4.
+* [cubeview](doc/cubeview.md) - view cube maps or other textures from archive files.
 * [esmdump](doc/esmdump.md) - list records from .ESM files in text or TSV format.
 * [esmview](doc/esmview.md) - interactive version of esmdump, also includes a NIF viewer for objects with an associated model (MODL).
 * [findwater](doc/findwater.md) - create a height map of water bodies, optionally using .NIF meshes for Skyrim and newer games.
