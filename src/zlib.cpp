@@ -521,21 +521,26 @@ unsigned int ZLibDecompressor::calculateAdler32(
   unsigned int  s2 = a >> 16;
   size_t  i = 0;
 #if ENABLE_X86_64_AVX
-  while ((i + 8) <= bufSize)
+  while ((i + 16) <= bufSize)
   {
-    static const XMM_UInt16 multTbl = { 8, 7, 6, 5, 4, 3, 2, 1 };
+    static const XMM_UInt16 mulTbl1 = { 16, 15, 14, 13, 12, 11, 10, 9 };
+    static const XMM_UInt16 mulTbl2 = { 8, 7, 6, 5, 4, 3, 2, 1 };
     XMM_UInt32  aTmp = { s1, 0U, s2, 0U };
-    size_t  n = std::min((bufSize - i) >> 3, 256UL);
+    size_t  n = std::min((bufSize - i) >> 4, size_t(256));
     do
     {
       XMM_UInt16  tmp1, tmp2, tmp3;
       const std::uint64_t *p =
           reinterpret_cast< const std::uint64_t * >(buf + i);
       __asm__ ("vpmovzxbw %1, %0" : "=x" (tmp1) : "m" (*p));
+      __asm__ ("vpmovzxbw %1, %0" : "=x" (tmp2) : "m" (p[1]));
       __asm__ ("vpslldq $0x08, %1, %0" : "=x" (tmp3) : "x" (aTmp));
-      __asm__ ("vpslld $0x03, %0, %0" : "+x" (tmp3));
+      __asm__ ("vpslld $0x04, %0, %0" : "+x" (tmp3));
       __asm__ ("vpaddd %1, %0, %0" : "+x" (aTmp) : "x" (tmp3));
-      __asm__ ("vpmullw %2, %1, %0" : "=x" (tmp2) : "x" (tmp1), "xm" (multTbl));
+      __asm__ ("vpmullw %2, %1, %0" : "=x" (tmp3) : "x" (tmp1), "xm" (mulTbl1));
+      __asm__ ("vpaddw %1, %0, %0" : "+x" (tmp1) : "x" (tmp2));
+      __asm__ ("vpmullw %1, %0, %0" : "+x" (tmp2) : "xm" (mulTbl2));
+      __asm__ ("vpaddw %1, %0, %0" : "+x" (tmp2) : "x" (tmp3));
       __asm__ ("vpshufd $0x4e, %1, %0" : "=x" (tmp3) : "x" (tmp1));
       __asm__ ("vpaddw %1, %0, %0" : "+x" (tmp1) : "x" (tmp3));
       __asm__ ("vpshufd $0x4e, %1, %0" : "=x" (tmp3) : "x" (tmp2));
@@ -547,7 +552,7 @@ unsigned int ZLibDecompressor::calculateAdler32(
       __asm__ ("vpaddd %1, %0, %0" : "+x" (tmp1) : "x" (tmp3));
       __asm__ ("vpsrld $0x10, %0, %0" : "+x" (tmp1));
       __asm__ ("vpaddd %1, %0, %0" : "+x" (aTmp) : "x" (tmp1));
-      i = i + 8;
+      i = i + 16;
     }
     while (--n);
     s1 = aTmp[0] % 65521U;
@@ -556,7 +561,7 @@ unsigned int ZLibDecompressor::calculateAdler32(
 #else
   while ((i + 4) <= bufSize)
   {
-    size_t  n = std::min((bufSize - i) >> 2, 256UL);
+    size_t  n = std::min((bufSize - i) >> 2, size_t(256));
     do
     {
       s1 = s1 + buf[i];
