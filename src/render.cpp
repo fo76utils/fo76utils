@@ -206,12 +206,6 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
                      float(p.model.o->obndZ0), 0.0f);
     FloatVector4  b1(float(p.model.o->obndX1), float(p.model.o->obndY1),
                      float(p.model.o->obndZ1), 0.0f);
-    modelBounds.boundsMin = b0;
-    modelBounds.boundsMin.minValues(b1);
-    modelBounds.boundsMin -= 2.0f;
-    modelBounds.boundsMax = b0;
-    modelBounds.boundsMax.maxValues(b1);
-    modelBounds.boundsMax += 2.0f;
     FloatVector4  tmp(1.0f, 1.0f, 1.0f, 0.0f);
 #if ENABLE_TXST_DECALS
     if (BRANCH_UNLIKELY(p.flags & 0x10))
@@ -219,8 +213,16 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
       tmp = FloatVector4::convertFloat16(std::uint64_t(p.mswpFormID));
       tmp[2] = tmp[1];
       tmp[1] = 1.0f;
+      b0[1] = b0[1] * 1.5f;
+      b1[1] = b1[1] + 1000.0f;
     }
 #endif
+    modelBounds.boundsMin = b0;
+    modelBounds.boundsMin.minValues(b1);
+    modelBounds.boundsMin -= 2.0f;
+    modelBounds.boundsMax = b0;
+    modelBounds.boundsMax.maxValues(b1);
+    modelBounds.boundsMax += 2.0f;
     modelBounds.boundsMin *= tmp;
     modelBounds.boundsMax *= tmp;
     vt = p.modelTransform;
@@ -455,6 +457,7 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
     return;
   ESMFile::ESMField f(esmFile, r);
   float   specularSmoothness = 0.0f;
+  unsigned int  decalFlags = 0U;
   bool    haveDODT = false;
   while (f.next())
   {
@@ -468,10 +471,10 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
       decalHeight = std::min(std::max(decalHeight, 0.0f), 4096.0f);
       decalDepth = std::min(std::max(decalDepth, 0.0f), 4096.0f);
       p.obndX0 = (signed short) roundFloat(decalWidth * -0.5f);
-      p.obndY0 = (signed short) roundFloat(decalDepth * -0.25f);
+      p.obndY0 = (signed short) roundFloat(decalDepth * -0.5f);
       p.obndZ0 = (signed short) roundFloat(decalHeight * -0.5f);
       p.obndX1 = p.obndX0 + (signed short) roundFloat(decalWidth);
-      p.obndY1 = p.obndY0 + (signed short) roundFloat(decalDepth * 1.25f);
+      p.obndY1 = p.obndY0 + (signed short) roundFloat(decalDepth);
       p.obndZ1 = p.obndZ0 + (signed short) roundFloat(decalHeight);
       if (!(p.obndX1 > p.obndX0 && p.obndY1 > p.obndY0 && p.obndZ1 > p.obndZ0))
         return;
@@ -479,6 +482,8 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
       if (esmFile.getESMVersion() < 0x80)
         s = (s > 2.0f ? ((float(std::log2(s)) - 1.0f) * (1.0f / 9.0f)) : 0.0f);
       specularSmoothness = std::min(std::max(s, 0.0f), 8.0f);
+      if (f.size() == 36)
+        decalFlags = FileBuffer::readUInt32Fast(f.getDataPtr() + 28);
       haveDODT = true;
       break;
     }
@@ -536,7 +541,19 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
     }
     if (!(m.texturePathMask & 0x0001))
       return;
-    if (!(m.flags & BGSMFile::Flag_TSAlphaBlending) && (~m.alphaFlags & 0x1200))
+    if (decalFlags)
+    {
+      m.alphaThreshold = (unsigned char) std::min(decalFlags >> 16, 0xFFU);
+      m.alphaFlags = 0x00EC;
+      m.alpha = 1.0f;
+      if (decalFlags & 0x0200U)         // alpha blending
+        m.alphaFlags = std::uint16_t(!(decalFlags & 0x1000U) ? 0x00ED : 0x0029);
+      if (decalFlags & 0x0400U)         // alpha testing
+        m.alphaFlags = m.alphaFlags | 0x1200;
+      m.updateAlphaProperties();
+    }
+    else if (!(m.flags & BGSMFile::Flag_TSAlphaBlending) &&
+             (~m.alphaFlags & 0x1200))
     {
       // default alpha testing and blending
       m.flags = m.flags | BGSMFile::Flag_TSAlphaBlending;
@@ -843,10 +860,12 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
           FloatVector4  tmp(f.readFloatVector4());
           offsX = tmp[0];
           offsY = tmp[1];
-          offsZ = tmp[2];
-          rX = tmp[3];
-          rY = f.readFloat();
-          rZ = f.readFloat();
+          f.setPosition(f.getPosition() - 8);
+          tmp = f.readFloatVector4();
+          offsZ = tmp[0];
+          rX = tmp[1];
+          rY = tmp[2];
+          rZ = tmp[3];
         }
         else if (f == "XSCL" && f.size() >= 4)
         {
@@ -888,6 +907,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     if (BRANCH_UNLIKELY(tmp.flags & 0x10))
     {
       tmp.mswpFormID = xpddScale;
+      scale = 1.0f;
       refrMSWPFormID = 0U;
     }
 #endif
@@ -1207,6 +1227,8 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   decalBounds.boundsMax =
       FloatVector4(float(p.model.o->obndX1), float(p.model.o->obndY1),
                    float(p.model.o->obndZ1), 0.0f) * xpddScale;
+  decalBounds.boundsMin[1] = decalBounds.boundsMin[1] * 1.5f;
+  decalBounds.boundsMax[1] = decalBounds.boundsMax[1] + 1000.0f;
   NIFFile::NIFBounds  b;
   NIFFile::NIFVertex  v;
   for (int i = 0; i < 8; i++)
