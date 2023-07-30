@@ -54,8 +54,10 @@ env.Prepend(LIBS = [fo76utilsLib])
 nifViewEnv = env.Clone()
 buildCubeView = True
 try:
-    sdlPackageName = ["sdl2", "SDL2"][int("win" in sys.platform)]
-    nifViewEnv.ParseConfig("pkg-config --cflags --libs " + sdlPackageName)
+    try:
+        nifViewEnv.ParseConfig("pkg-config --short-errors --cflags --libs sdl2")
+    except:
+        nifViewEnv.ParseConfig("pkg-config --short-errors --cflags --libs SDL2")
     nifViewEnv.Append(CXXFLAGS = ["-DHAVE_SDL2=1"])
 except:
     buildCubeView = False
