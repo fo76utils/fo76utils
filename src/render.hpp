@@ -205,6 +205,15 @@ class Renderer : protected Renderer_Base
   static void loadModelsThread(Renderer *p,
                                unsigned int t, unsigned long long modelIDMask);
   void renderObjectList();
+  static inline float getDecalYOffsetMin(FloatVector4 boundsMin)
+  {
+    return (boundsMin[1] * 0.5f);
+  }
+  static inline float getDecalYOffsetMax(FloatVector4 boundsMax)
+  {
+    (void) boundsMax;
+    return 1000.0f;
+  }
   void renderDecal(RenderThread& t, const RenderObject& p);
   bool renderObject(RenderThread& t, size_t i,
                     unsigned long long tileMask = ~0ULL);
@@ -237,7 +246,9 @@ class Renderer : protected Renderer_Base
     return height;
   }
   void clear();
-  void clearImage();
+  // flags = 1: clear RGBA buffer only
+  // flags = 2: clear depth and normal buffer only
+  void clearImage(unsigned int flags = 3U);
   inline void clearTextureCache()
   {
     textureCache.clear();

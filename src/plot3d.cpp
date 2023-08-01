@@ -1628,6 +1628,88 @@ FloatVector4 Plot3D_TriShape::cubeMapToAmbient(const DDSTexture *e) const
   return s;
 }
 
+bool Plot3D_TriShape::findDecalYOffset(
+    float& yOffset, const NIFFile::NIFVertexTransform& modelTransform,
+    const NIFFile::NIFBounds& b) const
+{
+#if ENABLE_TXST_DECALS
+  NIFFile::NIFVertexTransform vt(modelTransform);
+  vt *= viewTransform;
+  NIFFile::NIFBounds  screenBounds;
+  for (int i = 0; i < 8; i++)
+  {
+    float   x = (!(i & 1) ? b.boundsMin[0] : b.boundsMax[0]);
+    float   y = (!(i & 2) ? b.boundsMin[1] : b.boundsMax[1]);
+    float   z = (!(i & 4) ? b.boundsMin[2] : b.boundsMax[2]);
+    FloatVector4  tmp(x, y, z, 0.0f);
+    tmp = vt.transformXYZ(tmp);
+    screenBounds += tmp;
+  }
+  int     x0 = roundFloat(screenBounds.boundsMin[0]);
+  int     y0 = roundFloat(screenBounds.boundsMin[1]);
+  int     z0 = roundFloat(screenBounds.boundsMin[2]);
+  int     x1 = roundFloat(screenBounds.boundsMax[0]);
+  int     y1 = roundFloat(screenBounds.boundsMax[1]);
+  int     z1 = roundFloat(screenBounds.boundsMax[2]);
+  if (x0 >= width || x1 < 0 || y0 >= height || y1 < 0 ||
+      z0 >= 16777216 || z1 < 0)
+  {
+    return false;
+  }
+  x0 = (x0 > 0 ? x0 : 0);
+  x1 = (x1 < (width - 1) ? x1 : (width - 1));
+  y0 = (y0 > 0 ? y0 : 0);
+  y1 = (y1 < (height - 1) ? y1 : (height - 1));
+
+  FloatVector4  viewToModelSpaceOffs(vt.offsX, vt.offsY, vt.offsZ, vt.rotateXX);
+  viewToModelSpaceOffs *= -1.0f;
+  viewToModelSpaceOffs.clearV3();
+  FloatVector4  viewToModelSpaceRX(vt.rotateXX, vt.rotateXY, vt.rotateXZ, 0.0f);
+  FloatVector4  viewToModelSpaceRY(vt.rotateYX, vt.rotateYY, vt.rotateYZ, 0.0f);
+  FloatVector4  viewToModelSpaceRZ(vt.rotateZX, vt.rotateZY, vt.rotateZZ, 0.0f);
+  FloatVector4  viewToModelSpaceScale(1.0f / vt.scale);
+
+  FloatVector4  decalDir(vt.rotateXY, vt.rotateYY, vt.rotateZY, vt.rotateXZ);
+  decalDir *= -1.0f;
+  FloatVector4  v0(vt.offsX, vt.offsY, vt.offsZ, vt.rotateXX);
+  float   minDistSqr = 1.0e20f;
+  for (int y = y0; y <= y1; y++)
+  {
+    size_t  offs = size_t(y) * size_t(width) + size_t(x0);
+    for (int x = x0; x <= x1; x++, offs++)
+    {
+      FloatVector4  v(float(x), float(y), bufZ[offs], 0.0f);
+      FloatVector4  tmp(v - v0);
+      float   d = tmp.dotProduct3(tmp);
+      if (d < minDistSqr)
+      {
+        v += viewToModelSpaceOffs;
+        v = (viewToModelSpaceRX * v[0]) + (viewToModelSpaceRY * v[1])
+            + (viewToModelSpaceRZ * v[2]);
+        v *= viewToModelSpaceScale;
+        if (b.checkBounds(v))
+        {
+          if (BRANCH_LIKELY(bufN && !debugMode))
+          {
+            FloatVector4  n(FloatVector4::uint32ToNormal(bufN[offs]));
+            if (n.dotProduct3(decalDir) < 0.5f)
+              continue;
+          }
+          minDistSqr = d;
+          yOffset = v[1];
+        }
+      }
+    }
+  }
+  return (minDistSqr < 16777216.0f);
+#else
+  (void) yOffset;
+  (void) modelTransform;
+  (void) b;
+  return false;
+#endif
+}
+
 void Plot3D_TriShape::drawDecal(
     const NIFFile::NIFVertexTransform& modelTransform,
     const DDSTexture * const *textures, unsigned int textureMask,
@@ -1780,14 +1862,13 @@ void Plot3D_TriShape::drawDecal(
   if (textureMask & 0x0010U)
     textureE = textures[4];
 
-  NIFFile::NIFVertexTransform viewToModelSpace(vt);
-  viewToModelSpace.rotateYX = vt.rotateXY;
-  viewToModelSpace.rotateZX = vt.rotateXZ;
-  viewToModelSpace.rotateXY = vt.rotateYX;
-  viewToModelSpace.rotateZY = vt.rotateYZ;
-  viewToModelSpace.rotateXZ = vt.rotateZX;
-  viewToModelSpace.rotateYZ = vt.rotateZY;
-  viewToModelSpace.scale = 1.0f / viewToModelSpace.scale;
+  FloatVector4  viewToModelSpaceOffs(vt.offsX, vt.offsY, vt.offsZ, vt.rotateXX);
+  viewToModelSpaceOffs *= -1.0f;
+  viewToModelSpaceOffs.clearV3();
+  FloatVector4  viewToModelSpaceRX(vt.rotateXX, vt.rotateXY, vt.rotateXZ, 0.0f);
+  FloatVector4  viewToModelSpaceRY(vt.rotateYX, vt.rotateYY, vt.rotateYZ, 0.0f);
+  FloatVector4  viewToModelSpaceRZ(vt.rotateZX, vt.rotateZY, vt.rotateZZ, 0.0f);
+  FloatVector4  viewToModelSpaceScale(1.0f / vt.scale);
   float   uScale, vScale;
   uScale = std::max(float(textures[0]->getWidth()) * (1.0f / mipScale), 1.0f);
   vScale = std::max(float(textures[0]->getHeight()) * (1.0f / mipScale), 1.0f);
@@ -1822,16 +1903,13 @@ void Plot3D_TriShape::drawDecal(
       v.cPtr = bufRGBA + offs;
       v.xyz = FloatVector4(float(x), float(y), *(v.zPtr), 0.0f);
       FloatVector4  modelXYZ(v.xyz);
-      modelXYZ -= FloatVector4(viewToModelSpace.offsX, viewToModelSpace.offsY,
-                               viewToModelSpace.offsZ, 0.0f);
-      modelXYZ = viewToModelSpace.rotateXYZ(modelXYZ);
-      modelXYZ *= viewToModelSpace.scale;
-      if (modelXYZ[0] < b.boundsMin[0] || modelXYZ[0] > b.boundsMax[0] ||
-          modelXYZ[1] < b.boundsMin[1] || modelXYZ[1] > b.boundsMax[1] ||
-          modelXYZ[2] < b.boundsMin[2] || modelXYZ[2] > b.boundsMax[2])
-      {
+      modelXYZ += viewToModelSpaceOffs;
+      modelXYZ = (viewToModelSpaceRX * modelXYZ[0])
+                 + (viewToModelSpaceRY * modelXYZ[1])
+                 + (viewToModelSpaceRZ * modelXYZ[2]);
+      modelXYZ *= viewToModelSpaceScale;
+      if (!b.checkBounds(modelXYZ))
         continue;
-      }
       if (BRANCH_UNLIKELY(!(bufNSaved && !debugMode)))
       {
         v.normal = decalDir;

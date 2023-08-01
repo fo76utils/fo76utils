@@ -213,8 +213,8 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
       tmp = FloatVector4::convertFloat16(std::uint64_t(p.mswpFormID));
       tmp[2] = tmp[1];
       tmp[1] = 1.0f;
-      b0[1] = b0[1] * 1.5f;
-      b1[1] = b1[1] + 1000.0f;
+      b0[1] = b0[1] + getDecalYOffsetMin(b0);
+      b1[1] = b1[1] + getDecalYOffsetMax(b1);
     }
 #endif
     modelBounds.boundsMin = b0;
@@ -1227,8 +1227,13 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   decalBounds.boundsMax =
       FloatVector4(float(p.model.o->obndX1), float(p.model.o->obndY1),
                    float(p.model.o->obndZ1), 0.0f) * xpddScale;
-  decalBounds.boundsMin[1] = decalBounds.boundsMin[1] * 1.5f;
-  decalBounds.boundsMax[1] = decalBounds.boundsMax[1] + 1000.0f;
+  decalBounds.boundsMin[1] = getDecalYOffsetMin(decalBounds.boundsMin);
+  decalBounds.boundsMax[1] = getDecalYOffsetMax(decalBounds.boundsMax);
+  float   yOffset = 0.0f;
+  if (!t.renderer->findDecalYOffset(yOffset, p.modelTransform, decalBounds))
+    return;
+  decalBounds.boundsMin[1] = float(p.model.o->obndY0) + yOffset;
+  decalBounds.boundsMax[1] = float(p.model.o->obndY1) + yOffset;
   NIFFile::NIFBounds  b;
   NIFFile::NIFVertex  v;
   for (int i = 0; i < 8; i++)
@@ -1767,9 +1772,9 @@ void Renderer::clear()
   baseObjects.clear();
 }
 
-void Renderer::clearImage()
+void Renderer::clearImage(unsigned int flags)
 {
-  clear(0x03);
+  clear(flags & 3U);
 }
 
 void Renderer::deallocateBuffers(unsigned int mask)

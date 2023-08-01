@@ -263,6 +263,9 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   }
   // Calculate ambient light from the average color of a cube map.
   FloatVector4 cubeMapToAmbient(const DDSTexture *e) const;
+  bool findDecalYOffset(float& yOffset,
+                        const NIFFile::NIFVertexTransform& modelTransform,
+                        const NIFFile::NIFBounds& b) const;
   // b = decal bounds (model space)
   // c = color (sRGB)
   void drawDecal(const NIFFile::NIFVertexTransform& modelTransform,
