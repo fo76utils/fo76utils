@@ -18,8 +18,9 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 
 * **0** to **5**: Set debug render mode. 0 or 1: disabled (default), 2: depth, 3: normals, 4: diffuse texture only with no lighting, 5: light only (white textures).
 * **+**, **-**: Zoom in or out.
-* **Keypad 1**, **3**, **9**, **7**: Set isometric view from the SW, SE, NE, or NW (default).
-* **Keypad 2**, **6**, **8**, **4**, **5**: Set view from the S, E, N, W, or top.
+* **Keypad 0**, **5**: Set view from the bottom or top.
+* **Keypad 1** to **9**: Set isometric view from the SW to NE (default = NW).
+* **Shift** + **Keypad 0** to **9**: Set side view, or top/bottom view rotated by 45 degrees.
 * **F1** to **F8**: Select default cube map.
 * **A**, **D**: Rotate model around the Z axis.
 * **S**, **W**: Rotate model around the X axis.
