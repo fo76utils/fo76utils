@@ -115,7 +115,13 @@ class SDLDisplay
     SDLKeySymKP8 = SDLK_KP_8 - SDLKeyOffs,
     SDLKeySymKP9 = SDLK_KP_9 - SDLKeyOffs,
     SDLKeySymKPIns = SDLK_KP_0 - SDLKeyOffs,
-    SDLKeySymKPDel = SDLK_KP_PERIOD - SDLKeyOffs
+    SDLKeySymKPDel = SDLK_KP_PERIOD - SDLKeyOffs,
+    SDLKeyModLShift = KMOD_LSHIFT,
+    SDLKeyModRShift = KMOD_RSHIFT,
+    SDLKeyModLCtrl = KMOD_LCTRL,
+    SDLKeyModRCtrl = KMOD_RCTRL,
+    SDLKeyModLAlt = KMOD_LALT,
+    SDLKeyModRAlt = KMOD_RALT
 #endif
   };
   struct SDLEvent
@@ -143,6 +149,7 @@ class SDLDisplay
     {
       return (int((d >> 3) & 0x0001FFFFU) - 32768);
     }
+    // SDLEventKeyUp/Down/Repeat: key modifiers (OR of SDLKeyModLShift etc.)
     // SDLEventMButtonUp/Down, SDLEventMouseMotion: Y coordinate in window
     // SDLEventMouseWheel: the amount scrolled vertically * 32
     inline int data2() const

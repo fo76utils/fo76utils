@@ -633,12 +633,13 @@ void SDLDisplay::pollEvents(std::vector< SDLEvent >& buf, int waitTime,
         else
           t = (!event.key.repeat ? SDLEventKeyDown : SDLEventKeyRepeat);
         d1 = int(event.key.keysym.sym);
+        d2 = int(event.key.keysym.mod) & 0xFFFF;
         if ((d1 >= 0x0020 && d1 < 0x007F) || (d1 >= 0x00A0 && d1 < 0x4000))
         {
           // printable characters
           if (textInputMode)
           {
-            if (!(event.key.keysym.mod & KMOD_CTRL) ||
+            if (!(d2 & (SDLKeyModLCtrl | SDLKeyModRCtrl)) ||
                 !((d1 >= 0x41 && d1 <= 0x5A) || (d1 >= 0x61 && d1 <= 0x7A)))
             {
               continue;
