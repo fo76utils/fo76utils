@@ -22,6 +22,7 @@ static const char *usageStrings[] =
   "    -ssaa INT           render at 2^N resolution and downsample",
   "    -f INT              output format, 0: RGB24, 1: A8R8G8B8, 2: RGB10A2",
   "    -rq INT             set render quality (0 to 255, see doc/render.md)",
+  "    -watermask BOOL     make non-water surfaces transparent or black",
   "    -q                  do not print messages other than errors",
   "",
   "    -btd FILENAME.BTD   read terrain data from Fallout 76 .btd file",
@@ -114,6 +115,7 @@ int main(int argc, char **argv)
     int     waterUVScale = 2048;
     int     outputFormat = 0;
     unsigned char renderQuality = 0;
+    bool    waterMaskMode = false;
     const char  *defaultEnvMap =
         "textures/shared/cubemaps/mipblur_defaultoutside1.dds";
     const char  *waterTexture = "textures/water/defaultwater.dds";
@@ -150,6 +152,7 @@ int main(int argc, char **argv)
         std::printf("-ssaa %d\n", int(ssaaLevel));
         std::printf("-f %d\n", outputFormat);
         std::printf("-rq %d\n", int(renderQuality));
+        std::printf("-watermask %d\n", int(waterMaskMode));
         std::printf("-w 0x%08X", formID);
         if (!formID)
           std::printf(" (defaults to 0x0000003C or 0x0025DA15)");
@@ -270,6 +273,14 @@ int main(int argc, char **argv)
         renderQuality =
             (unsigned char) parseInteger(argv[i], 0,
                                          "invalid render quality", 0, 255);
+      }
+      else if (std::strcmp(argv[i], "-watermask") == 0)
+      {
+        if (++i >= argc)
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
+        waterMaskMode =
+            bool(parseInteger(argv[i], 0, "invalid argument for -watermask",
+                              0, 1));
       }
       else if (std::strcmp(argv[i], "-q") == 0)
       {
@@ -535,6 +546,15 @@ int main(int argc, char **argv)
       enableSCOL = true;
       ltxtResolution = 128 >> btdLOD;
     }
+    if (waterMaskMode)
+    {
+      enableTextures = false;
+      debugMode = 4;
+      ltxtResolution = 128 >> btdLOD;
+      waterColor = 0x7FFFFFFFU;
+      renderQuality = (renderQuality & 0x03) | 0x10;
+      waterTexture = (char *) 0;
+    }
     if (!formID)
       formID = (!btdPath ? 0x0000003CU : 0x0025DA15U);
     waterColor =
@@ -628,6 +648,8 @@ int main(int argc, char **argv)
       };
       if (verboseMode)
         std::fprintf(stderr, "Rendering %s\n", renderObjectTypes[renderPass]);
+      if (waterMaskMode)
+        renderer.clearImage(0x01);
       renderer.initRenderPass(renderPass, (!renderPass ? worldID : formID));
       while (!renderer.renderObjects())
       {

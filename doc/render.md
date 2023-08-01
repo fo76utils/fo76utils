@@ -21,6 +21,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
   * 32: Disable built-in exclude patterns for effect meshes.
   * 64: Enable the rendering of decals (TXST objects), only if **render** has been built with the ENABLE\_TXST\_DECALS macro set to 1. This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
   * 128: Enable marker objects.
+* **-watermask BOOL**: Render water mask, non-water surfaces are made transparent or black.
 
 Values in hexadecimal format (prefixed with 0x) are accepted by **-w** and **-rq**.
 
