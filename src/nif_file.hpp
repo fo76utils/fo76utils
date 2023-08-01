@@ -140,6 +140,19 @@ class NIFFile : public FileBuffer
     {
       return boundsMax[2];
     }
+    inline bool checkBounds(FloatVector4 v) const
+    {
+#if ENABLE_X86_64_AVX
+      XMM_Int32 tmp1 = (v.v >= boundsMin.v) & (v.v <= boundsMax.v);
+      std::uint64_t tmp2;
+      __asm__ ("vpmovmskb %1, %0" : "=r" (tmp2) : "x" (tmp1));
+      return !(~tmp2 & 0x0FFFU);
+#else
+      return (v[0] >= boundsMin[0] && v[1] >= boundsMin[1] &&
+              v[2] >= boundsMin[2] && v[0] <= boundsMax[0] &&
+              v[1] <= boundsMax[1] && v[2] <= boundsMax[2]);
+#endif
+    }
   };
   struct NIFTriShape
   {
