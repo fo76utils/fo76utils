@@ -8,6 +8,8 @@
 #include <ctime>
 #include <SDL2/SDL.h>
 
+#include "viewrtbl.cpp"
+
 static const char *cmdOptsTable[] =
 {
   "1btd",               //  0
@@ -77,8 +79,8 @@ static const char *usageStrings[] =
   "",
   "    -cam SCALE DIR X Y Z",
   "                        set view scale from world to image coordinates,",
-  "                        view direction (0 to 19: NW, SW, SE, NE, top,",
-  "                        S, E, N, W, bottom), and camera position",
+  "                        view direction (0 to 19, see src/viewrtbl.cpp),",
+  "                        and camera position",
   "    -zrange FLOAT       limit Z range in view space",
   "    -light SCALE RY RZ  set RGB scale and Y, Z rotation (0, 0 = top)",
   "    -lcolor LMULT LCOLOR EMULT ECOLOR ACOLOR",
@@ -101,29 +103,85 @@ static const char *usageStrings[] =
   (char *) 0
 };
 
-static const float  viewRotations[60] =
-{
-  54.73561f,  180.0f,     45.0f,        // isometric from NW
-  54.73561f,  180.0f,     135.0f,       // isometric from SW
-  54.73561f,  180.0f,     -135.0f,      // isometric from SE
-  54.73561f,  180.0f,     -45.0f,       // isometric from NE
-  180.0f,     0.0f,       0.0f,         // top
-  -90.0f,     0.0f,       0.0f,         // S
-  -90.0f,     0.0f,       90.0f,        // E
-  -90.0f,     0.0f,       180.0f,       // N
-  -90.0f,     0.0f,       -90.0f,       // W
-    0.0f,     0.0f,       0.0f,         // bottom
-  54.73561f,  180.0f,     0.0f,         // isometric from N
-  54.73561f,  180.0f,     90.0f,        // isometric from W
-  54.73561f,  180.0f,     180.0f,       // isometric from S
-  54.73561f,  180.0f,     -90.0f,       // isometric from E
-  180.0f,     0.0f,       -45.0f,       // top (up = NE)
-  -90.0f,     0.0f,       -45.0f,       // SW
-  -90.0f,     0.0f,       45.0f,        // SE
-  -90.0f,     0.0f,       135.0f,       // NE
-  -90.0f,     0.0f,       -135.0f,      // NW
-    0.0f,     0.0f,       -45.0f        // bottom
-};
+static const char *keyboardUsageString =
+    "  \033[4m\033[38;5;228m0\033[m "
+    "to \033[4m\033[38;5;228m5\033[m                "
+    "Set debug render mode:                                          \n"
+    "                        "
+    "    0: disabled (default)                                       \n"
+    "                        "
+    "    1: reference and cell form IDs as RGB colors                \n"
+    "                        "
+    "    2: depth                                                    \n"
+    "                        "
+    "    3: normals                                                  \n"
+    "                        "
+    "    4: diffuse texture only with no lighting                    \n"
+    "                        "
+    "    5: light only (white textures)                              \n"
+    "  \033[4m\033[38;5;228m+\033[m, "
+    "\033[4m\033[38;5;228m-\033[m                  "
+    "Zoom in or out by a factor of 1.4142.                           \n"
+    "  \033[4m\033[38;5;228mKeypad 0, 5\033[m           "
+    "Set view from the bottom or top (default = top).                \n"
+    "  \033[4m\033[38;5;228mKeypad 1 to 9\033[m         "
+    "Set isometric view from the SW to NE.                           \n"
+    "  \033[4m\033[38;5;228mShift + Keypad 0 to 9\033[m "
+    "Set side view, or top/bottom view rotated by 45 degrees.        \n"
+    "  \033[4m\033[38;5;228mA\033[m, "
+    "\033[4m\033[38;5;228mD\033[m                  "
+    "Move to the left or right.                                      \n"
+    "  \033[4m\033[38;5;228mS\033[m, "
+    "\033[4m\033[38;5;228mW\033[m                  "
+    "Move backward or forward (-Z or +Z in the view space).          \n"
+    "  \033[4m\033[38;5;228mE\033[m, "
+    "\033[4m\033[38;5;228mX\033[m                  "
+    "Move up or down (-Y or +Y in the view space).                   \n"
+    "  \033[4m\033[38;5;228mMouse L button double\033[m "
+    "Move camera position so that the selected pixel is at the center\n"
+    "                        "
+    "of the screen.                                                  \n"
+    "  \033[4m\033[38;5;228mMouse R button double\033[m "
+    "Similar to above, but also adjust the Z coordinate in view space\n"
+    "                        "
+    "so that the selected pixel is just in front of the new camera   \n"
+    "                        "
+    "position.                                                       \n"
+    "  \033[4m\033[38;5;228mMouse L button single\033[m "
+    "In debug mode 1 only: print the form ID of the selected object  \n"
+    "                        "
+    "based on the color of the pixel, and also copy it to the        \n"
+    "                        "
+    "clipboard.                                                      \n"
+    "  \033[4m\033[38;5;228mF12\033[m "
+    "or \033[4m\033[38;5;228mPrint Screen\033[m   "
+    "Save screenshot.                                                \n"
+    "  \033[4m\033[38;5;228mP\033[m                     "
+    "Print current -light and -view parameters (for use with render  \n"
+    "                        "
+    "or markers), and camera position. The information printed is    \n"
+    "                        "
+    "also copied to the clipboard.                                   \n"
+    "  \033[4m\033[38;5;228mV\033[m                     "
+    "Print all current settings, similarly to the 'list' command.    \n"
+    "  \033[4m\033[38;5;228mR\033[m                     "
+    "Print the list of view directions that can be used with 'cam'.  \n"
+    "  \033[4m\033[38;5;228mH\033[m                     "
+    "Show help screen.                                               \n"
+    "  \033[4m\033[38;5;228mC\033[m                     "
+    "Clear messages.                                                 \n"
+    "  \033[4m\033[38;5;228m`\033[m                     "
+    "Open the console. In this mode, keyboard and mouse controls work\n"
+    "                        "
+    "similarly to esmview, and any of the command line options can be\n"
+    "                        "
+    "entered as a command (without the leading - character). Entering\n"
+    "                        "
+    "the hexadecimal form ID of a reference moves the camera position\n"
+    "                        "
+    "to its coordinates. The command q or ` returns to view mode.    \n"
+    "  \033[4m\033[38;5;228mEsc\033[m                   "
+    "Quit program.                                                   \n";
 
 struct WorldSpaceViewer
 {
@@ -202,6 +260,7 @@ struct WorldSpaceViewer
 #endif
   void printError(const char *fmt, ...);
   void updateDisplay();
+  void printReferenceInfo(unsigned int refrFormID);
   void pollEvents();
   void consoleInput();
   void saveScreenshot();
@@ -919,6 +978,151 @@ void WorldSpaceViewer::updateDisplay()
   }
 }
 
+static void printRecordType(char *buf, unsigned int n)
+{
+  for (int i = 0; i < 4; i++)
+  {
+    unsigned char c = (unsigned char) (n & 0x7F);
+    n = n >> 8;
+    if (c < 0x20 || c >= 0x7F)
+      c = 0x3F;
+    buf[i] = char(c);
+  }
+}
+
+void WorldSpaceViewer::printReferenceInfo(unsigned int refrFormID)
+{
+  refrFormID = (refrFormID & 0x00FFFFFFU) | (formID & 0x0F000000U);
+  std::sprintf(tmpBuf, "0x%08X", refrFormID);
+  (void) SDL_SetClipboardText(tmpBuf);
+  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(refrFormID);
+  if (!r)
+  {
+    display.consolePrint("Form ID = %s\n", tmpBuf);
+    return;
+  }
+  std::sprintf(tmpBuf, "???? form ID: 0x%08X", refrFormID);
+  printRecordType(tmpBuf, r->type);
+  std::string buf(tmpBuf);
+  std::string edid;
+  unsigned int  refrName = 0U;
+  float   refrX = 0.0f;
+  float   refrY = 0.0f;
+  float   refrZ = 0.0f;
+  float   refrRX = 0.0f;
+  float   refrRY = 0.0f;
+  float   refrRZ = 0.0f;
+  unsigned int  cellFlags = 0U;
+  int     cellX = 0;
+  int     cellY = 0;
+  ESMFile::ESMField f(esmFile, *r);
+  while (f.next())
+  {
+    if (f == "EDID" && f.size() > 0)
+    {
+      f.readString(edid);
+    }
+    else if (f == "NAME" && (*r == "REFR" || *r == "ACHR") && f.size() >= 4)
+    {
+      refrName = f.readUInt32Fast();
+    }
+    else if (f == "DATA" && (*r == "REFR" || *r == "ACHR") && f.size() >= 24)
+    {
+      refrX = f.readFloat();
+      refrY = f.readFloat();
+      refrZ = f.readFloat();
+      refrRX = f.readFloat() * (180.0f / 3.14159265f);
+      refrRY = f.readFloat() * (180.0f / 3.14159265f);
+      refrRZ = f.readFloat() * (180.0f / 3.14159265f);
+    }
+    else if (f == "DATA" && *r == "CELL" && f.size() >= 1)
+    {
+      if (f.size() >= 2)
+        cellFlags = f.readUInt16Fast();
+      else
+        cellFlags = f.readUInt8Fast();
+    }
+    else if (f == "XCLC" && *r == "CELL" && f.size() >= 8)
+    {
+      cellX = f.readInt32();
+      cellY = f.readInt32();
+    }
+  }
+  if (!edid.empty())
+  {
+    buf += " (\"";
+    buf += edid;
+    buf += "\")";
+  }
+  if (r->flags)
+  {
+    std::sprintf(tmpBuf, ", flags: 0x%08X", r->flags);
+    buf += tmpBuf;
+  }
+  ESMFile::ESMVCInfo  vcInfo;
+  esmFile.getVersionControlInfo(vcInfo, *r);
+  std::sprintf(tmpBuf, ", timestamp: %04u-%02u-%02u, user: 0x%04X\n",
+               vcInfo.year, vcInfo.month, vcInfo.day, vcInfo.userID1);
+  buf += tmpBuf;
+  if (*r == "REFR" || *r == "ACHR")
+  {
+    edid.clear();
+    std::string modelPath;
+    const ESMFile::ESMRecord  *r2 = (ESMFile::ESMRecord *) 0;
+    if (refrName)
+    {
+      r2 = esmFile.getRecordPtr(refrName);
+      if (r2)
+      {
+        ESMFile::ESMField f2(esmFile, *r2);
+        while (f2.next())
+        {
+          if (f2 == "EDID" && f2.size() > 0)
+            f2.readString(edid);
+          else if ((f2 == "MODL" || f2 == "MOD2") && f2.size() > 4)
+            f2.readPath(modelPath, std::string::npos, "meshes/", ".nif");
+        }
+      }
+    }
+    std::sprintf(tmpBuf, "    NAME: 0x%08X", refrName);
+    buf += tmpBuf;
+    if (r2)
+    {
+      buf += " (????";
+      printRecordType(&(buf[buf.length() - 4]), r2->type);
+      if (!edid.empty())
+      {
+        buf += " \"";
+        buf += edid;
+        buf += '"';
+      }
+      buf += ')';
+      if (!modelPath.empty())
+      {
+        buf += ", \"";
+        buf += modelPath;
+        buf += '"';
+      }
+    }
+    std::sprintf(tmpBuf, "\n    DATA: X: %.7g, Y: %.7g, Z: %.7g"
+                         ", RX: %.5g, RY: %.5g, RZ: %.5g\n",
+                 refrX, refrY, refrZ, refrRX, refrRY, refrRZ);
+    buf += tmpBuf;
+  }
+  else if (*r == "CELL")
+  {
+    std::sprintf(tmpBuf, "    DATA: 0x%04X", cellFlags);
+    buf += tmpBuf;
+    if (!(cellFlags & 1U))
+    {
+      std::sprintf(tmpBuf, ", XCLC: %3d, %3d", cellX, cellY);
+      buf += tmpBuf;
+    }
+    buf += '\n';
+  }
+  display.consolePrint("%s", buf.c_str());
+}
+
 void WorldSpaceViewer::pollEvents()
 {
   display.pollEvents(eventBuf, (renderPass < 3 ? 0 : -1000), false, true);
@@ -964,9 +1168,7 @@ void WorldSpaceViewer::pollEvents()
 #else
         c = ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU) | (c & 0xFF00U);
 #endif
-        std::sprintf(tmpBuf, "0x%08X", (unsigned int) c);
-        display.consolePrint("Reference form ID = %s\n", tmpBuf);
-        (void) SDL_SetClipboardText(tmpBuf);
+        printReferenceInfo(c);
         redrawScreenFlag = true;
       }
     }
@@ -996,41 +1198,25 @@ void WorldSpaceViewer::pollEvents()
           }
         }
         break;
-      case SDLDisplay::SDLKeySymKP7:
-        redrawWorldFlag = redrawWorldFlag | (viewRotation != 0);
-        viewRotation = 0;
-        break;
       case SDLDisplay::SDLKeySymKP1:
-        redrawWorldFlag = redrawWorldFlag | (viewRotation != 1);
-        viewRotation = 1;
-        break;
-      case SDLDisplay::SDLKeySymKP3:
-        redrawWorldFlag = redrawWorldFlag | (viewRotation != 2);
-        viewRotation = 2;
-        break;
-      case SDLDisplay::SDLKeySymKP9:
-        redrawWorldFlag = redrawWorldFlag | (viewRotation != 3);
-        viewRotation = 3;
-        break;
-      case SDLDisplay::SDLKeySymKP5:
-        redrawWorldFlag = redrawWorldFlag | (viewRotation != 4);
-        viewRotation = 4;
-        break;
       case SDLDisplay::SDLKeySymKP2:
-        redrawWorldFlag = redrawWorldFlag | (viewRotation != 5);
-        viewRotation = 5;
-        break;
-      case SDLDisplay::SDLKeySymKP6:
-        redrawWorldFlag = redrawWorldFlag | (viewRotation != 6);
-        viewRotation = 6;
-        break;
-      case SDLDisplay::SDLKeySymKP8:
-        redrawWorldFlag = redrawWorldFlag | (viewRotation != 7);
-        viewRotation = 7;
-        break;
+      case SDLDisplay::SDLKeySymKP3:
       case SDLDisplay::SDLKeySymKP4:
-        redrawWorldFlag = redrawWorldFlag | (viewRotation != 8);
-        viewRotation = 8;
+      case SDLDisplay::SDLKeySymKP5:
+      case SDLDisplay::SDLKeySymKP6:
+      case SDLDisplay::SDLKeySymKP7:
+      case SDLDisplay::SDLKeySymKP8:
+      case SDLDisplay::SDLKeySymKP9:
+      case SDLDisplay::SDLKeySymKPIns:
+        {
+          int     newViewDir =
+              getViewRotation(eventBuf[i].data1(), eventBuf[i].data2());
+          if (newViewDir >= 0 && newViewDir != viewRotation)
+          {
+            viewRotation = newViewDir;
+            redrawWorldFlag = true;
+          }
+        }
         break;
       case '0':
       case '1':
@@ -1086,12 +1272,13 @@ void WorldSpaceViewer::pollEvents()
           calculateViewOffset(viewOffsX, viewOffsY, viewOffsZ);
           std::sprintf(tmpBuf, "-light %.7g %.7g %.7g "
                                "-view %.7g %.7g %.7g %.7g %.7g %.7g %.7g "
-                               "(cam: %.7g %.7g %.7g)",
+                               "(cam: %.7g %d %.7g %.7g %.7g)",
                        rgbScale, lightRotationY, lightRotationZ, viewScale,
                        viewRotations[viewRotation * 3],
                        viewRotations[viewRotation * 3 + 1],
                        viewRotations[viewRotation * 3 + 2],
                        viewOffsX, viewOffsY, viewOffsZ,
+                       viewScale, int(viewRotation),
                        camPositionX, camPositionY, camPositionZ);
           display.consolePrint("%s\n", tmpBuf);
           (void) SDL_SetClipboardText(tmpBuf);
@@ -1104,6 +1291,28 @@ void WorldSpaceViewer::pollEvents()
           setRenderParams(1, &tmp);
           redrawScreenFlag = true;
         }
+        break;
+      case 'r':
+        display.clearTextBuffer();
+        for (size_t j = 0; j < (sizeof(viewRotationMessages) / sizeof(char *));
+             j++)
+        {
+          if (j == size_t(viewRotation))
+          {
+            display.consolePrint("\033[4m\033[38;5;228m%s\033[m",
+                                 viewRotationMessages[j]);
+          }
+          else
+          {
+            display.consolePrint("%s", viewRotationMessages[j]);
+          }
+        }
+        redrawScreenFlag = true;
+        break;
+      case 'h':
+        display.clearTextBuffer();
+        display.consolePrint("%s", keyboardUsageString);
+        redrawScreenFlag = true;
         break;
       case 'c':
         display.clearTextBuffer();

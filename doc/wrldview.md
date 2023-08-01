@@ -42,7 +42,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 
 ### View options
 
-* **-cam SCALE DIR X Y Z**: Set view scale from world to image coordinates, view direction (0 to 9: isometric NW, SW, SE, NE, top, side S, E, N, W, bottom), and camera position. Adding 10 to the view direction rotates around the Z axis by -45 degrees.
+* **-cam SCALE DIR X Y Z**: Set view scale from world to image coordinates, view direction (0 to 19, see [src/viewrtbl.cpp](../src/viewrtbl.cpp)), and camera position.
 * **-zrange FLOAT**: Limit Z range in view space to less than the specified value.
 
 ### Lighting options
@@ -62,14 +62,17 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 
 * **0** to **5**: Set debug render mode. 0: disabled (default), 1: reference and cell form IDs as RGB colors, 2: depth, 3: normals, 4: diffuse texture only with no lighting, 5: light only (white textures).
 * **+**, **-**: Zoom in or out.
-* **Keypad 1**, **3**, **9**, **7**: Set isometric view from the SW, SE, NE, or NW.
-* **Keypad 2**, **6**, **8**, **4**, **5**: Set view from the S, E, N, W, or top (default).
+* **Keypad 0**, **5**: Set view from the bottom or top (default = top).
+* **Keypad 1** to **9**: Set isometric view from the SW to NE.
+* **Shift** + **Keypad 0** to **9**: Set side view, or top/bottom view rotated by 45 degrees.
 * **A**, **D**: Move to the left or right.
 * **S**, **W**: Move backward or forward (-Z or +Z in the view space).
 * **E**, **X**: Move up or down (-Y or +Y in the view space).
 * **F12** or **Print Screen**: Save screenshot.
 * **P**: Print current **-light** and **-view** parameters (for use with [render](render.md) or [markers](markers.md)), and camera position. The information printed is also copied to the clipboard.
 * **V**: Print all current settings, similarly to the 'list' console command.
+* **R**: Print the list of view directions that can be used with 'cam'.
+* **H**: Show help screen.
 * **C**: Clear messages.
 * **\`**: Open the console. In this mode, keyboard and mouse controls work similarly to [esmview](esmview.md) with SDL 2, and any of the command line options can be entered as a command (without the leading - character). Entering the hexadecimal form ID of a reference moves the camera position to its coordinates. The command **q** or **\`** returns to view mode.
 * **Esc**: Quit program.
