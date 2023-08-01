@@ -5,6 +5,8 @@
 
 #include <algorithm>
 
+#include "viewrtbl.cpp"
+
 static const std::uint32_t  defaultWaterColor = 0xC0804000U;
 
 static const char *cubeMapPaths[24] =
@@ -446,32 +448,6 @@ void NIF_View::renderModelToFile(const char *outFileName,
 }
 
 #ifdef HAVE_SDL2
-static const float  viewRotations[27] =
-{
-  54.73561f,  180.0f,     45.0f,        // isometric from NW
-  54.73561f,  180.0f,     135.0f,       // isometric from SW
-  54.73561f,  180.0f,     -135.0f,      // isometric from SE
-  54.73561f,  180.0f,     -45.0f,       // isometric from NE
-  180.0f,     0.0f,       0.0f,         // top
-  -90.0f,     0.0f,       0.0f,         // front
-  -90.0f,     0.0f,       90.0f,        // right
-  -90.0f,     0.0f,       180.0f,       // back
-  -90.0f,     0.0f,       -90.0f        // left
-};
-
-static const char *viewRotationMessages[9] =
-{
-  "Isometric view from the NW\n",
-  "Isometric view from the SW\n",
-  "Isometric view from the SE\n",
-  "Isometric view from the NE\n",
-  "Top view\n",
-  "S view\n",
-  "E view\n",
-  "N view\n",
-  "W view\n"
-};
-
 static void updateRotation(float& rx, float& ry, float& rz,
                            int dx, int dy, int dz,
                            std::string& messageBuf, const char *msg)
@@ -777,10 +753,12 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228m+\033[m, "
     "\033[4m\033[38;5;228m-\033[m                  "
     "Zoom in or out.                                                 \n"
-    "  \033[4m\033[38;5;228mKeypad 1, 3, 9, 7\033[m     "
-    "Set isometric view from the SW, SE, NE, or NW (default).        \n"
-    "  \033[4m\033[38;5;228mKeypad 2, 6, 8, 4, 5\033[m  "
-    "Set view from the S, E, N, W, or top.                           \n"
+    "  \033[4m\033[38;5;228mKeypad 0, 5\033[m           "
+    "Set view from the bottom or top.                                \n"
+    "  \033[4m\033[38;5;228mKeypad 1 to 9\033[m         "
+    "Set isometric view from the SW to NE (default = NW).            \n"
+    "  \033[4m\033[38;5;228mShift + Keypad 0 to 9\033[m "
+    "Set side view, or top/bottom view rotated by 45 degrees.        \n"
     "  \033[4m\033[38;5;228mF1\033[m "
     "to \033[4m\033[38;5;228mF8\033[m              "
     "Select default cube map.                                        \n"
@@ -976,32 +954,17 @@ bool NIF_View::viewModels(SDLDisplay& display,
                 updateValueLogScale(viewScale, d, 0.0625f, 16.0f, messageBuf,
                                     "View scale");
                 break;
-              case SDLDisplay::SDLKeySymKP7:
-                viewRotation = 0;
-                break;
               case SDLDisplay::SDLKeySymKP1:
-                viewRotation = 1;
-                break;
-              case SDLDisplay::SDLKeySymKP3:
-                viewRotation = 2;
-                break;
-              case SDLDisplay::SDLKeySymKP9:
-                viewRotation = 3;
-                break;
-              case SDLDisplay::SDLKeySymKP5:
-                viewRotation = 4;
-                break;
               case SDLDisplay::SDLKeySymKP2:
-                viewRotation = 5;
-                break;
-              case SDLDisplay::SDLKeySymKP6:
-                viewRotation = 6;
-                break;
-              case SDLDisplay::SDLKeySymKP8:
-                viewRotation = 7;
-                break;
+              case SDLDisplay::SDLKeySymKP3:
               case SDLDisplay::SDLKeySymKP4:
-                viewRotation = 8;
+              case SDLDisplay::SDLKeySymKP5:
+              case SDLDisplay::SDLKeySymKP6:
+              case SDLDisplay::SDLKeySymKP7:
+              case SDLDisplay::SDLKeySymKP8:
+              case SDLDisplay::SDLKeySymKP9:
+              case SDLDisplay::SDLKeySymKPIns:
+                viewRotation = getViewRotation(d1, eventBuf[i].data2());
                 break;
               case SDLDisplay::SDLKeySymF1:
               case SDLDisplay::SDLKeySymF2:
