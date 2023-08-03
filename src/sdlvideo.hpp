@@ -300,6 +300,8 @@ class SDLDisplay
   // colors = background + (foreground << 8), color = 255 uses the default
   void printLine(const char *s, int xPos, int yPos,
                  std::uint32_t colors = 0xFFFFU);
+  // copy entire text buffer to clipboard
+  bool clipboardCopyAll();
   // copy word or line (if triple click) from text buffer to clipboard
   bool clipboardCopy(const SDLEvent& e, int yScroll);
   // returns false if the window is closed

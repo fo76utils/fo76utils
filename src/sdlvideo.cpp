@@ -1128,6 +1128,39 @@ void SDLDisplay::printLine(
 #endif
 }
 
+bool SDLDisplay::clipboardCopyAll()
+{
+#ifdef HAVE_SDL2
+  int     textBufLines = int(textBuf.size() / size_t(textWidth));
+  std::string clipboardBuf;
+  std::string lineBuf;
+  for (int y = 0; y < textBufLines; y++)
+  {
+    size_t  startPos = size_t(y) * size_t(textWidth);
+    size_t  endPos = startPos + size_t(textWidth);
+    int     x1 = textWidth;
+    while (x1 > 0 && (textBuf[endPos - 1] & 0x3FFFU) <= 0x20U)
+      x1--, endPos--;
+    if (x1 < 1 && clipboardBuf.empty())
+      continue;
+    convertUInt32ToUTF8(lineBuf, textBuf, startPos, endPos);
+    lineBuf += '\n';
+    clipboardBuf += lineBuf;
+  }
+  size_t  n = clipboardBuf.length();
+  while (n >= 2 && clipboardBuf[n - 1] == '\n' &&
+         (clipboardBuf[n - 2] == '\n' || clipboardBuf[n - 2] == '>'))
+  {
+    n--;
+  }
+  if (n < clipboardBuf.length())
+    clipboardBuf.resize(n);
+  return (!clipboardBuf.empty() && !SDL_SetClipboardText(clipboardBuf.c_str()));
+#else
+  return false;
+#endif
+}
+
 bool SDLDisplay::clipboardCopy(const SDLEvent& e, int yScroll)
 {
 #ifdef HAVE_SDL2
@@ -1274,6 +1307,10 @@ bool SDLDisplay::viewTextBuffer()
               redrawFlag = true;
             }
           }
+          break;
+        case 'a':
+          if (eventBuf[i].data2() & (SDLKeyModLCtrl | SDLKeyModRCtrl))
+            clipboardCopyAll();
           break;
         default:
           break;
@@ -1652,6 +1689,9 @@ bool SDLDisplay::consoleInput(
       }
       switch (d1)
       {
+        case 0x0001:                    // Ctrl-A
+          clipboardCopyAll();
+          break;
         case 0x0004:                    // Ctrl-D
           quitFlag = true;
           break;

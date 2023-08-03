@@ -34,6 +34,7 @@ C, N, P, and V can be grouped and used as a single command.
 * **S pattern**: Find next record with EDID matching pattern.
 * **S**: Select record interactively (requires SDL).
 * **W [MODS [MODC]]**: View the model (MODL) of the current record, if present. This command is not available if esmview is built without SDL support. Pressing H while in the NIF viewer prints the list of keyboard controls, Esc returns to the esmview console. The optional MODS and MODC parameters can be used to add a material swap form ID (if non-zero) and/or set the grayscale to palette map scale.
+* **Ctrl-A**: Copy the contents of the text buffer to the clipboard (SDL only).
 * **Q** or **Ctrl-D**: Quit.
 
 ##### Mouse controls

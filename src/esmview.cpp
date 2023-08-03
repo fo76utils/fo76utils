@@ -774,6 +774,7 @@ static const char *usageString =
     "V:              previous record in current group\n"
 #ifdef HAVE_SDL2
     "W [MODS [MODC]] view model (MODL) of current record, if present\n"
+    "Ctrl-A:         copy the contents of the text buffer to the clipboard\n"
 #endif
     "Q or Ctrl-D:    quit\n\n"
     "C, N, P, and V can be grouped and used as a single command\n\n"
