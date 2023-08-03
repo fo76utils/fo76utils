@@ -21,7 +21,7 @@ static const char *usageStrings[] =
   "    -txtcache INT       texture cache size in megabytes",
   "    -ssaa INT           render at 2^N resolution and downsample",
   "    -f INT              output format, 0: RGB24, 1: A8R8G8B8, 2: RGB10A2",
-  "    -rq INT             set render quality (0 to 255, see doc/render.md)",
+  "    -rq INT             set render quality (0 to 511, see doc/render.md)",
   "    -watermask BOOL     make non-water surfaces transparent or black",
   "    -q                  do not print messages other than errors",
   "",
@@ -114,7 +114,7 @@ int main(int argc, char **argv)
     float   reflZScale = 2.0f;
     int     waterUVScale = 2048;
     int     outputFormat = 0;
-    unsigned char renderQuality = 0;
+    unsigned short  renderQuality = 0;
     bool    waterMaskMode = false;
     const char  *defaultEnvMap =
         "textures/shared/cubemaps/mipblur_defaultoutside1.dds";
@@ -151,7 +151,7 @@ int main(int argc, char **argv)
         std::printf("-txtcache %d\n", textureCacheSize);
         std::printf("-ssaa %d\n", int(ssaaLevel));
         std::printf("-f %d\n", outputFormat);
-        std::printf("-rq %d\n", int(renderQuality));
+        std::printf("-rq 0x%04X\n", (unsigned int) renderQuality);
         std::printf("-watermask %d\n", int(waterMaskMode));
         std::printf("-w 0x%08X", formID);
         if (!formID)
@@ -271,8 +271,8 @@ int main(int argc, char **argv)
         if (++i >= argc)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         renderQuality =
-            (unsigned char) parseInteger(argv[i], 0,
-                                         "invalid render quality", 0, 255);
+            (unsigned short) parseInteger(argv[i], 0,
+                                          "invalid render quality", 0, 511);
       }
       else if (std::strcmp(argv[i], "-watermask") == 0)
       {
@@ -552,7 +552,7 @@ int main(int argc, char **argv)
       debugMode = 4;
       ltxtResolution = 128 >> btdLOD;
       waterColor = 0x7FFFFFFFU;
-      renderQuality = (renderQuality & 0x03) | 0x10;
+      renderQuality = (renderQuality & 0x0003) | 0x0100;
       waterTexture = (char *) 0;
     }
     if (!formID)
@@ -714,7 +714,14 @@ int main(int argc, char **argv)
       outputFormat = DDSInputFile::pixelFormatA2R10G10B10;
     DDSOutputFile outFile(args[1], width, height, outputFormat);
     outFile.writeImageData(imageDataPtr, imageDataSize,
-                           outputFormat, outputFormat);
+                           outputFormat,
+                           (!ssaaLevel ?
+#if USE_PIXELFMT_RGB10A2
+                            DDSInputFile::pixelFormatA2R10G10B10
+#else
+                            DDSInputFile::pixelFormatRGBA32
+#endif
+                            : outputFormat));
     err = 0;
   }
   catch (std::exception& e)
