@@ -450,6 +450,91 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   }
 }
 
+bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
+{
+  ESMFile::ESMField f(esmFile, r);
+  while (f.next())
+  {
+    if (f == "WNAM" && f.size() == 4)
+    {
+      const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(f.readUInt32Fast());
+      if (r2 && *r2 == "ARMO")
+      {
+        unsigned int  modelFormID = 0U;
+        bool    haveOBND = false;
+        ESMFile::ESMField f2(esmFile, *r2);
+        while (f2.next())
+        {
+          if (f2 == "MODL" && f2.size() == 4)
+          {
+            unsigned int  tmp = f2.readUInt32Fast();
+            if (!modelFormID ||
+                std::abs(int(tmp) - int(r2->formID))
+                < std::abs(int(modelFormID) - int(r2->formID)))
+            {
+              modelFormID = tmp;
+            }
+          }
+          else if (f2 == "MODL" && f2.size() > 4)
+          {
+            f2.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
+          }
+          else if (f2 == "OBND" && f2.size() >= 12)
+          {
+            p.obndX0 = f2.readInt16();
+            p.obndY0 = f2.readInt16();
+            p.obndZ0 = f2.readInt16();
+            p.obndX1 = f2.readInt16();
+            p.obndY1 = f2.readInt16();
+            p.obndZ1 = f2.readInt16();
+            haveOBND = true;
+          }
+        }
+        if (stringBuf.empty() && modelFormID)
+        {
+          r2 = esmFile.getRecordPtr(modelFormID);
+          if (r2 && (*r2 == "ARMA" || *r2 == "ARMO"))
+          {
+            ESMFile::ESMField f3(esmFile, *r2);
+            while (f3.next())
+            {
+              if ((f3 == "MOD2" || f3 == "MODL") && f3.size() > 4)
+              {
+                f3.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
+              }
+              else if (f3 == "OBND" && f3.size() >= 12)
+              {
+                p.obndX0 = f3.readInt16();
+                p.obndY0 = f3.readInt16();
+                p.obndZ0 = f3.readInt16();
+                p.obndX1 = f3.readInt16();
+                p.obndY1 = f3.readInt16();
+                p.obndZ1 = f3.readInt16();
+                haveOBND = true;
+              }
+            }
+          }
+        }
+        if (haveOBND && !stringBuf.empty())
+          return true;
+      }
+    }
+  }
+  if (enableMarkers && esmFile.getESMVersion() >= 0x80)
+  {
+    stringBuf = "meshes/markers/humanmarker.nif";
+    p.flags = p.flags | 0x20;
+    p.obndX0 = -20;
+    p.obndY0 = -10;
+    p.obndZ0 = 0;
+    p.obndX1 = 24;
+    p.obndY1 = 15;
+    p.obndZ1 = 133;
+    return true;
+  }
+  return false;
+}
+
 void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
 {
 #if ENABLE_TXST_DECALS
@@ -644,8 +729,8 @@ const Renderer::BaseObject * Renderer::readModelProperties(
           tmp.obndZ1 = (signed short) uint16ToSigned(f.readUInt16Fast());
           haveOBND = true;
         }
-        else if (f == "MODL" && f.size() > 4 &&
-                 (!modelLOD || stringBuf.empty()))
+        else if ((f == "MODL" || (f == "MOD2" && r == "ARMO")) &&
+                 f.size() > 4 && (!modelLOD || stringBuf.empty()))
         {
           f.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
           isHDModel = isHighQualityModel(stringBuf);
@@ -689,7 +774,14 @@ const Renderer::BaseObject * Renderer::readModelProperties(
         }
       }
       if (!haveOBND || stringBuf.empty())
-        continue;
+      {
+        if (BRANCH_LIKELY(!(enableActors && r == "NPC_")) ||
+            !(haveOBND = getNPCModel(tmp, r)))
+        {
+          continue;
+        }
+      }
+#if 0
       if (!isWater)
       {
         if (std::strncmp(stringBuf.c_str(), "meshes/water/", 13) == 0 ||
@@ -698,6 +790,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
           isWater = true;
         }
       }
+#endif
       if ((!isWater && isExcludedModel(stringBuf)) ||
           (isWater && !waterRenderMode))
       {
@@ -810,7 +903,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     r = esmFile.getRecordPtr(formID);
     if (BRANCH_UNLIKELY(!r))
       break;
-    if (BRANCH_UNLIKELY(!(*r == "REFR")))
+    if (BRANCH_UNLIKELY(!(*r == "REFR")) && !(*r == "ACHR"))
     {
       if (*r == "CELL")
       {
@@ -1151,9 +1244,9 @@ void Renderer::loadModels(unsigned int t, unsigned long long modelIDMask)
       continue;
     if (BRANCH_UNLIKELY(renderPass & 4) && !(o.flags & 4))
     {
-      if (disableEffectMeshes)
+      if (effectMeshMode & 2)
         continue;
-      if (!disableEffectFilters)
+      if (!(effectMeshMode & 1))
       {
         if (std::strncmp(o.modelPath.c_str(), "meshes/sky/", 11) == 0)
           continue;
@@ -1716,8 +1809,8 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     modelIDBase(0xFFFFFFFFU),
     waterReflectionLevel(1.0f),
     zRangeMax(zMax),
-    disableEffectMeshes(false),
-    disableEffectFilters(false),
+    effectMeshMode(0),
+    enableActors(false),
     waterRenderMode(0),
     bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
     whiteTexture(0xFFFFFFFFU),

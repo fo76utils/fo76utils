@@ -138,6 +138,7 @@ class Renderer : protected Renderer_Base
   bool    enableTextures;
   // 0: diffuse only, 1: normal mapping, 2: PBR on objects only, 3: full PBR
   unsigned char renderQuality;
+  // 4: Skyrim or older, 8: Fallout 4, 12: Fallout 76
   unsigned char renderMode;
   unsigned char debugMode;
   // 1: terrain, 2: objects, 4: objects with alpha blending
@@ -159,8 +160,9 @@ class Renderer : protected Renderer_Base
   std::string stringBuf;
   float   waterReflectionLevel;
   int     zRangeMax;
-  bool    disableEffectMeshes;
-  bool    disableEffectFilters;
+  // 0: default, 1: disable built-in exclude patterns, 2 or 3: disable effects
+  unsigned char effectMeshMode;
+  bool    enableActors;
   // 0: disable water, 1: default color, -1: use water parameters from the ESM
   signed char   waterRenderMode;
   unsigned char bufAllocFlags;          // bit 0: RGBA buffer, bit 1: Z buffer
@@ -179,6 +181,7 @@ class Renderer : protected Renderer_Base
   unsigned int getDefaultWorldID() const;
   void addTerrainCell(const ESMFile::ESMRecord& r);
   void addWaterCell(const ESMFile::ESMRecord& r);
+  bool getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r);
   void readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r);
   // returns NULL on excluded model or invalid object
   const BaseObject *readModelProperties(RenderObject& p,
@@ -296,21 +299,22 @@ class Renderer : protected Renderer_Base
   // 0: diffuse only, 4: normal mapping, 8: PBR on objects only, 12: full PBR
   // + 2: render references to any object type
   // + 1: do not split pre-combined meshes
-  // + 16: disable effect meshes
-  // + 32: disable built-in exclude patterns for effect meshes
-  // + 64: enable TXST decals
-  // + 128: enable marker objects
-  void setRenderQuality(unsigned char n)
+  // + 16: enable actors (experimental)
+  // + 32: enable TXST decals
+  // + 64: enable marker objects
+  // + 128: disable built-in exclude patterns for effect meshes
+  // + 256: disable effect meshes
+  void setRenderQuality(unsigned int n)
   {
-    enableMarkers = bool(n & 0x80);
+    enableMarkers = bool(n & 0x40);
 #if ENABLE_TXST_DECALS
-    enableDecals = bool(n & 0x40);
+    enableDecals = bool(n & 0x20);
 #endif
     enableSCOL |= bool(n & 1);
     enableAllObjects |= bool(n & 2);
-    renderQuality = (n >> 2) & 3;
-    disableEffectMeshes = bool(n & 0x10);
-    disableEffectFilters = bool(n & 0x20);
+    renderQuality = (unsigned char) ((n >> 2) & 3);
+    effectMeshMode = (unsigned char) ((n >> 7) & 3);
+    enableActors = bool(n & 0x10);
   }
   void setModelLOD(int n)
   {
