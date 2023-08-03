@@ -10,7 +10,15 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **-threads INT**: Set the number of threads to use.
 * **-debug INT**: Set debug render mode (0: disabled, 1: reference form IDs as 0xRRGGBB, 2: depth \* 16 or 64, 3: normals, 4: diffuse texture only, 5: light only).
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
-* **-rq INT**: Set render quality (0 to 15, defaults to 0). Normal mapping is enabled at 4 or above, specular/cube map reflections and PBR materials on objects from 8, and from 12 also on terrain. Adding 2 to the value enables rendering all supported object types, while adding 1 enables the use of pre-combined meshes.
+* **-rq INT**: Set render quality and flags (0 to 511, can be specified in hexadecimal format with 0x prefix, defaults to 0), using a sum of any of the following values:
+  * 1: Enable the use of pre-combined meshes (same as **-scol 1**).
+  * 2: Render all supported object types other than decals (same as **-a**).
+  * 0, 4, 8, or 12: Render quality from lowest to highest, 0 uses diffuse textures only on terrain and objects, 4 enables normal mapping, 8 also enables PBR on objects only, 12 enables PBR on terrain as well.
+  * 16: Enable actors, this is only partly implemented and may not work correctly.
+  * 32: Enable the rendering of decals (TXST objects), only if **render** has been built with the ENABLE\_TXST\_DECALS macro set to 1. This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
+  * 64: Enable marker objects.
+  * 128: Disable built-in exclude patterns for effect meshes.
+  * 256: Disable the use of effect materials.
 * **-ft INT**: Minimum frame time in milliseconds. The display is updated after this amount of time during rendering.
 * **-markers FILENAME**: Read marker definitions from the specified file, see [markers](markers.md) for details on the file format.
 
