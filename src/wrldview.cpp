@@ -63,7 +63,7 @@ static const char *usageStrings[] =
   "                        2: depth, 3: normals, 4: diffuse, 5: light only)",
   "    -textures BOOL      make all diffuse textures white if false",
   "    -txtcache INT       texture cache size in megabytes",
-  "    -rq INT             set render quality (0 to 255, see doc/render.md)",
+  "    -rq INT             set render quality (0 to 511, see doc/render.md)",
   "    -ft INT             minimum frame time in milliseconds",
   "    -markers FILENAME   read marker definitions from the specified file",
   "",
@@ -213,8 +213,8 @@ struct WorldSpaceViewer
   int     modelLOD;
   std::uint32_t waterColor;
   float   waterReflectionLevel;
-  std::uint16_t frameTimeMin;
-  unsigned char renderQuality;
+  std::uint16_t renderQuality;
+  bool    quitFlag;
   unsigned char viewRotation;
   float   viewScale;
   float   camPositionX;
@@ -240,11 +240,12 @@ struct WorldSpaceViewer
   ESMFile esmFile;
   SDLDisplay  display;
   size_t  imageDataSize;
+  // 0: rendering terrain, 1: objects, 2: water and effects, 3: done
+  // OR -256: begin the next pass
   int     renderPass;
-  bool    renderPassCompleted;
-  bool    quitFlag;
   bool    redrawScreenFlag;
   bool    redrawWorldFlag;
+  std::uint16_t frameTimeMin;
   std::uint64_t lastRedrawTime;
   std::map< size_t, std::string > cmdHistory1;
   std::map< std::string, size_t > cmdHistory2;
@@ -291,8 +292,8 @@ WorldSpaceViewer::WorldSpaceViewer(
     modelLOD(0),
     waterColor(0xFFFFFFFFU),
     waterReflectionLevel(1.0f),
-    frameTimeMin(500),
     renderQuality(0),
+    quitFlag(false),
     viewRotation(4),
     viewScale(0.0625f),
     camPositionX(0.0f),
@@ -317,10 +318,9 @@ WorldSpaceViewer::WorldSpaceViewer(
     display(w, h, "World space viewer", 4U,
             (h < 540 ? 24 : (h < 720 ? 36 : 48))),
     renderPass(0),
-    renderPassCompleted(false),
-    quitFlag(false),
     redrawScreenFlag(true),
-    redrawWorldFlag(true)
+    redrawWorldFlag(true),
+    frameTimeMin(500)
 {
   display.setDefaultTextColor(0x00, 0xC1);
   width = display.getWidth();
@@ -505,7 +505,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         display.consolePrint("\ndebug: %d\n", int(debugMode));
         display.consolePrint("textures: %d\n", int(enableTextures));
         display.consolePrint("txtcache: %d\n", textureCacheSize);
-        display.consolePrint("rq: %d\n", int(renderQuality));
+        display.consolePrint("rq: 0x%04X\n", (unsigned int) renderQuality);
         display.consolePrint("ft: %d\n", int(frameTimeMin));
         if (!markerDefsFileName.empty())
           display.consolePrint("markers: %s\n", markerDefsFileName.c_str());
@@ -642,11 +642,11 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         break;
       case 22:                  // "rq"
         {
-          unsigned char tmp = renderQuality;
+          std::uint16_t tmp = renderQuality;
           renderQuality =
-              (unsigned char) parseInteger(argv[i + 1], 0,
-                                           "invalid render quality", 0, 255);
-          if (renderer && ((tmp ^ renderQuality) & 0xC3))
+              std::uint16_t(parseInteger(argv[i + 1], 0,
+                                         "invalid render quality", 0, 511));
+          if (renderer && ((tmp ^ renderQuality) & 0x73))
             renderer->clearObjectPropertyCache();
         }
         redrawWorldFlag = true;
@@ -858,7 +858,6 @@ void WorldSpaceViewer::updateDisplay()
   {
     redrawWorldFlag = false;
     renderPass = 0;
-    renderPassCompleted = false;
     std::memset(imageBuf.data(), 0, imageDataSize * sizeof(std::uint32_t));
     float   *p = renderer->getZBufferData();
     float   z = zMax;
@@ -867,8 +866,7 @@ void WorldSpaceViewer::updateDisplay()
     display.clearTextBuffer();
     renderer->setEnableSCOL(false);
     renderer->setEnableAllObjects(false);
-    renderer->setRenderQuality(renderQuality
-                               | (unsigned char) (debugMode == 1));
+    renderer->setRenderQuality(renderQuality | std::uint16_t(debugMode == 1));
     renderer->setDebugMode(debugMode);
     float   viewOffsX, viewOffsY, viewOffsZ;
     calculateViewOffset(viewOffsX, viewOffsY, viewOffsZ);
@@ -906,12 +904,12 @@ void WorldSpaceViewer::updateDisplay()
     }
     else
     {
-      renderPassCompleted = true;
+      renderPass = -256;                // skip terrain rendering
     }
   }
-  else if (renderPassCompleted)
+  else if (renderPass < 0)
   {
-    renderPassCompleted = false;
+    renderPass = renderPass & 255;
     if (worldID && viewScale < objectsMinScale)
       renderPass = 2;
     if (++renderPass < 3)
@@ -950,8 +948,7 @@ void WorldSpaceViewer::updateDisplay()
   }
   else if (renderPass < 3)
   {
-    renderPassCompleted = renderer->renderObjects();
-    if (!renderPassCompleted)
+    if (!renderer->renderObjects())
     {
       display.consolePrint("\r    %7u / %7u  ",
                            (unsigned int) renderer->getObjectsRendered(),
@@ -959,6 +956,8 @@ void WorldSpaceViewer::updateDisplay()
     }
     else
     {
+      // the current pass is complete
+      renderPass = renderPass | -256;
       display.consolePrint("\r    %7u / %7u  \n",
                            (unsigned int) renderer->getObjectCount(),
                            (unsigned int) renderer->getObjectCount());
