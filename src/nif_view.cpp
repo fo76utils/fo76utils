@@ -883,7 +883,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
               saveScreenshot(display, nifFileNames[fileNum]);
             if (eventFlags & 8)
             {
-              int     n = display.browseList(
+              int     n = display.browseFile(
                               nifFileNames, "Select NIF file", fileNum,
                               0x0B080F04FFFFULL);
               if (n >= 0 && size_t(n) < nifFileNames.size() && n != fileNum)

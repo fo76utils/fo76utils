@@ -460,7 +460,7 @@ static void renderCubeMap(const BA2File& ba2File,
                 break;
               case SDLDisplay::SDLKeySymF9:
                 {
-                  int     n = display.browseList(
+                  int     n = display.browseFile(
                                   texturePaths, "Select texture file",
                                   int(fileNum), 0x0B080F04FFFFULL);
                   if (n >= 0 && size_t(n) < texturePaths.size() &&
