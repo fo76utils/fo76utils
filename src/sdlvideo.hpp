@@ -55,6 +55,23 @@ class SDLDisplay
   // returns 0 if there is not enough data yet, 0xFFFD on error
   std::uint32_t decodeUTF8Character();
   inline void printCharacter(std::uint32_t c);
+  struct BrowseFileItem
+  {
+    std::string fileName;
+    int     type;                       // 0: directory, 1: file
+    int     n;
+    BrowseFileItem(const std::string& s, int itemType, int itemNum)
+      : fileName(s),
+        type(itemType),
+        n(itemNum)
+    {
+    }
+    inline bool operator<(const BrowseFileItem& r) const
+    {
+      return (type < r.type || (type == r.type && fileName < r.fileName) ||
+              (type == r.type && fileName == r.fileName && n < r.n));
+    }
+  };
  public:
   enum
   {
@@ -312,6 +329,8 @@ class SDLDisplay
   // color = 255 is interpreted as the default color
   // Returns -1 if nothing is selected, -2 if the window is closed
   int browseList(const std::vector< std::string >& v, const char *titleString,
+                 int itemSelected, std::uint64_t colors = 0xFFFF0F04FFFFULL);
+  int browseFile(const std::vector< std::string >& v, const char *titleString,
                  int itemSelected, std::uint64_t colors = 0xFFFF0F04FFFFULL);
 #ifdef __GNUC__
   __attribute__ ((__format__ (__printf__, 2, 3)))

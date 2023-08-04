@@ -1526,6 +1526,279 @@ int SDLDisplay::browseList(
   return itemSelected;
 }
 
+int SDLDisplay::browseFile(
+    const std::vector< std::string >& v, const char *titleString,
+    int itemSelected, std::uint64_t colors)
+{
+  if (v.size() < 100)
+    return browseList(v, titleString, itemSelected, colors);
+  int     maxItemNum =
+      int(std::min(v.size() - 1, size_t(0x7FFFFFFF - textHeight)));
+  itemSelected = std::max(std::min(itemSelected, maxItemNum), 0);
+#ifdef HAVE_SDL2
+  if (textWidth < 16 || textHeight < 4)
+    return itemSelected;
+  clearTextBuffer();
+  textBuf.resize(size_t(textWidth) * size_t(textHeight), 0U);
+  std::vector< std::uint32_t >  savedDrawSurface;
+  copyFromDrawSurface(savedDrawSurface);
+  std::uint32_t listColor = std::uint32_t(colors & 0xFFFFU);
+  std::uint32_t selectColor = std::uint32_t((colors >> 16) & 0xFFFFU);
+  std::uint32_t titleColor = std::uint32_t((colors >> 32) & 0xFFFFU);
+  if (!titleString || titleString[0] == '\0')
+    titleString = "Select file";
+  std::string currentFile = v[itemSelected];    // full path
+  std::string currentDir;
+  std::string tmpBuf;
+  std::vector< BrowseFileItem > currentDirFiles;
+  std::set< std::string > subDirSet;
+  int     fileSelected = 0;
+  int     maxFileNum = 0;
+  std::vector< SDLEvent > eventBuf;
+  bool    redrawFlag = true;
+  bool    quitFlag = false;
+  bool    doneFlag = false;
+  while (!quitFlag && !doneFlag)
+  {
+    int     n0 = 0;
+    if (redrawFlag)
+    {
+      copyToDrawSurface(savedDrawSurface);
+      if (currentDirFiles.size() < 1)
+      {
+        // create file list under current directory
+        size_t  n = currentFile.rfind('/');
+        if (n == std::string::npos || n < 1)
+          currentDir.clear();
+        else
+          currentDir.assign(currentFile, 0, n);
+        if (n == std::string::npos)
+          n = 0;
+        else
+          n++;
+        currentDirFiles.emplace_back(std::string("/"), 0, -1);
+        currentDirFiles.emplace_back(std::string(".."), 0, -1);
+        subDirSet.clear();
+        for (int i = 0; i <= maxItemNum; i++)
+        {
+          if (n < 1 ||
+              (v[i].length() >= n && v[i][n - 1] == '/' &&
+               v[i].compare(0, n - 1, currentDir) == 0))
+          {
+            size_t  n2 = v[i].find('/', n);
+            if (n2 == std::string::npos)
+            {
+              currentDirFiles.emplace_back(std::string(v[i].c_str() + n), 1, i);
+            }
+            else
+            {
+              tmpBuf.assign(v[i], n, n2 - n);
+              if (subDirSet.insert(tmpBuf).second)
+                currentDirFiles.emplace_back(tmpBuf, 0, -1);
+            }
+          }
+        }
+        if (currentDirFiles.size() > 3)
+          std::sort(currentDirFiles.begin() + 2, currentDirFiles.end());
+        maxFileNum = int(currentDirFiles.size()) - 1;
+        fileSelected = 1;
+        for (size_t i = 2; i < currentDirFiles.size(); i++)
+        {
+          if (currentFile.compare(n, currentFile.length() - n,
+                                  currentDirFiles[i].fileName) == 0)
+          {
+            fileSelected = int(i);
+            break;
+          }
+        }
+        tmpBuf = titleString;
+        tmpBuf += " (";
+        tmpBuf += currentDir;
+        tmpBuf += "/)";
+      }
+      printLine(tmpBuf.c_str(), 0, 0, titleColor);
+      n0 = fileSelected - ((textHeight - 1) >> 1);
+      n0 = std::max(std::min(n0, maxFileNum - (textHeight - 2)), 0);
+      for (int i = 1; i < textHeight; i++)
+      {
+        const char  *s = "";
+        int     n = n0 + (i - 1);
+        if (n <= maxFileNum)
+          s = currentDirFiles[n].fileName.c_str();
+        printLine(s, 3, i, (n != fileSelected ? listColor : selectColor));
+        if (n <= maxFileNum && currentDirFiles[n].type == 0)
+          textBuf[size_t(i) * size_t(textWidth)] += std::uint32_t('+' - ' ');
+      }
+      drawText(0, 0, textHeight, 0.75f, 1.0f);
+      blitSurface();
+      redrawFlag = false;
+    }
+    pollEvents(eventBuf, -1000, false, true);
+    for (size_t i = 0; i < eventBuf.size(); i++)
+    {
+      int     t = eventBuf[i].type();
+      int     d1 = eventBuf[i].data1();
+      if (t == SDLEventWindow)
+      {
+        if (d1 == 0)
+          quitFlag = true;
+        else
+          redrawFlag = true;
+        continue;
+      }
+      if (t == SDLEventMButtonDown)
+      {
+        int     d3 = eventBuf[i].data3();
+        int     d4 = eventBuf[i].data4();
+        // single click = select item
+        // double click = select item and return
+        bool    doubleClickFlag = false;
+        if (d3 == 1)
+        {
+          int     d2 = eventBuf[i].data2();
+          int     x = (d1 * textWidth) / imageWidth;
+          int     y = (d2 * textHeight) / imageHeight;
+          if (x >= 0 && x < textWidth && y >= 1 && y < textHeight)
+          {
+            int     n = n0 + (y - 1);
+            if (n <= maxFileNum)
+            {
+              redrawFlag |= (n != fileSelected);
+              fileSelected = n;
+              if (d4 >= 2)
+              {
+                t = SDLEventKeyDown;
+                d1 = 0x0020;
+                doubleClickFlag = true;
+              }
+            }
+          }
+        }
+        if (!doubleClickFlag)
+          continue;
+      }
+      if (t == SDLEventMouseWheel)
+      {
+        int     d2 = eventBuf[i].data2();
+        d2 = fileSelected - (d2 / 10);
+        d2 = std::max(std::min(d2, maxFileNum), 0);
+        if (d2 != fileSelected)
+        {
+          fileSelected = d2;
+          redrawFlag = true;
+        }
+        continue;
+      }
+      if (t != SDLEventKeyDown && t != SDLEventKeyRepeat)
+        continue;
+      switch (d1)
+      {
+        case SDLKeySymBackspace:
+        case SDLKeySymEscape:
+          itemSelected = -1;
+          doneFlag = true;
+          break;
+        case SDLKeySymLeft:             // left: parent directory
+          fileSelected = 1;
+        case SDLKeySymReturn:
+        case 0x0020:
+        case SDLKeySymRight:            // right: enter selected directory
+          if (currentDirFiles[fileSelected].type != 0)
+          {
+            if (d1 != SDLKeySymRight)
+            {
+              itemSelected = currentDirFiles[fileSelected].n;
+              doneFlag = true;
+            }
+            break;
+          }
+          if (fileSelected < 2)
+          {
+            if (fileSelected == 0 || currentDir.find('/') == std::string::npos)
+            {
+              if (!currentDir.empty())
+              {
+                currentFile.clear();
+                currentDirFiles.clear();
+                redrawFlag = true;
+              }
+            }
+            else
+            {
+              currentFile = currentDir;
+              currentDirFiles.clear();
+              redrawFlag = true;
+            }
+            break;
+          }
+          currentFile = currentDir;
+          if (!currentFile.empty())
+            currentFile += '/';
+          currentFile += currentDirFiles[fileSelected].fileName;
+          currentFile += '/';
+          currentDirFiles.clear();
+          redrawFlag = true;
+          break;
+        case SDLKeySymUp:
+          if (fileSelected > 0)
+          {
+            fileSelected--;
+            redrawFlag = true;
+          }
+          break;
+        case SDLKeySymDown:
+          if (fileSelected < maxFileNum)
+          {
+            fileSelected++;
+            redrawFlag = true;
+          }
+          break;
+        case SDLKeySymHome:
+          if (fileSelected)
+          {
+            fileSelected = 0;
+            redrawFlag = true;
+          }
+          break;
+        case SDLKeySymEnd:
+          if (fileSelected != maxFileNum)
+          {
+            fileSelected = maxFileNum;
+            redrawFlag = true;
+          }
+          break;
+        case SDLKeySymPageUp:
+          if (fileSelected > 0)
+          {
+            fileSelected = fileSelected - (textHeight - 3);
+            fileSelected = std::max(fileSelected, 0);
+            redrawFlag = true;
+          }
+          break;
+        case SDLKeySymPageDown:
+          if (fileSelected < maxFileNum)
+          {
+            fileSelected = fileSelected + (textHeight - 3);
+            fileSelected = std::min(fileSelected, maxFileNum);
+            redrawFlag = true;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+  }
+  if (quitFlag)
+    return -2;
+  copyToDrawSurface(savedDrawSurface);
+  clearTextBuffer();
+#else
+  (void) titleString;
+  (void) colors;
+#endif
+  return itemSelected;
+}
+
 #ifdef __GNUC__
 __attribute__ ((__format__ (__printf__, 2, 3)))
 #endif
