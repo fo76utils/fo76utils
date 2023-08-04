@@ -15,7 +15,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 * **-f INT**: Select output format, 0: 24-bit RGB (default), 1: 32-bit A8R8G8B8, 2: 32-bit A2R10G10B10.
 * **-rq INT**: Set render quality and flags (0 to 511, defaults to 0), using a sum of any of the following values:
   * 1: Enable the use of pre-combined meshes (same as **-scol 1**).
-  * 2: Render all supported object types other than decals (same as **-a**).
+  * 2: Render all supported object types other than decals, actors and markers (same as **-a**).
   * 0, 4, 8, or 12: Render quality from lowest to highest, 0 uses diffuse textures only on terrain and objects, 4 enables normal mapping, 8 also enables PBR on objects only, 12 enables PBR on terrain as well.
   * 16: Enable actors, this is only partly implemented and may not work correctly.
   * 32: Enable the rendering of decals (TXST objects), only if **render** has been built with the ENABLE\_TXST\_DECALS macro set to 1. This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
@@ -51,7 +51,7 @@ Compiling with **rgb10a2=1** is required to actually increase frame buffer preci
 ### Model options
 
 * **-scol BOOL**: Enable the use of pre-combined meshes. This works around some problems related to material swaps, but is generally slower, and may have other issues.
-* **-a**: Render all supported object types, other than decals (TXST).
+* **-a**: Render all supported object types, other than decals (TXST), actors and markers.
 * **-mlod INT**: Set level of detail for models, 0 (default and best) to 4.
 * **-vis BOOL**: Render only objects visible from distance.
 * **-ndis BOOL**: If zero, also render initially disabled objects.

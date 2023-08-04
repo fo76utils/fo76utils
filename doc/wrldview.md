@@ -12,7 +12,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
 * **-rq INT**: Set render quality and flags (0 to 511, can be specified in hexadecimal format with 0x prefix, defaults to 0), using a sum of any of the following values:
   * 1: Enable the use of pre-combined meshes (same as **-scol 1**).
-  * 2: Render all supported object types other than decals (same as **-a**).
+  * 2: Render all supported object types other than decals, actors and markers (same as **-a**).
   * 0, 4, 8, or 12: Render quality from lowest to highest, 0 uses diffuse textures only on terrain and objects, 4 enables normal mapping, 8 also enables PBR on objects only, 12 enables PBR on terrain as well.
   * 16: Enable actors, this is only partly implemented and may not work correctly.
   * 32: Enable the rendering of decals (TXST objects), only if **render** has been built with the ENABLE\_TXST\_DECALS macro set to 1. This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
