@@ -23,12 +23,20 @@ class Renderer : protected Renderer_Base
  protected:
   // maximum number of NIF files to keep loaded (must be power of two and <= 64)
   static const unsigned int modelBatchCnt = 16U;
+  enum
+  {
+    baseObjBufShift = 12,
+    baseObjBufMask = 0x0FFF,
+    baseObjHashMask = 0xFFFF
+  };
   struct BaseObject
   {
+    unsigned int  formID;
+    std::int32_t  prv;                  // previous object with the same hash
     unsigned short  type;               // first 2 characters, or 0 if excluded
     unsigned short  flags;              // same as RenderObject flags
     unsigned int  modelID;
-    unsigned int  mswpFormID;           // TXST form ID for decals
+    unsigned int  mswpFormID;           // color for decals
     signed short  obndX0;
     signed short  obndY0;
     signed short  obndZ0;
@@ -167,7 +175,8 @@ class Renderer : protected Renderer_Base
   signed char   waterRenderMode;
   unsigned char bufAllocFlags;          // bit 0: RGBA buffer, bit 1: Z buffer
   NIFFile::NIFBounds  worldBounds;
-  std::map< unsigned int, BaseObject >  baseObjects;
+  std::vector< std::int32_t > baseObjects;      // baseObjHashMask + 1 elements
+  std::vector< std::vector< BaseObject > >  baseObjectBufs;
   DDSTexture  whiteTexture;
   // for TXST and WATR objects, materials[0] is the default water
   std::map< unsigned int, BGSMFile >  materials;
@@ -259,6 +268,7 @@ class Renderer : protected Renderer_Base
   inline void clearObjectPropertyCache()
   {
     baseObjects.clear();
+    baseObjectBufs.clear();
   }
   inline void clearExcludeModelPatterns()
   {

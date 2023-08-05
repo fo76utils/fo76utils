@@ -285,12 +285,20 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
     return -1;
   }
   NIFFile::NIFBounds  screenBounds;
+  FloatVector4  vtOffs(vt.offsX, vt.offsY, vt.offsZ, 0.0f);
+  FloatVector4  vtRotateX(vt.rotateXX, vt.rotateYX, vt.rotateZX, 0.0f);
+  FloatVector4  vtRotateY(vt.rotateXY, vt.rotateYY, vt.rotateZY, 0.0f);
+  FloatVector4  vtRotateZ(vt.rotateXZ, vt.rotateYZ, vt.rotateZZ, 0.0f);
+  vtRotateX *= vt.scale;
+  vtRotateY *= vt.scale;
+  vtRotateZ *= vt.scale;
   for (int i = 0; i < 8; i++)
   {
-    FloatVector4  v((!(i & 1) ? modelBounds.xMin() : modelBounds.xMax()),
-                    (!(i & 2) ? modelBounds.yMin() : modelBounds.yMax()),
-                    (!(i & 4) ? modelBounds.zMin() : modelBounds.zMax()), 0.0f);
-    v = vt.transformXYZ(v);
+    FloatVector4  v(vtRotateX
+                    * (!(i & 1) ? modelBounds.xMin() : modelBounds.xMax()));
+    v += (vtRotateY * (!(i & 2) ? modelBounds.yMin() : modelBounds.yMax()));
+    v += (vtRotateZ * (!(i & 4) ? modelBounds.zMin() : modelBounds.zMax()));
+    v += vtOffs;
     screenBounds += v;
   }
   worldBounds += screenBounds.boundsMin;
@@ -457,7 +465,7 @@ bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
   {
     if (f == "WNAM" && f.size() == 4)
     {
-      const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(f.readUInt32Fast());
+      const ESMFile::ESMRecord  *r2 = esmFile.findRecord(f.readUInt32Fast());
       if (r2 && *r2 == "ARMO")
       {
         unsigned int  modelFormID = 0U;
@@ -492,7 +500,7 @@ bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
         }
         if (stringBuf.empty() && modelFormID)
         {
-          r2 = esmFile.getRecordPtr(modelFormID);
+          r2 = esmFile.findRecord(modelFormID);
           if (r2 && (*r2 == "ARMA" || *r2 == "ARMO"))
           {
             ESMFile::ESMField f3(esmFile, *r2);
@@ -543,6 +551,7 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
   ESMFile::ESMField f(esmFile, r);
   float   specularSmoothness = 0.0f;
   unsigned int  decalFlags = 0U;
+  unsigned int  decalColor = 0xFFFFFFFFU;
   bool    haveDODT = false;
   while (f.next())
   {
@@ -568,7 +577,10 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
         s = (s > 2.0f ? ((float(std::log2(s)) - 1.0f) * (1.0f / 9.0f)) : 0.0f);
       specularSmoothness = std::min(std::max(s, 0.0f), 8.0f);
       if (f.size() == 36)
+      {
         decalFlags = FileBuffer::readUInt32Fast(f.getDataPtr() + 28);
+        decalColor = FileBuffer::readUInt32Fast(f.getDataPtr() + 32);
+      }
       haveDODT = true;
       break;
     }
@@ -652,7 +664,7 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
   p.type = 0x5854;                      // "TX"
   p.flags = 0x0010;                     // is decal
   p.modelID = 0U;
-  p.mswpFormID = formID;
+  p.mswpFormID = decalColor;
   char    tmpBuf[32];
   std::sprintf(tmpBuf, "~0x%08X", formID);
   p.modelPath = tmpBuf;
@@ -665,11 +677,30 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
 const Renderer::BaseObject * Renderer::readModelProperties(
     RenderObject& p, const ESMFile::ESMRecord& r)
 {
-  std::map< unsigned int, BaseObject >::const_iterator  i =
-      baseObjects.find(r.formID);
-  if (i == baseObjects.end())
+  if (BRANCH_UNLIKELY(baseObjects.size() < size_t(baseObjHashMask + 1)))
+    baseObjects.resize(size_t(baseObjHashMask + 1), std::int32_t(-1));
+  BaseObject    *o = (BaseObject *) 0;
+  std::uint32_t h;
+  {
+    std::uint64_t tmp = 0xFFFFFFFFU;
+    hashFunctionUInt64(tmp, r.formID);
+    h = std::uint32_t(tmp & baseObjHashMask);
+  }
+  for (std::int32_t i = baseObjects[h]; i >= 0; )
+  {
+    std::uint32_t n = std::uint32_t(i);
+    BaseObject& tmp = baseObjectBufs[n >> baseObjBufShift][n & baseObjBufMask];
+    if (tmp.formID == r.formID)
+    {
+      o = &tmp;
+      break;
+    }
+    i = tmp.prv;
+  }
+  if (!o)
   {
     BaseObject  tmp;
+    tmp.formID = r.formID;
     tmp.type = 0;
     tmp.flags = (unsigned short) ((r.flags >> 18) & 0x20U);     // is marker
     tmp.modelID = 0xFFFFFFFFU;
@@ -807,15 +838,26 @@ const Renderer::BaseObject * Renderer::readModelProperties(
       tmp.mswpFormID =
           materialSwaps.loadMaterialSwap(ba2File, esmFile, tmp.mswpFormID);
     }
-    i = baseObjects.insert(std::pair< unsigned int, BaseObject >(
-                               r.formID, tmp)).first;
+    if (baseObjectBufs.size() < 1 ||
+        baseObjectBufs.back().size() >= (baseObjBufMask + 1U))
+    {
+      baseObjectBufs.emplace_back();
+      baseObjectBufs.back().reserve(baseObjBufMask + 1U);
+    }
+    std::vector< BaseObject >&  objBuf = baseObjectBufs.back();
+    size_t  n =
+        ((baseObjectBufs.size() - 1) << baseObjBufShift) | objBuf.size();
+    tmp.prv = baseObjects[h];
+    objBuf.push_back(tmp);
+    baseObjects[h] = std::int32_t(n);
+    o = &(objBuf.back());
   }
-  if (!(i->second.flags & 0x17))
+  if (!(o->flags & 0x17))
     return (BaseObject *) 0;
-  p.flags = i->second.flags;
-  p.model.o = &(i->second);
-  p.mswpFormID = i->second.mswpFormID;
-  return &(i->second);
+  p.flags = o->flags;
+  p.model.o = o;
+  p.mswpFormID = o->mswpFormID;
+  return o;
 }
 
 void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
@@ -846,7 +888,7 @@ void Renderer::addSCOLObjects(const ESMFile::ESMRecord& r,
       mswpFormID_ONAM = 0U;
       if (f.size() >= 8)
         mswpFormID_ONAM = f.readUInt32Fast();
-      const ESMFile::ESMRecord  *r3 = esmFile.getRecordPtr(modelFormID);
+      const ESMFile::ESMRecord  *r3 = esmFile.findRecord(modelFormID);
       if (!r3)
         continue;
       if (!(o = readModelProperties(tmp, *r3)) || (tmp.flags & 0x14))
@@ -900,7 +942,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
   const ESMFile::ESMRecord  *r = (ESMFile::ESMRecord *) 0;
   do
   {
-    r = esmFile.getRecordPtr(formID);
+    r = esmFile.findRecord(formID);
     if (BRANCH_UNLIKELY(!r))
       break;
     if (BRANCH_UNLIKELY(!(*r == "REFR")) && !(*r == "ACHR"))
@@ -908,7 +950,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
       if (*r == "CELL")
       {
         const ESMFile::ESMRecord  *r2;
-        if (!(r->parent && bool(r2 = esmFile.getRecordPtr(r->parent)) &&
+        if (!(r->parent && bool(r2 = esmFile.findRecord(r->parent)) &&
               r2->formID == 1U))        // ignore starting cell at 0, 0
         {
           if (type == 0)
@@ -944,42 +986,48 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
       ESMFile::ESMField f(esmFile, *r);
       while (f.next())
       {
-        if (f == "NAME" && f.size() >= 4)
+        switch (f.type)
         {
-          r2 = esmFile.getRecordPtr(f.readUInt32Fast());
-        }
-        else if (f == "DATA" && f.size() >= 24)
-        {
-          FloatVector4  tmp(f.readFloatVector4());
-          offsX = tmp[0];
-          offsY = tmp[1];
-          f.setPosition(f.getPosition() - 8);
-          tmp = f.readFloatVector4();
-          offsZ = tmp[0];
-          rX = tmp[1];
-          rY = tmp[2];
-          rZ = tmp[3];
-        }
-        else if (f == "XSCL" && f.size() >= 4)
-        {
-          scale = f.readFloat();
-        }
-        else if (f == "XMSP" && f.size() >= 4)
-        {
-          refrMSWPFormID = f.readUInt32Fast();
-        }
+          case 0x454D414EU:             // "NAME"
+            if (f.size() >= 4)
+              r2 = esmFile.findRecord(f.readUInt32Fast());
+            break;
+          case 0x41544144U:             // "DATA"
+            if (f.size() >= 24)
+            {
+              FloatVector4  tmp(f.readFloatVector4());
+              offsX = tmp[0];
+              offsY = tmp[1];
+              f.setPosition(f.getPosition() - 8);
+              tmp = f.readFloatVector4();
+              offsZ = tmp[0];
+              rX = tmp[1];
+              rY = tmp[2];
+              rZ = tmp[3];
+            }
+            break;
+          case 0x4C435358U:             // "XSCL"
+            if (f.size() >= 4)
+              scale = f.readFloat();
+            break;
+          case 0x50534D58U:             // "XMSP"
+            if (f.size() >= 4)
+              refrMSWPFormID = f.readUInt32Fast();
+            break;
 #if ENABLE_TXST_DECALS
-        else if (BRANCH_UNLIKELY(f == "XPDD") && r2 && *r2 == "TXST" &&
-                 f.size() >= 8)
-        {
-          float   xScale = f.readFloat();
-          float   zScale = f.readFloat();
-          xScale = std::min(std::max(xScale, 0.125f), 8.0f);
-          zScale = std::min(std::max(zScale, 0.125f), 8.0f);
-          xpddScale = std::uint32_t(convertToFloat16(xScale))
-                      | (std::uint32_t(convertToFloat16(zScale)) << 16);
-        }
+          case 0x44445058U:             // "XPDD"
+            if (r2 && *r2 == "TXST" && f.size() >= 8)
+            {
+              float   xScale = f.readFloat();
+              float   zScale = f.readFloat();
+              xScale = std::min(std::max(xScale, 0.125f), 8.0f);
+              zScale = std::min(std::max(zScale, 0.125f), 8.0f);
+              xpddScale = std::uint32_t(convertToFloat16(xScale))
+                          | (std::uint32_t(convertToFloat16(zScale)) << 16);
+            }
+            break;
 #endif
+        }
       }
     }
     if (!r2)
@@ -1035,15 +1083,15 @@ void Renderer::findObjects(unsigned int formID, int type)
 {
   if (!formID)
     return;
-  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
+  const ESMFile::ESMRecord  *r = esmFile.findRecord(formID);
   if (!r)
     return;
   if (*r == "WRLD")
   {
-    r = esmFile.getRecordPtr(0U);
+    r = esmFile.findRecord(0U);
     while (r && r->next)
     {
-      r = esmFile.getRecordPtr(r->next);
+      r = esmFile.findRecord(r->next);
       if (!r)
         break;
       if (*r == "GRUP" && r->formID == 0 && r->children)
@@ -1051,7 +1099,7 @@ void Renderer::findObjects(unsigned int formID, int type)
         unsigned int  groupID = r->children;
         while (groupID)
         {
-          const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(groupID);
+          const ESMFile::ESMRecord  *r2 = esmFile.findRecord(groupID);
           if (!r2)
             break;
           if (*r2 == "GRUP" && r2->formID == 1 && r2->flags == formID &&
@@ -1068,14 +1116,14 @@ void Renderer::findObjects(unsigned int formID, int type)
   else if (*r == "CELL")
   {
     findObjects(formID, type, false);
-    r = esmFile.getRecordPtr(0U);
+    r = esmFile.findRecord(0U);
     while (r)
     {
       if (*r == "GRUP")
       {
         if (r->formID <= 5U && r->children)
         {
-          r = esmFile.getRecordPtr(r->children);
+          r = esmFile.findRecord(r->children);
           continue;
         }
         else if (r->formID <= 9U && r->formID != 7U && r->flags == formID &&
@@ -1086,10 +1134,10 @@ void Renderer::findObjects(unsigned int formID, int type)
         }
       }
       while (r && !r->next && r->parent)
-        r = esmFile.getRecordPtr(r->parent);
+        r = esmFile.findRecord(r->parent);
       if (!(r && r->next))
         break;
-      r = esmFile.getRecordPtr(r->next);
+      r = esmFile.findRecord(r->next);
     }
   }
   else if (!(*r == "GRUP"))
@@ -1143,15 +1191,18 @@ void Renderer::sortObjectList()
 #endif
     i->second = n;
   }
-  for (std::map< unsigned int, BaseObject >::iterator
-           i = baseObjects.begin(); i != baseObjects.end(); i++)
+  for (size_t i = 0; i < baseObjectBufs.size(); i++)
   {
-    std::map< std::string, unsigned int >::const_iterator j =
-        modelPathsUsed.find(i->second.modelPath);
-    if (j == modelPathsUsed.end())
-      i->second.modelID = 0xFFFFFFFFU;
-    else
-      i->second.modelID = j->second;
+    for (size_t j = 0; j < baseObjectBufs[i].size(); j++)
+    {
+      BaseObject& o = baseObjectBufs[i][j];
+      std::map< std::string, unsigned int >::const_iterator k =
+          modelPathsUsed.find(o.modelPath);
+      if (k == modelPathsUsed.end())
+        o.modelID = 0xFFFFFFFFU;
+      else
+        o.modelID = k->second;
+    }
   }
   std::sort(objectList.begin(), objectList.end());
 }
@@ -1379,7 +1430,7 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   else if (renderQuality >= 1)
     texturePathMaskBase = 0x000B;
   std::map< unsigned int, BGSMFile >::const_iterator  i =
-      materials.find(p.model.o->mswpFormID);
+      materials.find(p.model.o->formID);
   if (i == materials.end())
     return;
   t.renderer->m = i->second;
@@ -1438,7 +1489,7 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   }
   t.renderer->setRenderMode(renderModeQuality);
   t.renderer->drawDecal(p.modelTransform, textures, textureMask,
-                        decalBounds, 0xFFFFFFFFU);
+                        decalBounds, p.model.o->mswpFormID);
 #else
   (void) t;
   (void) p;
@@ -1840,7 +1891,7 @@ unsigned int Renderer::findParentWorld(ESMFile& esmFile, unsigned int formID)
 {
   if (!formID)
     return 0xFFFFFFFFU;
-  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
+  const ESMFile::ESMRecord  *r = esmFile.findRecord(formID);
   if (!(r && (*r == "WRLD" || *r == "GRUP" || *r == "CELL" || *r == "REFR")))
     return 0xFFFFFFFFU;
   if (!(*r == "WRLD"))
@@ -1849,12 +1900,12 @@ unsigned int Renderer::findParentWorld(ESMFile& esmFile, unsigned int formID)
     {
       if (!r->parent)
         return 0U;
-      r = esmFile.getRecordPtr(r->parent);
+      r = esmFile.findRecord(r->parent);
       if (!r)
         return 0U;
     }
     formID = r->flags;
-    r = esmFile.getRecordPtr(formID);
+    r = esmFile.findRecord(formID);
   }
   return formID;
 }
@@ -1863,6 +1914,7 @@ void Renderer::clear()
 {
   clear(0x7C);
   baseObjects.clear();
+  baseObjectBufs.clear();
 }
 
 void Renderer::clearImage(unsigned int flags)
@@ -2099,7 +2151,7 @@ void Renderer::initRenderPass(int n, unsigned int formID)
       if (waterRenderMode < 0 && landData)
       {
         const ESMFile::ESMRecord  *r =
-            esmFile.getRecordPtr(landData->getWaterFormID());
+            esmFile.findRecord(landData->getWaterFormID());
         if (r && *r == "WATR")
           getWaterMaterial(materials, esmFile, r, 0xC0302010U, true);
       }
