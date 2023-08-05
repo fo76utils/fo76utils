@@ -60,8 +60,11 @@ class ESMFile
   // 0x2B: Skyrim DLC
   // 0x2C: Skyrim Special Edition (2016)
   // 0x83: Fallout 4
+  // 0xC0: Fallout 76 (Wild Appalachia?)
+  // 0xC1: Fallout 76 (Nuclear Winter?)
   // 0xC2: Fallout 76 (Wastelanders)
   // 0xC3: Fallout 76 (Steel Dawn and newer)
+  // 0xC5: Fallout 76 (The Pitt and newer?)
   unsigned char esmVersion;
   unsigned short  esmFlags;     // 0x80: localized strings
   unsigned int  zlibBufIndex;
@@ -70,21 +73,6 @@ class ESMFile
   std::vector< unsigned int > formIDMap;
   std::vector< std::vector< unsigned char > > zlibBuf;
   std::vector< FileBuffer * > esmFiles;
-  inline const ESMRecord *findRecord(unsigned int n) const
-  {
-    size_t  offs = recordBuf.size();
-    if (n & 0x80000000U)
-      offs = (n & 0x7FFFFFFFU) + recordCnt;
-    else if (n < formIDMap.size())
-      offs = formIDMap[n];
-    if (offs >= recordBuf.size())
-      return (ESMRecord *) 0;
-    return (recordBuf.data() + offs);
-  }
-  inline ESMRecord *findRecord(unsigned int n)
-  {
-    return const_cast< ESMRecord * >(((const ESMFile *) this)->findRecord(n));
-  }
   const unsigned char *uncompressRecord(ESMRecord& r);
   unsigned int loadRecords(size_t& groupCnt, FileBuffer& buf,
                            size_t endPos, unsigned int parent);
@@ -98,6 +86,28 @@ class ESMFile
   }
   const ESMRecord& getRecord(unsigned int formID) const;
   // returns NULL if the record does not exist
+  inline const ESMRecord *findRecord(unsigned int n) const
+  {
+    if (BRANCH_UNLIKELY(n >= 0x80000000U))
+    {
+      n = (n & 0x7FFFFFFFU) + recordCnt;
+    }
+    else
+    {
+      std::vector< unsigned int >::const_iterator i = formIDMap.begin() + n;
+      if (BRANCH_UNLIKELY(i >= formIDMap.end()))
+        return (ESMRecord *) 0;
+      n = *i;
+    }
+    std::vector< ESMRecord >::const_iterator  i = recordBuf.begin() + n;
+    if (BRANCH_UNLIKELY(i >= recordBuf.end()))
+      return (ESMRecord *) 0;
+    return &(*i);
+  }
+  inline ESMRecord *findRecord(unsigned int n)
+  {
+    return const_cast< ESMRecord * >(((const ESMFile *) this)->findRecord(n));
+  }
   inline const ESMRecord *getRecordPtr(unsigned int formID) const
   {
     return findRecord(formID);
@@ -105,6 +115,12 @@ class ESMFile
   // encoding is (year - 2000) * 512 + (month * 32) + day for FO4 and newer
   unsigned short getRecordTimestamp(unsigned int formID) const;
   unsigned short getRecordUserID(unsigned int formID) const;
+  inline unsigned short getRecordFormVersion(const ESMRecord& r) const
+  {
+    if (!esmVersion)
+      return 0;
+    return FileBuffer::readUInt16Fast(r.fileData + 20);
+  }
   inline unsigned int getESMVersion() const
   {
     return esmVersion;
