@@ -27,6 +27,7 @@ View Fallout 4 or 76 cube maps from archive files. Can also be used to view any 
 * **F5**: Disable alpha blending.
 * **F6**: Enable alpha blending (texture view only).
 * **F9**: Select file from list.
+* **F11**: Save decompressed texture, including all faces of a cube map, but no mipmaps. Alpha channel and normal map Z fix settings are applied to the output file.
 * **F12** or **Print Screen**: Save screenshot.
 * **H**: Show help screen.
 * **C**: Clear messages.

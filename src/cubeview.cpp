@@ -38,19 +38,15 @@ static void renderTextureThread(
     std::uint32_t *outBuf, int w, int h, int y0, int y1,
     const DDSTexture *texture, bool isSRGB, bool fixNormalMap, bool enableAlpha)
 {
-  float   txtW = float(texture->getWidth());
-  float   txtH = float(texture->getHeight());
-  float   scale = std::max(txtW / float(w), txtH / float(h));
+  float   txtW = std::max(float(texture->getWidth() - 1), 1.0f);
+  float   txtH = std::max(float(texture->getHeight() - 1), 1.0f);
+  float   scale = std::max(txtW / float(w - 1), txtH / float(h - 1));
+  float   uScale = scale / txtW;
+  float   vScale = scale / txtH;
+  float   uOffset = float(w - 1) * -0.5f * uScale + 0.5f;
+  float   vOffset = float(h - 1) * -0.5f * vScale + 0.5f;
   float   mipLevel = FloatVector4::log2Fast(std::max(scale, 1.0f));
   mipLevel = std::min(std::max(mipLevel, 0.0f), 15.0f);
-  float   uScale = 0.0f;
-  float   vScale = 0.0f;
-  if (texture->getWidth() > 1)
-    uScale = scale / (txtW - 1.0f);
-  if (texture->getHeight() > 1)
-    vScale = scale / (txtH - 1.0f);
-  float   uOffset = float(1 - w) * 0.5f * uScale + 0.5f;
-  float   vOffset = float(1 - h) * 0.5f * vScale + 0.5f;
   outBuf = outBuf + (size_t(y0) * size_t(w));
   for (int yc = y0; yc < y1; yc++)
   {
@@ -61,7 +57,7 @@ static void renderTextureThread(
       FloatVector4  c0(0.0f);
       if (enableAlpha)
         c0 = (!((xc ^ yc) & 32) ? FloatVector4(64.0f) : FloatVector4(128.0f));
-      if (u >= 0.0f && u <= 1.0f && v >= 0.0f && v <= 1.0f)
+      if (u > -0.000001f && u < 1.000001f && v > -0.000001f && v < 1.000001f)
       {
         FloatVector4  c(texture->getPixelTC(u, v, mipLevel));
         float   a = c[3];
@@ -88,7 +84,9 @@ static void renderTextureThread(
   }
 }
 
-static void saveScreenshot(SDLDisplay& display, const std::string& ddsFileName)
+static void saveScreenshot(SDLDisplay& display, const std::string& ddsFileName,
+                           const DDSTexture *texture = (DDSTexture *) 0,
+                           bool enableAlpha = true, bool fixNormalMap = false)
 {
   try
   {
@@ -113,15 +111,47 @@ static void saveScreenshot(SDLDisplay& display, const std::string& ddsFileName)
       std::sprintf(buf, "_%02u%02u%02u.dds", h, m, s);
       fileName += buf;
     }
-    int     w = display.getWidth() >> int(display.getIsDownsampled());
-    int     h = display.getHeight() >> int(display.getIsDownsampled());
-    display.blitSurface();
-    const std::uint32_t *p = display.lockScreenSurface();
-    DDSOutputFile f(fileName.c_str(), w, h, DDSInputFile::pixelFormatRGB24);
-    size_t  pitch = display.getPitch();
-    for (int y = 0; y < h; y++, p = p + pitch)
-      f.writeImageData(p, size_t(w), DDSInputFile::pixelFormatRGB24);
-    display.unlockScreenSurface();
+    if (texture)
+    {
+      int     w = texture->getWidth();
+      int     h = texture->getHeight();
+      DDSOutputFile f(fileName.c_str(), w, h, DDSInputFile::pixelFormatRGBA32);
+      for (size_t i = 0; i < texture->getTextureCount(); i++)
+      {
+        for (int y = 0; y < h; y++)
+        {
+          for (int x = 0; x < w; x++)
+          {
+            std::uint32_t c = texture->getPixelN(x, y, 0, int(i));
+            if (fixNormalMap)
+            {
+              FloatVector4  tmp(c);
+              tmp -= 127.5f;
+              tmp[2] = float(std::sqrt(std::max(16256.25f
+                                                - tmp.dotProduct2(tmp), 0.0f)));
+              tmp += 127.5f;
+              c = std::uint32_t(tmp);
+            }
+            f.writeByte((unsigned char) ((c >> 16) & 0xFFU));
+            f.writeByte((unsigned char) ((c >> 8) & 0xFFU));
+            f.writeByte((unsigned char) (c & 0xFFU));
+            f.writeByte((unsigned char) (!enableAlpha ? 0xFFU : (c >> 24)));
+          }
+        }
+      }
+    }
+    else
+    {
+      int     w = display.getWidth() >> int(display.getIsDownsampled());
+      int     h = display.getHeight() >> int(display.getIsDownsampled());
+      display.blitSurface();
+      const std::uint32_t *p = display.lockScreenSurface();
+      DDSOutputFile f(fileName.c_str(), w, h, DDSInputFile::pixelFormatRGB24);
+      size_t  pitch = display.getPitch();
+      for (int y = 0; y < h; y++, p = p + pitch)
+        f.writeImageData(p, size_t(w), DDSInputFile::pixelFormatRGB24);
+      display.unlockScreenSurface();
+    }
     display.consolePrint("Saved screenshot to %s\n", fileName.c_str());
   }
   catch (std::exception& e)
@@ -174,6 +204,8 @@ static const char *keyboardUsageString =
     "Enable alpha blending (texture view only).                      \n"
     "  \033[4m\033[38;5;228mF9\033[m                    "
     "Select file from list.                                          \n"
+    "  \033[4m\033[38;5;228mF11\033[m                   "
+    "Save decompressed texture.                                      \n"
     "  \033[4m\033[38;5;228mF12\033[m "
     "or \033[4m\033[38;5;228mPrint Screen\033[m   "
     "Save screenshot.                                                \n"
@@ -203,7 +235,7 @@ static void renderCubeMap(const BA2File& ba2File,
   bool    enableGamma = false;
   bool    fixNormalMap = false;
   bool    enableAlpha = true;
-  bool    screenshotFlag = false;
+  unsigned char screenshotFlag = 0;     // 1: save screenshot, 2: save texture
   std::vector< SDLDisplay::SDLEvent > eventBuf;
   DDSTexture  *texture = (DDSTexture *) 0;
   do
@@ -295,9 +327,13 @@ static void renderCubeMap(const BA2File& ba2File,
       }
       display.unlockDrawSurface();
       if (screenshotFlag)
-        saveScreenshot(display, texturePaths[fileNum]);
+      {
+        saveScreenshot(display, texturePaths[fileNum],
+                       (screenshotFlag == 1 ? (DDSTexture *) 0 : texture),
+                       enableAlpha, fixNormalMap);
+      }
     }
-    screenshotFlag = false;
+    screenshotFlag = 0;
     display.drawText(0, -1, display.getTextRows(), 0.75f, 1.0f);
     display.blitSurface();
     bool    redrawFlag = false;
@@ -480,11 +516,18 @@ static void renderCubeMap(const BA2File& ba2File,
                   }
                 }
                 break;
+              case SDLDisplay::SDLKeySymF11:
+                if (texture)
+                {
+                  screenshotFlag = 2;
+                  redrawFlag = true;
+                }
+                break;
               case SDLDisplay::SDLKeySymF12:
               case SDLDisplay::SDLKeySymPrintScr:
                 if (texture)
                 {
-                  screenshotFlag = true;
+                  screenshotFlag = 1;
                   redrawFlag = true;
                 }
                 break;
