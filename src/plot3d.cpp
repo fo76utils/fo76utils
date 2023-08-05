@@ -219,7 +219,7 @@ FloatVector4 Plot3D_TriShape::alphaBlend(
 {
   a = a * m.alpha * (1.0f / 255.0f);
   unsigned char blendMode = (unsigned char) ((m.alphaFlags >> 1) & 0xFFU);
-  if (a >= (511.0f / 512.0f) && blendMode == 0xEC)
+  if (a >= (511.0f / 512.0f) && blendMode == 0x76)
     return c;
   FloatVector4  c0(FloatVector4::convertRGBA32(*(z.cPtr)));
   if (usingSRGBColorSpace)
@@ -227,9 +227,9 @@ FloatVector4 Plot3D_TriShape::alphaBlend(
   else
     c0.srgbExpand();
   c0 /= lightColor[3];
-  if (BRANCH_LIKELY(blendMode == 0xEC))
+  if (BRANCH_LIKELY(blendMode == 0x76))
     return (c0 + ((c - c0) * a));
-  if (blendMode == 0x0C)
+  if (blendMode == 0x06)
     return (c0 + (c * a));
   return (alphaBlendFunction(c, c, c0, a, blendMode & 0x0F)
           + alphaBlendFunction(c0, c, c0, a, blendMode >> 4));
@@ -1876,13 +1876,22 @@ void Plot3D_TriShape::drawDecal(
   vScale = (vScale - 1.0f) / (vScale * (b.boundsMin[2] - b.boundsMax[2]));
   float   uOffset = -(b.boundsMin[0] * uScale);
   float   vOffset = -(b.boundsMax[2] * vScale);
+  if (!(c & 0x08000000U))
+  {
+    // select subtexture
+    mipScale *= 0.5f;
+    uScale *= 0.5f;
+    vScale *= 0.5f;
+    uOffset = uOffset * 0.5f + (!(c & 0x40000000U) ? 0.0f : 0.5f);
+    vOffset = vOffset * 0.5f + (!(c & 0x80000000U) ? 0.0f : 0.5f);
+  }
 
   Fragment  v;
   v.bitangent =
       FloatVector4(vt.rotateXX, vt.rotateYX, vt.rotateZX, vt.rotateXY);
   v.tangent =
       FloatVector4(vt.rotateXZ, vt.rotateYZ, vt.rotateZZ, vt.scale) * -1.0f;
-  v.vertexColor = FloatVector4(c);
+  v.vertexColor = FloatVector4(c | 0xFF000000U);
   if (!usingSRGBColorSpace)
     v.vertexColor *= (1.0f / 255.0f);
   else

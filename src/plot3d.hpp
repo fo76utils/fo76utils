@@ -267,7 +267,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                         const NIFFile::NIFVertexTransform& modelTransform,
                         const NIFFile::NIFBounds& b) const;
   // b = decal bounds (model space)
-  // c = color (sRGB)
+  // c = color (sRGB) in bits 0 to 23, flags in bits 24 to 31
+  //     subtextures (selected with b30 and b31) are enabled if b27 is not set
   void drawDecal(const NIFFile::NIFVertexTransform& modelTransform,
                  const DDSTexture * const *textures, unsigned int textureMask,
                  const NIFFile::NIFBounds& b, std::uint32_t c = 0xFFFFFFFFU);
