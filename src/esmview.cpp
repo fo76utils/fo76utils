@@ -1006,22 +1006,22 @@ int main(int argc, char **argv)
         {
           helpFlag = true;
           std::vector< unsigned int > tmpBuf;
-          const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
+          const ESMFile::ESMRecord  *r = esmFile.findRecord(formID);
           while (r && r->parent)
           {
             tmpBuf.push_back(r->parent);
-            r = esmFile.getRecordPtr(r->parent);
+            r = esmFile.findRecord(r->parent);
           }
           for (size_t i = tmpBuf.size(); i-- > 0; )
             esmFile.printRecordHdr(tmpBuf[i]);
           esmFile.consolePrint(
               "%s\033[31m\033[1m", (tmpBuf.size() > 0 ? "\n" : ""));
           esmFile.printRecordHdr(formID);
-          r = esmFile.getRecordPtr(formID);
+          r = esmFile.findRecord(formID);
           if (!r)
             continue;
           size_t  fileOffs =
-              size_t(r->fileData - esmFile.getRecordPtr(0U)->fileData);
+              size_t(r->fileData - esmFile.findRecord(0U)->fileData);
           ESMFile::ESMVCInfo  vcInfo;
           esmFile.getVersionControlInfo(vcInfo, *r);
           esmFile.consolePrint(

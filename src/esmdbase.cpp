@@ -619,7 +619,7 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
       // "*NAM"
       unsigned int  n = f.readUInt32();
       f.setPosition(0);
-      if (n >= 256U && n < 0x80000000U && getRecordPtr(n))
+      if (n >= 256U && n < 0x80000000U && findRecord(n))
         dataType = 6;
     }
     if (!dataType)
@@ -1009,7 +1009,7 @@ void ESMDump::dumpVersionInfo(unsigned int formID, const ESMRecord *parentGroup)
         }
         if (refrName)
         {
-          const ESMRecord *r2 = getRecordPtr(refrName);
+          const ESMRecord *r2 = findRecord(refrName);
           if (r2)
           {
             parentType = recordType;
@@ -1029,7 +1029,7 @@ void ESMDump::dumpVersionInfo(unsigned int formID, const ESMRecord *parentGroup)
           if (f == "QNAM" && f.size() >= 4)
             questID = f.readUInt32Fast();
         }
-        if (questID && getRecordPtr(questID))
+        if (questID && findRecord(questID))
         {
           parentType = 0x54535551U;     // "QUST"
           i = edidDB.find(questID);
@@ -1041,7 +1041,7 @@ void ESMDump::dumpVersionInfo(unsigned int formID, const ESMRecord *parentGroup)
     const ESMRecord *r2 = &r;
     while (parentEDID.empty() && r2 && r2->parent != 0U)
     {
-      r2 = getRecordPtr(r2->parent);
+      r2 = findRecord(r2->parent);
       if (!(r2 && *r2 == "GRUP"))
         break;
       if (!(r2->formID == 1 || (r2->formID >= 6 && r2->formID <= 9)))

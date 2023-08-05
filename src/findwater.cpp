@@ -292,7 +292,7 @@ void findWater(ESMFile& esmFile, unsigned int formID)
           scale = f.readFloat();
         }
       }
-      const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(n);
+      const ESMFile::ESMRecord  *r2 = esmFile.findRecord(n);
       if (r2 &&
           (*r2 == "ACTI" || *r2 == "MSTT" || *r2 == "PWAT" || *r2 == "STAT"))
       {

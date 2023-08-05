@@ -266,7 +266,7 @@ void MapImage::loadTextures(const char *listFileName,
 
 bool MapImage::checkParentWorld(const ESMFile::ESMRecord& r)
 {
-  const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(r.flags);
+  const ESMFile::ESMRecord  *r2 = esmFile.findRecord(r.flags);
   if (!r2)
     return false;
   float   onamS = 1.0f;
@@ -309,7 +309,7 @@ void MapImage::setWorldCellOffsets(unsigned int formID,
 {
   while (formID)
   {
-    const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
+    const ESMFile::ESMRecord  *r = esmFile.findRecord(formID);
     if (!r)
       break;
     if (*r == "GRUP")
@@ -440,7 +440,7 @@ const ESMFile::ESMRecord * MapImage::getParentCell(unsigned int formID) const
   const ESMFile::ESMRecord  *r;
   while (true)
   {
-    if (!formID || !(r = esmFile.getRecordPtr(formID)))
+    if (!formID || !(r = esmFile.findRecord(formID)))
       return (ESMFile::ESMRecord *) 0;
     if (*r == "CELL")
       break;
@@ -454,7 +454,7 @@ const ESMFile::ESMRecord * MapImage::getParentCell(unsigned int formID) const
 
 bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
 {
-  const ESMFile::ESMRecord  *p = esmFile.getRecordPtr(formID);
+  const ESMFile::ESMRecord  *p = esmFile.findRecord(formID);
   if (!p || !(*p == "REFR" || *p == "ACHR"))
     return false;
   ESMFile::ESMField f(esmFile, *p);
@@ -490,7 +490,7 @@ bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
     r.flags = (p->flags & 0xFFFCU) | 1U;        // bit 0 = not interior
   while (p->parent)
   {
-    p = esmFile.getRecordPtr(p->parent);
+    p = esmFile.findRecord(p->parent);
     if (!p)
       break;
     if (*p == "GRUP")
@@ -513,7 +513,7 @@ bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
     return false;
   if (r.xtel)
   {
-    p = esmFile.getRecordPtr(r.name);
+    p = esmFile.findRecord(r.name);
     if (p && *p == "DOOR")
     {
       r.isDoor = true;
@@ -623,7 +623,7 @@ void MapImage::findMarkers(unsigned int worldID)
   worldFormID = worldID;
   isInteriorMap = false;
   std::set< REFRRecord >  objectsFound;
-  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(worldID);
+  const ESMFile::ESMRecord  *r = esmFile.findRecord(worldID);
   if (worldID)
   {
     if (r && *r == "CELL")
@@ -640,15 +640,15 @@ void MapImage::findMarkers(unsigned int worldID)
       if (!(r && r->next))
         r = (ESMFile::ESMRecord *) 0;
       else
-        r = esmFile.getRecordPtr(r->next);
+        r = esmFile.findRecord(r->next);
       if (!(r && *r == "GRUP" && r->formID >= 6U && r->children))
         r = (ESMFile::ESMRecord *) 0;
       else
-        r = esmFile.getRecordPtr(r->children);
+        r = esmFile.findRecord(r->children);
     }
     else
     {
-      r = esmFile.getRecordPtr(0U);
+      r = esmFile.findRecord(0U);
     }
   }
   while (r)
@@ -709,7 +709,7 @@ void MapImage::findMarkers(unsigned int worldID)
     }
     if (!nextFormID)
       break;
-    r = esmFile.getRecordPtr(nextFormID);
+    r = esmFile.findRecord(nextFormID);
   }
   for (unsigned char p = 0; p <= 15; p++)
   {

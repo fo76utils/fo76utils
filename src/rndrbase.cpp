@@ -162,7 +162,7 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
   std::string bnamPath;
   std::string snamPath;
   std::map< std::string, BGSMFile >&  v = materialSwaps[formID];
-  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(formID);
+  const ESMFile::ESMRecord  *r = esmFile.findRecord(formID);
   if (!(r && *r == "MSWP"))
     return 0U;
   ESMFile::ESMField f(esmFile, *r);
@@ -343,7 +343,7 @@ unsigned int Renderer_Base::getWaterMaterial(
   BGSMFile  tmp;
   tmp.nifVersion = nifVersion;
   tmp.setWaterColor(std::uint32_t(defaultColor), 1.0f);
-  const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(waterFormID);
+  const ESMFile::ESMRecord  *r2 = esmFile.findRecord(waterFormID);
   if (r2 && *r2 == "WATR")
   {
     ESMFile::ESMField f2(esmFile, *r2);

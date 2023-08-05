@@ -251,7 +251,7 @@ void LandscapeData::findESMLand(ESMFile& esmFile,
   const ESMFile::ESMRecord  *r = (ESMFile::ESMRecord *) 0;
   for ( ; formID; formID = r->next)
   {
-    r = esmFile.getRecordPtr(formID);
+    r = esmFile.findRecord(formID);
     if (!r)
       break;
     if (*r == "GRUP")
@@ -307,10 +307,10 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
     errorMessage("LandscapeData: invalid mip level");
   std::vector< unsigned long long > landList;
   {
-    const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(worldID);
+    const ESMFile::ESMRecord  *r = esmFile.findRecord(worldID);
     if (r && *r == "WRLD" && r->next)
     {
-      r = esmFile.getRecordPtr(r->next);
+      r = esmFile.findRecord(r->next);
       if (r && *r == "GRUP" && r->formID == 1 && r->children)
         findESMLand(esmFile, landList, r->children);
     }
@@ -365,7 +365,7 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
     if (j == emptyCells.end())
       continue;
     const ESMFile::ESMRecord  *r =
-        esmFile.getRecordPtr((unsigned int) (landList[i] & 0xFFFFFFFFU));
+        esmFile.findRecord((unsigned int) (landList[i] & 0xFFFFFFFFU));
     if (!(r && *r == "LAND"))
       continue;
     int     x = (int(k & 0xFFFFU) - (cellMinX + 32768)) << 5;
@@ -560,7 +560,7 @@ void LandscapeData::loadESMFile(ESMFile& esmFile,
 void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
                                     size_t n)
 {
-  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(ltexFormIDs[n]);
+  const ESMFile::ESMRecord  *r = esmFile.findRecord(ltexFormIDs[n]);
   if (!r)
     return;
   std::string stringBuf;
@@ -585,7 +585,7 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
     {
       unsigned int  tmp = f.readUInt32Fast();
       unsigned int  savedFormID = ltexFormIDs[n];
-      const ESMFile::ESMRecord  *r2 = esmFile.getRecordPtr(tmp);
+      const ESMFile::ESMRecord  *r2 = esmFile.findRecord(tmp);
       if (tmp && r2 &&
           ((*r == "LTEX" && *r2 == "TXST") || (*r == "GCVR" && *r2 == "LTEX")))
       {
@@ -639,7 +639,7 @@ void LandscapeData::loadTextureInfo(ESMFile& esmFile, const BA2File *ba2File,
 unsigned int LandscapeData::loadWorldInfo(ESMFile& esmFile,
                                           unsigned int worldID)
 {
-  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(worldID);
+  const ESMFile::ESMRecord  *r = esmFile.findRecord(worldID);
   if (!(r && *r == "WRLD"))
     errorMessage("LandscapeData: world not found in ESM file");
   unsigned int  parentID = 0U;

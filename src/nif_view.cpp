@@ -418,7 +418,7 @@ void NIF_View::setWaterColor(unsigned int watrFormID)
 {
   if (watrFormID && esmFile)
   {
-    const ESMFile::ESMRecord  *r = esmFile->getRecordPtr(watrFormID);
+    const ESMFile::ESMRecord  *r = esmFile->findRecord(watrFormID);
     if (r && *r == "WATR")
     {
       waterFormID = getWaterMaterial(waterMaterials, *esmFile, r, 0U);

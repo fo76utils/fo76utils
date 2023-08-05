@@ -994,7 +994,7 @@ void WorldSpaceViewer::printReferenceInfo(unsigned int refrFormID)
   refrFormID = (refrFormID & 0x00FFFFFFU) | (formID & 0x0F000000U);
   std::sprintf(tmpBuf, "0x%08X", refrFormID);
   (void) SDL_SetClipboardText(tmpBuf);
-  const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(refrFormID);
+  const ESMFile::ESMRecord  *r = esmFile.findRecord(refrFormID);
   if (!r)
   {
     display.consolePrint("Form ID = %s\n", tmpBuf);
@@ -1070,7 +1070,7 @@ void WorldSpaceViewer::printReferenceInfo(unsigned int refrFormID)
     const ESMFile::ESMRecord  *r2 = (ESMFile::ESMRecord *) 0;
     if (refrName)
     {
-      r2 = esmFile.getRecordPtr(refrName);
+      r2 = esmFile.findRecord(refrName);
       if (r2)
       {
         ESMFile::ESMField f2(esmFile, *r2);
@@ -1408,7 +1408,7 @@ void WorldSpaceViewer::consoleInput()
         unsigned int  n =
             (unsigned int) parseInteger(args[0], 0,
                                         "invalid form ID", 0, 0x0FFFFFFF);
-        const ESMFile::ESMRecord  *r = esmFile.getRecordPtr(n);
+        const ESMFile::ESMRecord  *r = esmFile.findRecord(n);
         if (!r)
           errorMessage("invalid form ID");
         if (!(*r == "REFR" || *r == "ACHR"))
