@@ -170,6 +170,19 @@ inline std::uint16_t convertToFloat16(float x)
 std::uint16_t convertToFloat16(float x);
 #endif
 
+inline void hashFunctionUInt64(std::uint64_t& h, std::uint64_t m)
+{
+#if ENABLE_X86_64_AVX
+  __asm__ ("crc32 %1, %0" : "+r" (h) : "r" (m));
+#else
+  static const std::uint64_t  multValue = 0xEE088D97U;
+  h = std::uint32_t((h ^ m) & 0xFFFFFFFFU) * multValue;
+  h = h + (h >> 32);
+  h = std::uint32_t((h ^ (m >> 32)) & 0xFFFFFFFFU) * multValue;
+  h = h + (h >> 32);
+#endif
+}
+
 inline unsigned long long rgba32ToRBGA64(unsigned int c)
 {
   return ((unsigned long long) (c & 0x00FF00FFU)
