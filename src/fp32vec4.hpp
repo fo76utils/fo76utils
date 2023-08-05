@@ -572,30 +572,37 @@ inline std::uint32_t FloatVector4::convertToA2R10G10B10(bool noClamp) const
   {
     1023.0f / 255.0f, 1023.0f / 255.0f, 1023.0f / 255.0f, 3.0f / 255.0f
   };
+#if ENABLE_X86_64_AVX2
+  static const XMM_UInt32 sllTbl = { 20U, 10U, 0U, 30U };
+#else
   static const XMM_UInt8  shufTbl =
   {
     4, 5, 0, 1, 8, 9, 12, 13, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80
   };
   static const XMM_Int16  multTbl2 = { 64, 1, 1, 16384, 0, 0, 0, 0 };
+#endif
   XMM_Float   tmp1;
   XMM_UInt32  tmp2;
-  if (noClamp)
-  {
-    __asm__ ("vmulps %2, %1, %0" : "=x" (tmp1) : "x" (v), "xm" (multTbl1));
-  }
-  else
-  {
-    static const XMM_Float  maxTbl = { 255.0f, 255.0f, 255.0f, 255.0f };
-    __asm__ ("vxorps %0, %0, %0" : "=x" (tmp2));
-    __asm__ ("vminps %2, %1, %0" : "=x" (tmp1) : "x" (v), "xm" (maxTbl));
-    __asm__ ("vmaxps %1, %0, %0" : "+x" (tmp1) : "x" (tmp2));
-    __asm__ ("vmulps %1, %0, %0" : "+x" (tmp1) : "xm" (multTbl1));
-  }
+  __asm__ ("vmulps %2, %1, %0" : "=x" (tmp1) : "x" (v), "xm" (multTbl1));
   __asm__ ("vcvtps2dq %0, %0" : "+x" (tmp1));
+  if (!noClamp)
+  {
+    static const XMM_Int32  minTbl = { 0, 0, 0, 0 };
+    static const XMM_Int32  maxTbl = { 1023, 1023, 1023, 3 };
+    __asm__ ("vpmaxsd %1, %0, %0" : "+x" (tmp1) : "xm" (minTbl));
+    __asm__ ("vpminsd %1, %0, %0" : "+x" (tmp1) : "xm" (maxTbl));
+  }
+#if ENABLE_X86_64_AVX2
+  __asm__ ("vpsllvd %1, %0, %0" : "+x" (tmp1) : "xm" (sllTbl));
+  __asm__ ("vpshufd $0x4e, %1, %0" : "=x" (tmp2) : "x" (tmp1));
+  __asm__ ("vpor %1, %0, %0" : "+x" (tmp2) : "x" (tmp1));
+  __asm__ ("vpshufd $0xb1, %1, %0" : "=x" (tmp1) : "x" (tmp2));
+#else
   __asm__ ("vpshufb %1, %0, %0" : "+x" (tmp1) : "xm" (shufTbl));
   __asm__ ("vpmullw %1, %0, %0" : "+x" (tmp1) : "xm" (multTbl2));
   __asm__ ("vpsrlq $0x20, %1, %0" : "=x" (tmp2) : "x" (tmp1));
   __asm__ ("vpslld $0x04, %0, %0" : "+x" (tmp1));
+#endif
   __asm__ ("vpor %1, %0, %0" : "+x" (tmp2) : "x" (tmp1));
   return tmp2[0];
 }
