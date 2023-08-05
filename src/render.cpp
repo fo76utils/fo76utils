@@ -2105,6 +2105,13 @@ void Renderer::loadTerrain(const char *btdFileName,
                                  defTxtID, mipLevel, xMin, yMin, xMax, yMax);
     defaultWaterLevel = landData->getWaterLevel();
   }
+  if (waterRenderMode < 0)
+  {
+    const ESMFile::ESMRecord  *r =
+        esmFile.findRecord(landData->getWaterFormID());
+    if (r && *r == "WATR")
+      getWaterMaterial(materials, esmFile, r, 0xC0302010U, true);
+  }
   size_t  textureCnt = landData->getTextureCount();
   if (!landTextures)
     landTextures = new LandscapeTextureSet[textureCnt];
@@ -2166,13 +2173,6 @@ void Renderer::initRenderPass(int n, unsigned int formID)
       break;
     case 2:
       renderPass = 4;
-      if (waterRenderMode < 0 && landData)
-      {
-        const ESMFile::ESMRecord  *r =
-            esmFile.findRecord(landData->getWaterFormID());
-        if (r && *r == "WATR")
-          getWaterMaterial(materials, esmFile, r, 0xC0302010U, true);
-      }
       break;
     default:
       return;
