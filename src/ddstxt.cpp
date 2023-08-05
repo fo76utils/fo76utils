@@ -12,10 +12,14 @@ static inline std::uint64_t decodeBC3Alpha(std::uint64_t& a,
                                            const unsigned char *src,
                                            bool isSigned = false)
 {
-  unsigned int  a0 = src[0] ^ (!isSigned ? 0U : 0x80U);
-  unsigned int  a1 = src[1] ^ (!isSigned ? 0U : 0x80U);
-  FloatVector4  a0_f((float) int(a0));
-  FloatVector4  a1_f((float) int(a1));
+  std::uint64_t ba = FileBuffer::readUInt64Fast(src);
+  if (isSigned)
+    ba = ba ^ 0x8080U;
+  unsigned int  a0 = (unsigned int) (ba & 0xFFU);
+  unsigned int  a1 = (unsigned int) ((ba >> 8) & 0xFFU);
+  FloatVector4  tmp((std::uint32_t) ba);
+  FloatVector4  a0_f(tmp[0], tmp[0], tmp[0], tmp[0]);
+  FloatVector4  a1_f(tmp[1], tmp[1], tmp[1], tmp[1]);
   a1_f -= a0_f;
   if (a0 > a1)
   {
@@ -30,9 +34,7 @@ static inline std::uint64_t decodeBC3Alpha(std::uint64_t& a,
     FloatVector4  m(0.2f, 0.4f, 0.6f, 0.8f);
     a = a | (std::uint64_t(std::uint32_t(a0_f + (a1_f * m))) << 16);
   }
-  std::uint64_t ba = FileBuffer::readUInt16Fast(src + 2);
-  ba = ba | (std::uint64_t(FileBuffer::readUInt32Fast(src + 4)) << 16);
-  return ba;
+  return (ba >> 16);
 }
 
 static inline std::uint32_t decodeAlphaChannel(const std::uint64_t& a,
@@ -283,6 +285,22 @@ size_t DDSTexture::decodeLine_R8G8(
   return (size_t(w) << 1);
 }
 
+size_t DDSTexture::decodeLine_R8(
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
+{
+  unsigned int  x = 0;
+  for ( ; (x + 4U) <= w; x = x + 4U, dst = dst + 4, src = src + 4)
+  {
+    dst[0] = 0xFF000000U | (std::uint32_t(src[0]) * 0x00010101U);
+    dst[1] = 0xFF000000U | (std::uint32_t(src[1]) * 0x00010101U);
+    dst[2] = 0xFF000000U | (std::uint32_t(src[2]) * 0x00010101U);
+    dst[3] = 0xFF000000U | (std::uint32_t(src[3]) * 0x00010101U);
+  }
+  for ( ; x < w; x++, dst++, src++)
+    *dst = 0xFF000000U | (std::uint32_t(*src) * 0x00010101U);
+  return size_t(w);
+}
+
 void DDSTexture::loadTextureData(
     const unsigned char *srcPtr, int n, size_t blockSize,
     size_t (*decodeFunction)(std::uint32_t *,
@@ -296,7 +314,7 @@ void DDSTexture::loadTextureData(
     unsigned int  h = (yMaskMip0 >> (unsigned char) i) + 1U;
     if (i <= int(maxMipLevel))
     {
-      if (blockSize > 16)
+      if (blockSize < 8)
       {
         // uncompressed format
         for (unsigned int y = 0; y < h; y++)
@@ -431,8 +449,13 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
         case 0x1C:                      // DXGI_FORMAT_R8G8B8A8_UNORM
         case 0x1D:                      // DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
           haveAlpha = true;
-          blockSize = 64;
+          blockSize = 4;
           decodeFunction = &decodeLine_RGBA;
+          break;
+        case 0x3D:                      // DXGI_FORMAT_R8_UNORM
+        case 0x3E:                      // DXGI_FORMAT_R8_UINT
+          blockSize = 1;
+          decodeFunction = &decodeLine_R8;
           break;
         case 0x47:                      // DXGI_FORMAT_BC1_UNORM
         case 0x48:                      // DXGI_FORMAT_BC1_UNORM_SRGB
@@ -465,7 +488,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
           break;
         case 0x57:                      // DXGI_FORMAT_B8G8R8A8_UNORM
           haveAlpha = true;
-          blockSize = 64;
+          blockSize = 4;
           decodeFunction = &decodeLine_BGRA;
           break;
         case 0x62:                      // DXGI_FORMAT_BC7_UNORM
@@ -523,17 +546,17 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     blockSize = buf.readUInt32();
     if (blockSize != 16 && blockSize != 24 && blockSize != 32)
       errorMessage("unsupported texture file format");
-    blockSize = blockSize << 1;
+    blockSize = blockSize >> 3;
     unsigned long long  rgMask = buf.readUInt64();
     unsigned long long  baMask = buf.readUInt64();
-    if (blockSize < 64 || !(formatFlags & 0x03))
+    if (blockSize < 4 || !(formatFlags & 0x03))
       baMask = baMask & ~0xFF00000000000000ULL;
     else
       haveAlpha = true;
     if (rgMask == 0x0000FF00000000FFULL && baMask == 0x0000000000FF0000ULL)
-      decodeFunction = (blockSize < 64 ? &decodeLine_RGB : &decodeLine_RGB32);
+      decodeFunction = (blockSize < 4 ? &decodeLine_RGB : &decodeLine_RGB32);
     else if (rgMask == 0x0000FF0000FF0000ULL && baMask == 0x00000000000000FFULL)
-      decodeFunction = (blockSize < 64 ? &decodeLine_BGR : &decodeLine_BGR32);
+      decodeFunction = (blockSize < 4 ? &decodeLine_BGR : &decodeLine_BGR32);
     else if (rgMask == 0x0000FF00000000FFULL && baMask == 0xFF00000000FF0000ULL)
       decodeFunction = &decodeLine_RGBA;
     else if (rgMask == 0x0000FF0000FF0000ULL && baMask == 0xFF000000000000FFULL)
@@ -544,13 +567,13 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       errorMessage("unsupported texture file format");
   }
   size_t  sizeRequired = 0;
-  if (blockSize > 16)
+  if (blockSize < 8)
   {
     for (unsigned int i = 0; i <= maxMipLevel; i++)
     {
       unsigned int  w = (xMaskMip0 >> i) + 1U;
       unsigned int  h = (yMaskMip0 >> i) + 1U;
-      sizeRequired = sizeRequired + (size_t(w) * h * (blockSize >> 4));
+      sizeRequired = sizeRequired + (size_t(w) * h * blockSize);
     }
   }
   else
@@ -579,8 +602,8 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   {
     unsigned int  w = xMaskMip0 + 1U;
     unsigned int  h = yMaskMip0 + 1U;
-    if (blockSize > 16)
-      srcPtr = srcPtr + (size_t(w) * h * (blockSize >> 4));
+    if (blockSize < 8)
+      srcPtr = srcPtr + (size_t(w) * h * blockSize);
     else
       srcPtr = srcPtr + (size_t((w + 3) >> 2) * ((h + 3) >> 2) * blockSize);
     xMaskMip0 = xMaskMip0 >> 1;

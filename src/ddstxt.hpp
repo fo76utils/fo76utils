@@ -48,6 +48,8 @@ class DDSTexture
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_R8G8(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
+  static size_t decodeLine_R8(
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   void loadTextureData(const unsigned char *srcPtr, int n, size_t blockSize,
                        size_t (*decodeFunction)(std::uint32_t *,
                                                 const unsigned char *,
