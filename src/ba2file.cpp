@@ -681,6 +681,9 @@ int BA2File::extractBA2Texture(std::vector< unsigned char >& buf,
   bool    compressedTexture = true;
   switch (dxgiFormat)
   {
+    case 0x0A:                  // DXGI_FORMAT_R16G16B16A16_FLOAT
+    case 0x0B:                  // DXGI_FORMAT_R16G16B16A16_UNORM
+      pitch = width << 3;
     case 0x3D:                  // DXGI_FORMAT_R8_UNORM
       compressedTexture = false;
       break;
