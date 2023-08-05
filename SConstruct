@@ -4,29 +4,31 @@ import os, sys
 env = Environment(tools = [*filter(None, ARGUMENTS.get('tools','').split(','))] or None,
                   ENV = { "PATH" : os.environ["PATH"],
                           "HOME" : os.environ["HOME"] })
-env["CXXFLAGS"] = Split("-Wall -std=c++11 -Isrc")
+env["CCFLAGS"] = Split("-Wall -Isrc")
+env["CFLAGS"] = Split("-std=c99")
+env["CXXFLAGS"] = Split("-std=c++11")
 if int(ARGUMENTS.get("avx2", 0)):
-    env.Append(CXXFLAGS = ["-march=haswell"])
+    env.Append(CCFLAGS = ["-march=haswell"])
 elif int(ARGUMENTS.get("avx", 1)):
-    env.Append(CXXFLAGS = ["-march=sandybridge"])
-env.Append(CXXFLAGS = ["-mtune=generic"])
+    env.Append(CCFLAGS = ["-march=sandybridge"])
+env.Append(CCFLAGS = ["-mtune=generic"])
 env.Append(LIBS = ["m"])
 if "win" in sys.platform:
     buildPackage = ARGUMENTS.get("buildpkg", "")
 else:
     env.Append(LIBS = ["pthread"])
 if int(ARGUMENTS.get("debug", 0)):
-    env.Append(CXXFLAGS = Split("-g -Og"))
+    env.Append(CCFLAGS = Split("-g -Og"))
 elif int(ARGUMENTS.get("profile", 0)):
-    env.Append(CXXFLAGS = Split("-g -pg -O"))
+    env.Append(CCFLAGS = Split("-g -pg -O"))
     env.Prepend(LINKFLAGS = ["-pg"])
 else:
-    env.Append(CXXFLAGS = Split("-O3 -fomit-frame-pointer -ffast-math"))
+    env.Append(CCFLAGS = Split("-O3 -fomit-frame-pointer -ffast-math"))
     env.Append(LINKFLAGS = ["-s"])
 if int(ARGUMENTS.get("rgb10a2", 0)):
-    env.Append(CXXFLAGS = ["-DUSE_PIXELFMT_RGB10A2=1"])
+    env.Append(CCFLAGS = ["-DUSE_PIXELFMT_RGB10A2=1"])
 if int(ARGUMENTS.get("decals", 0)):
-    env.Append(CXXFLAGS = ["-DENABLE_TXST_DECALS=1"])
+    env.Append(CCFLAGS = ["-DENABLE_TXST_DECALS=1"])
 
 libSources = ["src/common.cpp", "src/filebuf.cpp", "src/zlib.cpp"]
 libSources += ["src/ba2file.cpp", "src/esmfile.cpp", "src/stringdb.cpp"]
@@ -35,6 +37,8 @@ libSources += ["src/esmdbase.cpp", "src/nif_file.cpp", "src/bgsmfile.cpp"]
 libSources += ["src/landdata.cpp", "src/plot3d.cpp", "src/landtxt.cpp"]
 libSources += ["src/terrmesh.cpp", "src/render.cpp", "src/rndrbase.cpp"]
 libSources += ["src/markers.cpp"]
+# detex source files
+libSources += ["src/bits.c", "src/bptc-tables.c", "src/decompress-bptc.c"]
 fo76utilsLib = env.StaticLibrary("fo76utils", libSources)
 
 if int(ARGUMENTS.get("pymodule", 0)):
@@ -58,7 +62,7 @@ try:
         nifViewEnv.ParseConfig("pkg-config --short-errors --cflags --libs sdl2")
     except:
         nifViewEnv.ParseConfig("pkg-config --short-errors --cflags --libs SDL2")
-    nifViewEnv.Append(CXXFLAGS = ["-DHAVE_SDL2=1"])
+    nifViewEnv.Append(CCFLAGS = ["-DHAVE_SDL2=1"])
 except:
     buildCubeView = False
 sdlVideoLib = nifViewEnv.StaticLibrary("sdlvideo",
@@ -98,7 +102,7 @@ if "win" in sys.platform:
         pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
         pkgFiles += Split("doc ltex scripts src SConstruct SConstruct.maps")
         pkgFiles += Split(".gitignore LICENSE README.md README.mman-win32")
-        pkgFiles += Split("mapicons.py tes5cell.txt")
+        pkgFiles += Split("README.detex mapicons.py tes5cell.txt")
         package = env.Command(
                       "../fo76utils-" + str(buildPackage) + ".7z", pkgFiles,
                       "7za a -m0=lzma -mx=9 -x!src/*.o $TARGET $SOURCES")
