@@ -550,8 +550,9 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
     return;
   ESMFile::ESMField f(esmFile, r);
   float   specularSmoothness = 0.0f;
-  unsigned int  decalFlags = 0U;
+  unsigned int  decalFlags = 0xFFFFFFFFU;
   unsigned int  decalColor = 0xFFFFFFFFU;
+  bool    haveAlphaFlags = false;
   bool    haveDODT = false;
   while (f.next())
   {
@@ -576,10 +577,16 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
       if (esmFile.getESMVersion() < 0x80)
         s = (s > 2.0f ? ((float(std::log2(s)) - 1.0f) * (1.0f / 9.0f)) : 0.0f);
       specularSmoothness = std::min(std::max(s, 0.0f), 8.0f);
-      if (f.size() == 36)
+      if (f.size() == 28)
+      {
+        decalFlags = FileBuffer::readUInt32Fast(f.getDataPtr() + 24);
+        decalFlags = ((decalFlags & 0x01U) << 8) | ((decalFlags & 0x0EU) << 10);
+      }
+      else if (f.size() == 36)
       {
         decalFlags = FileBuffer::readUInt32Fast(f.getDataPtr() + 28);
         decalColor = FileBuffer::readUInt32Fast(f.getDataPtr() + 32);
+        haveAlphaFlags = true;
       }
       haveDODT = true;
       break;
@@ -638,7 +645,7 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
     }
     if (!(m.texturePathMask & 0x0001))
       return;
-    if (decalFlags)
+    if (haveAlphaFlags)
     {
       m.alphaThreshold = (unsigned char) std::min(decalFlags >> 16, 0xFFU);
       m.alphaFlags = 0x00EC;
@@ -664,7 +671,7 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
   p.type = 0x5854;                      // "TX"
   p.flags = 0x0010;                     // is decal
   p.modelID = 0U;
-  p.mswpFormID = decalColor;
+  p.mswpFormID = (decalColor & 0x00FFFFFFU) | ((decalFlags & 0xFF00U) << 16);
   char    tmpBuf[32];
   std::sprintf(tmpBuf, "~0x%08X", formID);
   p.modelPath = tmpBuf;
@@ -1488,8 +1495,19 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
       textureMask |= 0x0010U;
   }
   t.renderer->setRenderMode(renderModeQuality);
+  std::uint32_t decalColor = std::uint32_t(p.model.o->mswpFormID);
+  if (!(decalColor & 0x08000000U))
+  {
+    // generate pseudo-random subtexture index
+    std::uint64_t h = 0xFFFFFFFFU;
+    hashFunctionUInt64(
+        h, FileBuffer::readUInt64Fast(&(p.modelTransform.offsX)));
+    hashFunctionUInt64(
+        h, FileBuffer::readUInt32Fast(&(p.modelTransform.offsZ)));
+    decalColor = (decalColor & 0x3FFFFFFFU) | std::uint32_t(h & 0xC0000000U);
+  }
   t.renderer->drawDecal(p.modelTransform, textures, textureMask,
-                        decalBounds, p.model.o->mswpFormID);
+                        decalBounds, decalColor);
 #else
   (void) t;
   (void) p;

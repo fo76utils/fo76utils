@@ -36,7 +36,7 @@ class Renderer : protected Renderer_Base
     unsigned short  type;               // first 2 characters, or 0 if excluded
     unsigned short  flags;              // same as RenderObject flags
     unsigned int  modelID;
-    unsigned int  mswpFormID;           // color for decals
+    unsigned int  mswpFormID;           // color + flags (in alpha) for decals
     signed short  obndX0;
     signed short  obndY0;
     signed short  obndZ0;
