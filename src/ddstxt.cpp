@@ -4,6 +4,10 @@
 
 #include <new>
 
+extern "C" bool detexDecompressBlockBPTC(
+    const std::uint8_t *bitstring, std::uint32_t mode_mask,
+    std::uint32_t flags, std::uint8_t *pixel_buffer);
+
 static inline std::uint64_t decodeBC3Alpha(std::uint64_t& a,
                                            const unsigned char *src,
                                            bool isSigned = false)
@@ -179,6 +183,17 @@ size_t DDSTexture::decodeBlock_BC5S(
     ba1 = ba1 >> 3;
     ba2 = ba2 >> 3;
   }
+  return 16;
+}
+
+size_t DDSTexture::decodeBlock_BC7(
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
+{
+  std::uint8_t  tmp[64];
+  (void) detexDecompressBlockBPTC(reinterpret_cast< const std::uint8_t * >(src),
+                                  0xFFFFFFFFU, 0U, tmp);
+  for (unsigned int i = 0; i < 16; i++)
+    dst[(i >> 2) * w + (i & 3)] = FileBuffer::readUInt32Fast(&(tmp[i << 2]));
   return 16;
 }
 
@@ -452,6 +467,12 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
           haveAlpha = true;
           blockSize = 64;
           decodeFunction = &decodeLine_BGRA;
+          break;
+        case 0x62:                      // DXGI_FORMAT_BC7_UNORM
+        case 0x63:                      // DXGI_FORMAT_BC7_UNORM_SRGB
+          haveAlpha = true;
+          blockSize = 16;
+          decodeFunction = &decodeBlock_BC7;
           break;
         default:
           throw FO76UtilsError("unsupported DXGI_FORMAT: 0x%08X", tmp);

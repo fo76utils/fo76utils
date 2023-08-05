@@ -32,6 +32,8 @@ class DDSTexture
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC5S(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
+  static size_t decodeBlock_BC7(
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_RGB(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_BGR(
