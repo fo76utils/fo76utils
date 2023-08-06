@@ -15,7 +15,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
   * 2: Render all supported object types other than decals, actors and markers (same as **-a**).
   * 0, 4, 8, or 12: Render quality from lowest to highest, 0 uses diffuse textures only on terrain and objects, 4 enables normal mapping, 8 also enables PBR on objects only, 12 enables PBR on terrain as well.
   * 16: Enable actors, this is only partly implemented and may not work correctly.
-  * 32: Enable the rendering of decals (TXST objects), only if **render** has been built with the ENABLE\_TXST\_DECALS macro set to 1. This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
+  * 32: Enable the rendering of decals (TXST objects). This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
   * 64: Enable marker objects.
   * 128: Disable built-in exclude patterns for effect meshes.
   * 256: Disable the use of effect materials.

@@ -7,10 +7,6 @@
 #include "nif_file.hpp"
 #include "fp32vec4.hpp"
 
-#ifndef ENABLE_TXST_DECALS
-#  define ENABLE_TXST_DECALS  0
-#endif
-
 class Plot3D_TriShape : public NIFFile::NIFTriShape
 {
  protected:

@@ -180,13 +180,8 @@ size_t Plot3D_TriShape::transformVertexData(
 inline void Plot3D_TriShape::storeNormal(
     FloatVector4 n, const std::uint32_t *cPtr)
 {
-#if ENABLE_TXST_DECALS
   if (BRANCH_UNLIKELY(bufN))
     bufN[size_t(cPtr - bufRGBA)] = n.normalToUInt32();
-#else
-  (void) n;
-  (void) cPtr;
-#endif
 }
 
 static inline FloatVector4 alphaBlendFunction(
@@ -1632,7 +1627,6 @@ bool Plot3D_TriShape::findDecalYOffset(
     float& yOffset, const NIFFile::NIFVertexTransform& modelTransform,
     const NIFFile::NIFBounds& b) const
 {
-#if ENABLE_TXST_DECALS
   NIFFile::NIFVertexTransform vt(modelTransform);
   vt *= viewTransform;
   NIFFile::NIFBounds  screenBounds;
@@ -1702,12 +1696,6 @@ bool Plot3D_TriShape::findDecalYOffset(
     }
   }
   return (minDistSqr < 16777216.0f);
-#else
-  (void) yOffset;
-  (void) modelTransform;
-  (void) b;
-  return false;
-#endif
 }
 
 void Plot3D_TriShape::drawDecal(
@@ -1715,7 +1703,6 @@ void Plot3D_TriShape::drawDecal(
     const DDSTexture * const *textures, unsigned int textureMask,
     const NIFFile::NIFBounds& b, std::uint32_t c)
 {
-#if ENABLE_TXST_DECALS
   if (BRANCH_UNLIKELY(!(textureMask & 1U)))
     return;                     // no diffuse texture
   if (BRANCH_UNLIKELY(m.flags
@@ -1936,12 +1923,5 @@ void Plot3D_TriShape::drawDecal(
     }
   }
   bufN = bufNSaved;
-#else
-  (void) modelTransform;
-  (void) textures;
-  (void) textureMask;
-  (void) b;
-  (void) c;
-#endif
 }
 

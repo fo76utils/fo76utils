@@ -317,9 +317,7 @@ class Renderer : protected Renderer_Base
   void setRenderQuality(unsigned int n)
   {
     enableMarkers = bool(n & 0x40);
-#if ENABLE_TXST_DECALS
     enableDecals = bool(n & 0x20);
-#endif
     enableSCOL |= bool(n & 1);
     enableAllObjects |= bool(n & 2);
     renderQuality = (unsigned char) ((n >> 2) & 3);

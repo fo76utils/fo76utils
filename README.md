@@ -35,7 +35,6 @@ Running any of the programs without arguments prints detailed usage information.
         pacman -S mingw64/mingw-w64-x86_64-swig
 * The installed MSYS2 and MinGW packages can be updated anytime by running **pacman -Syu** again.
 * In the MSYS2 MinGW x64 terminal, compile the utilities with **scons**. Use **scons -j 8** for building with 8 parallel jobs, and **scons -c** to clean up and delete the object files and executables. Running scons with the **rgb10a2=1** option compiles all tools that can render NIF files with RGB10A2 frame buffer format, and adding **pymodule=1** builds a Python interface to libfo76utils under scripts.
-* The scons option **decals=1** enables support for rendering decals (TXST objects).
 * If Visual Studio is also installed on the system, **tools=mingw** needs to be added to the scons options.
 * By default, the code generated is compatible with Intel Sandy Bridge or newer CPUs. Adding **avx=0** or **avx2=1** disables instruction set extensions or also enables them for Haswell or newer, respectively.
 * Optionally, for the makemap and icon extraction scripts only, download and install [ImageMagick](https://imagemagick.org/script/download.php#windows) and [SWFTools](http://www.swftools.org/download.html).

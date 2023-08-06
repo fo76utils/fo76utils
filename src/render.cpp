@@ -207,7 +207,6 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
     FloatVector4  b1(float(p.model.o->obndX1), float(p.model.o->obndY1),
                      float(p.model.o->obndZ1), 0.0f);
     FloatVector4  tmp(1.0f, 1.0f, 1.0f, 0.0f);
-#if ENABLE_TXST_DECALS
     if (BRANCH_UNLIKELY(p.flags & 0x10))
     {
       tmp = FloatVector4::convertFloat16(std::uint64_t(p.mswpFormID));
@@ -216,7 +215,6 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
       b0[1] = b0[1] + getDecalYOffsetMin(b0);
       b1[1] = b1[1] + getDecalYOffsetMax(b1);
     }
-#endif
     modelBounds.boundsMin = b0;
     modelBounds.boundsMin.minValues(b1);
     modelBounds.boundsMin -= 2.0f;
@@ -545,7 +543,6 @@ bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
 
 void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
 {
-#if ENABLE_TXST_DECALS
   if (!(r == "TXST"))
     return;
   ESMFile::ESMField f(esmFile, r);
@@ -675,10 +672,6 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
   char    tmpBuf[32];
   std::sprintf(tmpBuf, "~0x%08X", formID);
   p.modelPath = tmpBuf;
-#else
-  (void) p;
-  (void) r;
-#endif
 }
 
 const Renderer::BaseObject * Renderer::readModelProperties(
@@ -736,12 +729,10 @@ const Renderer::BaseObject * Renderer::readModelProperties(
           if ((r.flags & 0x8000U) < std::uint32_t(distantObjectsOnly))
             continue;
           break;
-#if ENABLE_TXST_DECALS
         case 0x54535854:                // "TXST"
           if (enableDecals)
             readDecalProperties(tmp, r);
           continue;
-#endif
         default:
           if (!enableAllObjects ||
               (r.flags & 0x8000U) < std::uint32_t(distantObjectsOnly))
@@ -952,7 +943,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     r = esmFile.findRecord(formID);
     if (BRANCH_UNLIKELY(!r))
       break;
-    if (BRANCH_UNLIKELY(!(*r == "REFR")) && !(*r == "ACHR"))
+    if (BRANCH_UNLIKELY(!(*r == "REFR")))
     {
       if (*r == "CELL")
       {
@@ -966,14 +957,18 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
             addWaterCell(*r);
         }
       }
-      if (!isRecursive)
-        break;
-      if (*r == "GRUP" && r->children)
+      if (!(*r == "ACHR"))
       {
-        if (r->formID > 0U && r->formID < (!type ? 6U : 10U) && r->formID != 7U)
-          findObjects(r->children, type, true);
+        if (!isRecursive)
+          break;
+        if (*r == "GRUP" && r->children && r->formID < 10U)
+        {
+          // group types 1 to 5 for terrain, + 6, 8, 9 for objects
+          if ((1U << r->formID) & (!type ? 0x003EU : 0x037EU))
+            findObjects(r->children, type, true);
+        }
+        continue;
       }
-      continue;
     }
     if ((r->flags & (!noDisabledObjects ? 0x00000020 : 0x00000820)) || !type)
       continue;                         // ignore deleted and disabled records
@@ -986,9 +981,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     float   offsY = 0.0f;
     float   offsZ = 0.0f;
     unsigned int  refrMSWPFormID = 0U;
-#if ENABLE_TXST_DECALS
     unsigned int  xpddScale = 0x3C003C00U;      // 1.0, 1.0 in FP16 format
-#endif
     {
       ESMFile::ESMField f(esmFile, *r);
       while (f.next())
@@ -1021,7 +1014,6 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
             if (f.size() >= 4)
               refrMSWPFormID = f.readUInt32Fast();
             break;
-#if ENABLE_TXST_DECALS
           case 0x44445058U:             // "XPDD"
             if (r2 && *r2 == "TXST" && f.size() >= 8)
             {
@@ -1033,7 +1025,6 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
                           | (std::uint32_t(convertToFloat16(zScale)) << 16);
             }
             break;
-#endif
         }
       }
     }
@@ -1051,14 +1042,12 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     const BaseObject  *o = readModelProperties(tmp, *r2);
     if (!o)
       continue;
-#if ENABLE_TXST_DECALS
     if (BRANCH_UNLIKELY(tmp.flags & 0x10))
     {
       tmp.mswpFormID = xpddScale;
       scale = 1.0f;
       refrMSWPFormID = 0U;
     }
-#endif
     tmp.modelTransform = NIFFile::NIFVertexTransform(scale, rX, rY, rZ,
                                                      offsX, offsY, offsZ);
     if (setScreenAreaUsed(tmp) < 0)
@@ -1183,19 +1172,15 @@ void Renderer::sortObjectList()
       modelPathsUsed[objectList[i].model.o->modelPath] = 0U;
   }
   unsigned int  n = 0U;
-#if ENABLE_TXST_DECALS
   bool    decalFlag = false;
-#endif
   for (std::map< std::string, unsigned int >::iterator
            i = modelPathsUsed.begin(); i != modelPathsUsed.end(); i++, n++)
   {
-#if ENABLE_TXST_DECALS
     if (BRANCH_UNLIKELY(i->first.c_str()[0] == '~') && !decalFlag)
     {
       n = (n + modelBatchCnt - 1U) & ~(modelBatchCnt - 1U);
       decalFlag = true;
     }
-#endif
     i->second = n;
   }
   for (size_t i = 0; i < baseObjectBufs.size(); i++)
@@ -1364,7 +1349,6 @@ void Renderer::loadModelsThread(Renderer *p,
 
 void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
 {
-#if ENABLE_TXST_DECALS
   NIFFile::NIFVertexTransform vt(p.modelTransform);
   vt *= viewTransform;
   FloatVector4  xpddScale(FloatVector4::convertFloat16(
@@ -1508,10 +1492,6 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   }
   t.renderer->drawDecal(p.modelTransform, textures, textureMask,
                         decalBounds, decalColor);
-#else
-  (void) t;
-  (void) p;
-#endif
 }
 
 bool Renderer::renderObject(RenderThread& t, size_t i,
@@ -1762,12 +1742,10 @@ bool Renderer::renderObject(RenderThread& t, size_t i,
       textureMask |= 0x0010U;
     t.renderer->drawTriShape(p.modelTransform, textures, textureMask);
   }
-#if ENABLE_TXST_DECALS
   else if ((p.flags & 0x10) && !(renderPass & 0x04))    // decal
   {
     renderDecal(t, p);
   }
-#endif
   return true;
 }
 
@@ -2179,7 +2157,6 @@ void Renderer::initRenderPass(int n, unsigned int formID)
   }
   sortObjectList();
   threadSortBuf.resize(64);
-#if ENABLE_TXST_DECALS
   if (enableDecals && !debugMode && !outBufN)
   {
     size_t  imageDataSize = size_t(width) * size_t(height);
@@ -2187,7 +2164,6 @@ void Renderer::initRenderPass(int n, unsigned int formID)
     for (size_t i = 0; i < imageDataSize; i++)
       outBufN[i] = 0U;
   }
-#endif
   for (size_t i = 0; i < renderThreads.size(); i++)
   {
     renderThreads[i].renderer->setBuffers(outBufRGBA, outBufZ, width, height,

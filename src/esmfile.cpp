@@ -81,7 +81,7 @@ unsigned int ESMFile::loadRecords(size_t& groupCnt, FileBuffer& buf,
         errorMessage("invalid ESM record size");
       buf.setPosition(buf.getPosition() + recordSize);
     }
-    if (!esmRecord->fileData)
+    if (BRANCH_LIKELY(!esmRecord->fileData))
     {
       esmRecord->parent = parent;
       if (prv)
@@ -90,13 +90,14 @@ unsigned int ESMFile::loadRecords(size_t& groupCnt, FileBuffer& buf,
       if (!r)
         r = n;
     }
-    if (n != 0U || !esmRecord->fileData)
+    else if (n == 0U)
     {
-      esmRecord->type = recordType;
-      esmRecord->flags = flags;
-      esmRecord->formID = formID;
-      esmRecord->fileData = p;
+      continue;
     }
+    esmRecord->type = recordType;
+    esmRecord->flags = flags;
+    esmRecord->formID = formID;
+    esmRecord->fileData = p;
   }
   return r;
 }
@@ -331,21 +332,21 @@ bool ESMFile::ESMField::next()
     errorMessage("end of record data");
   type = readUInt32Fast();
   size_t  n = readUInt16Fast();
-  if (type == 0x58585858 && n == 4)     // "XXXX"
+  if (BRANCH_UNLIKELY(type == 0x58585858))      // "XXXX"
   {
-    if (dataRemaining < 16)
-      errorMessage("end of record data");
-    n = readUInt32Fast();
-    type = readUInt32Fast();
-    (void) readUInt16Fast();
+    if (BRANCH_LIKELY(n == 4))
+    {
+      if (dataRemaining < 16)
+        errorMessage("end of record data");
+      n = readUInt32Fast();
+      type = readUInt32Fast();
+      (void) readUInt16Fast();
+    }
   }
   if ((filePos + n) > dataRemaining)
     errorMessage("end of record data");
   dataRemaining = dataRemaining - (unsigned int) (filePos + n);
-  if (!(n + dataRemaining))
-    fileBuf = (unsigned char *) 0;
-  else
-    fileBuf = fileBuf + filePos;
+  fileBuf = fileBuf + filePos;
   fileBufSize = n;
   filePos = 0;
   return true;
