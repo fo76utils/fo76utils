@@ -1623,12 +1623,13 @@ FloatVector4 Plot3D_TriShape::cubeMapToAmbient(const DDSTexture *e) const
   return s;
 }
 
-bool Plot3D_TriShape::findDecalYOffset(
-    float& yOffset, const NIFFile::NIFVertexTransform& modelTransform,
+float Plot3D_TriShape::findDecalYOffset(
+    const NIFFile::NIFVertexTransform& modelTransform,
     const NIFFile::NIFBounds& b) const
 {
   NIFFile::NIFVertexTransform vt(modelTransform);
   vt *= viewTransform;
+  float   yOffset = -16777216.0f;
   NIFFile::NIFBounds  screenBounds;
   for (int i = 0; i < 8; i++)
   {
@@ -1648,7 +1649,7 @@ bool Plot3D_TriShape::findDecalYOffset(
   if (x0 >= width || x1 < 0 || y0 >= height || y1 < 0 ||
       z0 >= 16777216 || z1 < 0)
   {
-    return false;
+    return yOffset;
   }
   x0 = (x0 > 0 ? x0 : 0);
   x1 = (x1 < (width - 1) ? x1 : (width - 1));
@@ -1695,7 +1696,7 @@ bool Plot3D_TriShape::findDecalYOffset(
       }
     }
   }
-  return (minDistSqr < 16777216.0f);
+  return yOffset;
 }
 
 void Plot3D_TriShape::drawDecal(
