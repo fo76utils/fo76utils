@@ -219,7 +219,8 @@ class Renderer : protected Renderer_Base
   void renderObjectList();
   static inline float getDecalYOffsetMin(FloatVector4 boundsMin)
   {
-    return (boundsMin[1] * 0.5f);
+    (void) boundsMin;
+    return 0.0f;
   }
   static inline float getDecalYOffsetMax(FloatVector4 boundsMax)
   {
