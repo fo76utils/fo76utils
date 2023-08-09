@@ -12,12 +12,10 @@ else:
     fo76Path = "./Fallout76/Data"
 
 esmPath = fo76Path + "/SeventySix.esm"
-btdPath1 = fo76Path + "/Terrain/Appalachia.btd"
-btdPath2 = fo76Path + "/Terrain/EXM1PittWorldspace.btd"
 convertOptions = ["-interlace", "Plane", "-sampling-factor", "1x1"]
 convertOptions += ["-quality", 80]
 
-baseOptions = [ fo76Path, "-btd", btdPath2,
+baseOptions = [ fo76Path,
                 "-light", 1.6, 70.5288, 135, "-ltxtres", 1024, "-lmip", 2,
                 "-ssaa", 1, "-rq", 0x2F ]
 
@@ -41,10 +39,9 @@ mapList = [ [ "the_pitt_industrial",        0x00616199, False,  768, -256 ],
             [ "protoexpo04",                0x0053E8DF, True,   1024, 0 ],
             [ "protoexpo05",                0x005B5E1E, True,   1280, 256 ],
             [ "morgantown",                 0x0025DA15, False,  1792, 11008,
-              [ "-btd", btdPath1, "-xm", "/babylon" ] ],
+              [ "-xm", "/babylon" ] ],
             [ "watoga",                     0x0025DA15, False,  -18296, -17688,
-              [ "-btd", btdPath1 ] ]
-            ]
+              ] ]
 
 def runCmd(args):
     tmpArgs = []

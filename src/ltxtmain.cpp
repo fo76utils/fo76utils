@@ -51,7 +51,7 @@ static void loadTextures(
       }
       if (c == '\r' || c == '\n')
       {
-        while (s.length() > 0 && s[s.length() - 1] == ' ')
+        while (s.length() > 0 && s.back() == ' ')
           s.resize(s.length() - 1);
         if (!s.empty())
         {
@@ -471,7 +471,7 @@ int main(int argc, char **argv)
       landData = new LandscapeData(esmFile, btdFileName, ba2File,
                                    formatMask, worldFormID, defTxtID,
                                    btdLOD, xMin, yMin, xMax, yMax);
-      isFO76 = (btdFileName && *btdFileName);
+      isFO76 = (esmFile->getESMVersion() >= 0xC0U);
       while ((2 << txtSetMip) < landData->getCellResolution())
         txtSetMip++;
       while ((32 << fo76VClrMip) < landData->getCellResolution())

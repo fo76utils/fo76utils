@@ -93,5 +93,5 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 
 ### Example
 
-./wrldview Fallout76/Data/SeventySix.esm 2304 1296 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -r -71 -71 71 71 -rq 10 -ltxtres 1024 -lcolor 1 -1 0.875 -1 -1 -light 1.6 70.5288 135 -cam 0.125 1 -29332.19 79373.61 115577.4
+./wrldview Fallout76/Data/SeventySix.esm 2304 1296 Fallout76/Data -r -71 -71 71 71 -rq 10 -ltxtres 1024 -lcolor 1 -1 0.875 -1 -1 -light 1.6 70.5288 135 -cam 0.125 1 -29332.19 79373.61 115577.4
 

@@ -535,10 +535,29 @@ int main(int argc, char **argv)
         std::fprintf(stderr, "%s\n", usageStrings[i]);
       return err;
     }
-    if (!(btdPath && *btdPath != '\0'))
+    int     width =
+        int(parseInteger(args[2], 0, "invalid image width", 2, 32768));
+    int     height =
+        int(parseInteger(args[3], 0, "invalid image height", 2, 32768));
+    viewOffsX = viewOffsX + (float(width) * 0.5f);
+    viewOffsY = viewOffsY + (float(height - 2) * 0.5f);
+    viewOffsZ = viewOffsZ - float(zMin);
+    zMax = zMax - zMin;
+
+    BA2File ba2File(args[4]);
+    ESMFile esmFile(args[0]);
+    unsigned int  worldID = Renderer::findParentWorld(esmFile, formID);
+    if (worldID == 0xFFFFFFFFU)
+      errorMessage("form ID not found in ESM, or invalid record type");
+
+    if (esmFile.getESMVersion() < 0xC0U)
     {
       btdPath = (char *) 0;
       btdLOD = 2;
+    }
+    else if (!btdPath)
+    {
+      btdPath = args[4];
     }
     if (debugMode == 1)
     {
@@ -561,14 +580,6 @@ int main(int argc, char **argv)
         waterColor + (waterColor & 0x7F000000U) + ((waterColor >> 30) << 24);
     if (!(waterColor & 0xFF000000U))
       waterColor = 0U;
-    int     width =
-        int(parseInteger(args[2], 0, "invalid image width", 2, 32768));
-    int     height =
-        int(parseInteger(args[3], 0, "invalid image height", 2, 32768));
-    viewOffsX = viewOffsX + (float(width) * 0.5f);
-    viewOffsY = viewOffsY + (float(height - 2) * 0.5f);
-    viewOffsZ = viewOffsZ - float(zMin);
-    zMax = zMax - zMin;
     if (ssaaLevel > 0)
     {
       width = width << ssaaLevel;
@@ -581,12 +592,6 @@ int main(int argc, char **argv)
       zMax = zMax << ssaaLevel;
       zMax = (zMax < 16777216 ? zMax : 16777216);
     }
-
-    BA2File ba2File(args[4]);
-    ESMFile esmFile(args[0]);
-    unsigned int  worldID = Renderer::findParentWorld(esmFile, formID);
-    if (worldID == 0xFFFFFFFFU)
-      errorMessage("form ID not found in ESM, or invalid record type");
 
     Renderer  renderer(width, height, ba2File, esmFile,
                        (std::uint32_t *) 0, (float *) 0, zMax);

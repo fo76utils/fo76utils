@@ -54,7 +54,7 @@ Running any of the programs without arguments prints detailed usage information.
 
     ./btddump Fallout76/Data/Terrain/Appalachia.btd fo76hmap.dds 0 -80 -80 80 80 1
     ./findwater Fallout76/Data/SeventySix.esm fo76wmap.dds fo76hmap.dds Fallout76/Data
-    ./landtxt Fallout76/Data/SeventySix.esm fo76ltx2.dds -d Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -r -80 -80 80 80 -l 1 -mip 6
+    ./landtxt Fallout76/Data/SeventySix.esm fo76ltx2.dds -d Fallout76/Data -r -80 -80 80 80 -l 1 -mip 6
     ./terrain fo76hmap.dds fo76terr.dds 9216 6144 -ltex fo76ltx2.dds -light 150 100 35 -wmap fo76wmap.dds -watercolor 0x600A1A22
 
 #### Example 2
@@ -87,7 +87,7 @@ Running any of the programs without arguments prints detailed usage information.
 
 #### Example 7
 
-    ./render Fallout76/Data/SeventySix.esm whitespring.dds 4096 4096 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r -32 -32 32 32 -cam 0.125 54.7356 180 -135 53340 -99681 74002.25 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ssaa 1 -rq 0x2F -ltxtres 512
+    ./render Fallout76/Data/SeventySix.esm whitespring.dds 4096 4096 Fallout76/Data -r -32 -32 32 32 -cam 0.125 54.7356 180 -135 53340 -99681 74002.25 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ssaa 1 -rq 0x2F -ltxtres 512
     ./markers Fallout76/Data/SeventySix.esm fo76mmap.dds 4096,4096,0.125,54.7356,180,-135,4096,-256,16384 fo76icondefs.txt
-    ./render Fallout76/Data/SeventySix.esm watoga.dds 9024 9024 Fallout76/Data -btd Fallout76/Data/Terrain/Appalachia.btd -l 0 -r 0 -71 71 0 -cam 0.25 180 0 0 146368.4 -141504.4 65536 -light 1.7 70.5288 135 -ssaa 1 -rq 0x2F -ltxtres 2048 -mip 1 -lmip 2
+    ./render Fallout76/Data/SeventySix.esm watoga.dds 9024 9024 Fallout76/Data -r 0 -71 71 0 -cam 0.25 180 0 0 146368.4 -141504.4 65536 -light 1.7 70.5288 135 -ssaa 1 -rq 0x2F -ltxtres 2048 -mip 1 -lmip 2
 

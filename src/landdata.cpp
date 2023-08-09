@@ -693,8 +693,15 @@ LandscapeData::LandscapeData(
     waterFormID(0x00000018U)
 {
   unsigned char l = (unsigned char) mipLevel;
+  if (esmFile)
+  {
+    if (esmFile->getESMVersion() >= 0xC0U && !btdFileName)
+      btdFileName = "";
+    else if (esmFile->getESMVersion() < 0xC0U && btdFileName)
+      btdFileName = (char *) 0;
+  }
   if (!worldID)
-    worldID = (btdFileName && *btdFileName ? 0x0025DA15U : 0x0000003CU);
+    worldID = (btdFileName ? 0x0025DA15U : 0x0000003CU);
   unsigned int  parentID = 0U;
   if (esmFile)
   {
@@ -702,12 +709,69 @@ LandscapeData::LandscapeData(
     landLevel = -8192.0f;
     parentID = loadWorldInfo(*esmFile, worldID);
   }
-  if (btdFileName && *btdFileName)
-    loadBTDFile(btdFileName, formatMask & 0x1B, l);
+  if (btdFileName)
+  {
+    std::string btdFullName;
+    const char  *s = btdFileName;
+    size_t  n = std::strlen(s);
+    if (!(n > 4 && (FileBuffer::readUInt32Fast(s + (n - 4)) & 0xDFDFDFFFU)
+                   == 0x4454422EU))     // ".BTD"
+    {
+      btdFullName = btdFileName;
+      if (!btdFullName.empty())
+      {
+        if (btdFullName.back() != '/'
+#if defined(_WIN32) || defined(_WIN64)
+            && btdFullName.back() != '\\' && btdFullName.back() != ':'
+#endif
+            )
+        {
+          btdFullName += '/';
+        }
+      }
+      btdFullName += "Terrain/";
+      bool    nameFound = false;
+      if (esmFile)
+      {
+        const ESMFile::ESMRecord  *r = esmFile->findRecord(worldID);
+        if (r && *r == "WRLD")
+        {
+          ESMFile::ESMField f(*esmFile, *r);
+          while (f.next())
+          {
+            if (f == "EDID" && f.size() > 0)
+            {
+              for (size_t i = f.size(); i > 0; i--)
+              {
+                char    c = char(f.readUInt8Fast());
+                if (!c)
+                  break;
+                if (!((unsigned char) c >= 0x20 && (unsigned char) c < 0x7F))
+                  c = '_';
+                btdFullName += c;
+              }
+              nameFound = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!nameFound)
+        btdFullName += "Appalachia.btd";
+      else
+        btdFullName += ".btd";
+      s = btdFullName.c_str();
+    }
+    loadBTDFile(s, formatMask & 0x1B, l);
+  }
   else if (esmFile)
+  {
     loadESMFile(*esmFile, formatMask & 0x0F, worldID, defTxtID, l, parentID);
+  }
   else
+  {
     errorMessage("LandscapeData: no input file");
+  }
   if (esmFile)
   {
     for (size_t i = 0; i < ltexFormIDs.size(); i++)

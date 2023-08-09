@@ -250,6 +250,7 @@ struct WorldSpaceViewer
   std::map< size_t, std::string > cmdHistory1;
   std::map< std::string, size_t > cmdHistory2;
   std::string cmdBuf;
+  const char  *dataPath;
   char    tmpBuf[1024];
   WorldSpaceViewer(int w, int h, const char *esmFiles, const char *archivePath,
                    int argc, const char * const *argv);
@@ -320,7 +321,8 @@ WorldSpaceViewer::WorldSpaceViewer(
     renderPass(0),
     redrawScreenFlag(true),
     redrawWorldFlag(true),
-    frameTimeMin(500)
+    frameTimeMin(500),
+    dataPath(archivePath)
 {
   display.setDefaultTextColor(0x00, 0xC1);
   width = display.getWidth();
@@ -822,10 +824,10 @@ void WorldSpaceViewer::updateDisplay()
 {
   if (BRANCH_UNLIKELY(!renderer))
   {
-    if (btdPath.empty())
+    if (esmFile.getESMVersion() < 0xC0U)
       btdLOD = 2;
     if (!formID)
-      formID = (btdPath.empty() ? 0x0000003CU : 0x0025DA15U);
+      formID = (esmFile.getESMVersion() < 0xC0U ? 0x0000003CU : 0x0025DA15U);
     worldID = Renderer::findParentWorld(esmFile, formID);
     if (worldID == 0xFFFFFFFFU)
     {
@@ -896,7 +898,8 @@ void WorldSpaceViewer::updateDisplay()
                         - (textureMip + FloatVector4::log2Int(ltxtResolution));
       ltxtMip = std::max(std::min(ltxtMip, 15 - textureMip), 0);
       renderer->setLandTextureMip(float(ltxtMip));
-      renderer->loadTerrain(btdPath.c_str(), worldID, defTxtID, btdLOD,
+      renderer->loadTerrain((btdPath.empty() ? dataPath : btdPath.c_str()),
+                            worldID, defTxtID, btdLOD,
                             terrainX0, terrainY0, terrainX1, terrainY1);
       display.consolePrint("Rendering terrain\n");
       renderer->initRenderPass(0, worldID);
