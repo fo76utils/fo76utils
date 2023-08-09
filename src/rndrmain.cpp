@@ -546,6 +546,8 @@ int main(int argc, char **argv)
 
     BA2File ba2File(args[4]);
     ESMFile esmFile(args[0]);
+    if (!formID)
+      formID = (esmFile.getESMVersion() < 0xC0U ? 0x0000003CU : 0x0025DA15U);
     unsigned int  worldID = Renderer::findParentWorld(esmFile, formID);
     if (worldID == 0xFFFFFFFFU)
       errorMessage("form ID not found in ESM, or invalid record type");
@@ -574,8 +576,6 @@ int main(int argc, char **argv)
       renderQuality = (renderQuality & 0x0003) | 0x0100;
       waterTexture = (char *) 0;
     }
-    if (!formID)
-      formID = (!btdPath ? 0x0000003CU : 0x0025DA15U);
     waterColor =
         waterColor + (waterColor & 0x7F000000U) + ((waterColor >> 30) << 24);
     if (!(waterColor & 0xFF000000U))
