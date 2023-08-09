@@ -35,19 +35,19 @@ static inline FloatVector4 downsample2xFunc_A2R10G10B10(
     const std::uint32_t * const *inBufPtrs, int x)
 {
   FloatVector4  c, c1, c2;
-  c = FloatVector4::convertA2R10G10B10(inBufPtrs[0][x]).srgbExpand();
-  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[1][x]);
-  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[2][x]);
-  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[1]);
-  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[3][x]);
-  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[4][x]);
-  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[2]);
-  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[5][x]);
-  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[6][x]);
-  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[3]);
-  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[7][x]);
-  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[8][x]);
-  c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample2xFilterTable[4]);
+  c = FloatVector4::convertA2R10G10B10(inBufPtrs[0][x], true);
+  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[1][x], true);
+  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[2][x], true);
+  c += ((c1 + c2) * downsample2xFilterTable[1]);
+  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[3][x], true);
+  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[4][x], true);
+  c += ((c1 + c2) * downsample2xFilterTable[2]);
+  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[5][x], true);
+  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[6][x], true);
+  c += ((c1 + c2) * downsample2xFilterTable[3]);
+  c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[7][x], true);
+  c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[8][x], true);
+  c += ((c1 + c2) * downsample2xFilterTable[4]);
   return c;
 }
 
@@ -199,20 +199,20 @@ static FloatVector4 downsample4xFunc_R8G8B8A8(
 static FloatVector4 downsample4xFunc_A2R10G10B10(
     const std::uint32_t * const *inBufPtrs, int x)
 {
-  FloatVector4  c(FloatVector4::convertA2R10G10B10(inBufPtrs[0][x]));
-  c.srgbExpand();
+  FloatVector4  c(FloatVector4::convertA2R10G10B10(inBufPtrs[0][x], true));
   int     i = 1;
   for (int j = 1; j < 13; i = i + 6, j = j + 3)
   {
-    FloatVector4  c1(FloatVector4::convertA2R10G10B10(inBufPtrs[i][x]));
-    FloatVector4  c2(FloatVector4::convertA2R10G10B10(inBufPtrs[i + 1][x]));
-    c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample4xFilterTable[j]);
-    c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[i + 2][x]);
-    c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[i + 3][x]);
-    c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample4xFilterTable[j + 1]);
-    c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[i + 4][x]);
-    c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[i + 5][x]);
-    c += ((c1.srgbExpand() + c2.srgbExpand()) * downsample4xFilterTable[j + 2]);
+    FloatVector4  c1(FloatVector4::convertA2R10G10B10(inBufPtrs[i][x], true));
+    FloatVector4  c2(FloatVector4::convertA2R10G10B10(inBufPtrs[i + 1][x],
+                                                      true));
+    c += ((c1 + c2) * downsample4xFilterTable[j]);
+    c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[i + 2][x], true);
+    c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[i + 3][x], true);
+    c += ((c1 + c2) * downsample4xFilterTable[j + 1]);
+    c1 = FloatVector4::convertA2R10G10B10(inBufPtrs[i + 4][x], true);
+    c2 = FloatVector4::convertA2R10G10B10(inBufPtrs[i + 5][x], true);
+    c += ((c1 + c2) * downsample4xFilterTable[j + 2]);
   }
   return c;
 }

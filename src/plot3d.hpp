@@ -141,7 +141,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   inline FloatVector4 specularGGX(
       FloatVector4 reflectedView, float roughness, float nDotL, float nDotV,
       const float *fresnelPoly, FloatVector4 f0) const;
-  // c0 = terrain color, a = water transparency
+  // c0 = terrain color (scaled to 1.0), a = water transparency
   inline FloatVector4 calculateLighting_Water(
       FloatVector4 c0, float a, Fragment& z, bool isFO76) const;
   // fill with water

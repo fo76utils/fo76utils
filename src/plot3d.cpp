@@ -216,11 +216,11 @@ FloatVector4 Plot3D_TriShape::alphaBlend(
   unsigned char blendMode = (unsigned char) ((m.alphaFlags >> 1) & 0xFFU);
   if (a >= (511.0f / 512.0f) && blendMode == 0x76)
     return c;
-  FloatVector4  c0(FloatVector4::convertRGBA32(*(z.cPtr)));
+  FloatVector4  c0;
   if (usingSRGBColorSpace)
-    c0 *= (1.0f / 255.0f);
+    c0 = FloatVector4::convertRGBA32(*(z.cPtr), false) * (1.0f / 255.0f);
   else
-    c0.srgbExpand();
+    c0 = FloatVector4::convertRGBA32(*(z.cPtr), true);
   c0 /= lightColor[3];
   if (BRANCH_LIKELY(blendMode == 0x76))
     return (c0 + ((c - c0) * a));
@@ -497,9 +497,9 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_Water(
   c *= ((lightColor * std::max(nDotL, 0.0f)) + (ambientLight * envColor));
   c *= lightColor[3];
   if (!isFO76)
-    c += ((c0 * (1.0f / 255.0f) - c) * a);
+    c += ((c0 - c) * a);
   else
-    c += ((c0.srgbExpand() - c) * a * (FloatVector4(1.0f) - m.w.shallowColor));
+    c += ((c0 - c) * a * (FloatVector4(1.0f) - m.w.shallowColor));
   e *= envColor;
   specular *= lightColor;
   e *= (m.w.envMapScale * lightColor[3]);
@@ -524,7 +524,7 @@ void Plot3D_TriShape::drawPixel_Water(Plot3D_TriShape& p, Fragment& z)
     a = FloatVector4::exp2Fast(a - 1.0f);
   else
     a = 0.0625f;
-  FloatVector4  c(p.calculateLighting_Water(c0, a, z, false));
+  FloatVector4  c(p.calculateLighting_Water(c0 * (1.0f / 255.0f), a, z, false));
   *(z.cPtr) = c.convertToRGBA32(true);
 }
 
@@ -573,7 +573,7 @@ void Plot3D_TriShape::drawPixel_Water_G(Plot3D_TriShape& p, Fragment& z)
 {
   float   a = *(z.zPtr) - z.xyz[2];     // water depth in pixels
   *(z.zPtr) = z.xyz[2];
-  FloatVector4  c0(FloatVector4::convertRGBA32(*(z.cPtr)));
+  FloatVector4  c0(FloatVector4::convertRGBA32(*(z.cPtr), true));
   a = a * p.m.w.unused;         // -3.0 / maximum depth in pixels
   if (a > -3.0f)
     a = FloatVector4::exp2Fast(a - 0.75f);

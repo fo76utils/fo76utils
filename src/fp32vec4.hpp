@@ -75,9 +75,6 @@ struct FloatVector4
                       const std::uint32_t *p1_3, const std::uint32_t *p2_3,
                       float xf, float yf, bool isSRGB = false);
   static inline FloatVector4 convertFloat16(std::uint64_t n);
-  static inline FloatVector4 convertA2R10G10B10(const std::uint32_t& c);
-  // convert from the pixel format selected with USE_PIXELFMT_RGB10A2
-  static inline FloatVector4 convertRGBA32(const std::uint32_t& c);
   inline float& operator[](size_t n)
   {
     return v[n];
@@ -133,6 +130,11 @@ struct FloatVector4
   // 0.0 - 1.0 linear -> 0.0 - 255.0 sRGB (clamps input to 0.0 - 1.0)
   inline FloatVector4& srgbCompress();
   inline operator std::uint32_t() const;
+  static inline FloatVector4 convertA2R10G10B10(const std::uint32_t& c,
+                                                bool expandSRGB = false);
+  // convert from the pixel format selected with USE_PIXELFMT_RGB10A2
+  static inline FloatVector4 convertRGBA32(const std::uint32_t& c,
+                                           bool expandSRGB = false);
   inline std::uint32_t convertToA2R10G10B10(bool noClamp = false) const;
   // convert to the pixel format selected with USE_PIXELFMT_RGB10A2
   inline std::uint32_t convertToRGBA32(bool noAlpha = false,
@@ -210,29 +212,6 @@ inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n)
   __asm__ ("vaddps %0, %0, %0" : "+x" (tmp2));
   __asm__ ("vpminud %1, %0, %0" : "+x" (v) : "x" (tmp2));
 #endif
-  return FloatVector4(v);
-}
-
-inline FloatVector4 FloatVector4::convertA2R10G10B10(const std::uint32_t& c)
-{
-  static const XMM_UInt8  shufTbl =
-  {
-    2, 3, 0x80, 0x80, 1, 2, 0x80, 0x80, 0, 1, 0x80, 0x80, 3, 0x80, 0x80, 0x80
-  };
-  static const XMM_UInt32 maskTbl =
-  {
-    0x00003FF0U, 0x00000FFCU, 0x000003FFU, 0x000000C0U
-  };
-  static const XMM_Float  multTbl =
-  {
-    255.0f / 16368.0f, 255.0f / 4092.0f, 255.0f / 1023.0f, 255.0f / 192.0f
-  };
-  XMM_Float v;
-  __asm__ ("vmovd %1, %0" : "=x" (v) : "rm" (c));
-  __asm__ ("vpshufb %1, %0, %0" : "+x" (v) : "xm" (shufTbl));
-  __asm__ ("vpand %1, %0, %0" : "+x" (v) : "xm" (maskTbl));
-  __asm__ ("vcvtdq2ps %0, %0" : "+x" (v));
-  __asm__ ("vmulps %1, %0, %0" : "+x" (v) : "xm" (multTbl));
   return FloatVector4(v);
 }
 
@@ -566,6 +545,77 @@ inline FloatVector4::operator std::uint32_t() const
   return c;
 }
 
+inline FloatVector4 FloatVector4::convertA2R10G10B10(
+    const std::uint32_t& c, bool expandSRGB)
+{
+  XMM_Float v;
+#if ENABLE_X86_64_AVX2
+  static const XMM_UInt32 maskTbl =
+  {
+    0x3FF00000U, 0x000FFC00U, 0x000003FFU, 0x0000C000U
+  };
+  static const XMM_Float  srgbTbl1 =
+  {
+    float(0.13945550 / (1072693248.0 * 1072693248.0)),
+    float(0.13945550 / (1047552.0 * 1047552.0)),
+    float(0.13945550 / (1023.0 * 1023.0)),
+    float(0.13945550 / (49152.0 * 49152.0))
+  };
+  static const XMM_Float  srgbTbl2 =
+  {
+    float(0.86054450 / 1072693248.0), float(0.86054450 / 1047552.0),
+    float(0.86054450 / 1023.0), float(0.86054450 / 49152.0)
+  };
+  static const XMM_Float  multTbl =
+  {
+    float(255.0 / 1072693248.0), float(255.0 / 1047552.0),
+    float(255.0 / 1023.0), float(255.0 / 49152.0)
+  };
+  __asm__ ("vpbroadcastd %1, %0" : "=x" (v) : "m" (c));
+  __asm__ ("vpshufhw $0xb4, %0, %0" : "+x" (v));
+#else
+  static const XMM_UInt8  shufTbl =
+  {
+    2, 3, 0x80, 0x80, 1, 2, 0x80, 0x80, 0, 1, 0x80, 0x80, 3, 0x80, 0x80, 0x80
+  };
+  static const XMM_UInt32 maskTbl =
+  {
+    0x00003FF0U, 0x00000FFCU, 0x000003FFU, 0x000000C0U
+  };
+  static const XMM_Float  srgbTbl1 =
+  {
+    float(0.13945550 / (16368.0 * 16368.0)),
+    float(0.13945550 / (4092.0 * 4092.0)),
+    float(0.13945550 / (1023.0 * 1023.0)), float(0.13945550 / (192.0 * 192.0))
+  };
+  static const XMM_Float  srgbTbl2 =
+  {
+    float(0.86054450 / 16368.0), float(0.86054450 / 4092.0),
+    float(0.86054450 / 1023.0), float(0.86054450 / 192.0)
+  };
+  static const XMM_Float  multTbl =
+  {
+    255.0f / 16368.0f, 255.0f / 4092.0f, 255.0f / 1023.0f, 255.0f / 192.0f
+  };
+  __asm__ ("vmovd %1, %0" : "=x" (v) : "rm" (c));
+  __asm__ ("vpshufb %1, %0, %0" : "+x" (v) : "xm" (shufTbl));
+#endif
+  __asm__ ("vpand %1, %0, %0" : "+x" (v) : "xm" (maskTbl));
+  __asm__ ("vcvtdq2ps %0, %0" : "+x" (v));
+  if (expandSRGB)
+  {
+    // gamma expand and scale to 1.0
+    v *= (v * srgbTbl1 + srgbTbl2);
+    v *= v;
+  }
+  else
+  {
+    // scale to 255.0
+    v *= multTbl;
+  }
+  return FloatVector4(v);
+}
+
 inline std::uint32_t FloatVector4::convertToA2R10G10B10(bool noClamp) const
 {
   static const XMM_Float  multTbl1 =
@@ -667,18 +717,6 @@ inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n)
                       ::convertFloat16(std::uint16_t((n >> 16) & 0xFFFFU)),
                       ::convertFloat16(std::uint16_t((n >> 32) & 0xFFFFU)),
                       ::convertFloat16(std::uint16_t((n >> 48) & 0xFFFFU)));
-}
-
-inline FloatVector4 FloatVector4::convertA2R10G10B10(const std::uint32_t& c)
-{
-  float   r = float(int((c >> 20) & 0x03FF));
-  float   g = float(int((c >> 10) & 0x03FF));
-  float   b = float(int(c & 0x03FF));
-  float   a = float(int((c >> 30) & 0x0003));
-  FloatVector4  tmp(r, g, b, a);
-  tmp *= FloatVector4(255.0f / 1023.0f, 255.0f / 1023.0f,
-                      255.0f / 1023.0f, 255.0f / 3.0f);
-  return tmp;
 }
 
 inline FloatVector4& FloatVector4::operator+=(const FloatVector4& r)
@@ -992,6 +1030,21 @@ inline FloatVector4::operator std::uint32_t() const
   return (c0 | (c1 << 8) | (c2 << 16) | (c3 << 24));
 }
 
+inline FloatVector4 FloatVector4::convertA2R10G10B10(
+    const std::uint32_t& c, bool expandSRGB)
+{
+  float   r = float(int((c >> 20) & 0x03FF));
+  float   g = float(int((c >> 10) & 0x03FF));
+  float   b = float(int(c & 0x03FF));
+  float   a = float(int((c >> 30) & 0x0003));
+  FloatVector4  tmp(r, g, b, a);
+  tmp *= FloatVector4(255.0f / 1023.0f, 255.0f / 1023.0f,
+                      255.0f / 1023.0f, 255.0f / 3.0f);
+  if (expandSRGB)
+    tmp.srgbExpand();
+  return tmp;
+}
+
 inline std::uint32_t FloatVector4::convertToA2R10G10B10(bool noClamp) const
 {
   FloatVector4  tmp(*this);
@@ -1100,11 +1153,14 @@ inline FloatVector4::FloatVector4(
   *this = v0;
 }
 
-inline FloatVector4 FloatVector4::convertRGBA32(const std::uint32_t& c)
+inline FloatVector4 FloatVector4::convertRGBA32(
+    const std::uint32_t& c, bool expandSRGB)
 {
 #if USE_PIXELFMT_RGB10A2
-  return FloatVector4::convertA2R10G10B10(c);
+  return FloatVector4::convertA2R10G10B10(c, expandSRGB);
 #else
+  if (expandSRGB)
+    return FloatVector4(&c).srgbExpand();
   return FloatVector4(&c);
 #endif
 }
