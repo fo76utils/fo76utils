@@ -1390,7 +1390,7 @@ int SDLDisplay::browseList(
         int     d4 = eventBuf[i].data4();
         // single click = select item
         // double click = select item and return
-        if (d3 == 1)
+        if (d3 == 1 || d3 == 3)
         {
           int     d2 = eventBuf[i].data2();
           int     x = (d1 * textWidth) / imageWidth;
@@ -1401,7 +1401,7 @@ int SDLDisplay::browseList(
             if (n <= maxItemNum)
             {
               redrawFlag |= (n != itemSelected);
-              doneFlag |= (d4 >= 2);
+              doneFlag |= (d3 == 3 || d4 >= 2);
               itemSelected = n;
             }
           }
@@ -1560,65 +1560,65 @@ int SDLDisplay::browseFile(
   bool    doneFlag = false;
   while (!quitFlag && !doneFlag)
   {
-    int     n0 = 0;
+    if (currentDirFiles.size() < 1)
+    {
+      // create file list under current directory
+      size_t  n = currentFile.rfind('/');
+      if (n == std::string::npos || n < 1)
+        currentDir.clear();
+      else
+        currentDir.assign(currentFile, 0, n);
+      if (n == std::string::npos)
+        n = 0;
+      else
+        n++;
+      currentDirFiles.emplace_back(std::string("/"), 0, -1);
+      currentDirFiles.emplace_back(std::string(".."), 0, -1);
+      subDirSet.clear();
+      for (int i = 0; i <= maxItemNum; i++)
+      {
+        if (n < 1 ||
+            (v[i].length() >= n && v[i][n - 1] == '/' &&
+             v[i].compare(0, n - 1, currentDir) == 0))
+        {
+          size_t  n2 = v[i].find('/', n);
+          if (n2 == std::string::npos)
+          {
+            currentDirFiles.emplace_back(std::string(v[i].c_str() + n), 1, i);
+          }
+          else
+          {
+            tmpBuf.assign(v[i], n, n2 - n);
+            if (subDirSet.insert(tmpBuf).second)
+              currentDirFiles.emplace_back(tmpBuf, 0, -1);
+          }
+        }
+      }
+      if (currentDirFiles.size() > 3)
+        std::sort(currentDirFiles.begin() + 2, currentDirFiles.end());
+      maxFileNum = int(currentDirFiles.size()) - 1;
+      fileSelected = 1;
+      for (size_t i = 2; i < currentDirFiles.size(); i++)
+      {
+        if (currentFile.compare(n, currentFile.length() - n,
+                                currentDirFiles[i].fileName) == 0)
+        {
+          fileSelected = int(i);
+          break;
+        }
+      }
+      tmpBuf = titleString;
+      tmpBuf += " (";
+      tmpBuf += currentDir;
+      tmpBuf += "/)";
+      printLine(tmpBuf.c_str(), 0, 0, titleColor);
+      redrawFlag = true;
+    }
+    int     n0 = fileSelected - ((textHeight - 1) >> 1);
+    n0 = std::max(std::min(n0, maxFileNum - (textHeight - 2)), 0);
     if (redrawFlag)
     {
       copyToDrawSurface(savedDrawSurface);
-      if (currentDirFiles.size() < 1)
-      {
-        // create file list under current directory
-        size_t  n = currentFile.rfind('/');
-        if (n == std::string::npos || n < 1)
-          currentDir.clear();
-        else
-          currentDir.assign(currentFile, 0, n);
-        if (n == std::string::npos)
-          n = 0;
-        else
-          n++;
-        currentDirFiles.emplace_back(std::string("/"), 0, -1);
-        currentDirFiles.emplace_back(std::string(".."), 0, -1);
-        subDirSet.clear();
-        for (int i = 0; i <= maxItemNum; i++)
-        {
-          if (n < 1 ||
-              (v[i].length() >= n && v[i][n - 1] == '/' &&
-               v[i].compare(0, n - 1, currentDir) == 0))
-          {
-            size_t  n2 = v[i].find('/', n);
-            if (n2 == std::string::npos)
-            {
-              currentDirFiles.emplace_back(std::string(v[i].c_str() + n), 1, i);
-            }
-            else
-            {
-              tmpBuf.assign(v[i], n, n2 - n);
-              if (subDirSet.insert(tmpBuf).second)
-                currentDirFiles.emplace_back(tmpBuf, 0, -1);
-            }
-          }
-        }
-        if (currentDirFiles.size() > 3)
-          std::sort(currentDirFiles.begin() + 2, currentDirFiles.end());
-        maxFileNum = int(currentDirFiles.size()) - 1;
-        fileSelected = 1;
-        for (size_t i = 2; i < currentDirFiles.size(); i++)
-        {
-          if (currentFile.compare(n, currentFile.length() - n,
-                                  currentDirFiles[i].fileName) == 0)
-          {
-            fileSelected = int(i);
-            break;
-          }
-        }
-        tmpBuf = titleString;
-        tmpBuf += " (";
-        tmpBuf += currentDir;
-        tmpBuf += "/)";
-      }
-      printLine(tmpBuf.c_str(), 0, 0, titleColor);
-      n0 = fileSelected - ((textHeight - 1) >> 1);
-      n0 = std::max(std::min(n0, maxFileNum - (textHeight - 2)), 0);
       for (int i = 1; i < textHeight; i++)
       {
         const char  *s = "";
@@ -1653,7 +1653,7 @@ int SDLDisplay::browseFile(
         // single click = select item
         // double click = select item and return
         bool    doubleClickFlag = false;
-        if (d3 == 1)
+        if (d3 == 1 || d3 == 3)
         {
           int     d2 = eventBuf[i].data2();
           int     x = (d1 * textWidth) / imageWidth;
@@ -1665,7 +1665,7 @@ int SDLDisplay::browseFile(
             {
               redrawFlag |= (n != fileSelected);
               fileSelected = n;
-              if (d4 >= 2)
+              if (d3 == 3 || d4 >= 2)
               {
                 t = SDLEventKeyDown;
                 d1 = 0x0020;
