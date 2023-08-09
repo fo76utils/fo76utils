@@ -52,7 +52,8 @@ class Renderer : protected Renderer_Base
     // 0x10: is decal (TXST object)
     // 0x20: is marker
     // 0x40: high quality model
-    // 0x80: upper byte is gradient map V from MODC
+    // 0x80: for objects: upper byte is gradient map V from MODC
+    //       for decals:  uses XPRM (disables XPDD and finding point of impact)
     unsigned short  flags;
     // -1:        not rendered
     // 0 to 63:   single tile, N = Y * 8 + X

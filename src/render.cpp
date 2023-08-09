@@ -198,7 +198,7 @@ signed short Renderer::calculateTileIndex(unsigned long long screenAreasUsed)
 int Renderer::setScreenAreaUsed(RenderObject& p)
 {
   p.tileIndex = -1;
-  NIFFile::NIFVertexTransform vt;
+  NIFFile::NIFVertexTransform vt(p.modelTransform);
   NIFFile::NIFBounds  modelBounds;
   if (p.flags & 0x12)
   {
@@ -212,8 +212,12 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
       tmp = FloatVector4::convertFloat16(std::uint64_t(p.mswpFormID));
       tmp[2] = tmp[1];
       tmp[1] = 1.0f;
-      b0[1] = b0[1] + getDecalYOffsetMin(b0);
-      b1[1] = b1[1] + getDecalYOffsetMax(b1);
+      if (!(p.flags & 0x80))
+      {
+        // add decal depth search range, unless using XPRM
+        b0[1] = b0[1] + getDecalYOffsetMin(b0);
+        b1[1] = b1[1] + getDecalYOffsetMax(b1);
+      }
     }
     modelBounds.boundsMin = b0;
     modelBounds.boundsMin.minValues(b1);
@@ -223,7 +227,6 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
     modelBounds.boundsMax += 2.0f;
     modelBounds.boundsMin *= tmp;
     modelBounds.boundsMax *= tmp;
-    vt = p.modelTransform;
     vt *= viewTransform;
   }
   else if (p.flags & 1)
@@ -275,7 +278,6 @@ int Renderer::setScreenAreaUsed(RenderObject& p)
     int     y1 = y0 + std::abs(int(p.model.t.y1) - int(p.model.t.y0));
     modelBounds.boundsMin = FloatVector4(float(x0), float(y0), 0.0f, 0.0f);
     modelBounds.boundsMax = FloatVector4(float(x1), float(y1), 0.0f, 0.0f);
-    vt = p.modelTransform;
     vt *= viewTransform;
   }
   else
@@ -1000,6 +1002,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
             if (f.size() >= 29 && (tmp.flags & 0x10) &&
                 *(f.getDataPtr() + 28) == 0x01)         // box
             {
+              tmp.flags = tmp.flags | 0x0080;
               float   decalWidth = float(o->obndX1) - float(o->obndX0);
               float   decalDepth = float(o->obndY1) - float(o->obndY0);
               float   decalHeight = float(o->obndZ1) - float(o->obndZ0);
@@ -1017,10 +1020,10 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
               refrMSWPFormID = f.readUInt32Fast();
             break;
           case 0x44445058U:             // "XPDD"
-            if (f.size() >= 8 && (tmp.flags & 0x10))
+            if (f.size() >= 8 && (tmp.flags & 0x90) == 0x10)
             {
-              decalScaleX = decalScaleX * f.readFloat();
-              decalScaleZ = decalScaleZ * f.readFloat();
+              decalScaleX = f.readFloat();
+              decalScaleZ = f.readFloat();
             }
             break;
           case 0x4C435358U:             // "XSCL"
@@ -1373,10 +1376,14 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   decalBounds.boundsMax =
       FloatVector4(float(p.model.o->obndX1), float(p.model.o->obndY1),
                    float(p.model.o->obndZ1), 0.0f) * xpddScale;
-  decalBounds.boundsMin[1] = getDecalYOffsetMin(decalBounds.boundsMin);
-  decalBounds.boundsMax[1] = getDecalYOffsetMax(decalBounds.boundsMax);
-  float   yOffset = t.renderer->findDecalYOffset(p.modelTransform, decalBounds);
-  yOffset = std::max(yOffset, 0.0f);
+  float   yOffset = 0.0f;
+  if (!(p.flags & 0x80))
+  {
+    decalBounds.boundsMin[1] = getDecalYOffsetMin(decalBounds.boundsMin);
+    decalBounds.boundsMax[1] = getDecalYOffsetMax(decalBounds.boundsMax);
+    yOffset = t.renderer->findDecalYOffset(p.modelTransform, decalBounds);
+    yOffset = std::max(yOffset, 0.0f);
+  }
   decalBounds.boundsMin[1] = float(p.model.o->obndY0) + yOffset;
   decalBounds.boundsMax[1] = float(p.model.o->obndY1) + yOffset;
   NIFFile::NIFBounds  b;
