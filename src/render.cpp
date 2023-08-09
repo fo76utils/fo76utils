@@ -972,94 +972,105 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     }
     if ((r->flags & (!noDisabledObjects ? 0x00000020 : 0x00000820)) || !type)
       continue;                         // ignore deleted and disabled records
+    RenderObject  tmp;
+    tmp.flags = 0;
+    tmp.tileIndex = -1;
+    tmp.z = 0;
     const ESMFile::ESMRecord  *r2 = (ESMFile::ESMRecord *) 0;
+    const BaseObject  *o = (BaseObject *) 0;
     float   scale = 1.0f;
-    float   rX = 0.0f;
-    float   rY = 0.0f;
-    float   rZ = 0.0f;
-    float   offsX = 0.0f;
-    float   offsY = 0.0f;
-    float   offsZ = 0.0f;
     unsigned int  refrMSWPFormID = 0U;
-    unsigned int  xpddScale = 0x3C003C00U;      // 1.0, 1.0 in FP16 format
+    float   decalScaleX = 1.0f;
+    float   decalScaleZ = 1.0f;
     {
       ESMFile::ESMField f(esmFile, *r);
       while (f.next())
       {
         switch (f.type)
         {
-          case 0x454D414EU:             // "NAME"
-            if (f.size() >= 4)
-              r2 = esmFile.findRecord(f.readUInt32Fast());
-            break;
-          case 0x41544144U:             // "DATA"
-            if (f.size() >= 24)
+          case 0x454D414EU:             // "NAME" (must be first)
+            if (f.size() >= 4 && !r2)
             {
-              FloatVector4  tmp(f.readFloatVector4());
-              offsX = tmp[0];
-              offsY = tmp[1];
-              f.setPosition(f.getPosition() - 8);
-              tmp = f.readFloatVector4();
-              offsZ = tmp[0];
-              rX = tmp[1];
-              rY = tmp[2];
-              rZ = tmp[3];
+              r2 = esmFile.findRecord(f.readUInt32Fast());
+              if (r2 && !(*r2 == "SCOL" && !enableSCOL))
+                o = readModelProperties(tmp, *r2);
             }
             break;
-          case 0x4C435358U:             // "XSCL"
-            if (f.size() >= 4)
-              scale = f.readFloat();
+          case 0x4D525058U:             // "XPRM"
+            if (f.size() >= 29 && (tmp.flags & 0x10) &&
+                *(f.getDataPtr() + 28) == 0x01)         // box
+            {
+              float   decalWidth = float(o->obndX1) - float(o->obndX0);
+              float   decalDepth = float(o->obndY1) - float(o->obndY0);
+              float   decalHeight = float(o->obndZ1) - float(o->obndZ0);
+              decalWidth = std::max(decalWidth * 0.5f, 0.5f);
+              decalDepth = std::max(decalDepth * 0.5f, 0.5f);
+              decalHeight = std::max(decalHeight * 0.5f, 0.5f);
+              FloatVector4  b(f.readFloatVector4());
+              decalScaleX = b[0] / decalWidth;
+              scale = b[1] / decalDepth;
+              decalScaleZ = b[2] / decalHeight;
+            }
             break;
           case 0x50534D58U:             // "XMSP"
-            if (f.size() >= 4)
+            if (f.size() >= 4 && !(tmp.flags & 0x10))
               refrMSWPFormID = f.readUInt32Fast();
             break;
           case 0x44445058U:             // "XPDD"
-            if (r2 && *r2 == "TXST" && f.size() >= 8)
+            if (f.size() >= 8 && (tmp.flags & 0x10))
             {
-              float   xScale = f.readFloat();
-              float   zScale = f.readFloat();
-              xScale = std::min(std::max(xScale, 0.125f), 8.0f);
-              zScale = std::min(std::max(zScale, 0.125f), 8.0f);
-              xpddScale = std::uint32_t(convertToFloat16(xScale))
-                          | (std::uint32_t(convertToFloat16(zScale)) << 16);
+              decalScaleX = decalScaleX * f.readFloat();
+              decalScaleZ = decalScaleZ * f.readFloat();
+            }
+            break;
+          case 0x4C435358U:             // "XSCL"
+            if (f.size() >= 4 && !(tmp.flags & 0x10))
+              scale = f.readFloat();
+            break;
+          case 0x41544144U:             // "DATA" (must be last)
+            if (f.size() >= 24 && r2 && o)
+            {
+              FloatVector4  d1(f.readFloatVector4());   // X, Y, Z, RX
+              f.setPosition(f.getPosition() - 8);
+              FloatVector4  d2(f.readFloatVector4());   // Z, RX, RY, RZ
+              if (*r2 == "SCOL" && !enableSCOL)
+              {
+                addSCOLObjects(*r2, scale, d2[1], d2[2], d2[3],
+                               d1[0], d1[1], d2[0], refrMSWPFormID);
+                continue;
+              }
+              tmp.modelTransform =
+                  NIFFile::NIFVertexTransform(
+                      scale, d2[1], d2[2], d2[3], d1[0], d1[1], d2[0]);
+              if (BRANCH_UNLIKELY(tmp.flags & 0x10))
+              {
+                decalScaleX =
+                    std::min(std::max(decalScaleX / scale, 0.0625f), 16.0f);
+                decalScaleZ =
+                    std::min(std::max(decalScaleZ / scale, 0.0625f), 16.0f);
+                tmp.mswpFormID =
+                    std::uint32_t(convertToFloat16(decalScaleX))
+                    | (std::uint32_t(convertToFloat16(decalScaleZ)) << 16);
+              }
+              (void) setScreenAreaUsed(tmp);
             }
             break;
         }
       }
     }
-    if (!r2)
-      continue;
-    if (*r2 == "SCOL" && !enableSCOL)
-    {
-      addSCOLObjects(*r2, scale, rX, rY, rZ, offsX, offsY, offsZ,
-                     refrMSWPFormID);
-      continue;
-    }
-    RenderObject  tmp;
-    tmp.tileIndex = -1;
-    tmp.z = 0;
-    const BaseObject  *o = readModelProperties(tmp, *r2);
-    if (!o)
-      continue;
-    if (BRANCH_UNLIKELY(tmp.flags & 0x10))
-    {
-      tmp.mswpFormID = xpddScale;
-      scale = 1.0f;
-      refrMSWPFormID = 0U;
-    }
-    tmp.modelTransform = NIFFile::NIFVertexTransform(scale, rX, rY, rZ,
-                                                     offsX, offsY, offsZ);
-    if (setScreenAreaUsed(tmp) < 0)
+    if (tmp.tileIndex < 0)
       continue;
     if (debugMode == 1)
       tmp.z = int(r->formID);
-    if (tmp.flags & 4)
+    if (BRANCH_UNLIKELY(tmp.flags & 0x14))
     {
-      if (waterRenderMode >= 0)
-        tmp.mswpFormID = 0U;
-      else
-        tmp.mswpFormID = getWaterMaterial(materials, esmFile, r2, 0U);
+      if (!(tmp.flags & 0x10))
+      {
+        if (waterRenderMode >= 0)
+          tmp.mswpFormID = 0U;
+        else
+          tmp.mswpFormID = getWaterMaterial(materials, esmFile, r2, 0U);
+      }
     }
     else if (refrMSWPFormID)
     {
@@ -1364,9 +1375,8 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
                    float(p.model.o->obndZ1), 0.0f) * xpddScale;
   decalBounds.boundsMin[1] = getDecalYOffsetMin(decalBounds.boundsMin);
   decalBounds.boundsMax[1] = getDecalYOffsetMax(decalBounds.boundsMax);
-  float   yOffset = 0.0f;
-  if (!t.renderer->findDecalYOffset(yOffset, p.modelTransform, decalBounds))
-    return;
+  float   yOffset = t.renderer->findDecalYOffset(p.modelTransform, decalBounds);
+  yOffset = std::max(yOffset, 0.0f);
   decalBounds.boundsMin[1] = float(p.model.o->obndY0) + yOffset;
   decalBounds.boundsMax[1] = float(p.model.o->obndY1) + yOffset;
   NIFFile::NIFBounds  b;
