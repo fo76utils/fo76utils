@@ -237,7 +237,7 @@ void BA2File::loadBSAFile(FileBuffer& buf, size_t archiveFile, int archiveType)
       if (c)
         folderName += fixNameCharacter(c);
     }
-    if (folderName.length() > 0 && folderName[folderName.length() - 1] != '/')
+    if (folderName.length() > 0 && folderName.back() != '/')
       folderName += '/';
     folderNames[i] = folderName;
     for (size_t j = folderFileCnts[i]; j-- > 0; n++)
@@ -292,11 +292,8 @@ void BA2File::loadFile(FileBuffer& buf, size_t archiveFile,
       c = c + ('a' - 'A');
     else if (c == '\\')
       c = '/';
-    if (c == '/' &&
-        fileName2.length() > 0 && fileName2[fileName2.length() - 1] == '/')
-    {
+    if (c == '/' && fileName2.length() > 0 && fileName2.back() == '/')
       continue;
-    }
     fileName2 += c;
   }
   if ((n = fileName2.rfind("/interface/")) != std::string::npos ||
@@ -334,11 +331,8 @@ void BA2File::loadArchivesFromDir(const char *pathName)
     std::set< std::string > archiveNames1;
     std::set< std::string > archiveNames2;
     std::string dirName(pathName);
-    if (dirName[dirName.length() - 1] != '/' &&
-        dirName[dirName.length() - 1] != '\\')
-    {
+    if (dirName.back() != '/' && dirName.back() != '\\')
       dirName += '/';
-    }
     std::string baseName;
     std::string fullName;
     struct dirent *e;

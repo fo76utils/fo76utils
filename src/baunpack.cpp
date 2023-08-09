@@ -32,7 +32,7 @@ static void loadFileList(std::set< std::string >& fileNames,
       c = inFile.readUInt8();
     if (c == '\t' || c == '\r' || c == '\n')
     {
-      while (s.length() > 0 && s[s.length() - 1] == ' ')
+      while (s.length() > 0 && s.back() == ' ')
         s.resize(s.length() - 1);
       if (!s.empty())
       {

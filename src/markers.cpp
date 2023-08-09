@@ -116,7 +116,7 @@ static void readMarkerDefLine(
     }
     if (c == '\t' && commentFlag)
       continue;
-    while (s.length() > 0 && (unsigned char) s[s.length() - 1] <= ' ')
+    while (s.length() > 0 && (unsigned char) s.back() <= ' ')
       s.resize(s.length() - 1);
     if (!s.empty())
     {

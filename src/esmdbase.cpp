@@ -381,7 +381,7 @@ void ESMDump::convertField(std::string& s,
   }
   if (!haveData)
     s.clear();
-  while (s.length() > 0 && s[s.length() - 1] == '\t')
+  while (s.length() > 0 && s.back() == '\t')
     s.resize(s.length() - 1);
 }
 

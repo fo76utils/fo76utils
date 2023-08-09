@@ -385,8 +385,7 @@ bool FileBuffer::getDefaultDataPath(std::string& dataPath)
   }
   dataPath = s;
   while (dataPath.length() > 0 &&
-         (dataPath[dataPath.length() - 1] == '/' ||
-          dataPath[dataPath.length() - 1] == '\\'))
+         (dataPath.back() == '/' || dataPath.back() == '\\'))
   {
     dataPath.resize(dataPath.length() - 1);
   }
