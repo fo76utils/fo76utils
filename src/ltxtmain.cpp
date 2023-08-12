@@ -517,19 +517,19 @@ int main(int argc, char **argv)
         const unsigned char *gcvrData = (unsigned char *) 0;
         if (!isFO76)
         {
-          ltexData32 = inFile->getDataPtr();
+          ltexData32 = inFile->data();
           if (vclrFile)
-            vclrData24 = vclrFile->getDataPtr();
+            vclrData24 = vclrFile->data();
         }
         else
         {
-          ltexData16 = inFile->getDataPtr();
+          ltexData16 = inFile->data();
           if (vclrFile)
-            vclrData16 = vclrFile->getDataPtr();
+            vclrData16 = vclrFile->data();
           if (gcvrFile)
-            gcvrData = gcvrFile->getDataPtr();
+            gcvrData = gcvrFile->data();
         }
-        threads[i] = new RenderThread(txtSetFile->getDataPtr(),
+        threads[i] = new RenderThread(txtSetFile->data(),
                                       ltexData32, vclrData24,
                                       ltexData16, vclrData16, gcvrData,
                                       width >> xyScale, height >> xyScale,

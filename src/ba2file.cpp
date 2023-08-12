@@ -131,7 +131,7 @@ void BA2File::loadBA2General(FileBuffer& buf, size_t archiveFile)
     (void) buf.readUInt32Fast();        // extension
     (void) buf.readUInt32Fast();        // unknown
     (void) buf.readUInt32Fast();        // flags
-    fileDecl.fileData = buf.getDataPtr() + buf.readUInt64();
+    fileDecl.fileData = buf.data() + buf.readUInt64();
     fileDecl.packedSize = buf.readUInt32Fast();
     fileDecl.unpackedSize = buf.readUInt32Fast();
     fileDecl.archiveType = 0;
@@ -168,7 +168,7 @@ void BA2File::loadBA2Textures(FileBuffer& buf, size_t archiveFile)
     (void) buf.readUInt32Fast();        // extension ("dds\0")
     (void) buf.readUInt32Fast();        // unknown
     (void) buf.readUInt8Fast();         // unknown
-    const unsigned char *fileData = buf.getDataPtr() + buf.getPosition();
+    const unsigned char *fileData = buf.data() + buf.getPosition();
     size_t  chunkCnt = buf.readUInt8Fast();
     (void) buf.readUInt16Fast();        // chunk header size
     (void) buf.readUInt16Fast();        // texture width
@@ -262,7 +262,7 @@ void BA2File::loadBSAFile(FileBuffer& buf, size_t archiveFile, int archiveType)
       FileDeclaration *fileDecl = addPackedFile(fileName);
       if (fileDecl)
       {
-        fileDecl->fileData = buf.getDataPtr() + size_t(fileDecls[n] >> 32);
+        fileDecl->fileData = buf.data() + size_t(fileDecls[n] >> 32);
         fileDecl->packedSize = 0;
         fileDecl->unpackedSize = (unsigned int) (fileDecls[n] & 0x7FFFFFFFU);
         fileDecl->archiveType =
@@ -314,7 +314,7 @@ void BA2File::loadFile(FileBuffer& buf, size_t archiveFile,
   FileDeclaration *fileDecl = addPackedFile(fileName2);
   if (!fileDecl)
     return;
-  fileDecl->fileData = buf.getDataPtr();
+  fileDecl->fileData = buf.data();
   fileDecl->packedSize = 0;
   fileDecl->unpackedSize = (unsigned int) buf.size();
   fileDecl->archiveType = 0;
@@ -494,7 +494,7 @@ unsigned int BA2File::getBSAUnpackedSize(const unsigned char*& dataPtr,
                                          const FileDeclaration& fd) const
 {
   const FileBuffer& buf = *(archiveFiles[fd.archiveFile]);
-  size_t  offs = size_t(dataPtr - buf.getDataPtr());
+  size_t  offs = size_t(dataPtr - buf.data());
   if (fd.archiveType & 0x00000100)
     offs = offs + (size_t(buf.readUInt8(offs)) + 1);
   unsigned int  unpackedSize = fd.unpackedSize;
@@ -503,7 +503,7 @@ unsigned int BA2File::getBSAUnpackedSize(const unsigned char*& dataPtr,
     unpackedSize = buf.readUInt32(offs);
     offs = offs + 4;
   }
-  dataPtr = buf.getDataPtr() + offs;
+  dataPtr = buf.data() + offs;
   return unpackedSize;
 }
 
@@ -634,7 +634,7 @@ int BA2File::extractBA2Texture(std::vector< unsigned char >& buf,
                                const FileDeclaration& fileDecl,
                                int mipOffset) const
 {
-  FileBuffer  fileBuf(archiveFiles[fileDecl.archiveFile]->getDataPtr(),
+  FileBuffer  fileBuf(archiveFiles[fileDecl.archiveFile]->data(),
                       archiveFiles[fileDecl.archiveFile]->size());
   const unsigned char *p = fileDecl.fileData;
   size_t  chunkCnt = p[0];
@@ -642,7 +642,7 @@ int BA2File::extractBA2Texture(std::vector< unsigned char >& buf,
   unsigned int  height = ((unsigned int) p[4] << 8) | p[3];
   int     mipCnt = p[7];
   unsigned char dxgiFormat = p[8];
-  size_t  offs = size_t(p - fileBuf.getDataPtr()) + 11;
+  size_t  offs = size_t(p - fileBuf.data()) + 11;
   buf.resize(148);
   for ( ; chunkCnt-- > 0; offs = offs + 24)
   {
@@ -667,7 +667,7 @@ int BA2File::extractBA2Texture(std::vector< unsigned char >& buf,
     else
     {
       extractBlock(buf, chunkSizeUnpacked, fileDecl,
-                   fileBuf.getDataPtr() + chunkOffset, chunkSizePacked);
+                   fileBuf.data() + chunkOffset, chunkSizePacked);
     }
   }
   // write DDS header
@@ -765,7 +765,7 @@ void BA2File::extractBlock(
   size_t  n = buf.size();
   buf.resize(n + unpackedSize);
   const FileBuffer& fileBuf = *(archiveFiles[fileDecl.archiveFile]);
-  size_t  offs = size_t(p - fileBuf.getDataPtr());
+  size_t  offs = size_t(p - fileBuf.data());
   if (!packedSize)
   {
     if (offs >= fileBuf.size() || (offs + unpackedSize) > fileBuf.size())

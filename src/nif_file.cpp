@@ -987,7 +987,7 @@ NIFFile::NIFFile(const unsigned char *buf, size_t bufSize,
 }
 
 NIFFile::NIFFile(FileBuffer& buf, const BA2File *ba2File)
-  : FileBuffer(buf.getDataPtr(), buf.size())
+  : FileBuffer(buf.data(), buf.size())
 {
   loadNIFFile(ba2File);
 }

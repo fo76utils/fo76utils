@@ -134,7 +134,7 @@ static void loadPalette(unsigned long long *buf, const char *fileName)
   FileBuffer    inFile(fileName);
   unsigned long long  tmp1 = 0x01;
   int     tmp2 = -1;
-  const unsigned char *p = inFile.getDataPtr();
+  const unsigned char *p = inFile.data();
   size_t  k = 0;
   for (size_t i = 0; i < inFile.size(); i++)
   {

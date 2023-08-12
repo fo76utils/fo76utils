@@ -52,6 +52,18 @@ class FileBuffer
   {
     return fileBufSize;
   }
+  inline const unsigned char *data() const
+  {
+    return fileBuf;
+  }
+  inline const unsigned char& front() const
+  {
+    return fileBuf[0];
+  }
+  inline const unsigned char& back() const
+  {
+    return fileBuf[fileBufSize - 1];
+  }
   inline unsigned char operator[](size_t n) const
   {
     return fileBuf[n];
@@ -72,11 +84,20 @@ class FileBuffer
   FileBuffer();
   FileBuffer(const unsigned char *fileData, size_t fileSize);
   FileBuffer(const char *fileName);
+  inline FileBuffer(const unsigned char *fileData,
+                    size_t fileSize, size_t filePosition)
+    : fileBuf(fileData),
+      fileBufSize(fileSize),
+      filePos(filePosition),
+      fileStream(std::uintptr_t(-1))
+  {
+  }
   virtual ~FileBuffer();
   static bool getDefaultDataPath(std::string& dataPath);
  protected:
-  // on Windows: returns HANDLE from CreateFile(), INVALID_HANDLE_VALUE on error
-  // on other systems: returns int from open(), negative value on error
+  // on Windows: returns HANDLE from CreateFile()
+  // on other systems: returns int from open()
+  // a negative value cast to std::uintptr_t is returned on error
   static std::uintptr_t openFileInDataPath(const char *fileName);
 };
 

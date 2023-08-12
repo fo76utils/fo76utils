@@ -597,7 +597,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   {
     errorMessage("DDS file is shorter than expected");
   }
-  const unsigned char *srcPtr = buf.getDataPtr() + dataOffs;
+  const unsigned char *srcPtr = buf.data() + dataOffs;
   for ( ; mipOffset > 0 && maxMipLevel; mipOffset--, maxMipLevel--)
   {
     unsigned int  w = xMaskMip0 + 1U;
