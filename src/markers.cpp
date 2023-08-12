@@ -457,7 +457,7 @@ bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
   const ESMFile::ESMRecord  *p = esmFile.findRecord(formID);
   if (!p || !(*p == "REFR" || *p == "ACHR"))
     return false;
-  ESMFile::ESMField f(esmFile, *p);
+  ESMFile::ESMField f(*p, esmFile);
   if (!f.next())
     return false;
   r.formID = formID;
@@ -517,13 +517,13 @@ bool MapImage::getREFRRecord(REFRRecord& r, unsigned int formID)
     if (p && *p == "DOOR")
     {
       r.isDoor = true;
-      ESMFile::ESMField f2(esmFile, *p);
+      ESMFile::ESMField f2(*p, esmFile);
       while (f2.next())
       {
         if (f2 == "FNAM" && f2.size() >= 1)
         {
           // ignore doors with the minimal use flag
-          r.isDoor = !(f2.getDataPtr()[0] & 0x08);
+          r.isDoor = !(f2.front() & 0x08);
           break;
         }
       }
@@ -657,7 +657,7 @@ void MapImage::findMarkers(unsigned int worldID)
     if (BRANCH_LIKELY(*r == "REFR" || *r == "ACHR"))
     {
       bool    matchFlag = (formIDs.find(r->formID) != formIDs.end());
-      ESMFile::ESMField f(esmFile, *r);
+      ESMFile::ESMField f(*r, esmFile);
       while (f.next())
       {
         if (f == "NAME" && f.size() >= 4)

@@ -465,7 +465,7 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
           break;
         }
         std::sprintf(tmpBuf, (!(i & 3) ? "  %02X" : " %02X"),
-                     (unsigned int) f.getDataPtr()[i]);
+                     (unsigned int) f[i]);
         tmpField.data += tmpBuf;
       }
     }
@@ -502,7 +502,7 @@ bool ESMView::viewModel(unsigned int formID,
   if (*r == "REFR")
   {
     unsigned int  refrName = 0U;
-    ESMField  f(*this, *r);
+    ESMField  f(*r, *this);
     while (f.next())
     {
       if (f == "NAME" && f.size() >= 4)
@@ -616,7 +616,7 @@ bool ESMView::browseRecord(unsigned int& formID)
       if (*r == "REFR" || *r == "ACHR")
       {
         unsigned int  refrName = 0U;
-        ESMField  f(*this, *r);
+        ESMField  f(*r, *this);
         while (f.next())
         {
           if (f == "NAME" && f.size() >= 4)

@@ -165,7 +165,7 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
   const ESMFile::ESMRecord  *r = esmFile.findRecord(formID);
   if (!(r && *r == "MSWP"))
     return 0U;
-  ESMFile::ESMField f(esmFile, *r);
+  ESMFile::ESMField f(*r, esmFile);
   while (f.next())
   {
     if (f == "BNAM")
@@ -193,9 +193,8 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
         }
         float   gradientMapV = -1.0f;
         if (f.dataRemaining >= 4U &&
-            FileBuffer::readUInt32Fast(f.getDataPtr() + f.size())
-            == 0x4D414E43U)             // "CNAM"
-        {
+            FileBuffer::readUInt32Fast(f.data() + f.size()) == 0x4D414E43U)
+        {                               // "CNAM"
           if (f.next() && f.size() >= 4)
           {
             gradientMapV = f.readFloat();
@@ -346,7 +345,7 @@ unsigned int Renderer_Base::getWaterMaterial(
   const ESMFile::ESMRecord  *r2 = esmFile.findRecord(waterFormID);
   if (r2 && *r2 == "WATR")
   {
-    ESMFile::ESMField f2(esmFile, *r2);
+    ESMFile::ESMField f2(*r2, esmFile);
     while (f2.next())
     {
       if (!(f2 == (esmFile.getESMVersion() < 0x02 ? "DATA" : "DNAM")))

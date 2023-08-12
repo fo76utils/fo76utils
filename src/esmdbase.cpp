@@ -459,7 +459,7 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
         {
           if (tmpField == "EDID" && tmpField.size() > 0)
           {
-            switch (tmpField.getDataPtr()[0])
+            switch (tmpField.front())
             {
               case 'b':
                 dataType = 1;
@@ -1001,7 +1001,7 @@ void ESMDump::dumpVersionInfo(unsigned int formID, const ESMRecord *parentGroup)
       if (r == "REFR" || r == "ACHR")
       {
         unsigned int  refrName = 0U;
-        ESMField  f(*this, r);
+        ESMField  f(r, *this);
         while (f.next())
         {
           if (f == "NAME" && f.size() >= 4)

@@ -22,7 +22,7 @@ const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
   zlibBufRecord = 0xFFFFFFFFU;
   zlibBuf[zlibBufIndex].resize(size_t(offs) + uncompressedSize);
   unsigned char *p = zlibBuf[zlibBufIndex].data();
-  std::memcpy(p, buf.getDataPtr(), offs);
+  std::memcpy(p, buf.data(), offs);
   p[4] = (unsigned char) (uncompressedSize & 0xFF);
   p[5] = (unsigned char) ((uncompressedSize >> 8) & 0xFF);
   p[6] = (unsigned char) ((uncompressedSize >> 16) & 0xFF);
@@ -31,7 +31,7 @@ const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
   unsigned int  recordSize =
       (unsigned int) ZLibDecompressor::decompressData(
                          p + offs, uncompressedSize,
-                         buf.getDataPtr() + (offs + 4), compressedSize);
+                         buf.data() + (offs + 4), compressedSize);
   if (recordSize != uncompressedSize)
     errorMessage("invalid compressed record size");
   if ((zlibBufIndex + 1) < zlibBuf.size())
@@ -53,7 +53,7 @@ unsigned int ESMFile::loadRecords(size_t& groupCnt, FileBuffer& buf,
   {
     if ((buf.getPosition() + recordHdrSize) > endPos)
       errorMessage("end of group in ESM input file");
-    const unsigned char *p = buf.getDataPtr() + buf.getPosition();
+    const unsigned char *p = buf.data() + buf.getPosition();
     unsigned int  recordType = buf.readUInt32Fast();
     unsigned int  recordSize = buf.readUInt32Fast();
     unsigned int  flags = buf.readUInt32Fast();
@@ -319,6 +319,18 @@ ESMFile::ESMField::ESMField(ESMFile& f, unsigned int formID)
   fileBufSize = f.recordHdrSize;
   filePos = 4;
   dataRemaining = readUInt32Fast();
+}
+
+ESMFile::ESMField::ESMField(const ESMRecord& r, const ESMFile& f)
+  : FileBuffer(r.fileData, f.recordHdrSize, 8),
+    type(0),
+    dataRemaining(FileBuffer::readUInt32Fast(r.fileData + 4))
+{
+  if (BRANCH_UNLIKELY(r.type == 0x50555247 || (r.flags & 0x00040000)))
+  {
+    // "GRUP" or compressed record
+    dataRemaining = 0;
+  }
 }
 
 bool ESMFile::ESMField::next()

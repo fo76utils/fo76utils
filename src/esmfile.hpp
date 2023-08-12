@@ -34,6 +34,9 @@ class ESMFile
     unsigned int  dataRemaining;
     ESMField(ESMFile& f, const ESMRecord& r);
     ESMField(ESMFile& f, unsigned int formID);
+    // constructor that accepts a const ESMFile,
+    // but does not support compressed records
+    ESMField(const ESMRecord& r, const ESMFile& f);
     bool next();
     inline bool operator==(const char *s) const
     {

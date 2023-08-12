@@ -470,7 +470,7 @@ bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
       {
         unsigned int  modelFormID = 0U;
         bool    haveOBND = false;
-        ESMFile::ESMField f2(esmFile, *r2);
+        ESMFile::ESMField f2(*r2, esmFile);
         while (f2.next())
         {
           if (f2 == "MODL" && f2.size() == 4)
@@ -503,7 +503,7 @@ bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
           r2 = esmFile.findRecord(modelFormID);
           if (r2 && (*r2 == "ARMA" || *r2 == "ARMO"))
           {
-            ESMFile::ESMField f3(esmFile, *r2);
+            ESMFile::ESMField f3(*r2, esmFile);
             while (f3.next())
             {
               if ((f3 == "MOD2" || f3 == "MODL") && f3.size() > 4)
@@ -547,7 +547,7 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
 {
   if (!(r == "TXST"))
     return;
-  ESMFile::ESMField f(esmFile, r);
+  ESMFile::ESMField f(r, esmFile);
   float   specularSmoothness = 0.0f;
   unsigned int  decalFlags = 0xFFFFFFFFU;
   unsigned int  decalColor = 0xFFFFFFFFU;
@@ -578,13 +578,13 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
       specularSmoothness = std::min(std::max(s, 0.0f), 8.0f);
       if (f.size() == 28)
       {
-        decalFlags = FileBuffer::readUInt32Fast(f.getDataPtr() + 24);
+        decalFlags = FileBuffer::readUInt32Fast(f.data() + 24);
         decalFlags = ((decalFlags & 0x01U) << 8) | ((decalFlags & 0x0EU) << 10);
       }
       else if (f.size() == 36)
       {
-        decalFlags = FileBuffer::readUInt32Fast(f.getDataPtr() + 28);
-        decalColor = FileBuffer::readUInt32Fast(f.getDataPtr() + 32);
+        decalFlags = FileBuffer::readUInt32Fast(f.data() + 28);
+        decalColor = FileBuffer::readUInt32Fast(f.data() + 32);
         haveAlphaFlags = true;
       }
       haveDODT = true;
@@ -604,7 +604,7 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
     else if (esmFile.getESMVersion() < 0xC0)
       m.nifVersion = 130U;              // Fallout 4
     m.s.specularSmoothness = specularSmoothness;
-    ESMFile::ESMField f2(esmFile, r);
+    ESMFile::ESMField f2(r, esmFile);
     while (f2.next())
     {
       if (f2 == "MNAM" && f2.size() > 0)
@@ -985,7 +985,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     float   decalScaleX = 1.0f;
     float   decalScaleZ = 1.0f;
     {
-      ESMFile::ESMField f(esmFile, *r);
+      ESMFile::ESMField f(*r, esmFile);
       while (f.next())
       {
         switch (f.type)
@@ -999,8 +999,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
             }
             break;
           case 0x4D525058U:             // "XPRM"
-            if (f.size() >= 29 && (tmp.flags & 0x10) &&
-                *(f.getDataPtr() + 28) == 0x01)         // box
+            if (f.size() >= 29 && (tmp.flags & 0x10) && f[28] == 0x01)  // box
             {
               tmp.flags = tmp.flags | 0x0080;
               float   decalWidth = float(o->obndX1) - float(o->obndX0);
