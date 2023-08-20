@@ -143,14 +143,33 @@ class NIFFile : public FileBuffer
     inline bool checkBounds(FloatVector4 v) const
     {
 #if ENABLE_X86_64_AVX
-      XMM_Int32 tmp1 = (v.v >= boundsMin.v) & (v.v <= boundsMax.v);
-      std::uint64_t tmp2;
-      __asm__ ("vpmovmskb %1, %0" : "=r" (tmp2) : "x" (tmp1));
-      return !(~tmp2 & 0x0FFFU);
+      XMM_Int32 tmp1, tmp2;
+      bool    z;
+      __asm__ ("vcmpnleps %2, %1, %0"
+               : "=x" (tmp1) : "x" (boundsMin.v), "x" (v.v));
+      __asm__ ("vcmpnleps %2, %1, %0"
+               : "=x" (tmp2) : "x" (v.v), "x" (boundsMax.v));
+      __asm__ ("vpor %1, %0, %0" : "+x" (tmp1) : "x" (tmp2));
+      __asm__ ("vpshufd $0xa4, %0, %0" : "+x" (tmp1));
+      __asm__ ("vptest %1, %1" : "=@ccz" (z) : "x" (tmp1));
+      return z;
 #else
       return (v[0] >= boundsMin[0] && v[1] >= boundsMin[1] &&
               v[2] >= boundsMin[2] && v[0] <= boundsMax[0] &&
               v[1] <= boundsMax[1] && v[2] <= boundsMax[2]);
+#endif
+    }
+    inline operator bool() const
+    {
+#if ENABLE_X86_64_AVX
+      XMM_Int32   tmp1 = (boundsMax.v > boundsMin.v);
+      XMM_UInt64  tmp2;
+      __asm__ ("vpshufd $0xaa, %1, %0" : "=x" (tmp2) : "x" (tmp1));
+      __asm__ ("vpor %1, %0, %0" : "+x" (tmp2) : "x" (tmp1));
+      return bool(tmp2[0]);
+#else
+      return (boundsMax[0] > boundsMin[0] || boundsMax[1] > boundsMin[1] ||
+              boundsMax[2] > boundsMin[2]);
 #endif
     }
   };
