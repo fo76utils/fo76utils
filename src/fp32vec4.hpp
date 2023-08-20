@@ -115,7 +115,6 @@ struct FloatVector4
   inline FloatVector4& rsqrtFast();     // elements must be positive
   static inline float squareRootFast(float x);
   static inline float log2Fast(float x);
-  static inline int log2Int(int x);
   // ((x * p[0] + p[1]) * x + p[2]) * x + p[3]
   static inline float polynomial3(const float *p, float x);
   static inline float exp2Fast(float x);
@@ -432,13 +431,6 @@ inline float FloatVector4::log2Fast(float x)
   FloatVector4  tmp2(m, m2, m * m2, m2 * m2);
   FloatVector4  tmp3(4.05608897f, -2.10465275f, 0.63728021f, -0.08021013f);
   return (tmp2.dotProduct(tmp3) + e - (127.0f + 2.50847106f));
-}
-
-inline int FloatVector4::log2Int(int x)
-{
-  int     tmp = x;              // return 0 if x == 0
-  __asm__ ("bsr %0, %0" : "+r" (tmp) : : "cc");
-  return tmp;
 }
 
 inline float FloatVector4::polynomial3(const float *p, float x)
@@ -944,17 +936,6 @@ inline float FloatVector4::squareRootFast(float x)
 inline float FloatVector4::log2Fast(float x)
 {
   return float(std::log2(x));
-}
-
-inline int FloatVector4::log2Int(int x)
-{
-  unsigned int  n = (unsigned int) x;
-  int     r = int(bool(n & 0xFFFF0000U)) << 4;
-  r = r | (int(bool(n & (0xFF00U << r))) << 3);
-  r = r | (int(bool(n & (0xF0U << r))) << 2);
-  r = r | (int(bool(n & (0x0CU << r))) << 1);
-  r = r | int(bool(n & (0x02U << r)));
-  return r;
 }
 
 inline float FloatVector4::polynomial3(const float *p, float x)
