@@ -18,10 +18,11 @@ static const char *usageStrings[] =
   "    -scol BOOL          enable the use of pre-combined meshes",
   "    -a                  render all object types",
   "    -textures BOOL      make all diffuse textures white if false",
-  "    -txtcache INT       texture cache size in megabytes",
+  "    -tc | -txtcache INT texture cache size in megabytes",
+  "    -mc INT             number of models to load at once (1 to 64)",
   "    -ssaa INT           render at 2^N resolution and downsample",
   "    -f INT              output format, 0: RGB24, 1: A8R8G8B8, 2: RGB10A2",
-  "    -rq INT             set render quality (0 to 511, see doc/render.md)",
+  "    -rq INT             set render quality (0 - 1023, see doc/render.md)",
   "    -watermask BOOL     make non-water surfaces transparent or black",
   "    -q                  do not print messages other than errors",
   "",
@@ -68,8 +69,9 @@ int main(int argc, char **argv)
   try
   {
     std::vector< const char * > args;
-    int     threadCnt = -1;
-    int     textureCacheSize = 1024;
+    unsigned char threadCnt = 0;
+    unsigned char modelBatchCnt = 16;
+    unsigned int  textureCacheSize = 1024U;
     bool    verboseMode = true;
     bool    distantObjectsOnly = false;
     bool    noDisabledObjects = true;
@@ -139,8 +141,8 @@ int main(int argc, char **argv)
       }
       else if (std::strcmp(argv[i], "--list-defaults") == 0)
       {
-        std::printf("-threads %d", threadCnt);
-        if (threadCnt <= 0)
+        std::printf("-threads %u", (unsigned int) threadCnt);
+        if (!threadCnt)
         {
           std::printf(" (defaults to hardware threads: %d)",
                       int(std::thread::hardware_concurrency()));
@@ -148,7 +150,8 @@ int main(int argc, char **argv)
         std::printf("\n-debug %d\n", int(debugMode));
         std::printf("-scol %d\n", int(enableSCOL));
         std::printf("-textures %d\n", int(enableTextures));
-        std::printf("-txtcache %d\n", textureCacheSize);
+        std::printf("-txtcache %u\n", textureCacheSize);
+        std::printf("-mc %u\n", (unsigned int) modelBatchCnt);
         std::printf("-ssaa %d\n", int(ssaaLevel));
         std::printf("-f %d\n", outputFormat);
         std::printf("-rq 0x%04X\n", (unsigned int) renderQuality);
@@ -214,8 +217,9 @@ int main(int argc, char **argv)
       {
         if (++i >= argc)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        threadCnt = int(parseInteger(argv[i], 10, "invalid number of threads",
-                                     1, 16));
+        threadCnt =
+            (unsigned char) parseInteger(argv[i], 10,
+                                         "invalid number of threads", 0, 16);
       }
       else if (std::strcmp(argv[i], "-debug") == 0)
       {
@@ -243,13 +247,23 @@ int main(int argc, char **argv)
             bool(parseInteger(argv[i], 0, "invalid argument for -textures",
                               0, 1));
       }
-      else if (std::strcmp(argv[i], "-txtcache") == 0)
+      else if (std::strcmp(argv[i], "-tc") == 0 ||
+               std::strcmp(argv[i], "-txtcache") == 0)
       {
         if (++i >= argc)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         textureCacheSize =
-            int(parseInteger(argv[i], 0, "invalid texture cache size",
-                             256, 4095));
+            (unsigned int) parseInteger(argv[i], 0,
+                                        "invalid texture cache size",
+                                        256, 65535);
+      }
+      else if (std::strcmp(argv[i], "-mc") == 0)
+      {
+        if (++i >= argc)
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
+        modelBatchCnt =
+            (unsigned char) parseInteger(argv[i], 0,
+                                         "invalid model cache size", 1, 64);
       }
       else if (std::strcmp(argv[i], "-ssaa") == 0)
       {
@@ -272,7 +286,7 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         renderQuality =
             (unsigned short) parseInteger(argv[i], 0,
-                                          "invalid render quality", 0, 511);
+                                          "invalid render quality", 0, 1023);
       }
       else if (std::strcmp(argv[i], "-watermask") == 0)
       {
@@ -564,7 +578,6 @@ int main(int argc, char **argv)
     if (debugMode == 1)
     {
       ssaaLevel = 0;
-      enableSCOL = true;
       ltxtResolution = 128 >> btdLOD;
     }
     if (waterMaskMode)
@@ -595,9 +608,9 @@ int main(int argc, char **argv)
 
     Renderer  renderer(width, height, ba2File, esmFile,
                        (std::uint32_t *) 0, (float *) 0, zMax);
-    if (threadCnt > 0)
-      renderer.setThreadCount(threadCnt);
-    renderer.setTextureCacheSize(size_t(textureCacheSize) << 20);
+    renderer.setThreadCount(threadCnt);
+    renderer.setTextureCacheSize(std::uint64_t(textureCacheSize) << 20);
+    renderer.setModelCacheSize(modelBatchCnt);
     renderer.setDistantObjectsOnly(distantObjectsOnly);
     renderer.setNoDisabledObjects(noDisabledObjects);
     renderer.setEnableSCOL(enableSCOL);
@@ -656,7 +669,7 @@ int main(int argc, char **argv)
       if (waterMaskMode)
         renderer.clearImage(0x01);
       renderer.initRenderPass(renderPass, (!renderPass ? worldID : formID));
-      while (!renderer.renderObjects())
+      while (!renderer.renderObjects(1000))
       {
         if (verboseMode)
         {

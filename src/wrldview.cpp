@@ -5,6 +5,7 @@
 #include "sdlvideo.hpp"
 #include "markers.hpp"
 
+#include <bit>
 #include <ctime>
 #include <SDL2/SDL.h>
 
@@ -29,25 +30,27 @@ static const char *cmdOptsTable[] =
   "1lmult",             // 14
   "1ltxtres",           // 15
   "1markers",           // 16
-  "1minscale",          // 17
-  "1mip",               // 18
-  "1mlod",              // 19
-  "1ndis",              // 20
-  "4r",                 // 21
-  "1rq",                // 22
-  "1rscale",            // 23
-  "1textures",          // 24
-  "1threads",           // 25
-  "1txtcache",          // 26
-  "1vis",               // 27
-  "1w",                 // 28
-  "1watercolor",        // 29
-  "1wrefl",             // 30
-  "1wscale",            // 31
-  "1wtxt",              // 32
-  "1xm",                // 33
-  "0xm_clear",          // 34
-  "1zrange"             // 35
+  "1mc",                // 17
+  "1minscale",          // 18
+  "1mip",               // 19
+  "1mlod",              // 20
+  "1ndis",              // 21
+  "4r",                 // 22
+  "1rq",                // 23
+  "1rscale",            // 24
+  "1tc",                // 25
+  "1textures",          // 26
+  "1threads",           // 27
+  "1txtcache",          // 28
+  "1vis",               // 29
+  "1w",                 // 30
+  "1watercolor",        // 31
+  "1wrefl",             // 32
+  "1wscale",            // 33
+  "1wtxt",              // 34
+  "1xm",                // 35
+  "0xm_clear",          // 36
+  "1zrange"             // 37
 };
 
 static const char *usageStrings[] =
@@ -62,8 +65,9 @@ static const char *usageStrings[] =
   "    -debug INT          set debug render mode (0: disabled, 1: form IDs,",
   "                        2: depth, 3: normals, 4: diffuse, 5: light only)",
   "    -textures BOOL      make all diffuse textures white if false",
-  "    -txtcache INT       texture cache size in megabytes",
-  "    -rq INT             set render quality (0 to 511, see doc/render.md)",
+  "    -tc | -txtcache INT texture cache size in megabytes",
+  "    -mc INT             number of models to load at once (1 to 64)",
+  "    -rq INT             set render quality (0 - 1023, see doc/render.md)",
   "    -ft INT             minimum frame time in milliseconds",
   "    -markers FILENAME   read marker definitions from the specified file",
   "",
@@ -153,6 +157,8 @@ static const char *keyboardUsageString =
     "based on the color of the pixel, and also copy it to the        \n"
     "                        "
     "clipboard.                                                      \n"
+    "  \033[4m\033[38;5;228mMouse R button single\033[m "
+    "Print the X, Y, Z coordinates in the world space.               \n"
     "  \033[4m\033[38;5;228mF12\033[m "
     "or \033[4m\033[38;5;228mPrint Screen\033[m   "
     "Save screenshot.                                                \n"
@@ -191,8 +197,9 @@ struct WorldSpaceViewer
   Renderer  *renderer;
   int     width;
   int     height;
-  int     threadCnt;
-  int     textureCacheSize;
+  unsigned char threadCnt;
+  unsigned char modelBatchCnt;
+  unsigned int  textureCacheSize;
   bool    distantObjectsOnly;
   bool    noDisabledObjects;
   bool    enableTextures;
@@ -246,7 +253,6 @@ struct WorldSpaceViewer
   bool    redrawScreenFlag;
   bool    redrawWorldFlag;
   std::uint16_t frameTimeMin;
-  std::uint64_t lastRedrawTime;
   std::map< size_t, std::string > cmdHistory1;
   std::map< std::string, size_t > cmdHistory2;
   std::string cmdBuf;
@@ -263,6 +269,7 @@ struct WorldSpaceViewer
   void printError(const char *fmt, ...);
   void updateDisplay();
   void printReferenceInfo(unsigned int refrFormID);
+  void printWorldSpaceXYZ(int x, int y);
   void pollEvents();
   void consoleInput();
   void saveScreenshot();
@@ -272,8 +279,9 @@ WorldSpaceViewer::WorldSpaceViewer(
     int w, int h, const char *esmFiles, const char *archivePath,
     int argc, const char * const *argv)
   : renderer((Renderer *) 0),
-    threadCnt(-1),
-    textureCacheSize(1024),
+    threadCnt(0),
+    modelBatchCnt(16),
+    textureCacheSize(1024U),
     distantObjectsOnly(false),
     noDisabledObjects(true),
     enableTextures(true),
@@ -329,7 +337,6 @@ WorldSpaceViewer::WorldSpaceViewer(
   height = display.getHeight();
   imageDataSize = size_t(width) * size_t(height);
   imageBuf.resize(imageDataSize, 0U);
-  lastRedrawTime = SDL_GetTicks64();
   try
   {
     setRenderParams(argc, argv);
@@ -416,11 +423,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
             std::uint32_t(parseInteger(argv[i + 1], 0,
                                        "invalid land texture color",
                                        0, 0x00FFFFFF));
-        if (renderer)
-        {
-          renderer->setLandDefaultColor(ltxtDefColor);
-          redrawWorldFlag = true;
-        }
+        redrawWorldFlag = true;
         break;
       case 4:                   // "deftxt"
         defTxtID =
@@ -498,15 +501,16 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         break;
       case 12:                  // "list"
       case 13:                  // "list-defaults"
-        display.consolePrint("threads: %d", threadCnt);
-        if (threadCnt <= 0)
+        display.consolePrint("threads: %u", (unsigned int) threadCnt);
+        if (!threadCnt)
         {
           display.consolePrint(" (defaults to hardware threads: %d)",
                                int(std::thread::hardware_concurrency()));
         }
         display.consolePrint("\ndebug: %d\n", int(debugMode));
         display.consolePrint("textures: %d\n", int(enableTextures));
-        display.consolePrint("txtcache: %d\n", textureCacheSize);
+        display.consolePrint("txtcache: %u\n", textureCacheSize);
+        display.consolePrint("mc: %u\n", (unsigned int) modelBatchCnt);
         display.consolePrint("rq: 0x%04X\n", (unsigned int) renderQuality);
         display.consolePrint("ft: %d\n", int(frameTimeMin));
         if (!markerDefsFileName.empty())
@@ -571,11 +575,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         landTextureMult = float(parseFloat(argv[i + 1],
                                            "invalid land texture RGB scale",
                                            0.5, 8.0));
-        if (renderer)
-        {
-          renderer->setLandTxtRGBScale(landTextureMult);
-          redrawWorldFlag = true;
-        }
+        redrawWorldFlag = true;
         break;
       case 15:                  // "ltxtres"
         ltxtMaxResolution =
@@ -589,41 +589,36 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         markerDefsFileName = argv[i + 1];
         redrawWorldFlag = true;
         break;
-      case 17:                  // "minscale"
+      case 17:                  // "mc"
+        modelBatchCnt =
+            (unsigned char) parseInteger(argv[i + 1], 0,
+                                         "invalid model cache size", 1, 64);
+        redrawWorldFlag = true;
+        break;
+      case 18:                  // "minscale"
         objectsMinScale = float(parseFloat(argv[i + 1], "invalid view scale",
                                            1.0f / 512.0f, 16.0f));
         redrawWorldFlag = true;
         break;
-      case 18:                  // "mip"
+      case 19:                  // "mip"
         textureMip = int(parseInteger(argv[i + 1], 10,
                                       "invalid texture mip level", 0, 15));
         if (renderer)
-        {
           renderer->clearTextureCache();
-          renderer->setTextureMipLevel(textureMip);
-          redrawWorldFlag = true;
-        }
+        redrawWorldFlag = true;
         break;
-      case 19:                  // "mlod"
+      case 20:                  // "mlod"
         modelLOD = int(parseInteger(argv[i + 1], 10,
                                     "invalid model LOD", 0, 4));
-        if (renderer)
-        {
-          renderer->setModelLOD(modelLOD);
-          redrawWorldFlag = true;
-        }
+        redrawWorldFlag = true;
         break;
-      case 20:                  // "ndis"
+      case 21:                  // "ndis"
         noDisabledObjects =
             bool(parseInteger(argv[i + 1], 0,
                               "invalid argument for -ndis", 0, 1));
-        if (renderer)
-        {
-          renderer->setNoDisabledObjects(noDisabledObjects);
-          redrawWorldFlag = true;
-        }
+        redrawWorldFlag = true;
         break;
-      case 21:                  // "r"
+      case 22:                  // "r"
         terrainX0 =
             std::int16_t(parseInteger(argv[i + 1], 10,
                                       "invalid terrain X0", -32768, 32767));
@@ -642,61 +637,56 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           redrawWorldFlag = true;
         }
         break;
-      case 22:                  // "rq"
+      case 23:                  // "rq"
         {
           std::uint16_t tmp = renderQuality;
           renderQuality =
               std::uint16_t(parseInteger(argv[i + 1], 0,
-                                         "invalid render quality", 0, 511));
+                                         "invalid render quality", 0, 1023));
           if (renderer && ((tmp ^ renderQuality) & 0x73))
             renderer->clearObjectPropertyCache();
         }
         redrawWorldFlag = true;
         break;
-      case 23:                  // "rscale"
+      case 24:                  // "rscale"
         reflZScale =
             float(parseFloat(argv[i + 1],
                              "invalid reflection view vector Z scale",
                              0.25, 16.0));
         redrawWorldFlag = true;
         break;
-      case 24:                  // "textures"
+#if 0
+      case 25:                  // "tc"
+        break;
+#endif
+      case 26:                  // "textures"
         enableTextures =
             bool(parseInteger(argv[i + 1], 0,
                               "invalid argument for -textures", 0, 1));
-        if (renderer)
-        {
-          renderer->setEnableTextures(enableTextures);
-          redrawWorldFlag = true;
-        }
+        redrawWorldFlag = true;
         break;
-      case 25:                  // "threads"
-        threadCnt = int(parseInteger(argv[i + 1], 10,
-                                     "invalid number of threads", 1, 16));
-        if (renderer)
-        {
-          renderer->setThreadCount(threadCnt);
-          redrawWorldFlag = true;
-        }
+      case 27:                  // "threads"
+        threadCnt =
+            (unsigned char) parseInteger(argv[i + 1], 10,
+                                         "invalid number of threads", 0, 16);
+        redrawWorldFlag = true;
         break;
-      case 26:                  // "txtcache"
+      case 25:                  // "tc"
+      case 28:                  // "txtcache"
         textureCacheSize =
-            int(parseInteger(argv[i + 1], 0,
-                             "invalid texture cache size", 256, 4095));
+            (unsigned int) parseInteger(argv[i + 1], 0,
+                                        "invalid texture cache size",
+                                        256, 65535);
         if (renderer)
-          renderer->setTextureCacheSize(size_t(textureCacheSize) << 20);
+          renderer->setTextureCacheSize(std::uint64_t(textureCacheSize) << 20);
         break;
-      case 27:                  // "vis"
+      case 29:                  // "vis"
         distantObjectsOnly =
             bool(parseInteger(argv[i + 1], 0,
                               "invalid argument for -vis", 0, 1));
-        if (renderer)
-        {
-          renderer->setDistantObjectsOnly(distantObjectsOnly);
-          redrawWorldFlag = true;
-        }
+        redrawWorldFlag = true;
         break;
-      case 28:                  // "w"
+      case 30:                  // "w"
         formID = (unsigned int) parseInteger(argv[i + 1], 0,
                                              "invalid form ID", 0, 0x0FFFFFFF);
         if (renderer)
@@ -706,7 +696,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           redrawWorldFlag = true;
         }
         break;
-      case 29:                  // "watercolor"
+      case 31:                  // "watercolor"
         {
           std::uint32_t tmp =
               std::uint32_t(parseInteger(argv[i + 1], 0, "invalid water color",
@@ -714,33 +704,25 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           tmp = tmp + (tmp & 0x7F000000U) + ((tmp >> 30) << 24);
           if (!(tmp & 0xFF000000U))
             tmp = 0U;
-          if (renderer)
-          {
-            renderer->setWaterColor(tmp);
-            if ((tmp == 0U) != (waterColor == 0U))
-              renderer->clearObjectPropertyCache();
-            redrawWorldFlag = true;
-          }
+          if (renderer && bool(tmp) != bool(waterColor))
+            renderer->clearObjectPropertyCache();
           waterColor = tmp;
-        }
-        break;
-      case 30:                  // "wrefl"
-        waterReflectionLevel =
-            float(parseFloat(argv[i + 1],
-                             "invalid water environment map scale", 0.0, 4.0));
-        if (renderer)
-        {
-          renderer->setWaterEnvMapScale(waterReflectionLevel);
           redrawWorldFlag = true;
         }
         break;
-      case 31:                  // "wscale"
+      case 32:                  // "wrefl"
+        waterReflectionLevel =
+            float(parseFloat(argv[i + 1],
+                             "invalid water environment map scale", 0.0, 4.0));
+        redrawWorldFlag = true;
+        break;
+      case 33:                  // "wscale"
         waterUVScale =
             int(parseInteger(argv[i + 1], 0,
                              "invalid water texture tile size", 2, 32768));
         redrawWorldFlag = true;
         break;
-      case 32:                  // "wtxt"
+      case 34:                  // "wtxt"
         waterTexture = argv[i + 1];
         if (renderer)
         {
@@ -748,7 +730,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           redrawWorldFlag = true;
         }
         break;
-      case 33:                  // "xm"
+      case 35:                  // "xm"
         if (argv[i + 1][0])
         {
           excludeModelPatterns.push_back(std::string(argv[i + 1]));
@@ -760,7 +742,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           }
         }
         break;
-      case 34:                  // "xm_clear"
+      case 36:                  // "xm_clear"
         if (excludeModelPatterns.size() > 0)
         {
           excludeModelPatterns.clear();
@@ -772,7 +754,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           }
         }
         break;
-      case 35:                  // "zrange"
+      case 37:                  // "zrange"
         zMax = float(parseFloat(argv[i + 1],
                                 "invalid Z range", 1.0, 16777216.0));
         redrawWorldFlag = true;
@@ -835,21 +817,9 @@ void WorldSpaceViewer::updateDisplay()
       errorMessage("form ID not found in ESM, or invalid record type");
     }
     renderer = new Renderer(width, height, ba2File, esmFile, imageBuf.data());
-    if (threadCnt > 0)
-      renderer->setThreadCount(threadCnt);
-    renderer->setTextureCacheSize(size_t(textureCacheSize) << 20);
-    renderer->setDistantObjectsOnly(distantObjectsOnly);
-    renderer->setNoDisabledObjects(noDisabledObjects);
-    renderer->setEnableTextures(enableTextures);
-    renderer->setLandDefaultColor(ltxtDefColor);
-    renderer->setTextureMipLevel(textureMip);
-    renderer->setLandTxtRGBScale(landTextureMult);
-    renderer->setModelLOD(modelLOD);
-    renderer->setWaterColor(waterColor);
-    renderer->setWaterEnvMapScale(waterReflectionLevel);
     if (!defaultEnvMap.empty())
       renderer->setDefaultEnvMap(defaultEnvMap);
-    if (waterColor && !waterTexture.empty())
+    if (!waterTexture.empty())
       renderer->setWaterTexture(waterTexture);
     for (size_t i = 0; i < excludeModelPatterns.size(); i++)
       renderer->addExcludeModelPattern(excludeModelPatterns[i]);
@@ -866,9 +836,21 @@ void WorldSpaceViewer::updateDisplay()
     for (size_t i = imageDataSize; i-- > 0; p++)
       *p = z;
     display.clearTextBuffer();
+    renderer->setThreadCount(threadCnt);
+    renderer->setTextureCacheSize(std::uint64_t(textureCacheSize) << 20);
+    renderer->setModelCacheSize(modelBatchCnt);
+    renderer->setDistantObjectsOnly(distantObjectsOnly);
+    renderer->setNoDisabledObjects(noDisabledObjects);
+    renderer->setEnableTextures(enableTextures);
+    renderer->setLandDefaultColor(ltxtDefColor);
+    renderer->setTextureMipLevel(textureMip);
+    renderer->setLandTxtRGBScale(landTextureMult);
+    renderer->setModelLOD(modelLOD);
+    renderer->setWaterColor(waterColor);
+    renderer->setWaterEnvMapScale(waterReflectionLevel);
     renderer->setEnableSCOL(false);
     renderer->setEnableAllObjects(false);
-    renderer->setRenderQuality(renderQuality | std::uint16_t(debugMode == 1));
+    renderer->setRenderQuality(renderQuality);
     renderer->setDebugMode(debugMode);
     float   viewOffsX, viewOffsY, viewOffsZ;
     calculateViewOffset(viewOffsX, viewOffsY, viewOffsZ);
@@ -894,8 +876,9 @@ void WorldSpaceViewer::updateDisplay()
       ltxtResolution = std::min(ltxtResolution, ltxtMaxResolution);
       ltxtResolution = std::max(ltxtResolution, 128 >> btdLOD);
       renderer->setLandTxtResolution(ltxtResolution);
-      int     ltxtMip = (esmFile.getESMVersion() < 0x80U ? 13 : 14)
-                        - (textureMip + FloatVector4::log2Int(ltxtResolution));
+      int     ltxtMip =
+          (esmFile.getESMVersion() < 0x80U ? 14 : 15)
+          - (textureMip + int(std::bit_width((unsigned int) ltxtResolution)));
       ltxtMip = std::max(std::min(ltxtMip, 15 - textureMip), 0);
       renderer->setLandTextureMip(float(ltxtMip));
       renderer->loadTerrain((btdPath.empty() ? dataPath : btdPath.c_str()),
@@ -951,7 +934,7 @@ void WorldSpaceViewer::updateDisplay()
   }
   else if (renderPass < 3)
   {
-    if (!renderer->renderObjects())
+    if (!renderer->renderObjects(int(frameTimeMin)))
     {
       display.consolePrint("\r    %7u / %7u  ",
                            (unsigned int) renderer->getObjectsRendered(),
@@ -965,13 +948,11 @@ void WorldSpaceViewer::updateDisplay()
                            (unsigned int) renderer->getObjectCount(),
                            (unsigned int) renderer->getObjectCount());
     }
-    if (SDL_GetTicks64() >= (lastRedrawTime + frameTimeMin))
-      redrawScreenFlag = true;
+    redrawScreenFlag = true;
   }
   if (redrawScreenFlag)
   {
     redrawScreenFlag = false;
-    lastRedrawTime = SDL_GetTicks64();
     std::memcpy(display.lockDrawSurface(), imageBuf.data(),
                 imageDataSize * sizeof(std::uint32_t));
     display.unlockDrawSurface();
@@ -1125,6 +1106,32 @@ void WorldSpaceViewer::printReferenceInfo(unsigned int refrFormID)
   display.consolePrint("%s", buf.c_str());
 }
 
+void WorldSpaceViewer::printWorldSpaceXYZ(int x, int y)
+{
+  float   rX = viewRotations[viewRotation * 3] * d;
+  float   rY = viewRotations[viewRotation * 3 + 1] * d;
+  float   rZ = viewRotations[viewRotation * 3 + 2] * d;
+  NIFFile::NIFVertexTransform viewTransformInv(
+      1.0f / viewScale, rX, rY, rZ, 0.0f, 0.0f, 0.0f);
+  NIFFile::NIFVertexTransform tmp(viewTransformInv);
+  viewTransformInv.rotateYX = tmp.rotateXY;
+  viewTransformInv.rotateZX = tmp.rotateXZ;
+  viewTransformInv.rotateXY = tmp.rotateYX;
+  viewTransformInv.rotateZY = tmp.rotateYZ;
+  viewTransformInv.rotateXZ = tmp.rotateZX;
+  viewTransformInv.rotateYZ = tmp.rotateZY;
+  float   viewOffsX, viewOffsY, viewOffsZ;
+  calculateViewOffset(viewOffsX, viewOffsY, viewOffsZ);
+  viewOffsX += (float(width) * 0.5f);
+  viewOffsY += (float(height - 2) * 0.5f);
+  const float *zBuf = renderer->getZBufferData();
+  float   z = zBuf[size_t(y) * size_t(width) + size_t(x)];
+  FloatVector4  v(float(x) - viewOffsX, float(y) - viewOffsY, z - viewOffsZ,
+                  0.0f);
+  v = viewTransformInv.transformXYZ(v);
+  display.consolePrint("X: %.7g, Y: %.7g, Z: %.7g\n", v[0], v[1], v[2]);
+}
+
 void WorldSpaceViewer::pollEvents()
 {
   display.pollEvents(eventBuf, (renderPass < 3 ? 0 : -1000), false, true);
@@ -1171,6 +1178,11 @@ void WorldSpaceViewer::pollEvents()
         c = ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU) | (c & 0xFF00U);
 #endif
         printReferenceInfo(c);
+        redrawScreenFlag = true;
+      }
+      else if (eventBuf[i].data3() == 3 && eventBuf[i].data4() == 1)
+      {
+        printWorldSpaceXYZ(x, y);
         redrawScreenFlag = true;
       }
     }
