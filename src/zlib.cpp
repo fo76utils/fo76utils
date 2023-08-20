@@ -3,6 +3,8 @@
 #include "zlib.hpp"
 #include "fp32vec4.hpp"
 
+#include <bit>
+
 std::uint32_t ZLibDecompressor::readU32LE()
 {
   std::uint32_t w = readU16LE();
@@ -35,7 +37,7 @@ inline void ZLibDecompressor::srLoad(unsigned long long& sr)
 {
   if (BRANCH_UNLIKELY(sr < 0x00010000ULL))
   {
-    unsigned int  bitCnt = (unsigned int) FloatVector4::log2Int(int(sr));
+    unsigned int  bitCnt = (unsigned int) std::bit_width(sr) - 1U;
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
     if (BRANCH_LIKELY((inPtr + 6) <= inBufEnd))
     {
@@ -327,7 +329,7 @@ void ZLibDecompressor::huffmanBuildDecodeTable(
       unsigned int  c = (r << 8) >> l;
       unsigned int  n = ((c & 0x55) << 1) | ((c & 0xAA) >> 1);
       n = ((n & 0x33) << 2) | ((n & 0xCC) >> 2);
-      n = ((n & 0x0F) << 4) | ((n & 0xF0) >> 4);
+      n = std::rotl(std::uint8_t(n), 4);
       if (l <= 8)
         c = huffTable[huffTable[l + 287] + r];
       c = (c << 8) | l;

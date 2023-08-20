@@ -4,6 +4,7 @@
 #include "fp32vec4.hpp"
 
 #include <algorithm>
+#include <bit>
 
 // vertex coordinates closer than this to exact integers are rounded
 #ifndef VERTEX_XY_SNAP
@@ -1388,9 +1389,9 @@ Plot3D_TriShape& Plot3D_TriShape::operator=(const NIFFile::NIFTriShape& t)
 
 static float calculateMipOffset(const DDSTexture *t1, const DDSTexture *t2)
 {
-  int     a1 = t1->getWidth() * t1->getHeight();
-  int     a2 = t2->getWidth() * t2->getHeight();
-  int     m = FloatVector4::log2Int(a1) - FloatVector4::log2Int(a2);
+  unsigned int  a1 = (unsigned int) (t1->getWidth() * t1->getHeight());
+  unsigned int  a2 = (unsigned int) (t2->getWidth() * t2->getHeight());
+  int     m = int(std::bit_width(a1)) - int(std::bit_width(a2));
   if (m < 0)
     return float(-((1 - m) >> 1));
   m = (m + 1) >> 1;
