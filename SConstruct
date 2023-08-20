@@ -6,7 +6,7 @@ env = Environment(tools = [*filter(None, ARGUMENTS.get('tools','').split(','))] 
                           "HOME" : os.environ["HOME"] })
 env["CCFLAGS"] = Split("-Wall -Isrc")
 env["CFLAGS"] = Split("-std=c99")
-env["CXXFLAGS"] = Split("-std=c++11")
+env["CXXFLAGS"] = Split("-std=c++20")
 if int(ARGUMENTS.get("avx2", 0)):
     env.Append(CCFLAGS = ["-march=haswell"])
 elif int(ARGUMENTS.get("avx", 1)):
