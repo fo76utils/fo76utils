@@ -17,25 +17,25 @@
 
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 
 class Renderer : protected Renderer_Base
 {
  protected:
-  // maximum number of NIF files to keep loaded (must be power of two and <= 64)
-  static const unsigned int modelBatchCnt = 16U;
   enum
   {
+    maxThreadCnt = 16,
     baseObjBufShift = 12,
     baseObjBufMask = 0x0FFF,
-    baseObjHashMask = 0xFFFF
+    baseObjHashMask = 0xFFFF,
+    renderObjQueueSize = 512
   };
   struct BaseObject
   {
     unsigned int  formID;
     std::int32_t  prv;                  // previous object with the same hash
-    unsigned short  type;               // first 2 characters, or 0 if excluded
-    unsigned short  flags;              // same as RenderObject flags
-    unsigned int  modelID;
+    unsigned int  flags;                // same as RenderObject flags
+    unsigned int  modelID;              // b0 to b7: nifFiles index
     unsigned int  mswpFormID;           // color + flags (in alpha) for decals
     signed short  obndX0;
     signed short  obndY0;
@@ -43,7 +43,7 @@ class Renderer : protected Renderer_Base
     signed short  obndX1;
     signed short  obndY1;
     signed short  obndZ1;
-    std::string modelPath;              // "~0x%08X" % formID for decals
+    const std::string *modelPath;       // NULL for decals
   };
   struct RenderObject
   {
@@ -52,50 +52,134 @@ class Renderer : protected Renderer_Base
     // 0x10: is decal (TXST object)
     // 0x20: is marker
     // 0x40: high quality model
-    // 0x80: for objects: upper byte is gradient map V from MODC
+    // 0x80: for objects: bits 8-15 = grayscale to palette map scale from MODC
     //       for decals:  uses XPRM (disables XPDD and finding point of impact)
-    unsigned short  flags;
-    // -1:        not rendered
-    // 0 to 63:   single tile, N = Y * 8 + X
-    // 64 to 319:   2*2 tiles, N = 64 + ((Y0 & 6) * 8) + (X0 & 6)
-    //                             + ((Y0 & 1) * 128) + ((X0 & 1) * 64)
-    // 320 to 1343: 4*4 tiles, N = 320 + ((Y0 & 4) * 8) + (X0 & 4)
-    //                             + ((Y0 & 3) * 256) + ((X0 & 3) * 64)
-    // 1344:        8*8 tiles
-    signed short  tileIndex;
-    int     z;                  // Z coordinate for sorting / debugMode 1 formID
+    // bits 8 to 15: (objects only if b7 is set) grayscale to palette map scale
+    // bits 29 to 31: sort group (higher = rendered later)
+    //           0 = cell (terrain or water), no valid model ID
+    //           1 = object
+    //           2 = decal (TXST)
+    //           3 = object (e.g. actor) that decals cannot be projected onto
+    unsigned int  flags;
+    int     z;                  // Z coordinate for sorting
     union
     {
-      const BaseObject  *o;     // valid if flags & 2 or flags & 16 is set
-      struct
+      struct                    // object data (valid if flags & 2 is set)
       {
-        signed short  x0;       // terrain area, or water cell bounds
+        const BaseObject  *b;
+        // for solid objects: material swap form ID if non-zero
+        // for water: form ID of WATR object
+        unsigned int  mswpFormID;
+        // form ID of second material swap
+        unsigned int  mswpFormID2;
+      }
+      o;
+      struct                    // decal data (valid if flags & 16 is set)
+      {
+        const BaseObject  *b;
+        // from XPDD
+        float   scaleX;
+        float   scaleZ;
+      }
+      d;
+      struct                    // cell data (terrain or water)
+      {
+        // For terrain, the X and Y bounds are heightmap image coordinates,
+        // and the Z bounds are raw 16-bit height values - 32768.
+        // For water cells, the bounds are always x0 = y0 = z0 = z1 = 0
+        // and x1 = y1 = 4096.
+        signed short  x0;
         signed short  y0;
         signed short  x1;
         signed short  y1;
+        signed short  z0;
+        signed short  z1;
+        unsigned int  waterFormID;      // WATR object
       }
       t;
     }
     model;
-    // for solid objects: material swap form ID if non-zero
-    // for water: form ID of WATR object
-    // for decals: XPDD data (X and Z scale) as packed 16-bit floats
-    unsigned int  mswpFormID;
+    unsigned int  formID;               // form ID of reference or cell
     NIFFile::NIFVertexTransform modelTransform;
     bool operator<(const RenderObject& r) const;
+  };
+  struct ModelPathSortObject
+  {
+    BaseObject  *o;
+    inline bool operator<(const ModelPathSortObject& r) const
+    {
+      if ((o->flags ^ r.o->flags) & 0xE0000000U)
+        return (o->flags < r.o->flags);
+      if (o->modelPath && r.o->modelPath)
+        return (*(o->modelPath) < *(r.o->modelPath));
+      return (o->formID < r.o->formID);
+    }
   };
   struct ModelData
   {
     NIFFile *nifFile;
-    size_t  totalTriangleCnt;
-    std::vector< NIFFile::NIFTriShape > meshData;
     const BaseObject  *o;
-    std::thread *loadThread;
-    std::string threadErrMsg;
-    std::vector< unsigned char >  fileBuf;
+    NIFFile::NIFBounds  objectBounds;
+    std::vector< NIFFile::NIFTriShape > meshData;
+    bool    usesAlphaBlending;
     ModelData();
     ~ModelData();
     void clear();
+  };
+  struct TileMask
+  {
+#if ENABLE_X86_64_AVX
+    YMM_UInt64    m;
+#else
+    std::uint64_t m[4];
+#endif
+    inline TileMask();
+    TileMask(const NIFFile::NIFBounds& screenBounds, int w, int h);
+    inline bool overlapsWith(const TileMask& r) const;
+    inline TileMask& operator|=(const TileMask& r);
+    inline operator bool() const;
+    inline bool isFull() const;
+  };
+  struct RenderObjectQueueObj
+  {
+    const RenderObject  *o;
+    RenderObjectQueueObj  *prv;         // previous object in queue
+    RenderObjectQueueObj  *nxt;         // next object in queue
+    // thread working on object (< 0: none, >= 256: this is a model load event,
+    // o->model.o.b contains the model ID and path, all bits of m are set)
+    std::intptr_t threadNum;
+    TileMask  m;
+  };
+  struct RenderObjectQueue
+  {
+    std::vector< RenderObjectQueueObj > buf;
+    RenderObjectQueueObj  *firstObject;         // NULL: empty queue
+    RenderObjectQueueObj  *lastObject;
+    RenderObjectQueueObj  *firstFreeObject;     // NULL: full queue
+    // true on all objects rendered / error
+    bool    doneFlag;
+    // true stops worker threads from processing new objects
+    bool    pauseFlag;
+    // true if load model events have been added to the queue
+    bool    loadingModelsFlag;
+    // bit mask of threads currently rendering
+    std::uint32_t threadsActive;
+    std::mutex  m;
+    std::condition_variable cv;
+    RenderObjectQueue(size_t bufSize);
+    void clear();
+    inline void push_back(const RenderObject& p, const TileMask& tileMask);
+    // move object to front of queue
+    inline void move_front(RenderObjectQueueObj *o);
+    // move to free object stack
+    inline void pop(RenderObjectQueueObj *o);
+    // check if a model is scheduled to be loaded and the previous model
+    // in the same nifFiles slot is no longer used (returns object pointer,
+    // or NULL if none was found)
+    RenderObjectQueueObj *findModelToLoad();
+    // find an object ready to render, and move it to the front of the queue
+    // returns pointer to the object found (NULL if none)
+    RenderObjectQueueObj *findObject();
   };
   struct RenderThread
   {
@@ -103,22 +187,12 @@ class Renderer : protected Renderer_Base
     std::string errMsg;
     TerrainMesh *terrainMesh;
     Plot3D_TriShape *renderer;
-    // objects not rendered due to incorrect bounds
-    std::vector< unsigned int > objectsRemaining;
     std::vector< unsigned char >  fileBuf;
     std::vector< Renderer_Base::TriShapeSortObject >  sortBuf;
     RenderThread();
     ~RenderThread();
     void join();
     void clear();
-  };
-  struct ThreadSortObject
-  {
-    unsigned long long  tileMask;
-    size_t  triangleCnt;
-    inline ThreadSortObject();
-    inline bool operator<(const ThreadSortObject& r) const;
-    inline ThreadSortObject& operator+=(const ThreadSortObject& r);
   };
   std::uint32_t *outBufRGBA;
   float   *outBufZ;
@@ -152,13 +226,14 @@ class Renderer : protected Renderer_Base
   unsigned char debugMode;
   // 1: terrain, 2: objects, 4: objects with alpha blending
   unsigned char renderPass;
-  int     threadCnt;
+  bool    ignoreOBND;
+  unsigned char threadCnt;
+  unsigned char modelBatchCnt;
   TextureCache  textureCache;
   LandscapeTextureSet *landTextures;
   size_t  objectListPos;
   unsigned int  modelIDBase;
   std::vector< RenderObject > objectList;
-  std::vector< ThreadSortObject > threadSortBuf;
   std::vector< std::string >  excludeModelPatterns;
   std::vector< std::string >  hdModelNamePatterns;
   std::string defaultEnvMap;
@@ -166,6 +241,7 @@ class Renderer : protected Renderer_Base
   std::vector< ModelData >    nifFiles;
   MaterialSwaps materialSwaps;
   std::vector< RenderThread > renderThreads;
+  RenderObjectQueue *renderObjectQueue;
   std::string stringBuf;
   float   waterReflectionLevel;
   int     zRangeMax;
@@ -182,12 +258,8 @@ class Renderer : protected Renderer_Base
   // for TXST and WATR objects, materials[0] is the default water
   std::map< unsigned int, BGSMFile >  materials;
   std::uint32_t *outBufN;               // normals for decal rendering
-  // bit Y * 8 + X of the return value is set if the bounds of the object
-  // overlap with tile (X, Y) of the screen, using 8*8 tiles and (0, 0)
-  // in the top left corner
-  unsigned long long calculateTileMask(int x0, int y0, int x1, int y1) const;
-  static signed short calculateTileIndex(unsigned long long screenAreasUsed);
-  int setScreenAreaUsed(RenderObject& p);
+  // returns false if the object is not visible
+  bool setScreenAreaUsed(RenderObject& p);
   unsigned int getDefaultWorldID() const;
   void addTerrainCell(const ESMFile::ESMRecord& r);
   void addWaterCell(const ESMFile::ESMRecord& r);
@@ -197,9 +269,8 @@ class Renderer : protected Renderer_Base
   const BaseObject *readModelProperties(RenderObject& p,
                                         const ESMFile::ESMRecord& r);
   void addSCOLObjects(const ESMFile::ESMRecord& r,      // SCOL
-                      float scale, float rX, float rY, float rZ,
-                      float offsX, float offsY, float offsZ,
-                      unsigned int refrMSWPFormID);
+                      const NIFFile::NIFVertexTransform& vt,
+                      unsigned int refrFormID, unsigned int refrMSWPFormID);
   // type = 0: terrain, type = 1: objects
   void findObjects(unsigned int formID, int type, bool isRecursive);
   void findObjects(unsigned int formID, int type);
@@ -214,10 +285,7 @@ class Renderer : protected Renderer_Base
   void clear(unsigned int flags);
   bool isExcludedModel(const std::string& modelPath) const;
   bool isHighQualityModel(const std::string& modelPath) const;
-  void loadModels(unsigned int t, unsigned long long modelIDMask);
-  static void loadModelsThread(Renderer *p,
-                               unsigned int t, unsigned long long modelIDMask);
-  void renderObjectList();
+  bool loadModel(const BaseObject& o, size_t threadNum);
   static inline float getDecalYOffsetMin(FloatVector4 boundsMin)
   {
     (void) boundsMin;
@@ -229,13 +297,9 @@ class Renderer : protected Renderer_Base
     return 1000.0f;
   }
   void renderDecal(RenderThread& t, const RenderObject& p);
-  bool renderObject(RenderThread& t, size_t i,
-                    unsigned long long tileMask = ~0ULL);
-  void renderThread(size_t threadNum, size_t startPos, size_t endPos,
-                    unsigned long long tileIndexMask);
-  static void threadFunction(Renderer *p, size_t threadNum,
-                             size_t startPos, size_t endPos,
-                             unsigned long long tileIndexMask);
+  void renderObject(RenderThread& t, const RenderObject& p);
+  void renderThread(size_t threadNum);
+  static void threadFunction(Renderer *p, size_t threadNum);
  public:
   Renderer(int imageWidth, int imageHeight,
            const BA2File& archiveFiles, ESMFile& masterFiles,
@@ -284,10 +348,14 @@ class Renderer : protected Renderer_Base
   void setLightDirection(float rotationY, float rotationZ);
   // default to std::thread::hardware_concurrency() if n <= 0
   void setThreadCount(int n);
-  void setTextureCacheSize(size_t n)
+  void setTextureCacheSize(std::uint64_t n)
   {
-    textureCache.textureCacheSize = n;
+    if (sizeof(size_t) < 8)
+      n = std::min(n, std::uint64_t(0xFFFFFFFFU));
+    textureCache.textureCacheSize = size_t(n);
   }
+  // set the number of models to load at once (1 to 64)
+  void setModelCacheSize(int n);
   void setTextureMipLevel(int n)
   {
     textureMip = n;             // base mip level for all textures
@@ -316,6 +384,7 @@ class Renderer : protected Renderer_Base
   // + 64: enable marker objects
   // + 128: disable built-in exclude patterns for effect meshes
   // + 256: disable effect meshes
+  // + 512: ignore object bounds
   void setRenderQuality(unsigned int n)
   {
     enableMarkers = bool(n & 0x40);
@@ -323,6 +392,7 @@ class Renderer : protected Renderer_Base
     enableSCOL |= bool(n & 1);
     enableAllObjects |= bool(n & 2);
     renderQuality = (unsigned char) ((n >> 2) & 3);
+    ignoreOBND = bool(n & 0x0200);
     effectMeshMode = (unsigned char) ((n >> 7) & 3);
     enableActors = bool(n & 0x10);
   }
@@ -388,12 +458,12 @@ class Renderer : protected Renderer_Base
   // n = 1: objects
   // n = 2: water and objects with alpha blending
   void initRenderPass(int n, unsigned int formID = 0U);
-  // returns true if all objects have been rendered
-  bool renderObjects();
-  inline size_t getObjectsRendered() const
-  {
-    return objectListPos;       // <= getObjectCount()
-  }
+  // Returns true if all objects have been rendered.
+  // If t is greater than zero, the function may return false after at least
+  // the specified number of milliseconds.
+  bool renderObjects(int t = 0);
+  // return value <= getObjectCount()
+  size_t getObjectsRendered();
   inline size_t getObjectCount() const
   {
     return objectList.size();
