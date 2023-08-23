@@ -10,7 +10,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **-threads INT**: Set the number of threads to use.
 * **-debug INT**: Set debug render mode (0: disabled, 1: reference form IDs as 0xRRGGBB, 2: depth \* 16 or 64, 3: normals, 4: diffuse texture only, 5: light only).
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
-* **-rq INT**: Set render quality and flags (0 to 511, can be specified in hexadecimal format with 0x prefix, defaults to 0), using a sum of any of the following values:
+* **-rq INT**: Set render quality and flags (0 to 1023, can be specified in hexadecimal format with 0x prefix, defaults to 0), using a sum of any of the following values:
   * 1: Enable the use of pre-combined meshes (same as **-scol 1**).
   * 2: Render all supported object types other than decals, actors and markers (same as **-a**).
   * 0, 4, 8, or 12: Render quality from lowest to highest, 0 uses diffuse textures only on terrain and objects, 4 enables normal mapping, 8 also enables PBR on objects only, 12 enables PBR on terrain as well.
@@ -19,13 +19,15 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
   * 64: Enable marker objects.
   * 128: Disable built-in exclude patterns for effect meshes.
   * 256: Disable the use of effect materials.
+  * 512: Disable the use of object bounds data (OBND) for the purpose of testing if an object is visible.
 * **-ft INT**: Minimum frame time in milliseconds. The display is updated after this amount of time during rendering.
 * **-markers FILENAME**: Read marker definitions from the specified file, see [markers](markers.md) for details on the file format.
 
 ### Texture options
 
 * **-textures BOOL**: Make all diffuse textures white if false.
-* **-txtcache INT**: Texture cache size in megabytes.
+* **-tc INT** or **-txtcache INT**: Texture cache size in megabytes.
+* **-mc INT**: Model cache size, the number of models to load at the same time (1 to 64, defaults to 16).
 * **-mip INT**: Base mip level for all textures other than cube maps and the water texture. Defaults to 2.
 * **-env FILENAME.DDS**: Default environment map texture path in archives. Defaults to **textures/shared/cubemaps/mipblur_defaultoutside1.dds**. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures, and [cubeview](cubeview.md) to preview them.
 
@@ -51,6 +53,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 ### View options
 
 * **-cam SCALE DIR X Y Z**: Set view scale from world to image coordinates, view direction (0 to 19, see [src/viewrtbl.cpp](../src/viewrtbl.cpp)), and camera position.
+* **-cam SCALE -1 RX RY RZ X Y Z**: Set view scale from world to image coordinates, view direction using custom rotations (see [figure](view.png)), and camera position.
 * **-zrange FLOAT**: Limit Z range in view space to less than the specified value.
 
 ### Lighting options
@@ -76,6 +79,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **A**, **D**: Move to the left or right.
 * **S**, **W**: Move backward or forward (-Z or +Z in the view space).
 * **E**, **X**: Move up or down (-Y or +Y in the view space).
+* **F11**: Save raw screenshot without downsampling or pixel format conversion.
 * **F12** or **Print Screen**: Save screenshot.
 * **P**: Print current **-light** and **-view** parameters (for use with [render](render.md) or [markers](markers.md)), and camera position. The information printed is also copied to the clipboard.
 * **V**: Print all current settings, similarly to the 'list' console command.

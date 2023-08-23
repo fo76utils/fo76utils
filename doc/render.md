@@ -13,7 +13,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 * **-ssaa INT**: Render at 2<sup>N</sup> (double or quadruple) resolution and downsample.
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
 * **-f INT**: Select output format, 0: 24-bit RGB (default), 1: 32-bit A8R8G8B8, 2: 32-bit A2R10G10B10.
-* **-rq INT**: Set render quality and flags (0 to 511, defaults to 0), using a sum of any of the following values:
+* **-rq INT**: Set render quality and flags (0 to 1023, defaults to 0), using a sum of any of the following values:
   * 1: Enable the use of pre-combined meshes (same as **-scol 1**).
   * 2: Render all supported object types other than decals, actors and markers (same as **-a**).
   * 0, 4, 8, or 12: Render quality from lowest to highest, 0 uses diffuse textures only on terrain and objects, 4 enables normal mapping, 8 also enables PBR on objects only, 12 enables PBR on terrain as well.
@@ -22,6 +22,7 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
   * 64: Enable marker objects.
   * 128: Disable built-in exclude patterns for effect meshes.
   * 256: Disable the use of effect materials.
+  * 512: Disable the use of object bounds data (OBND) for the purpose of testing if an object is visible.
 * **-watermask BOOL**: Render water mask, non-water surfaces are made transparent or black.
 
 Values in hexadecimal format (prefixed with 0x) are accepted by **-w** and **-rq**.
@@ -33,7 +34,8 @@ Compiling with **rgb10a2=1** is required to actually increase frame buffer preci
 ### Texture options
 
 * **-textures BOOL**: Make all diffuse textures white if false.
-* **-txtcache INT**: Texture cache size in megabytes.
+* **-tc INT** or **-txtcache INT**: Texture cache size in megabytes.
+* **-mc INT**: Model cache size, the number of models to load at the same time (1 to 64, defaults to 16).
 * **-mip INT**: Base mip level for all textures other than cube maps and the water texture. Defaults to 2.
 * **-env FILENAME.DDS**: Default environment map texture path in archives. Defaults to **textures/shared/cubemaps/mipblur_defaultoutside1.dds**. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures, and [cubeview](cubeview.md) to preview them.
 
