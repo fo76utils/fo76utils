@@ -2126,9 +2126,9 @@ void Renderer::setViewTransform(
     float scale, float rotationX, float rotationY, float rotationZ,
     float offsetX, float offsetY, float offsetZ)
 {
-  NIFFile::NIFVertexTransform t(scale, rotationX, rotationY, rotationZ,
-                                offsetX, offsetY, offsetZ);
-  viewTransform = t;
+  (void) new(&viewTransform) NIFFile::NIFVertexTransform(
+                                 scale, rotationX, rotationY, rotationZ,
+                                 offsetX, offsetY, offsetZ);
 }
 
 void Renderer::setLightDirection(float rotationY, float rotationZ)
@@ -2148,6 +2148,7 @@ void Renderer::setThreadCount(int n)
   n = (n > 1 ? (n < maxThreads ? n : maxThreads) : 1);
   if (n == int(threadCnt))
     return;
+  clear(0x10);
   renderThreads.resize(size_t(n));
   threadCnt = (unsigned char) renderThreads.size();
   for (size_t i = 0; i < threadCnt; i++)
@@ -2371,10 +2372,11 @@ bool Renderer::renderObjects(int t)
   const std::chrono::time_point< std::chrono::steady_clock >  t0 =
       std::chrono::steady_clock::now();
   RenderObjectQueue&  q = *renderObjectQueue;
+  q.cv.notify_all();
   while (true)
   {
-    bool    doneFlag;
     bool    pauseFlag = false;
+    bool    objectListEndFlag = (objectListPos >= objectList.size());
     // check for events
     if (t > 0)
     {
@@ -2385,52 +2387,27 @@ bool Renderer::renderObjects(int t)
     }
     {
       std::unique_lock< std::mutex >  tmpLock(q.m);
-      if (objectListPos >= objectList.size() && !q.firstObject)
-        q.doneFlag = true;
       q.pauseFlag = pauseFlag;
-      while (!(pauseFlag || q.firstFreeObject || q.doneFlag))
+      while (!q.doneFlag)
+      {
+        if (objectListEndFlag && !q.firstObject)
+        {
+          q.doneFlag = true;
+          break;
+        }
+        if ((q.firstFreeObject && !objectListEndFlag) ||
+            (pauseFlag && !q.threadsActive))
+        {
+          break;
+        }
         q.cv.wait_for(tmpLock, std::chrono::milliseconds(100));
-      doneFlag = q.doneFlag;
-    }
-    if (doneFlag)
-    {
-      q.cv.notify_all();
-      bool    haveThreads = false;
-      for (size_t i = 0; i < renderThreads.size(); i++)
-      {
-        if (renderThreads[i].t)
-        {
-          renderThreads[i].join();
-          haveThreads = true;
-        }
       }
-      q.clear();
-      textureCache.shrinkTextureCache();
-      clear(0x20);
-      if (haveThreads)
-      {
-        for (size_t i = 0; i < renderThreads.size(); i++)
-        {
-          if (!renderThreads[i].errMsg.empty())
-            throw FO76UtilsError(1, renderThreads[i].errMsg.c_str());
-        }
-      }
-      return true;
+      if (q.doneFlag)
+        break;
     }
     if (pauseFlag)
-    {
-      {
-        std::unique_lock< std::mutex >  tmpLock(q.m);
-        while (q.threadsActive && !q.doneFlag)
-          q.cv.wait_for(tmpLock, std::chrono::milliseconds(100));
-        if (q.doneFlag)
-          continue;
-      }
-      break;
-    }
+      return false;
     size_t  i = objectListPos;
-    if (i >= objectList.size())
-      continue;
     RenderObject& o = objectList[i];
     unsigned int  modelID = 0xFFFFFFFFU;
     if ((o.flags & 0x12) &&
@@ -2439,6 +2416,7 @@ bool Renderer::renderObjects(int t)
       // schedule loading new set of models
       modelIDBase = modelID & ~0xFFU;
       unsigned long long  m = 0ULL;
+      bool    doneFlag = false;
       for (std::vector< RenderObject >::iterator
                j = objectList.begin() + i; j != objectList.end(); j++)
       {
@@ -2482,7 +2460,7 @@ bool Renderer::renderObjects(int t)
         q.cv.wait_for(tmpLock, std::chrono::milliseconds(100));
       }
       if (doneFlag)
-        continue;
+        break;
       if (!(renderPass & 1))
         textureCache.shrinkTextureCache();
     }
@@ -2560,7 +2538,28 @@ bool Renderer::renderObjects(int t)
     }
     q.cv.notify_all();
   }
-  return false;
+  q.cv.notify_all();
+  bool    haveThreads = false;
+  for (size_t i = 0; i < renderThreads.size(); i++)
+  {
+    if (renderThreads[i].t)
+    {
+      renderThreads[i].join();
+      haveThreads = true;
+    }
+  }
+  q.clear();
+  textureCache.shrinkTextureCache();
+  clear(0x20);
+  if (haveThreads)
+  {
+    for (size_t i = 0; i < renderThreads.size(); i++)
+    {
+      if (!renderThreads[i].errMsg.empty())
+        throw FO76UtilsError(1, renderThreads[i].errMsg.c_str());
+    }
+  }
+  return true;
 }
 
 size_t Renderer::getObjectsRendered()
