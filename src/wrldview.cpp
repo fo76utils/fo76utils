@@ -159,6 +159,8 @@ static const char *keyboardUsageString =
     "clipboard.                                                      \n"
     "  \033[4m\033[38;5;228mMouse R button single\033[m "
     "Print the X, Y, Z coordinates in the world space.               \n"
+    "  \033[4m\033[38;5;228mF11\033[m                   "
+    "Save raw screenshot without downsampling or format conversion.  \n"
     "  \033[4m\033[38;5;228mF12\033[m "
     "or \033[4m\033[38;5;228mPrint Screen\033[m   "
     "Save screenshot.                                                \n"
@@ -222,8 +224,11 @@ struct WorldSpaceViewer
   float   waterReflectionLevel;
   std::uint16_t renderQuality;
   bool    quitFlag;
-  unsigned char viewRotation;
+  signed char viewRotation;             // -1: using custom rotations
   float   viewScale;
+  float   viewRotationX;
+  float   viewRotationY;
+  float   viewRotationZ;
   float   camPositionX;
   float   camPositionY;
   float   camPositionZ;
@@ -257,11 +262,12 @@ struct WorldSpaceViewer
   std::map< std::string, size_t > cmdHistory2;
   std::string cmdBuf;
   const char  *dataPath;
-  char    tmpBuf[1024];
+  std::vector< char > tmpBuf;
   WorldSpaceViewer(int w, int h, const char *esmFiles, const char *archivePath,
                    int argc, const char * const *argv);
   virtual ~WorldSpaceViewer();
-  void calculateViewOffset(float& x, float& y, float& z) const;
+  void setViewTransform();
+  bool screenToWorldSpace(FloatVector4& v, int x, int y) const;
   void setRenderParams(int argc, const char * const *argv);
 #ifdef __GNUC__
   __attribute__ ((__format__ (__printf__, 2, 3)))
@@ -272,7 +278,7 @@ struct WorldSpaceViewer
   void printWorldSpaceXYZ(int x, int y);
   void pollEvents();
   void consoleInput();
-  void saveScreenshot();
+  void saveScreenshot(bool disableDownsampling = false);
 };
 
 WorldSpaceViewer::WorldSpaceViewer(
@@ -305,6 +311,9 @@ WorldSpaceViewer::WorldSpaceViewer(
     quitFlag(false),
     viewRotation(4),
     viewScale(0.0625f),
+    viewRotationX(0.0f),
+    viewRotationY(0.0f),
+    viewRotationZ(180.0f),
     camPositionX(0.0f),
     camPositionY(0.0f),
     camPositionZ(65536.0f),
@@ -330,20 +339,41 @@ WorldSpaceViewer::WorldSpaceViewer(
     redrawScreenFlag(true),
     redrawWorldFlag(true),
     frameTimeMin(500),
-    dataPath(archivePath)
+    dataPath(archivePath),
+    tmpBuf(2048)
 {
   display.setDefaultTextColor(0x00, 0xC1);
   width = display.getWidth();
   height = display.getHeight();
   imageDataSize = size_t(width) * size_t(height);
   imageBuf.resize(imageDataSize, 0U);
+  renderer = new Renderer(width, height, ba2File, esmFile, imageBuf.data());
   try
   {
+    if (esmFile.getESMVersion() < 0xC0U)
+      btdLOD = 2;
+    if (!formID)
+      formID = (esmFile.getESMVersion() < 0xC0U ? 0x0000003CU : 0x0025DA15U);
+    worldID = Renderer::findParentWorld(esmFile, formID);
+    if (worldID == 0xFFFFFFFFU)
+    {
+      worldID = 0U;
+      errorMessage("form ID not found in ESM, or invalid record type");
+    }
+    renderer->setDefaultEnvMap(defaultEnvMap);
+    renderer->setWaterTexture(waterTexture);
+    for (size_t i = 0; i < excludeModelPatterns.size(); i++)
+      renderer->addExcludeModelPattern(excludeModelPatterns[i]);
     setRenderParams(argc, argv);
   }
   catch (std::exception& e)
   {
     printError("%s", e.what());
+  }
+  catch (...)
+  {
+    delete renderer;
+    throw;
   }
 }
 
@@ -353,18 +383,42 @@ WorldSpaceViewer::~WorldSpaceViewer()
     delete renderer;
 }
 
-void WorldSpaceViewer::calculateViewOffset(float& x, float& y, float& z) const
+void WorldSpaceViewer::setViewTransform()
 {
-  x = -camPositionX;
-  y = -camPositionY;
-  z = -camPositionZ;
-  float   rX = viewRotations[viewRotation * 3] * d;
-  float   rY = viewRotations[viewRotation * 3 + 1] * d;
-  float   rZ = viewRotations[viewRotation * 3 + 2] * d;
-  NIFFile::NIFVertexTransform vt(viewScale, rX, rY, rZ, 0.0f, 0.0f, 0.0f);
+  float   x = -camPositionX;
+  float   y = -camPositionY;
+  float   z = -camPositionZ;
+  NIFFile::NIFVertexTransform vt(viewScale, viewRotationX * d,
+                                 viewRotationY * d, viewRotationZ * d,
+                                 0.0f, 0.0f, 0.0f);
   vt.transformXYZ(x, y, z);
   x = float(roundFloat(x)) + 0.1f;
   y = float(roundFloat(y)) + 0.1f;
+  renderer->setViewTransform(
+      viewScale, viewRotationX * d, viewRotationY * d, viewRotationZ * d,
+      x + (float(width) * 0.5f), y + (float(height - 2) * 0.5f), z);
+}
+
+bool WorldSpaceViewer::screenToWorldSpace(FloatVector4& v, int x, int y) const
+{
+  v = FloatVector4(camPositionX, camPositionY, camPositionZ, 0.0f);
+  size_t  offs = size_t(y) * size_t(width) + size_t(x);
+  float   z = renderer->getZBufferData()[offs];
+  if (!((renderer->getImageData()[offs] & 0x80000000U) && z < zMax))
+    return false;
+  NIFFile::NIFVertexTransform tmp(renderer->getViewTransform());
+  NIFFile::NIFVertexTransform viewTransformInv(tmp);
+  viewTransformInv.rotateYX = tmp.rotateXY;
+  viewTransformInv.rotateZX = tmp.rotateXZ;
+  viewTransformInv.rotateXY = tmp.rotateYX;
+  viewTransformInv.rotateZY = tmp.rotateYZ;
+  viewTransformInv.rotateXZ = tmp.rotateZX;
+  viewTransformInv.rotateYZ = tmp.rotateZY;
+  viewTransformInv.scale = 1.0f / tmp.scale;
+  v = FloatVector4(float(x) - tmp.offsX, float(y) - tmp.offsY, z - tmp.offsZ,
+                   0.0f) * viewTransformInv.scale;
+  v = viewTransformInv.rotateXYZ(v);
+  return true;
 }
 
 void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
@@ -392,19 +446,36 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         if (esmFile.getESMVersion() >= 0xC0U)
         {
           btdPath = argv[i + 1];
-          if (renderer)
-          {
-            renderer->clear();
-            redrawWorldFlag = true;
-          }
+          renderer->clear();
+          redrawWorldFlag = true;
         }
         break;
       case 1:                   // "cam"
         viewScale = float(parseFloat(argv[i + 1], "invalid view scale",
                                      1.0f / 512.0f, 16.0f));
         viewRotation =
-            (unsigned char) parseInteger(argv[i + 2], 10,
-                                         "invalid view direction", 0, 19);
+            (signed char) parseInteger(argv[i + 2], 10,
+                                       "invalid view direction", -1, 19);
+        if (viewRotation < 0)
+        {
+          i = i + 3;
+          if ((i + n) >= argc)
+            throw FO76UtilsError("missing argument for %s", argv[i]);
+          viewRotationX = float(parseFloat(argv[i], "invalid view X rotation",
+                                           -360.0, 360.0));
+          viewRotationY = float(parseFloat(argv[i + 1],
+                                           "invalid view Y rotation",
+                                           -360.0, 360.0));
+          viewRotationZ = float(parseFloat(argv[i + 2],
+                                           "invalid view Z rotation",
+                                           -360.0, 360.0));
+        }
+        else
+        {
+          viewRotationX = viewRotations[size_t(viewRotation) * 3];
+          viewRotationY = viewRotations[size_t(viewRotation) * 3 + 1];
+          viewRotationZ = viewRotations[size_t(viewRotation) * 3 + 2];
+        }
         camPositionX = float(parseFloat(argv[i + 3], "invalid camera position",
                                         -1000000.0, 1000000.0));
         camPositionY = float(parseFloat(argv[i + 4], "invalid camera position",
@@ -429,19 +500,13 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         defTxtID =
             (unsigned int) parseInteger(argv[i + 1], 0,
                                         "invalid form ID", 0, 0x0FFFFFFF);
-        if (renderer)
-        {
-          renderer->clear();
-          redrawWorldFlag = true;
-        }
+        renderer->clear();
+        redrawWorldFlag = true;
         break;
       case 5:                   // "env"
         defaultEnvMap = argv[i + 1];
-        if (renderer)
-        {
-          renderer->setDefaultEnvMap(defaultEnvMap);
-          redrawWorldFlag = true;
-        }
+        renderer->setDefaultEnvMap(defaultEnvMap);
+        redrawWorldFlag = true;
         break;
       case 6:                   // "ft"
         frameTimeMin =
@@ -452,7 +517,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
       case 8:                   // "help"
         for (size_t j = 0; usageStrings[j]; j++)
           display.consolePrint("%s\n", usageStrings[j]);
-        if (!renderer)
+        if (cmdBuf.empty())
         {
           display.viewTextBuffer();
           quitFlag = true;
@@ -466,7 +531,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         {
           btdLOD = 2;
         }
-        else if (renderer)
+        else
         {
           renderer->clear();
           redrawWorldFlag = true;
@@ -527,9 +592,19 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         display.consolePrint("ltxtres: %d\n", ltxtMaxResolution);
         display.consolePrint("mip: %d\n", textureMip);
         display.consolePrint("lmult: %.1f\n", landTextureMult);
-        display.consolePrint("cam: %.7g %d %.7g %.7g %.7g\n",
-                             viewScale, int(viewRotation),
-                             camPositionX, camPositionY, camPositionZ);
+        if (viewRotation < 0)
+        {
+          display.consolePrint("cam: %.7g -1 %.7g %.7g %.7g %.7g %.7g %.7g\n",
+                               viewScale,
+                               viewRotationX, viewRotationY, viewRotationZ,
+                               camPositionX, camPositionY, camPositionZ);
+        }
+        else
+        {
+          display.consolePrint("cam: %.7g %d %.7g %.7g %.7g\n",
+                               viewScale, int(viewRotation),
+                               camPositionX, camPositionY, camPositionZ);
+        }
         display.consolePrint("zrange: %.7g\n", zMax);
         display.consolePrint("light: %.1f %.4f %.4f\n",
                              rgbScale, lightRotationY, lightRotationZ);
@@ -564,7 +639,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
                                              | (waterColor & 0x00FFFFFFU)));
         display.consolePrint("wrefl: %.3f\n", waterReflectionLevel);
         display.consolePrint("wscale: %d\n", waterUVScale);
-        if (!renderer)
+        if (cmdBuf.empty())
         {
           display.viewTextBuffer();
           quitFlag = true;
@@ -603,8 +678,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
       case 19:                  // "mip"
         textureMip = int(parseInteger(argv[i + 1], 10,
                                       "invalid texture mip level", 0, 15));
-        if (renderer)
-          renderer->clearTextureCache();
+        renderer->clearTextureCache();
         redrawWorldFlag = true;
         break;
       case 20:                  // "mlod"
@@ -631,11 +705,8 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         terrainY1 =
             std::int16_t(parseInteger(argv[i + 4], 10,
                                       "invalid terrain Y1", terrainY0, 32767));
-        if (renderer)
-        {
-          renderer->clear();
-          redrawWorldFlag = true;
-        }
+        renderer->clear();
+        redrawWorldFlag = true;
         break;
       case 23:                  // "rq"
         {
@@ -643,7 +714,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           renderQuality =
               std::uint16_t(parseInteger(argv[i + 1], 0,
                                          "invalid render quality", 0, 1023));
-          if (renderer && ((tmp ^ renderQuality) & 0x73))
+          if ((tmp ^ renderQuality) & 0x73)
             renderer->clearObjectPropertyCache();
         }
         redrawWorldFlag = true;
@@ -677,8 +748,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
             (unsigned int) parseInteger(argv[i + 1], 0,
                                         "invalid texture cache size",
                                         256, 65535);
-        if (renderer)
-          renderer->setTextureCacheSize(std::uint64_t(textureCacheSize) << 20);
+        renderer->setTextureCacheSize(std::uint64_t(textureCacheSize) << 20);
         break;
       case 29:                  // "vis"
         distantObjectsOnly =
@@ -687,14 +757,23 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         redrawWorldFlag = true;
         break;
       case 30:                  // "w"
-        formID = (unsigned int) parseInteger(argv[i + 1], 0,
-                                             "invalid form ID", 0, 0x0FFFFFFF);
-        if (renderer)
         {
-          delete renderer;
-          renderer = (Renderer *) 0;
-          redrawWorldFlag = true;
+          unsigned int  tmp1, tmp2;
+          tmp1 = (unsigned int) parseInteger(argv[i + 1], 0,
+                                             "invalid form ID", 0, 0x0FFFFFFF);
+          if (!tmp1)
+          {
+            tmp1 = (esmFile.getESMVersion() < 0xC0U ?
+                    0x0000003CU : 0x0025DA15U);
+          }
+          tmp2 = Renderer::findParentWorld(esmFile, tmp1);
+          if (tmp2 == 0xFFFFFFFFU)
+            errorMessage("form ID not found in ESM, or invalid record type");
+          formID = tmp1;
+          worldID = tmp2;
         }
+        renderer->clear();
+        redrawWorldFlag = true;
         break;
       case 31:                  // "watercolor"
         {
@@ -704,7 +783,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           tmp = tmp + (tmp & 0x7F000000U) + ((tmp >> 30) << 24);
           if (!(tmp & 0xFF000000U))
             tmp = 0U;
-          if (renderer && bool(tmp) != bool(waterColor))
+          if (bool(tmp) != bool(waterColor))
             renderer->clearObjectPropertyCache();
           waterColor = tmp;
           redrawWorldFlag = true;
@@ -724,34 +803,25 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         break;
       case 34:                  // "wtxt"
         waterTexture = argv[i + 1];
-        if (renderer)
-        {
-          renderer->setWaterTexture(waterTexture);
-          redrawWorldFlag = true;
-        }
+        renderer->setWaterTexture(waterTexture);
+        redrawWorldFlag = true;
         break;
       case 35:                  // "xm"
         if (argv[i + 1][0])
         {
           excludeModelPatterns.push_back(std::string(argv[i + 1]));
-          if (renderer)
-          {
-            renderer->addExcludeModelPattern(excludeModelPatterns.back());
-            renderer->clearObjectPropertyCache();
-            redrawWorldFlag = true;
-          }
+          renderer->addExcludeModelPattern(excludeModelPatterns.back());
+          renderer->clearObjectPropertyCache();
+          redrawWorldFlag = true;
         }
         break;
       case 36:                  // "xm_clear"
         if (excludeModelPatterns.size() > 0)
         {
           excludeModelPatterns.clear();
-          if (renderer)
-          {
-            renderer->clearExcludeModelPatterns();
-            renderer->clearObjectPropertyCache();
-            redrawWorldFlag = true;
-          }
+          renderer->clearExcludeModelPatterns();
+          renderer->clearObjectPropertyCache();
+          redrawWorldFlag = true;
         }
         break;
       case 37:                  // "zrange"
@@ -771,13 +841,14 @@ void WorldSpaceViewer::printError(const char *fmt, ...)
 {
   std::va_list  ap;
   va_start(ap, fmt);
-  std::vsnprintf(tmpBuf, sizeof(tmpBuf), fmt, ap);
+  std::vsnprintf(tmpBuf.data(), tmpBuf.size(), fmt, ap);
   va_end(ap);
-  tmpBuf[sizeof(tmpBuf) - 1] = '\0';
+  tmpBuf.back() = '\0';
   display.unlockScreenSurface();
   display.clearSurface();
   display.clearTextBuffer();
-  display.consolePrint("\033[41m\033[33m\033[1m    Error: %s    \n", tmpBuf);
+  display.consolePrint("\033[41m\033[33m\033[1m    Error: %s    \n",
+                       tmpBuf.data());
   display.drawText(0, -1, display.getTextRows(), 1.0f, 1.0f);
   display.blitSurface();
   do
@@ -804,28 +875,6 @@ void WorldSpaceViewer::printError(const char *fmt, ...)
 
 void WorldSpaceViewer::updateDisplay()
 {
-  if (BRANCH_UNLIKELY(!renderer))
-  {
-    if (esmFile.getESMVersion() < 0xC0U)
-      btdLOD = 2;
-    if (!formID)
-      formID = (esmFile.getESMVersion() < 0xC0U ? 0x0000003CU : 0x0025DA15U);
-    worldID = Renderer::findParentWorld(esmFile, formID);
-    if (worldID == 0xFFFFFFFFU)
-    {
-      worldID = 0U;
-      errorMessage("form ID not found in ESM, or invalid record type");
-    }
-    renderer = new Renderer(width, height, ba2File, esmFile, imageBuf.data());
-    if (!defaultEnvMap.empty())
-      renderer->setDefaultEnvMap(defaultEnvMap);
-    if (!waterTexture.empty())
-      renderer->setWaterTexture(waterTexture);
-    for (size_t i = 0; i < excludeModelPatterns.size(); i++)
-      renderer->addExcludeModelPattern(excludeModelPatterns[i]);
-    redrawWorldFlag = true;
-  }
-
   if (BRANCH_UNLIKELY(redrawWorldFlag))
   {
     redrawWorldFlag = false;
@@ -852,14 +901,7 @@ void WorldSpaceViewer::updateDisplay()
     renderer->setEnableAllObjects(false);
     renderer->setRenderQuality(renderQuality);
     renderer->setDebugMode(debugMode);
-    float   viewOffsX, viewOffsY, viewOffsZ;
-    calculateViewOffset(viewOffsX, viewOffsY, viewOffsZ);
-    renderer->setViewTransform(
-        viewScale, viewRotations[viewRotation * 3] * d,
-        viewRotations[viewRotation * 3 + 1] * d,
-        viewRotations[viewRotation * 3 + 2] * d,
-        viewOffsX + (float(width) * 0.5f),
-        viewOffsY + (float(height - 2) * 0.5f), viewOffsZ);
+    setViewTransform();
     renderer->setLightDirection(lightRotationY * d, lightRotationZ * d);
     renderer->setRenderParameters(
         lightColor, ambientColor, envColor, lightLevel, envLevel,
@@ -909,18 +951,11 @@ void WorldSpaceViewer::updateDisplay()
     else if (BRANCH_UNLIKELY(!markerDefsFileName.empty()))
     {
       display.consolePrint("Finding markers\n");
-      float   viewOffsX, viewOffsY, viewOffsZ;
-      calculateViewOffset(viewOffsX, viewOffsY, viewOffsZ);
-      NIFFile::NIFVertexTransform vt(
-          viewScale, viewRotations[viewRotation * 3] * d,
-          viewRotations[viewRotation * 3 + 1] * d,
-          viewRotations[viewRotation * 3 + 2] * d,
-          viewOffsX + (float(width) * 0.5f),
-          viewOffsY + (float(height - 2) * 0.5f), viewOffsZ);
       try
       {
         MapImage  mapImage(esmFile, markerDefsFileName.c_str(),
-                           imageBuf.data(), width, height, vt);
+                           imageBuf.data(), width, height,
+                           renderer->getViewTransform());
         mapImage.findMarkers(formID);
       }
       catch (std::exception& e)
@@ -976,17 +1011,17 @@ static void printRecordType(char *buf, unsigned int n)
 void WorldSpaceViewer::printReferenceInfo(unsigned int refrFormID)
 {
   refrFormID = (refrFormID & 0x00FFFFFFU) | (formID & 0x0F000000U);
-  std::sprintf(tmpBuf, "0x%08X", refrFormID);
-  (void) SDL_SetClipboardText(tmpBuf);
+  std::sprintf(tmpBuf.data(), "0x%08X", refrFormID);
+  (void) SDL_SetClipboardText(tmpBuf.data());
   const ESMFile::ESMRecord  *r = esmFile.findRecord(refrFormID);
   if (!r)
   {
-    display.consolePrint("Form ID = %s\n", tmpBuf);
+    display.consolePrint("Form ID = %s\n", tmpBuf.data());
     return;
   }
-  std::sprintf(tmpBuf, "???? form ID: 0x%08X", refrFormID);
-  printRecordType(tmpBuf, r->type);
-  std::string buf(tmpBuf);
+  std::sprintf(tmpBuf.data(), "???? form ID: 0x%08X", refrFormID);
+  printRecordType(tmpBuf.data(), r->type);
+  std::string buf(tmpBuf.data());
   std::string edid;
   unsigned int  refrName = 0U;
   float   refrX = 0.0f;
@@ -1039,14 +1074,14 @@ void WorldSpaceViewer::printReferenceInfo(unsigned int refrFormID)
   }
   if (r->flags)
   {
-    std::sprintf(tmpBuf, ", flags: 0x%08X", r->flags);
-    buf += tmpBuf;
+    std::sprintf(tmpBuf.data(), ", flags: 0x%08X", r->flags);
+    buf += tmpBuf.data();
   }
   ESMFile::ESMVCInfo  vcInfo;
   esmFile.getVersionControlInfo(vcInfo, *r);
-  std::sprintf(tmpBuf, ", timestamp: %04u-%02u-%02u, user: 0x%04X\n",
+  std::sprintf(tmpBuf.data(), ", timestamp: %04u-%02u-%02u, user: 0x%04X\n",
                vcInfo.year, vcInfo.month, vcInfo.day, vcInfo.userID1);
-  buf += tmpBuf;
+  buf += tmpBuf.data();
   if (*r == "REFR" || *r == "ACHR")
   {
     edid.clear();
@@ -1067,8 +1102,8 @@ void WorldSpaceViewer::printReferenceInfo(unsigned int refrFormID)
         }
       }
     }
-    std::sprintf(tmpBuf, "    NAME: 0x%08X", refrName);
-    buf += tmpBuf;
+    std::sprintf(tmpBuf.data(), "    NAME: 0x%08X", refrName);
+    buf += tmpBuf.data();
     if (r2)
     {
       buf += " (????";
@@ -1087,19 +1122,19 @@ void WorldSpaceViewer::printReferenceInfo(unsigned int refrFormID)
         buf += '"';
       }
     }
-    std::sprintf(tmpBuf, "\n    DATA: X: %.7g, Y: %.7g, Z: %.7g"
-                         ", RX: %.5g, RY: %.5g, RZ: %.5g\n",
+    std::sprintf(tmpBuf.data(), "\n    DATA: X: %.7g, Y: %.7g, Z: %.7g"
+                                ", RX: %.5g, RY: %.5g, RZ: %.5g\n",
                  refrX, refrY, refrZ, refrRX, refrRY, refrRZ);
-    buf += tmpBuf;
+    buf += tmpBuf.data();
   }
   else if (*r == "CELL")
   {
-    std::sprintf(tmpBuf, "    DATA: 0x%04X", cellFlags);
-    buf += tmpBuf;
+    std::sprintf(tmpBuf.data(), "    DATA: 0x%04X", cellFlags);
+    buf += tmpBuf.data();
     if (!(cellFlags & 1U))
     {
-      std::sprintf(tmpBuf, ", XCLC: %3d, %3d", cellX, cellY);
-      buf += tmpBuf;
+      std::sprintf(tmpBuf.data(), ", XCLC: %3d, %3d", cellX, cellY);
+      buf += tmpBuf.data();
     }
     buf += '\n';
   }
@@ -1108,33 +1143,16 @@ void WorldSpaceViewer::printReferenceInfo(unsigned int refrFormID)
 
 void WorldSpaceViewer::printWorldSpaceXYZ(int x, int y)
 {
-  float   rX = viewRotations[viewRotation * 3] * d;
-  float   rY = viewRotations[viewRotation * 3 + 1] * d;
-  float   rZ = viewRotations[viewRotation * 3 + 2] * d;
-  NIFFile::NIFVertexTransform viewTransformInv(
-      1.0f / viewScale, rX, rY, rZ, 0.0f, 0.0f, 0.0f);
-  NIFFile::NIFVertexTransform tmp(viewTransformInv);
-  viewTransformInv.rotateYX = tmp.rotateXY;
-  viewTransformInv.rotateZX = tmp.rotateXZ;
-  viewTransformInv.rotateXY = tmp.rotateYX;
-  viewTransformInv.rotateZY = tmp.rotateYZ;
-  viewTransformInv.rotateXZ = tmp.rotateZX;
-  viewTransformInv.rotateYZ = tmp.rotateZY;
-  float   viewOffsX, viewOffsY, viewOffsZ;
-  calculateViewOffset(viewOffsX, viewOffsY, viewOffsZ);
-  viewOffsX += (float(width) * 0.5f);
-  viewOffsY += (float(height - 2) * 0.5f);
-  const float *zBuf = renderer->getZBufferData();
-  float   z = zBuf[size_t(y) * size_t(width) + size_t(x)];
-  FloatVector4  v(float(x) - viewOffsX, float(y) - viewOffsY, z - viewOffsZ,
-                  0.0f);
-  v = viewTransformInv.transformXYZ(v);
-  display.consolePrint("X: %.7g, Y: %.7g, Z: %.7g\n", v[0], v[1], v[2]);
+  FloatVector4  v;
+  if (screenToWorldSpace(v, x, y))
+    display.consolePrint("X: %.7g, Y: %.7g, Z: %.7g\n", v[0], v[1], v[2]);
 }
 
 void WorldSpaceViewer::pollEvents()
 {
   display.pollEvents(eventBuf, (renderPass < 3 ? 0 : -1000), false, true);
+  int     x0 = (width + 1) >> 1;
+  int     y0 = (height - 1) >> 1;
   float   xStep = 0.0f;
   float   yStep = 0.0f;
   float   zStep = 0.0f;
@@ -1156,8 +1174,6 @@ void WorldSpaceViewer::pollEvents()
       if ((eventBuf[i].data3() == 1 || eventBuf[i].data3() == 3) &&
           eventBuf[i].data4() == 2)
       {
-        int     x0 = (width + 1) >> 1;
-        int     y0 = (height - 1) >> 1;
         xStep += float(x - x0);
         yStep += float(y - y0);
         if (eventBuf[i].data3() == 3)
@@ -1228,6 +1244,19 @@ void WorldSpaceViewer::pollEvents()
           if (newViewDir >= 0 && newViewDir != viewRotation)
           {
             viewRotation = newViewDir;
+            viewRotationX = viewRotations[size_t(viewRotation) * 3];
+            viewRotationY = viewRotations[size_t(viewRotation) * 3 + 1];
+            viewRotationZ = viewRotations[size_t(viewRotation) * 3 + 2];
+            FloatVector4  v;
+            if (screenToWorldSpace(v, x0, y0))
+            {
+              camPositionX = v[0];
+              camPositionY = v[1];
+              camPositionZ = v[2];
+              size_t  offs = size_t(y0) * size_t(width) + size_t(x0);
+              zStep -= renderer->getZBufferData()[offs];
+            }
+            setViewTransform();
             redrawWorldFlag = true;
           }
         }
@@ -1282,20 +1311,37 @@ void WorldSpaceViewer::pollEvents()
         break;
       case 'p':
         {
-          float   viewOffsX, viewOffsY, viewOffsZ;
-          calculateViewOffset(viewOffsX, viewOffsY, viewOffsZ);
-          std::sprintf(tmpBuf, "-light %.7g %.7g %.7g "
-                               "-view %.7g %.7g %.7g %.7g %.7g %.7g %.7g "
-                               "(cam: %.7g %d %.7g %.7g %.7g)",
-                       rgbScale, lightRotationY, lightRotationZ, viewScale,
-                       viewRotations[viewRotation * 3],
-                       viewRotations[viewRotation * 3 + 1],
-                       viewRotations[viewRotation * 3 + 2],
-                       viewOffsX, viewOffsY, viewOffsZ,
-                       viewScale, int(viewRotation),
-                       camPositionX, camPositionY, camPositionZ);
-          display.consolePrint("%s\n", tmpBuf);
-          (void) SDL_SetClipboardText(tmpBuf);
+          float   viewOffsX = renderer->getViewTransform().offsX;
+          float   viewOffsY = renderer->getViewTransform().offsY;
+          float   viewOffsZ = renderer->getViewTransform().offsZ;
+          viewOffsX -= (float(width) * 0.5f);
+          viewOffsY -= (float(height - 2) * 0.5f);
+          if (viewRotation < 0)
+          {
+            std::sprintf(tmpBuf.data(),
+                         "-light %.7g %.7g %.7g "
+                         "-view %.7g %.7g %.7g %.7g %.7g %.7g %.7g "
+                         "(cam: %.7g -1 %.7g %.7g %.7g %.7g %.7g %.7g)",
+                         rgbScale, lightRotationY, lightRotationZ,
+                         viewScale, viewRotationX, viewRotationY, viewRotationZ,
+                         viewOffsX, viewOffsY, viewOffsZ,
+                         viewScale, viewRotationX, viewRotationY, viewRotationZ,
+                         camPositionX, camPositionY, camPositionZ);
+          }
+          else
+          {
+            std::sprintf(tmpBuf.data(),
+                         "-light %.7g %.7g %.7g "
+                         "-view %.7g %.7g %.7g %.7g %.7g %.7g %.7g "
+                         "(cam: %.7g %d %.7g %.7g %.7g)",
+                         rgbScale, lightRotationY, lightRotationZ,
+                         viewScale, viewRotationX, viewRotationY, viewRotationZ,
+                         viewOffsX, viewOffsY, viewOffsZ,
+                         viewScale, int(viewRotation),
+                         camPositionX, camPositionY, camPositionZ);
+          }
+          display.consolePrint("%s\n", tmpBuf.data());
+          (void) SDL_SetClipboardText(tmpBuf.data());
           redrawScreenFlag = true;
         }
         break;
@@ -1337,6 +1383,9 @@ void WorldSpaceViewer::pollEvents()
         display.clearTextBuffer();
         redrawScreenFlag = true;
         break;
+      case SDLDisplay::SDLKeySymF11:
+        saveScreenshot(true);
+        break;
       case SDLDisplay::SDLKeySymF12:
       case SDLDisplay::SDLKeySymPrintScr:
         saveScreenshot();
@@ -1350,22 +1399,19 @@ void WorldSpaceViewer::pollEvents()
   }
   if (!(xStep == 0.0f && yStep == 0.0f && zStep == 0.0f))
   {
-    float   rX = viewRotations[viewRotation * 3] * d;
-    float   rY = viewRotations[viewRotation * 3 + 1] * d;
-    float   rZ = viewRotations[viewRotation * 3 + 2] * d;
-    NIFFile::NIFVertexTransform viewTransformInv(
-        1.0f / viewScale, rX, rY, rZ, 0.0f, 0.0f, 0.0f);
-    NIFFile::NIFVertexTransform tmp(viewTransformInv);
+    NIFFile::NIFVertexTransform tmp(renderer->getViewTransform());
+    NIFFile::NIFVertexTransform viewTransformInv(tmp);
     viewTransformInv.rotateYX = tmp.rotateXY;
     viewTransformInv.rotateZX = tmp.rotateXZ;
     viewTransformInv.rotateXY = tmp.rotateYX;
     viewTransformInv.rotateZY = tmp.rotateYZ;
     viewTransformInv.rotateXZ = tmp.rotateZX;
     viewTransformInv.rotateYZ = tmp.rotateZY;
-    viewTransformInv.transformXYZ(xStep, yStep, zStep);
-    camPositionX += xStep;
-    camPositionY += yStep;
-    camPositionZ += zStep;
+    viewTransformInv.scale = 1.0f / tmp.scale;
+    viewTransformInv.rotateXYZ(xStep, yStep, zStep);
+    camPositionX += (xStep * viewTransformInv.scale);
+    camPositionY += (yStep * viewTransformInv.scale);
+    camPositionZ += (zStep * viewTransformInv.scale);
     redrawWorldFlag = true;
   }
 }
@@ -1379,8 +1425,8 @@ void WorldSpaceViewer::consoleInput()
       quitFlag = true;
       break;
     }
-    if (cmdBuf.length() > (sizeof(tmpBuf) - 1))
-      cmdBuf.resize(sizeof(tmpBuf) - 1);
+    if (cmdBuf.length() > (tmpBuf.size() - 1))
+      cmdBuf.resize(tmpBuf.size() - 1);
     for (size_t i = 0; i < cmdBuf.length(); i++)
     {
       if (cmdBuf[i] >= 'A' && cmdBuf[i] <= 'Z')
@@ -1404,7 +1450,7 @@ void WorldSpaceViewer::consoleInput()
           quoteFlag = true;
           i++;
         }
-        args.push_back(&(tmpBuf[i]));
+        args.push_back(tmpBuf.data() + i);
         for ( ; i < cmdBuf.length(); i++)
         {
           if (!quoteFlag && (unsigned char) cmdBuf[i] <= 0x20)
@@ -1456,7 +1502,7 @@ void WorldSpaceViewer::consoleInput()
   }
 }
 
-void WorldSpaceViewer::saveScreenshot()
+void WorldSpaceViewer::saveScreenshot(bool disableDownsampling)
 {
   bool    screenSurfaceLocked = false;
   try
@@ -1474,20 +1520,40 @@ void WorldSpaceViewer::saveScreenshot()
       std::sprintf(buf, "_%02u%02u%02u.dds", h, m, s);
       fileName += buf;
     }
-    std::memcpy(display.lockDrawSurface(), imageBuf.data(),
-                imageDataSize * sizeof(std::uint32_t));
-    display.unlockDrawSurface();
-    display.blitSurface();
-    int     w = display.getWidth() >> int(display.getIsDownsampled());
-    int     h = display.getHeight() >> int(display.getIsDownsampled());
-    const std::uint32_t *p = display.lockScreenSurface();
-    screenSurfaceLocked = true;
-    DDSOutputFile f(fileName.c_str(), w, h, DDSInputFile::pixelFormatRGBA32);
-    size_t  pitch = display.getPitch();
+    int     w, h;
+    size_t  pitch;
+    const std::uint32_t *p;
+    int     pixelFmt = DDSInputFile::pixelFormatRGBA32;
+    if (disableDownsampling)
+    {
+      w = display.getWidth();
+      h = display.getHeight();
+      pitch = size_t(w);
+      p = imageBuf.data();
+#if USE_PIXELFMT_RGB10A2
+      pixelFmt = DDSInputFile::pixelFormatA2R10G10B10;
+#endif
+    }
+    else
+    {
+      std::memcpy(display.lockDrawSurface(), imageBuf.data(),
+                  imageDataSize * sizeof(std::uint32_t));
+      display.unlockDrawSurface();
+      display.blitSurface();
+      w = display.getWidth() >> int(display.getIsDownsampled());
+      h = display.getHeight() >> int(display.getIsDownsampled());
+      pitch = display.getPitch();
+      p = display.lockScreenSurface();
+      screenSurfaceLocked = true;
+    }
+    DDSOutputFile f(fileName.c_str(), w, h, pixelFmt);
     for (int y = 0; y < h; y++, p = p + pitch)
-      f.writeImageData(p, size_t(w), DDSInputFile::pixelFormatRGBA32);
-    display.unlockScreenSurface();
-    screenSurfaceLocked = false;
+      f.writeImageData(p, size_t(w), pixelFmt);
+    if (screenSurfaceLocked)
+    {
+      display.unlockScreenSurface();
+      screenSurfaceLocked = false;
+    }
     display.consolePrint("Saved screenshot to %s\n", fileName.c_str());
   }
   catch (std::exception& e)
