@@ -22,6 +22,8 @@ class ESMView : public ESMDump, public SDLDisplay
           unsigned char bgColor = 0xE6, unsigned char fgColor = 0x00);
   virtual ~ESMView();
   void loadStrings(const char *stringsPrefix);
+  const char *parseFormID(unsigned int& n,
+                          const char *s, size_t len = 0x7FFFFFFF) const;
   unsigned int findPreviousRecord(unsigned int formID) const;
   unsigned int findNextRecord(unsigned int formID) const;
   unsigned int findNextGroup(unsigned int formID, const char *pattern) const;
@@ -42,6 +44,67 @@ void ESMView::loadStrings(const char *stringsPrefix)
 {
   if (ba2File)
     ESMDump::loadStrings(*ba2File, stringsPrefix);
+}
+
+const char * ESMView::parseFormID(
+    unsigned int& n, const char *s, size_t len) const
+{
+  n = 0xFFFFFFFFU;
+  std::string tmp;
+  bool    isHexValue = true;
+  for ( ; len > 0 && s && (unsigned char) *s > 0x20; s++, len--)
+  {
+    char    c = *s;
+    if (c >= 'A' && c <= 'Z')
+      c = c + ('a' - 'A');
+    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+          (c == 'x' && tmp.length() == 1 && tmp[0] == '0')))
+    {
+      bool    skipCharacter = (c == '$' && tmp.empty() && isHexValue);
+      isHexValue = false;
+      if (skipCharacter)
+        continue;
+    }
+    tmp += c;
+  }
+  if (tmp.empty())
+    return s;
+  if (!isHexValue)
+  {
+    for (std::map< unsigned int, std::string >::const_iterator
+             i = edidDB.begin(); i != edidDB.end(); i++)
+    {
+      if (i->second.length() != tmp.length())
+        continue;
+      for (size_t j = 0; j < tmp.length(); j++)
+      {
+        char    c = i->second[j];
+        if (c >= 'A' && c <= 'Z')
+          c = c + ('a' - 'A');
+        if (c != tmp[j])
+          break;
+        if ((j + 1) >= tmp.length())
+        {
+          n = i->first;
+          return s;
+        }
+      }
+    }
+  }
+  else
+  {
+    n = 0U;
+    for (size_t i = 0; i < tmp.length(); i++)
+    {
+      n = (n << 4) & 0xFFFFFFFFU;
+      unsigned char c = (unsigned char) tmp[i];
+      if (c >= 0x30 && c <= 0x39)       // '0' to '9'
+        n = n | (c - 0x30U);
+      else if (c >= 0x61 && c <= 0x66)  // 'a' to 'f'
+        n = n | (c - 0x57U);
+    }
+  }
+  return s;
 }
 
 void ESMView::printID(char *bufp, unsigned int id)
@@ -197,10 +260,8 @@ unsigned int ESMView::findNextGroup(unsigned int formID,
     }
     else
     {
-      if (c >= '0' && c <= '9')
-        groupLabel = (groupLabel << 4) | (unsigned int) (c - '0');
-      else if (c >= 'A' && c <= 'F')
-        groupLabel = (groupLabel << 4) | (unsigned int) (c - ('A' - 10));
+      parseFormID(groupLabel, pattern + i);
+      break;
     }
   }
   if (groupType >= 2 && groupType <= 5)
@@ -237,29 +298,30 @@ unsigned int ESMView::findNextGroup(unsigned int formID,
 
 unsigned int ESMView::findNextRef(unsigned int formID, const char *pattern)
 {
-  unsigned int  fieldType = 0;
-  unsigned int  n = 0;
-  bool    haveFieldType = false;
+  size_t  formIDOffs = 0;
+  unsigned int  fieldType = 0U;
+  while (pattern[0] && (unsigned char) pattern[0] <= 0x20)
+    pattern++;
   for (size_t i = 0; pattern[i] != '\0'; i++)
   {
     char    c = pattern[i];
-    if ((unsigned char) c <= ' ')
-      continue;
     if (c == ':')
     {
-      haveFieldType = true;
-      n = 0;
-      continue;
+      formIDOffs = i + 1;
+      for (size_t j = 0; j < i; j++)
+      {
+        c = pattern[j];
+        if (c >= 'a' && c <= 'z')
+          c = c - ('a' - 'A');
+        fieldType = (fieldType >> 8) | (((unsigned int) c & 0xFFU) << 24);
+      }
+      break;
     }
-    if (c >= 'a' && c <= 'z')
-      c = c - ('a' - 'A');
-    if (!haveFieldType)
-      fieldType = (fieldType >> 8) | (((unsigned int) c & 0xFFU) << 24);
-    else if (c >= '0' && c <= '9')
-      n = (n << 4) | (unsigned int) (c - '0');
-    else if (c >= 'A' && c <= 'F')
-      n = (n << 4) | (unsigned int) (c - ('A' - 10));
   }
+  if (!formIDOffs)
+    fieldType = 0x2A000000;             // "*"
+  unsigned int  n = 0U;
+  parseFormID(n, pattern + formIDOffs);
   bool    r0Flag = false;
   while (true)
   {
@@ -751,6 +813,7 @@ static void printUsage()
 }
 
 static const char *usageString =
+    "$EDID:          select record by editor ID\n"
     "0xxxxxx:        hexadecimal form ID\n"
     "B:              print history of records viewed\n"
     "C:              first child record\n"
@@ -1184,16 +1247,10 @@ int main(int argc, char **argv)
           esmFile.consolePrint("Printing unknown fields: %s\n",
                                (!noUnknownFields ? "on" : "off"));
         }
-        else if (cmdBuf[0] >= '0' && cmdBuf[0] <= '9')
+        else if ((cmdBuf[0] >= '0' && cmdBuf[0] <= '9') || cmdBuf[0] == '$')
         {
           unsigned int  newFormID = 0U;
-          for (size_t i = 0; i < cmdBuf.length(); i++)
-          {
-            if (cmdBuf[i] >= '0' && cmdBuf[i] <= '9')
-              newFormID = (newFormID << 4) | (unsigned int) (cmdBuf[i] - '0');
-            else if (cmdBuf[i] >= 'a' && cmdBuf[i] <= 'f')
-              newFormID = (newFormID << 4) | (unsigned int) (cmdBuf[i] - 'W');
-          }
+          esmFile.parseFormID(newFormID, cmdBuf.c_str(), cmdBuf.length());
           try
           {
             (void) esmFile.getRecordTimestamp(newFormID);
@@ -1259,15 +1316,7 @@ int main(int argc, char **argv)
           const char  *s = cmdBuf.c_str() + 1;
           while (*s == '\t' || *s == '\r' || *s == ' ')
             s++;
-          for ( ; *s != '\0'; s++)
-          {
-            if (*s >= '0' && *s <= '9')
-              mswpFormID = (mswpFormID << 4) | (unsigned int) (*s - '0');
-            else if (*s >= 'a' && *s <= 'f')
-              mswpFormID = (mswpFormID << 4) | (unsigned int) (*s - 'W');
-            else
-              break;
-          }
+          s = esmFile.parseFormID(mswpFormID, s);
           while (*s == '\t' || *s == '\r' || *s == ' ')
             s++;
           if (*s != '\0')

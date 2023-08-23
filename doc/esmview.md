@@ -11,6 +11,7 @@ Interactive version of [esmdump](esmdump.md). On Windows, if compiled without SD
 
 ### Commands
 
+* **$EDID**: Select record by editor ID.
 * **0xxxxxx**: Hexadecimal form ID of record to be shown.
 * **C**: First child record.
 * **N**: Next record in current group.
