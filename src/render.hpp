@@ -315,6 +315,12 @@ class Renderer : protected Renderer_Base
   {
     return outBufZ;
   }
+  // returns NULL in debug mode, or if decals are disabled
+  // the data can be decoded with FloatVector4::uint32ToNormal()
+  inline const std::uint32_t *getNormalBufferData() const
+  {
+    return outBufN;
+  }
   inline int getWidth() const
   {
     return width;
@@ -340,11 +346,16 @@ class Renderer : protected Renderer_Base
   {
     excludeModelPatterns.clear();
   }
-  void deallocateBuffers(unsigned int mask);    // mask & 1: RGBA, 2: depth
+  // mask & 1: RGBA, mask & 2: depth and normals
+  void deallocateBuffers(unsigned int mask);
   // rotations are in radians
   void setViewTransform(float scale,
                         float rotationX, float rotationY, float rotationZ,
                         float offsetX, float offsetY, float offsetZ);
+  inline const NIFFile::NIFVertexTransform& getViewTransform() const
+  {
+    return viewTransform;
+  }
   void setLightDirection(float rotationY, float rotationZ);
   // default to std::thread::hardware_concurrency() if n <= 0
   void setThreadCount(int n);
