@@ -2,6 +2,8 @@
 #include "common.hpp"
 #include "esmdbase.hpp"
 
+#include "ctdafunc.cpp"
+
 void ESMDump::updateStats(unsigned int recordType, unsigned int fieldType)
 {
   unsigned long long  key =
@@ -289,6 +291,44 @@ void ESMDump::printFileName(std::string& s, FileBuffer& buf)
   }
 }
 
+void ESMDump::printCTDA(std::string& s, FileBuffer& buf)
+{
+  if ((buf.getPosition() + 32) > buf.size())
+    return;
+  unsigned int  ctdaOp = buf.readUInt32Fast() & 0xFFU;
+  buf.setPosition(buf.getPosition() + 4);
+  unsigned int  functionID = buf.readUInt32Fast() & 0xFFFFU;
+  unsigned int  param1 = buf.readUInt32Fast();
+  unsigned int  param2 = buf.readUInt32Fast();
+  unsigned int  runOnType = buf.readUInt32Fast();
+  unsigned int  refID = buf.readUInt32Fast();
+  int           packageID = buf.readInt32();
+  static const char *ctdaOpTypes[8] =
+  {
+    "==", "!=", ">", ">=", "<", "<=", "?6", "?7"
+  };
+  char    tmpBuf[256];
+  if ((functionID & ~4096U) < (sizeof(ctdaFunctionNames) / sizeof(char *)))
+  {
+    s += ctdaFunctionNames[functionID & ~4096U];
+  }
+  else
+  {
+    std::sprintf(tmpBuf, "%u", functionID);
+    s += tmpBuf;
+  }
+  std::sprintf(tmpBuf, ":0x%X(0x%X,0x%X,%u,0x%X,%d)%s",
+               ctdaOp & 0x1FU, param1, param2, runOnType, refID, packageID,
+               ctdaOpTypes[ctdaOp >> 5]);
+  s += tmpBuf;
+  buf.setPosition(buf.getPosition() - 28);
+  if (ctdaOp & 4U)
+    printFormID(s, buf);
+  else
+    printFloat(s, buf);
+  buf.setPosition(buf.getPosition() + 24);
+}
+
 void ESMDump::convertField(std::string& s,
                            ESMField& f, const std::string& fldDef)
 {
@@ -385,7 +425,7 @@ void ESMDump::convertField(std::string& s,
     s.resize(s.length() - 1);
 }
 
-void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
+bool ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
 {
   if (fieldDefDB.begin() != fieldDefDB.end())
   {
@@ -395,7 +435,7 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
     if (i != fieldDefDB.end())
     {
       convertField(s, f, i->second);
-      return;
+      return true;
     }
   }
   //  1: boolean
@@ -408,6 +448,7 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
   //  8: localized string
   //  9: string
   // 10: file name
+  // 11: CTDA
   int     dataTypes[8];
   int     dataCnt = 1;
   int     arraySize = 1;
@@ -440,7 +481,7 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
         dataType = 6;
       break;
     case 0x4D414E42:            // "BNAM"
-      if (r == "LTEX")
+      if (r == "LTEX" || r == "MSWP")
         dataType = 10;
       break;
     case 0x54585442:            // "BTXT"
@@ -450,6 +491,9 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
       break;
     case 0x45565243:            // "CRVE"
       dataType = 10;
+      break;
+    case 0x41445443:            // "CTDA"
+      dataType = 11;
       break;
     case 0x41544144:            // "DATA"
       if (r == "GMST")
@@ -568,8 +612,10 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
         arraySize = 6;
       }
       break;
-    case 0x49504550:            // "PEPI"
     case 0x4D414E53:            // "SNAM"
+      if (r == "MSWP")
+        dataType = 10;
+    case 0x49504550:            // "PEPI"
       if (!tsvFormat && r == "QUST")
         dataType = 10;
       break;
@@ -605,6 +651,15 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
         dataType = 7;
       }
       break;
+    case 0x524B4C58:            // "XLKR"
+      arraySize = 2;
+    case 0x4E434C58:            // "XLCN"
+    case 0x54524C58:            // "XLRT"
+    case 0x52594C58:            // "XLYR"
+    case 0x50534D58:            // "XMSP"
+      if (!((r == "REFR" || r == "ACHR") && !verboseMode))
+        dataType = 6;
+      break;
     case 0x4C435358:            // "XSCL"
       if (verboseMode && r == "REFR")
       {
@@ -623,7 +678,7 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
         dataType = 6;
     }
     if (!dataType)
-      return;
+      return false;
   }
   size_t  dataSize = 0;
   for (int i = 0; i < dataCnt; i++)
@@ -638,13 +693,13 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
     }
     else
     {
-      dataSize = dataSize + 1;
+      dataSize = dataSize + (dataType != 11 ? 1 : 32);
       exactSizeRequired = false;
     }
   }
   dataSize = dataSize * size_t(arraySize);
   if ((exactSizeRequired && f.size() != dataSize) || f.size() < dataSize)
-    return;
+    return false;
   for (int i = 0; i < arraySize; i++)
   {
     for (int j = 0; j < dataCnt; j++)
@@ -682,11 +737,15 @@ void ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
         case 10:                // file name
           printFileName(s, f);
           break;
+        case 11:                // condition
+          printCTDA(s, f);
+          break;
       }
     }
   }
   if (s.length() == 1)
     s.clear();
+  return true;
 }
 
 ESMDump::ESMDump(const char *fileName, std::FILE *outFile)
