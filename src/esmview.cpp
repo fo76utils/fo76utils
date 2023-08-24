@@ -509,8 +509,7 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
   {
     Field   tmpField;
     tmpField.type = f.type;
-    convertField(tmpField.data, r, f);
-    if (tmpField.data.empty() && f.size() > 0 && !noUnknownFields)
+    if (!convertField(tmpField.data, r, f) && f.size() > 0 && !noUnknownFields)
     {
       char    tmpBuf[32];
       std::sprintf(tmpBuf, "\t[%5u]", (unsigned int) f.size());
@@ -1317,6 +1316,8 @@ int main(int argc, char **argv)
           while (*s == '\t' || *s == '\r' || *s == ' ')
             s++;
           s = esmFile.parseFormID(mswpFormID, s);
+          if (mswpFormID == 0xFFFFFFFFU)
+            mswpFormID = 0U;
           while (*s == '\t' || *s == '\r' || *s == ' ')
             s++;
           if (*s != '\0')
