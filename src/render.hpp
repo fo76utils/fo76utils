@@ -28,7 +28,7 @@ class Renderer : protected Renderer_Base
     baseObjBufShift = 12,
     baseObjBufMask = 0x0FFF,
     baseObjHashMask = 0xFFFF,
-    renderObjQueueSize = 512
+    renderObjQueueSize = 256
   };
   struct BaseObject
   {
@@ -133,12 +133,12 @@ class Renderer : protected Renderer_Base
 #else
     std::uint64_t m[4];
 #endif
-    inline TileMask();
+    inline TileMask(bool isFull = false);
     TileMask(const NIFFile::NIFBounds& screenBounds, int w, int h);
     inline bool overlapsWith(const TileMask& r) const;
     inline TileMask& operator|=(const TileMask& r);
     inline operator bool() const;
-    inline bool isFull() const;
+    inline bool operator==(const TileMask& r) const;
   };
   struct RenderObjectQueueObj
   {
@@ -146,40 +146,42 @@ class Renderer : protected Renderer_Base
     RenderObjectQueueObj  *prv;         // previous object in queue
     RenderObjectQueueObj  *nxt;         // next object in queue
     // thread working on object (< 0: none, >= 256: this is a model load event,
-    // o->model.o.b contains the model ID and path, all bits of m are set)
+    // o->model.o.b contains the model ID and path, all bits of m are 0)
     std::intptr_t threadNum;
     TileMask  m;
   };
   struct RenderObjectQueue
   {
+    struct ObjectList
+    {
+      RenderObjectQueueObj  *front;
+      RenderObjectQueueObj  *back;
+      inline ObjectList();
+      inline void push_front(RenderObjectQueueObj *o);
+      inline void push_back(RenderObjectQueueObj *o);
+      inline void pop(RenderObjectQueueObj *o);
+      inline operator bool() const;
+    };
     std::vector< RenderObjectQueueObj > buf;
-    RenderObjectQueueObj  *firstObject;         // NULL: empty queue
-    RenderObjectQueueObj  *lastObject;
-    RenderObjectQueueObj  *firstFreeObject;     // NULL: full queue
-    // true on all objects rendered / error
-    bool    doneFlag;
-    // true stops worker threads from processing new objects
-    bool    pauseFlag;
-    // true if load model events have been added to the queue
-    bool    loadingModelsFlag;
-    // bit mask of threads currently rendering
-    std::uint32_t threadsActive;
+    ObjectList  queuedObjects;
+    ObjectList  objectsReady;
+    ObjectList  objectsRendered;
+    ObjectList  freeObjects;
+    bool    doneFlag;           // all objects rendered / error
+    bool    pauseFlag;          // stops worker threads from processing objects
+    bool    loadingModelsFlag;  // load model events were added to the queue
+    bool    allowReorder;       // allow rendering regular objects in any order
     std::mutex  m;
-    std::condition_variable cv;
+    std::condition_variable cv1;        // notifies worker threads
+    std::condition_variable cv2;        // notifies main thread
     RenderObjectQueue(size_t bufSize);
+    ~RenderObjectQueue();
     void clear();
-    inline void push_back(const RenderObject& p, const TileMask& tileMask);
-    // move object to front of queue
-    inline void move_front(RenderObjectQueueObj *o);
-    // move to free object stack
-    inline void pop(RenderObjectQueueObj *o);
-    // check if a model is scheduled to be loaded and the previous model
-    // in the same nifFiles slot is no longer used (returns object pointer,
-    // or NULL if none was found)
-    RenderObjectQueueObj *findModelToLoad();
-    // find an object ready to render, and move it to the front of the queue
-    // returns pointer to the object found (NULL if none)
-    RenderObjectQueueObj *findObject();
+    // returns true if o is ready to be processed and was added to objectsReady
+    bool queueObject(RenderObjectQueueObj *o);
+    // find objects ready to render, and move them to objectsReady
+    // returns the number of objects found
+    size_t findObjects();
   };
   struct RenderThread
   {
@@ -357,7 +359,14 @@ class Renderer : protected Renderer_Base
     return viewTransform;
   }
   void setLightDirection(float rotationY, float rotationZ);
-  // default to std::thread::hardware_concurrency() if n <= 0
+  static inline int getDefaultThreadCount()
+  {
+    int     n = int(std::thread::hardware_concurrency());
+    n = std::max(n, 1);
+    n = std::min(n - std::max((n >> 1) - 3, 0), int(maxThreadCnt));
+    return n;
+  }
+  // use default if n <= 0
   void setThreadCount(int n);
   void setTextureCacheSize(std::uint64_t n)
   {
@@ -396,6 +405,7 @@ class Renderer : protected Renderer_Base
   // + 128: disable built-in exclude patterns for effect meshes
   // + 256: disable effect meshes
   // + 512: ignore object bounds
+  // + 1024: do not allow reordering objects for performance
   void setRenderQuality(unsigned int n)
   {
     enableMarkers = bool(n & 0x40);
@@ -404,6 +414,7 @@ class Renderer : protected Renderer_Base
     enableAllObjects |= bool(n & 2);
     renderQuality = (unsigned char) ((n >> 2) & 3);
     ignoreOBND = bool(n & 0x0200);
+    renderObjectQueue->allowReorder = !(n & 0x0400);
     effectMeshMode = (unsigned char) ((n >> 7) & 3);
     enableActors = bool(n & 0x10);
   }

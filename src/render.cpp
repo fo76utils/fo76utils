@@ -48,16 +48,27 @@ void Renderer::ModelData::clear()
   usesAlphaBlending = false;
 }
 
-inline Renderer::TileMask::TileMask()
+inline Renderer::TileMask::TileMask(bool isFull)
 {
 #if ENABLE_X86_64_AVX
-  const YMM_UInt64  tmp = { 0U, 0U, 0U, 0U };
-  m = tmp;
+  if (!isFull)
+  {
+    const YMM_UInt64  tmp = { 0U, 0U, 0U, 0U };
+    m = tmp;
+  }
+  else
+  {
+    const YMM_UInt64  tmp =
+    {
+      std::uint64_t(-1), std::uint64_t(-1), std::uint64_t(-1), std::uint64_t(-1)
+    };
+    m = tmp;
+  }
 #else
-  m[0] = 0U;
-  m[1] = 0U;
-  m[2] = 0U;
-  m[3] = 0U;
+  m[0] = std::uint64_t(0) - std::uint64_t(isFull);
+  m[1] = m[0];
+  m[2] = m[0];
+  m[3] = m[0];
 #endif
 }
 
@@ -113,9 +124,8 @@ Renderer::TileMask::TileMask(
 inline bool Renderer::TileMask::overlapsWith(const TileMask& r) const
 {
 #if ENABLE_X86_64_AVX
-  YMM_UInt64  tmp = m & r.m;
   bool    nz;
-  __asm__ ("vptest %t1, %t1" : "=@ccnz" (nz) : "x" (tmp));
+  __asm__ ("vptest %t2, %t1" : "=@ccnz" (nz) : "x" (m), "xm" (r.m));
   return nz;
 #else
   return bool((m[0] & r.m[0]) | (m[1] & r.m[1])
@@ -147,31 +157,74 @@ inline Renderer::TileMask::operator bool() const
 #endif
 }
 
-inline bool Renderer::TileMask::isFull() const
+inline bool Renderer::TileMask::operator==(const TileMask& r) const
 {
 #if ENABLE_X86_64_AVX
-  const YMM_UInt64  tmp =
-  {
-    0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL,
-    0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL
-  };
-  bool    c;
-  __asm__ ("vptest %t2, %t1" : "=@ccc" (c) : "x" (m), "xm" (tmp));
-  return c;
+  YMM_UInt64  tmp = m ^ r.m;
+  bool    z;
+  __asm__ ("vptest %t1, %t1" : "=@ccz" (z) : "x" (tmp));
+  return z;
 #else
-  return ((m[0] & m[1] & m[2] & m[3]) == 0xFFFFFFFFFFFFFFFFULL);
+  return !((m[0] ^ r.m[0]) | (m[1] ^ r.m[1])
+           | (m[2] ^ r.m[2]) | (m[3] ^ r.m[3]));
 #endif
+}
+
+inline Renderer::RenderObjectQueue::ObjectList::ObjectList()
+  : front((RenderObjectQueueObj *) 0),
+    back((RenderObjectQueueObj *) 0)
+{
+}
+
+inline void Renderer::RenderObjectQueue::ObjectList::push_front(
+    RenderObjectQueueObj *o)
+{
+  o->prv = (RenderObjectQueueObj *) 0;
+  o->nxt = front;
+  if (!front)
+    back = o;
+  else
+    front->prv = o;
+  front = o;
+}
+
+inline void Renderer::RenderObjectQueue::ObjectList::push_back(
+    RenderObjectQueueObj *o)
+{
+  o->prv = back;
+  o->nxt = (RenderObjectQueueObj *) 0;
+  if (!back)
+    front = o;
+  else
+    back->nxt = o;
+  back = o;
+}
+
+inline void Renderer::RenderObjectQueue::ObjectList::pop(
+    RenderObjectQueueObj *o)
+{
+  RenderObjectQueueObj*&  prvNxt = (o != front ? o->prv->nxt : front);
+  RenderObjectQueueObj*&  nxtPrv = (o != back ? o->nxt->prv : back);
+  prvNxt = o->nxt;
+  nxtPrv = o->prv;
+}
+
+inline Renderer::RenderObjectQueue::ObjectList::operator bool() const
+{
+  return bool(front);
 }
 
 Renderer::RenderObjectQueue::RenderObjectQueue(size_t bufSize)
   : buf(bufSize + maxThreadCnt),
-    firstObject((RenderObjectQueueObj *) 0),
-    lastObject((RenderObjectQueueObj *) 0),
-    firstFreeObject((RenderObjectQueueObj *) 0),
     doneFlag(false),
     pauseFlag(false),
     loadingModelsFlag(false),
-    threadsActive(0U)
+    allowReorder(false)
+{
+  clear();
+}
+
+Renderer::RenderObjectQueue::~RenderObjectQueue()
 {
   clear();
 }
@@ -180,121 +233,140 @@ void Renderer::RenderObjectQueue::clear()
 {
   {
     std::unique_lock< std::mutex >  tmpLock(m);
-    while (threadsActive)
-      cv.wait_for(tmpLock, std::chrono::milliseconds(100));
-    firstObject = (RenderObjectQueueObj *) 0;
-    lastObject = (RenderObjectQueueObj *) 0;
-    firstFreeObject = (RenderObjectQueueObj *) 0;
     doneFlag = true;
     pauseFlag = false;
     loadingModelsFlag = false;
+    while (objectsRendered)
+      cv2.wait_for(tmpLock, std::chrono::milliseconds(20));
+    queuedObjects = ObjectList();
+    objectsReady = ObjectList();
+    objectsRendered = ObjectList();
+    freeObjects = ObjectList();
     for (std::vector< RenderObjectQueueObj >::iterator
              i = buf.begin(); i != buf.end(); i++)
     {
       i->o = (RenderObject *) 0;
-      i->prv = firstFreeObject;
-      i->nxt = (RenderObjectQueueObj *) 0;
-      i->threadNum = -1L;
+      i->threadNum = std::intptr_t(-1);
       i->m = TileMask();
-      firstFreeObject = &(*i);
+      freeObjects.push_back(&(*i));
     }
   }
-  cv.notify_all();
+  cv1.notify_all();
 }
 
-inline void Renderer::RenderObjectQueue::push_back(
-    const RenderObject& p, const TileMask& tileMask)
+bool Renderer::RenderObjectQueue::queueObject(RenderObjectQueueObj *o)
 {
-  RenderObjectQueueObj  *o = firstFreeObject;
-  if (BRANCH_UNLIKELY(!o))
-    return;
-  firstFreeObject = o->prv;
-  o->o = &p;
-  o->prv = lastObject;
-  o->nxt = (RenderObjectQueueObj *) 0;
-  o->threadNum = -1L;
-  o->m = tileMask;
-  if (!lastObject)
-    firstObject = o;
+  TileMask  tmpMask;
+  RenderObjectQueueObj  *p;
+  for (p = objectsRendered.front; p; p = p->nxt)
+    tmpMask |= p->m;
+  for (p = objectsReady.front; p; p = p->nxt)
+    tmpMask |= p->m;
+  bool    readyFlag = !tmpMask.overlapsWith(o->m);
+  if (readyFlag && !(allowReorder && !(o->o->flags & 0x1C)))
+  {
+    tmpMask = o->m;
+    for (p = queuedObjects.front; p; p = p->nxt)
+    {
+      if (tmpMask.overlapsWith(p->m))
+      {
+        readyFlag = false;
+        break;
+      }
+    }
+  }
+  if (readyFlag)
+    objectsReady.push_back(o);
   else
-    lastObject->nxt = o;
-  lastObject = o;
+    queuedObjects.push_back(o);
+  return readyFlag;
 }
 
-inline void Renderer::RenderObjectQueue::move_front(RenderObjectQueueObj *o)
+size_t Renderer::RenderObjectQueue::findObjects()
 {
-  if (BRANCH_UNLIKELY(o == firstObject))
-    return;
-  RenderObjectQueueObj*&  prvNxt = o->prv->nxt;
-  RenderObjectQueueObj*&  nxtPrv = (o != lastObject ? o->nxt->prv : lastObject);
-  firstObject->prv = o;
-  prvNxt = o->nxt;
-  nxtPrv = o->prv;
-  o->prv = (RenderObjectQueueObj *) 0;
-  o->nxt = firstObject;
-  firstObject = o;
-}
-
-inline void Renderer::RenderObjectQueue::pop(RenderObjectQueueObj *o)
-{
-  RenderObjectQueueObj*&  prvNxt =
-      (o != firstObject ? o->prv->nxt : firstObject);
-  RenderObjectQueueObj*&  nxtPrv = (o != lastObject ? o->nxt->prv : lastObject);
-  prvNxt = o->nxt;
-  nxtPrv = o->prv;
-  o->o = (RenderObject *) 0;
-  o->prv = firstFreeObject;
-  o->nxt = (RenderObjectQueueObj *) 0;
-  o->threadNum = -1L;
-  firstFreeObject = o;
-}
-
-Renderer::RenderObjectQueueObj * Renderer::RenderObjectQueue::findModelToLoad()
-{
-  std::uint64_t modelIDMask = 0U;
-  RenderObjectQueueObj  *o = firstObject;
-  for ( ; o; o = o->nxt)
+  if (!queuedObjects)
+    return 0;
+  RenderObjectQueueObj  *o, *nxt;
+  size_t  objectsFound = 0;
   {
-    const RenderObject  *p = o->o;
-    unsigned int  modelID = 0xFFFFFFFFU;
-    if (p && (p->flags & 0x02))
-      modelID = p->model.o.b->modelID;
-    if (BRANCH_LIKELY(o->threadNum < 256L))
+    TileMask  tileMask;
+    size_t  n = 0;
+    for (o = objectsRendered.front; o; o = o->nxt, n++)
+      tileMask |= o->m;
+    for (o = objectsReady.front; o; o = o->nxt, n++)
+      tileMask |= o->m;
+    if (n >= 32)
+      return 0;
+    if (!allowReorder)
     {
-      if (modelID != 0xFFFFFFFFU)
-        modelIDMask |= (std::uint64_t(1) << (modelID & 0xFFU));
-      continue;
+      for (o = queuedObjects.front; o; o = nxt)
+      {
+        nxt = o->nxt;
+        if (BRANCH_UNLIKELY(!tileMask.overlapsWith(o->m)))
+        {
+          if (BRANCH_UNLIKELY(o->threadNum >= 256L))
+            break;
+          queuedObjects.pop(o);
+          objectsReady.push_back(o);
+          objectsFound++;
+        }
+        tileMask |= o->m;
+      }
     }
-    if (modelID != 0xFFFFFFFFU &&
-        (modelIDMask & (std::uint64_t(1) << (modelID & 0xFFU))))
+    else
     {
-      continue;
+      for (o = queuedObjects.front; o; o = nxt)
+      {
+        nxt = o->nxt;
+        if (BRANCH_UNLIKELY(!tileMask.overlapsWith(o->m)))
+        {
+          if (BRANCH_UNLIKELY(o->threadNum >= 256L))
+            break;
+          queuedObjects.pop(o);
+          objectsReady.push_back(o);
+          objectsFound++;
+        }
+        if (o->o->flags & 0x1C)
+          tileMask |= o->m;     // do not reorder water, effects and decals
+      }
     }
-    break;
   }
-  return o;
-}
-
-Renderer::RenderObjectQueueObj * Renderer::RenderObjectQueue::findObject()
-{
-  RenderObjectQueueObj  *o = firstObject;
-  if (!(o && o->threadNum >= 0L))
-    return o;
-  TileMask  tileMask(o->m);
-  while ((o = o->nxt) != (RenderObjectQueueObj *) 0 && o->threadNum >= 0L)
-    tileMask |= o->m;
-  for ( ; o; o = o->nxt)
+  if (BRANCH_UNLIKELY(loadingModelsFlag))
   {
-    if (BRANCH_UNLIKELY(!tileMask.overlapsWith(o->m)))
+    std::uint64_t modelIDMask = 0U;
+    for (int i = 0; i < 3; i++)
     {
-      move_front(o);
-      break;
+      o = (i == 0 ? objectsRendered.front
+                    : (i == 1 ? objectsReady.front : queuedObjects.front));
+      for ( ; o; o = o->nxt)
+      {
+        if (i == 2 && o->threadNum >= 256L)
+          break;
+        unsigned int  modelID;
+        if ((o->o->flags & 0x02) &&
+            (modelID = o->o->model.o.b->modelID) != 0xFFFFFFFFU)
+        {
+          modelIDMask |= (std::uint64_t(1) << (modelID & 0xFFU));
+        }
+      }
     }
-    tileMask |= o->m;
-    if (BRANCH_UNLIKELY(tileMask.isFull()))
-      return (RenderObjectQueueObj *) 0;
+    for ( ; o; o = nxt)
+    {
+      nxt = o->nxt;
+      unsigned int  modelID = 0xFFFFFFFFU;
+      if (o->o->flags & 0x02)
+        modelID = o->o->model.o.b->modelID;
+      if (modelID != 0xFFFFFFFFU &&
+          (modelIDMask & (std::uint64_t(1) << (modelID & 0xFFU))))
+      {
+        continue;
+      }
+      queuedObjects.pop(o);
+      objectsReady.push_back(o);
+      objectsFound++;
+    }
   }
-  return o;
+  return objectsFound;
 }
 
 Renderer::RenderThread::RenderThread()
@@ -1896,53 +1968,49 @@ void Renderer::renderThread(size_t threadNum)
   RenderThread& t = renderThreads[threadNum];
   if (!t.renderer)
     return;
-  RenderObjectQueue&  q = *renderObjectQueue;
+  RenderObjectQueue&    q = *renderObjectQueue;
+  RenderObjectQueueObj  *o = (RenderObjectQueueObj *) 0;
+  bool    isModel = false;
   while (true)
   {
-    RenderObjectQueueObj  *o = (RenderObjectQueueObj *) 0;
-    bool    isModel = false;
+    while (!o)
     {
       std::unique_lock< std::mutex >  tmpLock(q.m);
-      while (!q.doneFlag)
-      {
-        if (!q.pauseFlag)
-        {
-          if (bool(o = q.findObject()))
-            break;
-          if (BRANCH_UNLIKELY(q.loadingModelsFlag))
-          {
-            if (bool(o = q.findModelToLoad()))
-            {
-              isModel = true;
-              break;
-            }
-          }
-        }
-        q.cv.wait_for(tmpLock, std::chrono::milliseconds(100));
-      }
+      while (!((q.objectsReady && !q.pauseFlag) || q.doneFlag))
+        q.cv1.wait(tmpLock);
       if (q.doneFlag)
-        break;
+        return;
+      o = q.objectsReady.front;
+      q.objectsReady.pop(o);
+      isModel = (o->threadNum >= 256L);
       o->threadNum = std::intptr_t(threadNum);
-      q.threadsActive |= std::uint32_t(1U << (unsigned char) threadNum);
+      q.objectsRendered.push_back(o);
     }
-    if (BRANCH_LIKELY(o->o))
-    {
-      if (BRANCH_UNLIKELY(isModel))
-      {
-        if (o->o->flags & 0x02)
-          (void) loadModel(*(o->o->model.o.b), threadNum);
-      }
-      else
-      {
-        renderObject(t, *(o->o));
-      }
-    }
+    if (BRANCH_LIKELY(!isModel))
+      renderObject(t, *(o->o));
+    else if (o->o->flags & 0x02)
+      (void) loadModel(*(o->o->model.o.b), threadNum);
+    bool    notifyFlag;
     {
       std::lock_guard< std::mutex > tmpLock(q.m);
-      q.pop(o);
-      q.threadsActive &= ~(std::uint32_t(1U << (unsigned char) threadNum));
+      q.objectsRendered.pop(o);
+      q.freeObjects.push_front(o);
+      o = (RenderObjectQueueObj *) 0;
+      notifyFlag = !q.objectsReady;
+      (void) q.findObjects();
+      if (q.objectsReady && !(q.doneFlag || q.pauseFlag))
+      {
+        o = q.objectsReady.front;
+        q.objectsReady.pop(o);
+        isModel = (o->threadNum >= 256L);
+        o->threadNum = std::intptr_t(threadNum);
+        q.objectsRendered.push_back(o);
+      }
+      notifyFlag = notifyFlag && q.objectsReady;
     }
-    q.cv.notify_all();
+    if (notifyFlag)
+      q.cv1.notify_all();
+    q.cv2.notify_all();
   }
 }
 
@@ -1970,18 +2038,21 @@ void Renderer::threadFunction(Renderer *p, size_t threadNum)
   }
   {
     std::lock_guard< std::mutex > tmpLock(q.m);
-    for (RenderObjectQueueObj *o = q.firstObject; o; )
+    for (RenderObjectQueueObj *o = q.objectsRendered.front; o; )
     {
       RenderObjectQueueObj  *nxt = o->nxt;
       if (o->threadNum == std::intptr_t(threadNum))
-        q.pop(o);
+      {
+        q.objectsRendered.pop(o);
+        q.freeObjects.push_front(o);
+      }
       o = nxt;
     }
-    q.threadsActive &= ~(std::uint32_t(1U << (unsigned char) threadNum));
     if (!p->renderThreads[threadNum].errMsg.empty())
       q.doneFlag = true;
   }
-  q.cv.notify_all();
+  q.cv2.notify_all();
+  q.cv1.notify_all();
 }
 
 Renderer::Renderer(int imageWidth, int imageHeight,
@@ -2143,7 +2214,7 @@ void Renderer::setLightDirection(float rotationY, float rotationZ)
 void Renderer::setThreadCount(int n)
 {
   if (n <= 0)
-    n = int(std::thread::hardware_concurrency());
+    n = getDefaultThreadCount();
   int     maxThreads = int(renderThreads.capacity());
   n = (n > 1 ? (n < maxThreads ? n : maxThreads) : 1);
   if (n == int(threadCnt))
@@ -2369,44 +2440,63 @@ void Renderer::initRenderPass(int n, unsigned int formID)
 
 bool Renderer::renderObjects(int t)
 {
-  const std::chrono::time_point< std::chrono::steady_clock >  t0 =
+  std::chrono::time_point< std::chrono::steady_clock >  endTime =
       std::chrono::steady_clock::now();
+  if (t > 0)
+  {
+    endTime +=
+        std::chrono::duration_cast< std::chrono::steady_clock::duration >(
+            std::chrono::milliseconds(t));
+  }
   RenderObjectQueue&  q = *renderObjectQueue;
-  q.cv.notify_all();
+  {
+    std::lock_guard< std::mutex > tmpLock(q.m);
+    q.pauseFlag = false;
+    (void) q.findObjects();
+  }
+  q.cv1.notify_all();
   while (true)
   {
-    bool    pauseFlag = false;
     bool    objectListEndFlag = (objectListPos >= objectList.size());
     // check for events
-    if (t > 0)
-    {
-      const std::chrono::time_point< std::chrono::steady_clock >  t1 =
-          std::chrono::steady_clock::now();
-      pauseFlag = (std::chrono::duration_cast< std::chrono::milliseconds >(
-                       t1 - t0).count() >= t);
-    }
     {
       std::unique_lock< std::mutex >  tmpLock(q.m);
-      q.pauseFlag = pauseFlag;
       while (!q.doneFlag)
       {
-        if (objectListEndFlag && !q.firstObject)
+        bool    queueEmptyFlag =
+            !(q.queuedObjects || q.objectsReady || q.objectsRendered);
+        if (objectListEndFlag && queueEmptyFlag)
         {
           q.doneFlag = true;
           break;
         }
-        if ((q.firstFreeObject && !objectListEndFlag) ||
-            (pauseFlag && !q.threadsActive))
+        if (q.pauseFlag && !q.objectsRendered)
+          return false;
+        if (BRANCH_UNLIKELY(q.loadingModelsFlag))
+        {
+          if (queueEmptyFlag)
+          {
+            q.loadingModelsFlag = false;
+            if (!(renderPass & 1))
+            {
+              tmpLock.unlock();
+              textureCache.shrinkTextureCache();
+              tmpLock.lock();
+            }
+            continue;
+          }
+        }
+        else if (q.freeObjects && !objectListEndFlag)
         {
           break;
         }
-        q.cv.wait_for(tmpLock, std::chrono::milliseconds(100));
+        if (t > 0 && std::chrono::steady_clock::now() >= endTime)
+          q.pauseFlag = true;
+        q.cv2.wait_for(tmpLock, std::chrono::milliseconds(20));
       }
       if (q.doneFlag)
         break;
     }
-    if (pauseFlag)
-      return false;
     size_t  i = objectListPos;
     RenderObject& o = objectList[i];
     unsigned int  modelID = 0xFFFFFFFFU;
@@ -2430,39 +2520,28 @@ bool Renderer::renderObjects(int t)
           continue;
         m = m | (1ULL << n);
         std::unique_lock< std::mutex >  tmpLock(q.m);
-        while (!(q.firstFreeObject || q.doneFlag))
-          q.cv.wait_for(tmpLock, std::chrono::milliseconds(100));
+        while (!(q.freeObjects || q.doneFlag))
+          q.cv2.wait_for(tmpLock, std::chrono::milliseconds(20));
         if (q.doneFlag)
         {
           doneFlag = true;
           break;
         }
+        RenderObjectQueueObj  *tmp = q.freeObjects.front;
+        q.freeObjects.pop(tmp);
         q.loadingModelsFlag = true;
-        TileMask  tileMask;
-        tileMask.m[0] = std::uint64_t(-1LL);
-        tileMask.m[1] = tileMask.m[0];
-        tileMask.m[2] = tileMask.m[0];
-        tileMask.m[3] = tileMask.m[0];
-        q.push_back(*j, tileMask);
-        q.lastObject->threadNum = 256L;
+        tmp->o = &(*j);
+        tmp->threadNum = 256L;
+        tmp->m = TileMask();
+        q.queuedObjects.push_back(tmp);
       }
-      q.cv.notify_all();
-      // wait until all models are loaded, or until error
-      while (!doneFlag)
+      if (!doneFlag)
       {
-        std::unique_lock< std::mutex >  tmpLock(q.m);
-        doneFlag = q.doneFlag;
-        if (doneFlag || !q.firstObject)
-        {
-          q.loadingModelsFlag = false;
-          break;
-        }
-        q.cv.wait_for(tmpLock, std::chrono::milliseconds(100));
+        std::lock_guard< std::mutex > tmpLock(q.m);
+        (void) q.findObjects();
       }
-      if (doneFlag)
-        break;
-      if (!(renderPass & 1))
-        textureCache.shrinkTextureCache();
+      q.cv1.notify_all();
+      continue;
     }
     objectListPos++;
     // calculate object bounds on screen
@@ -2532,13 +2611,20 @@ bool Renderer::renderObjects(int t)
     if (!tileMask)
       continue;
     // add next object to queue
+    bool    notifyFlag;
     {
       std::lock_guard< std::mutex > tmpLock(q.m);
-      q.push_back(o, tileMask);
+      RenderObjectQueueObj  *tmp = q.freeObjects.front;
+      q.freeObjects.pop(tmp);
+      tmp->o = &o;
+      tmp->threadNum = -1L;
+      tmp->m = tileMask;
+      notifyFlag = q.queueObject(tmp);
     }
-    q.cv.notify_all();
+    if (notifyFlag)
+      q.cv1.notify_one();
   }
-  q.cv.notify_all();
+  q.clear();
   bool    haveThreads = false;
   for (size_t i = 0; i < renderThreads.size(); i++)
   {
@@ -2548,7 +2634,6 @@ bool Renderer::renderObjects(int t)
       haveThreads = true;
     }
   }
-  q.clear();
   textureCache.shrinkTextureCache();
   clear(0x20);
   if (haveThreads)
@@ -2565,14 +2650,15 @@ bool Renderer::renderObjects(int t)
 size_t Renderer::getObjectsRendered()
 {
   std::intptr_t n = std::intptr_t(objectListPos);
-  {
-    std::lock_guard< std::mutex > tmpLock(renderObjectQueue->m);
-    for (RenderObjectQueueObj *o = renderObjectQueue->firstObject; o;
-         o = o->nxt)
-    {
-      n--;
-    }
-  }
+  RenderObjectQueue&  q = *renderObjectQueue;
+  std::lock_guard< std::mutex > tmpLock(q.m);
+  RenderObjectQueueObj  *o;
+  for (o = q.objectsRendered.front; o; o = o->nxt)
+    n -= std::intptr_t(bool(o->m));
+  for (o = q.objectsReady.front; o; o = o->nxt)
+    n -= std::intptr_t(bool(o->m));
+  for (o = q.queuedObjects.front; o; o = o->nxt)
+    n -= std::intptr_t(bool(o->m));
   return size_t(std::max(n, std::intptr_t(0)));
 }
 
