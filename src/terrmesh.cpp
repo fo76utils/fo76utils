@@ -4,6 +4,8 @@
 #include "landtxt.hpp"
 #include "fp32vec4.hpp"
 
+#include <bit>
+
 static inline FloatVector4 calculateNormal(FloatVector4 v1, FloatVector4 v2)
 {
   // cross product of v1 and v2
@@ -38,18 +40,14 @@ void TerrainMesh::createMesh(
 {
   int     w = std::abs(x1 - x0) + 1;
   int     h = std::abs(y1 - y0) + 1;
-  int     txtW = (w + 7) << textureScale;
-  int     txtH = (h + 7) << textureScale;
+  int     txtW = (w + 4) << textureScale;
+  int     txtH = (h + 4) << textureScale;
   x0 = (x0 < x1 ? x0 : x1);
   y0 = (y0 < y1 ? y0 : y1);
   x1 = x0 + w - 1;
   y1 = y0 + h - 1;
-  int     txtWP2 = 1;
-  int     txtHP2 = 1;
-  while (txtWP2 < txtW)
-    txtWP2 = txtWP2 << 1;
-  while (txtHP2 < txtH)
-    txtHP2 = txtHP2 << 1;
+  int     txtWP2 = 1 << int(std::bit_width((unsigned int) txtW - 1U));
+  int     txtHP2 = 1 << int(std::bit_width((unsigned int) txtH - 1U));
   // create vertex and triangle data
   vertexCnt = (unsigned int) w * (unsigned int) h;
   if (vertexCnt > 65536U)
@@ -204,20 +202,16 @@ void TerrainMesh::createMesh(
     }
     for (int y = 0; y < txtHP2; y++)
     {
-      int     yc = (y0 << textureScale) + y;
-      if (y >= ((txtH + txtHP2) >> 1))
-        yc = yc - txtHP2;
-      yc = (yc > 0 ? (yc < (ltexHeight - 1) ? yc : (ltexHeight - 1)) : 0);
+      int     yc =
+          std::min(std::max((y0 << textureScale) + y, 0), ltexHeight - 1);
       const unsigned char *srcPtr =
           ltexData[k] + (size_t(yc) * size_t(ltexWidth) * pixelBytes);
       if (pixelBytes == 2U)
       {
         for (int x = 0; x < txtWP2; x++, dstPtr = dstPtr + 2)
         {
-          int     xc = (x0 << textureScale) + x;
-          if (x >= ((txtW + txtWP2) >> 1))
-            xc = xc - txtWP2;
-          xc = (xc > 0 ? (xc < (ltexWidth - 1) ? xc : (ltexWidth - 1)) : 0);
+          int     xc =
+              std::min(std::max((x0 << textureScale) + x, 0), ltexWidth - 1);
           size_t  offs = size_t(xc) * 2U;
           dstPtr[0] = srcPtr[offs];
           dstPtr[1] = srcPtr[offs + 1];
@@ -227,10 +221,8 @@ void TerrainMesh::createMesh(
       {
         for (int x = 0; x < txtWP2; x++, dstPtr = dstPtr + 3)
         {
-          int     xc = (x0 << textureScale) + x;
-          if (x >= ((txtW + txtWP2) >> 1))
-            xc = xc - txtWP2;
-          xc = (xc > 0 ? (xc < (ltexWidth - 1) ? xc : (ltexWidth - 1)) : 0);
+          int     xc =
+              std::min(std::max((x0 << textureScale) + x, 0), ltexWidth - 1);
           size_t  offs = size_t(xc) * 3U;
           dstPtr[0] = srcPtr[offs];
           dstPtr[1] = srcPtr[offs + 1];
@@ -250,12 +242,12 @@ void TerrainMesh::createMesh(
     unsigned int ltexMask, float textureMip, float textureRGBScale,
     std::uint32_t textureDefaultColor)
 {
-  int     w = std::abs(x1 - x0) + 8;
-  int     h = std::abs(y1 - y0) + 8;
+  int     w = std::abs(x1 - x0) + 5;
+  int     h = std::abs(y1 - y0) + 5;
   int     txtW = w << textureScale;
   int     txtH = h << textureScale;
-  x0 = (x0 < x1 ? x0 : x1) - 4;
-  y0 = (y0 < y1 ? y0 : y1) - 4;
+  x0 = (x0 < x1 ? x0 : x1) - 1;
+  y0 = (y0 < y1 ? y0 : y1) - 1;
   x1 = x0 + w - 1;
   y1 = y0 + h - 1;
   size_t  totalDataSize = 0;
@@ -311,7 +303,7 @@ void TerrainMesh::createMesh(
   xOffset = xOffset * (4096.0f / float(cellResolution));
   yOffset = yOffset * (4096.0f / float(cellResolution));
   createMesh(hmapBuf.data(), w, h, ltexData, ltexMask, txtW, txtH,
-             textureScale, 4, 4, w - 4, h - 4, cellResolution,
+             textureScale, 1, 1, w - 4, h - 4, cellResolution,
              xOffset, yOffset, landData.getZMin(), landData.getZMax());
 }
 
