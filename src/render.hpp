@@ -52,9 +52,8 @@ class Renderer : protected Renderer_Base
     // 0x10: is decal (TXST object)
     // 0x20: is marker
     // 0x40: high quality model
-    // 0x80: for objects: bits 8-15 = grayscale to palette map scale from MODC
-    //       for decals:  uses XPRM (disables XPDD and finding point of impact)
-    // bits 8 to 15: (objects only if b7 is set) grayscale to palette map scale
+    // 0x80: decal reference uses XPRM (disables XPDD and finding impact point)
+    // bits 7 to 15: if not 0, grayscale to palette map scale (MODC) * 510 + 1
     // bits 29 to 31: sort group (higher = rendered later)
     //           0 = cell (terrain or water), no valid model ID
     //           1 = object
@@ -179,9 +178,8 @@ class Renderer : protected Renderer_Base
     void clear();
     // returns true if o is ready to be processed and was added to objectsReady
     bool queueObject(RenderObjectQueueObj *o);
-    // find objects ready to render, and move them to objectsReady
-    // returns the number of objects found
-    size_t findObjects();
+    // find objects ready to process, and move them to objectsReady
+    void findObjects();
   };
   struct RenderThread
   {

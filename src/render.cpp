@@ -256,22 +256,43 @@ void Renderer::RenderObjectQueue::clear()
 
 bool Renderer::RenderObjectQueue::queueObject(RenderObjectQueueObj *o)
 {
-  TileMask  tmpMask;
   RenderObjectQueueObj  *p;
-  for (p = objectsRendered.front; p; p = p->nxt)
-    tmpMask |= p->m;
-  for (p = objectsReady.front; p; p = p->nxt)
-    tmpMask |= p->m;
-  bool    readyFlag = !tmpMask.overlapsWith(o->m);
-  if (readyFlag && !(allowReorder && !(o->o->flags & 0x1C)))
+  bool    readyFlag;
+  if (BRANCH_UNLIKELY(o->threadNum >= 256L))
   {
-    tmpMask = o->m;
-    for (p = queuedObjects.front; p; p = p->nxt)
+    unsigned int  n = 0xFFU;
+    if (BRANCH_LIKELY(o->o->flags & 0x02))
+      n = o->o->model.o.b->modelID & 0xFFU;
+    readyFlag = true;
+    for (int i = 0; i < 3 && readyFlag; i++)
     {
-      if (tmpMask.overlapsWith(p->m))
+      p = (i == 0 ? objectsRendered.front
+                    : (i == 1 ? objectsReady.front : queuedObjects.front));
+      for ( ; p && readyFlag; p = p->nxt)
       {
-        readyFlag = false;
-        break;
+        if ((p->o->flags & 0x02) && (p->o->model.o.b->modelID & 0xFFU) == n)
+          readyFlag = false;
+      }
+    }
+  }
+  else
+  {
+    TileMask  tmpMask;
+    for (p = objectsRendered.front; p; p = p->nxt)
+      tmpMask |= p->m;
+    for (p = objectsReady.front; p; p = p->nxt)
+      tmpMask |= p->m;
+    readyFlag = !tmpMask.overlapsWith(o->m);
+    if (readyFlag && !(allowReorder && !(o->o->flags & 0x1C)))
+    {
+      tmpMask = o->m;
+      for (p = queuedObjects.front; p; p = p->nxt)
+      {
+        if (tmpMask.overlapsWith(p->m))
+        {
+          readyFlag = false;
+          break;
+        }
       }
     }
   }
@@ -282,12 +303,11 @@ bool Renderer::RenderObjectQueue::queueObject(RenderObjectQueueObj *o)
   return readyFlag;
 }
 
-size_t Renderer::RenderObjectQueue::findObjects()
+void Renderer::RenderObjectQueue::findObjects()
 {
   if (!queuedObjects)
-    return 0;
+    return;
   RenderObjectQueueObj  *o, *nxt;
-  size_t  objectsFound = 0;
   {
     TileMask  tileMask;
     size_t  n = 0;
@@ -296,7 +316,7 @@ size_t Renderer::RenderObjectQueue::findObjects()
     for (o = objectsReady.front; o; o = o->nxt, n++)
       tileMask |= o->m;
     if (n >= 32)
-      return 0;
+      return;
     if (!allowReorder)
     {
       for (o = queuedObjects.front; o; o = nxt)
@@ -308,7 +328,6 @@ size_t Renderer::RenderObjectQueue::findObjects()
             break;
           queuedObjects.pop(o);
           objectsReady.push_back(o);
-          objectsFound++;
         }
         tileMask |= o->m;
       }
@@ -324,7 +343,6 @@ size_t Renderer::RenderObjectQueue::findObjects()
             break;
           queuedObjects.pop(o);
           objectsReady.push_back(o);
-          objectsFound++;
         }
         if (o->o->flags & 0x1C)
           tileMask |= o->m;     // do not reorder water, effects and decals
@@ -334,39 +352,34 @@ size_t Renderer::RenderObjectQueue::findObjects()
   if (BRANCH_UNLIKELY(loadingModelsFlag))
   {
     std::uint64_t modelIDMask = 0U;
-    for (int i = 0; i < 3; i++)
+    for (o = objectsRendered.front; o; o = o->nxt)
     {
-      o = (i == 0 ? objectsRendered.front
-                    : (i == 1 ? objectsReady.front : queuedObjects.front));
-      for ( ; o; o = o->nxt)
-      {
-        if (i == 2 && o->threadNum >= 256L)
-          break;
-        unsigned int  modelID;
-        if ((o->o->flags & 0x02) &&
-            (modelID = o->o->model.o.b->modelID) != 0xFFFFFFFFU)
-        {
-          modelIDMask |= (std::uint64_t(1) << (modelID & 0xFFU));
-        }
-      }
+      if (o->o->flags & 0x02)
+        modelIDMask |= (std::uint64_t(1) << (o->o->model.o.b->modelID & 0xFFU));
+    }
+    for (o = objectsReady.front; o; o = o->nxt)
+    {
+      if (o->o->flags & 0x02)
+        modelIDMask |= (std::uint64_t(1) << (o->o->model.o.b->modelID & 0xFFU));
+    }
+    for (o = queuedObjects.front; o && o->threadNum < 256L; o = o->nxt)
+    {
+      if (o->o->flags & 0x02)
+        modelIDMask |= (std::uint64_t(1) << (o->o->model.o.b->modelID & 0xFFU));
     }
     for ( ; o; o = nxt)
     {
       nxt = o->nxt;
-      unsigned int  modelID = 0xFFFFFFFFU;
-      if (o->o->flags & 0x02)
-        modelID = o->o->model.o.b->modelID;
-      if (modelID != 0xFFFFFFFFU &&
-          (modelIDMask & (std::uint64_t(1) << (modelID & 0xFFU))))
+      if ((o->o->flags & 0x02) &&
+          (modelIDMask
+           & (std::uint64_t(1) << (o->o->model.o.b->modelID & 0xFFU))))
       {
         continue;
       }
       queuedObjects.pop(o);
       objectsReady.push_back(o);
-      objectsFound++;
     }
   }
-  return objectsFound;
 }
 
 Renderer::RenderThread::RenderThread()
@@ -1002,8 +1015,9 @@ const Renderer::BaseObject * Renderer::readModelProperties(
         }
         else if (f == "MODC" && f.size() >= 4)
         {
-          tmp.flags |= (unsigned int) (((roundFloat(f.readFloat() * 255.0f)
-                                         & 0xFF) << 8) | 0x80);
+          float   n = f.readFloat();
+          n = std::min(std::max(n, 0.0f), 1.0f) * 65280.0f + 192.0f;
+          tmp.flags = (tmp.flags & ~0xFF80U) | (unsigned int) (int(n) & 0xFF80);
         }
         else if (f == "WNAM" && r == "ACTI" && f.size() >= 4)
         {
@@ -1146,8 +1160,9 @@ void Renderer::addSCOLObjects(
     }
     else if (f == "MODC" && f.size() >= 4)
     {
-      modc_SCOL = (unsigned int) (((roundFloat(f.readFloat() * 255.0f) & 0xFF)
-                                   << 8) | 0x80);
+      float   n = f.readFloat();
+      n = std::min(std::max(n, 0.0f), 1.0f) * 65280.0f + 192.0f;
+      modc_SCOL = (unsigned int) (int(n) & 0xFF80);
     }
   }
 }
@@ -1655,8 +1670,11 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   t.renderer->m = i->second;
   const DDSTexture  *textures[10];
   unsigned int  textureMask = 0U;
-  if (p.flags & 0x80)
-    t.renderer->m.s.gradientMapV = float(int(p.flags >> 8)) * (1.0f / 255.0f);
+  if (p.model.d.b->flags & 0xFF80U)
+  {
+    t.renderer->m.s.gradientMapV =
+        float(int(p.model.d.b->flags & 0xFF80U) - 128) * (1.0f / 65280.0f);
+  }
   unsigned int  texturePathMask = t.renderer->m.texturePathMask;
   texturePathMask &= ((((unsigned int) t.renderer->m.flags & 0x80U) >> 5)
                       | texturePathMaskBase);
@@ -1811,10 +1829,10 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
       {
         if (p.model.o.b->mswpFormID)
           materialSwaps.materialSwap(*(t.renderer), p.model.o.b->mswpFormID);
-        if (p.flags & 0x80)
+        if (p.flags & 0xFF80U)
         {
           t.renderer->m.s.gradientMapV =
-              float(int((p.flags >> 8) & 0xFFU)) * (1.0f / 255.0f);
+              float(int(p.flags & 0xFF80U) - 128) * (1.0f / 65280.0f);
         }
         if (p.model.o.mswpFormID)
           materialSwaps.materialSwap(*(t.renderer), p.model.o.mswpFormID);
@@ -1997,7 +2015,7 @@ void Renderer::renderThread(size_t threadNum)
       q.freeObjects.push_front(o);
       o = (RenderObjectQueueObj *) 0;
       notifyFlag = !q.objectsReady;
-      (void) q.findObjects();
+      q.findObjects();
       if (q.objectsReady && !(q.doneFlag || q.pauseFlag))
       {
         o = q.objectsReady.front;
@@ -2452,7 +2470,7 @@ bool Renderer::renderObjects(int t)
   {
     std::lock_guard< std::mutex > tmpLock(q.m);
     q.pauseFlag = false;
-    (void) q.findObjects();
+    q.findObjects();
   }
   q.cv1.notify_all();
   while (true)
@@ -2491,8 +2509,12 @@ bool Renderer::renderObjects(int t)
           break;
         }
         if (t > 0 && std::chrono::steady_clock::now() >= endTime)
+        {
           q.pauseFlag = true;
-        q.cv2.wait_for(tmpLock, std::chrono::milliseconds(20));
+          t = 0;
+          continue;
+        }
+        q.cv2.wait(tmpLock);
       }
       if (q.doneFlag)
         break;
@@ -2503,13 +2525,22 @@ bool Renderer::renderObjects(int t)
     if ((o.flags & 0x12) &&
         (((modelID = o.model.o.b->modelID) ^ modelIDBase) & ~0xFFU))
     {
+      if (BRANCH_UNLIKELY(q.pauseFlag))
+        continue;
       // schedule loading new set of models
       modelIDBase = modelID & ~0xFFU;
       unsigned long long  m = 0ULL;
-      bool    doneFlag = false;
+      bool    notifyFlag = false;
       for (std::vector< RenderObject >::iterator
-               j = objectList.begin() + i; j != objectList.end(); j++)
+               j = objectList.begin() + i; true; j++)
       {
+        if (notifyFlag)
+        {
+          notifyFlag = false;
+          q.cv1.notify_one();
+        }
+        if (j == objectList.end())
+          break;
         if (!(j->flags & 0x02))
           continue;
         unsigned int  n = j->model.o.b->modelID;
@@ -2523,24 +2554,15 @@ bool Renderer::renderObjects(int t)
         while (!(q.freeObjects || q.doneFlag))
           q.cv2.wait_for(tmpLock, std::chrono::milliseconds(20));
         if (q.doneFlag)
-        {
-          doneFlag = true;
           break;
-        }
         RenderObjectQueueObj  *tmp = q.freeObjects.front;
         q.freeObjects.pop(tmp);
         q.loadingModelsFlag = true;
         tmp->o = &(*j);
         tmp->threadNum = 256L;
         tmp->m = TileMask();
-        q.queuedObjects.push_back(tmp);
+        notifyFlag = q.queueObject(tmp);
       }
-      if (!doneFlag)
-      {
-        std::lock_guard< std::mutex > tmpLock(q.m);
-        (void) q.findObjects();
-      }
-      q.cv1.notify_all();
       continue;
     }
     objectListPos++;
