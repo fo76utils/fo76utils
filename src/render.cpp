@@ -1827,13 +1827,13 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
       }
       else
       {
-        if (p.model.o.b->mswpFormID)
-          materialSwaps.materialSwap(*(t.renderer), p.model.o.b->mswpFormID);
         if (p.flags & 0xFF80U)
         {
           t.renderer->m.s.gradientMapV =
               float(int(p.flags & 0xFF80U) - 128) * (1.0f / 65280.0f);
         }
+        if (p.model.o.b->mswpFormID)
+          materialSwaps.materialSwap(*(t.renderer), p.model.o.b->mswpFormID);
         if (p.model.o.mswpFormID)
           materialSwaps.materialSwap(*(t.renderer), p.model.o.mswpFormID);
         if (p.model.o.mswpFormID2)
@@ -2595,20 +2595,20 @@ bool Renderer::renderObjects(int t)
     else
     {
       b.boundsMin = FloatVector4(float(o.model.t.x0), float(o.model.t.y0),
-                                 float(o.model.t.z0), 0.0f);
+                                 float(int(o.model.t.z0) + 32768), 0.0f);
       b.boundsMax = FloatVector4(float(o.model.t.x1), float(o.model.t.y1),
-                                 float(o.model.t.z1), 0.0f);
+                                 float(int(o.model.t.z1) + 32768), 0.0f);
       if (landData && !(o.flags & 4))
       {
-        float   xOffset = -(float(landData->getOriginX()));
-        float   yOffset = -(float(landData->getOriginY()));
-        float   zOffset = landData->getZMin() + 32768.0f;
         float   xyScale = 4096.0f / float(landData->getCellResolution());
         float   zScale = (landData->getZMax() - landData->getZMin()) / 65535.0f;
-        b.boundsMin += FloatVector4(xOffset, yOffset, zOffset, 0.0f);
-        b.boundsMax += FloatVector4(xOffset, yOffset, zOffset, 0.0f);
+        float   xOffset = -xyScale * float(landData->getOriginX());
+        float   yOffset = xyScale * float(landData->getOriginY());
+        float   zOffset = landData->getZMin();
         b.boundsMin *= FloatVector4(xyScale, -xyScale, zScale, 0.0f);
         b.boundsMax *= FloatVector4(xyScale, -xyScale, zScale, 0.0f);
+        b.boundsMin += FloatVector4(xOffset, yOffset, zOffset, 0.0f);
+        b.boundsMax += FloatVector4(xOffset, yOffset, zOffset, 0.0f);
       }
     }
     NIFFile::NIFVertexTransform vt(o.modelTransform);
