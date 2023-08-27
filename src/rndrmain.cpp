@@ -22,7 +22,7 @@ static const char *usageStrings[] =
   "    -mc INT             number of models to load at once (1 to 64)",
   "    -ssaa INT           render at 2^N resolution and downsample",
   "    -f INT              output format, 0: RGB24, 1: A8R8G8B8, 2: RGB10A2",
-  "    -rq INT             set render quality (0 - 1023, see doc/render.md)",
+  "    -rq INT             set render quality (0 - 2047, see doc/render.md)",
   "    -watermask BOOL     make non-water surfaces transparent or black",
   "    -q                  do not print messages other than errors",
   "",
@@ -143,10 +143,7 @@ int main(int argc, char **argv)
       {
         std::printf("-threads %u", (unsigned int) threadCnt);
         if (!threadCnt)
-        {
-          std::printf(" (defaults to hardware threads: %d)",
-                      int(std::thread::hardware_concurrency()));
-        }
+          std::printf(" (uses default: %d)", Renderer::getDefaultThreadCount());
         std::printf("\n-debug %d\n", int(debugMode));
         std::printf("-scol %d\n", int(enableSCOL));
         std::printf("-textures %d\n", int(enableTextures));
@@ -286,7 +283,7 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         renderQuality =
             (unsigned short) parseInteger(argv[i], 0,
-                                          "invalid render quality", 0, 1023);
+                                          "invalid render quality", 0, 2047);
       }
       else if (std::strcmp(argv[i], "-watermask") == 0)
       {

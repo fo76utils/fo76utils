@@ -67,7 +67,7 @@ static const char *usageStrings[] =
   "    -textures BOOL      make all diffuse textures white if false",
   "    -tc | -txtcache INT texture cache size in megabytes",
   "    -mc INT             number of models to load at once (1 to 64)",
-  "    -rq INT             set render quality (0 - 1023, see doc/render.md)",
+  "    -rq INT             set render quality (0 - 2047, see doc/render.md)",
   "    -ft INT             minimum frame time in milliseconds",
   "    -markers FILENAME   read marker definitions from the specified file",
   "",
@@ -569,8 +569,8 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         display.consolePrint("threads: %u", (unsigned int) threadCnt);
         if (!threadCnt)
         {
-          display.consolePrint(" (defaults to hardware threads: %d)",
-                               int(std::thread::hardware_concurrency()));
+          display.consolePrint(" (uses default: %d)",
+                               Renderer::getDefaultThreadCount());
         }
         display.consolePrint("\ndebug: %d\n", int(debugMode));
         display.consolePrint("textures: %d\n", int(enableTextures));
@@ -713,7 +713,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           std::uint16_t tmp = renderQuality;
           renderQuality =
               std::uint16_t(parseInteger(argv[i + 1], 0,
-                                         "invalid render quality", 0, 1023));
+                                         "invalid render quality", 0, 2047));
           if ((tmp ^ renderQuality) & 0x73)
             renderer->clearObjectPropertyCache();
         }
