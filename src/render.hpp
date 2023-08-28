@@ -34,7 +34,9 @@ class Renderer : protected Renderer_Base
   {
     unsigned int  formID;
     std::int32_t  prv;                  // previous object with the same hash
-    unsigned int  flags;                // same as RenderObject flags
+    std::uint16_t flags;                // same as RenderObject flags
+    std::uint16_t gradientMapV;         // if not 0, grayscale to palette map
+                                        // scale * 65534 + 1
     unsigned int  modelID;              // b0 to b7: nifFiles index
     unsigned int  mswpFormID;           // color + flags (in alpha) for decals
     signed short  obndX0;
@@ -53,13 +55,16 @@ class Renderer : protected Renderer_Base
     // 0x20: is marker
     // 0x40: high quality model
     // 0x80: decal reference uses XPRM (disables XPDD and finding impact point)
-    // bits 7 to 15: if not 0, grayscale to palette map scale (MODC) * 510 + 1
-    // bits 29 to 31: sort group (higher = rendered later)
+    // bits 13 to 15: sort group (higher = rendered later)
     //           0 = cell (terrain or water), no valid model ID
     //           1 = object
     //           2 = decal (TXST)
     //           3 = object (e.g. actor) that decals cannot be projected onto
-    unsigned int  flags;
+    std::uint16_t flags;
+    // for cells and decals:
+    //     screen area used (x0 | (y0 << 4) | (x1 << 8) | (y1 << 12))
+    // for objects: if not 0, grayscale to palette map scale * 65534 + 1
+    std::uint16_t flags2;
     int     z;                  // Z coordinate for sorting
     union
     {
@@ -84,15 +89,15 @@ class Renderer : protected Renderer_Base
       struct                    // cell data (terrain or water)
       {
         // For terrain, the X and Y bounds are heightmap image coordinates,
-        // and the Z bounds are raw 16-bit height values - 32768.
+        // and the Z bounds are raw 16-bit height values.
         // For water cells, the bounds are always x0 = y0 = z0 = z1 = 0
         // and x1 = y1 = 4096.
         signed short  x0;
         signed short  y0;
         signed short  x1;
         signed short  y1;
-        signed short  z0;
-        signed short  z1;
+        unsigned short  z0;
+        unsigned short  z1;
         unsigned int  waterFormID;      // WATR object
       }
       t;
@@ -107,7 +112,7 @@ class Renderer : protected Renderer_Base
     BaseObject  *o;
     inline bool operator<(const ModelPathSortObject& r) const
     {
-      if ((o->flags ^ r.o->flags) & 0xE0000000U)
+      if ((o->flags ^ r.o->flags) & 0xE000U)
         return (o->flags < r.o->flags);
       if (o->modelPath && r.o->modelPath)
         return (*(o->modelPath) < *(r.o->modelPath));
@@ -132,8 +137,11 @@ class Renderer : protected Renderer_Base
 #else
     std::uint64_t m[4];
 #endif
-    inline TileMask(bool isFull = false);
-    TileMask(const NIFFile::NIFBounds& screenBounds, int w, int h);
+    inline TileMask();
+    inline TileMask(unsigned int x0, unsigned int y0,
+                    unsigned int x1, unsigned int y1);
+    TileMask(const NIFFile::NIFBounds& b, const NIFFile::NIFVertexTransform& vt,
+             int w, int h);
     inline bool overlapsWith(const TileMask& r) const;
     inline TileMask& operator|=(const TileMask& r);
     inline operator bool() const;

@@ -9,7 +9,7 @@
 
 bool Renderer::RenderObject::operator<(const RenderObject& r) const
 {
-  if ((flags ^ r.flags) & 0xE0000000U)
+  if ((flags ^ r.flags) & 0xE000U)
     return (flags < r.flags);
   if (flags & 0x12)
   {
@@ -48,57 +48,39 @@ void Renderer::ModelData::clear()
   usesAlphaBlending = false;
 }
 
-inline Renderer::TileMask::TileMask(bool isFull)
+inline Renderer::TileMask::TileMask()
 {
 #if ENABLE_X86_64_AVX
-  if (!isFull)
-  {
-    const YMM_UInt64  tmp = { 0U, 0U, 0U, 0U };
-    m = tmp;
-  }
-  else
-  {
-    const YMM_UInt64  tmp =
-    {
-      std::uint64_t(-1), std::uint64_t(-1), std::uint64_t(-1), std::uint64_t(-1)
-    };
-    m = tmp;
-  }
+  const YMM_UInt64  tmp = { 0U, 0U, 0U, 0U };
+  m = tmp;
 #else
-  m[0] = std::uint64_t(0) - std::uint64_t(isFull);
-  m[1] = m[0];
-  m[2] = m[0];
-  m[3] = m[0];
+  m[0] = 0U;
+  m[1] = 0U;
+  m[2] = 0U;
+  m[3] = 0U;
 #endif
 }
 
-Renderer::TileMask::TileMask(
-    const NIFFile::NIFBounds& screenBounds, int w, int h)
+inline Renderer::TileMask::TileMask(unsigned int x0, unsigned int y0,
+                                    unsigned int x1, unsigned int y1)
 {
-  if (screenBounds.boundsMin[0] > float(w) ||
-      screenBounds.boundsMin[1] > float(h) ||
-      screenBounds.boundsMin[2] > 16777216.0f ||
-      screenBounds.boundsMax[0] < -1.0f || screenBounds.boundsMax[1] < -1.0f ||
-      screenBounds.boundsMax[2] < 0.0f || w < 1 || h < 1)
+  unsigned int  xMask = (2U << x1) - (1U << x0);
+  unsigned int  yMask = (2U << y1) - (1U << y0);
+#if ENABLE_X86_64_AVX2
+  const YMM_UInt16  maskTbl =
   {
-    *this = TileMask();
-    return;
-  }
-  unsigned int  x0, y0, x1, y1;
-  x0 = (unsigned int) roundFloat(std::max(screenBounds.boundsMin[0] - 1.0f,
-                                          0.0f));
-  y0 = (unsigned int) roundFloat(std::max(screenBounds.boundsMin[1] - 1.0f,
-                                          0.0f));
-  x1 = (unsigned int) roundFloat(std::min(screenBounds.boundsMax[0] + 1.0f,
-                                          float(w - 1)));
-  y1 = (unsigned int) roundFloat(std::min(screenBounds.boundsMax[1] + 1.0f,
-                                          float(h - 1)));
-  x0 = (x0 << 4) / (unsigned int) w;
-  y0 = (y0 << 4) / (unsigned int) h;
-  x1 = ((x1 << 4) / (unsigned int) w) + 1U;
-  y1 = ((y1 << 4) / (unsigned int) h) + 1U;
-  unsigned int  xMask = (1U << x1) - (1U << x0);
-  unsigned int  yMask = (1U << y1) - (1U << y0);
+    0x0001, 0x0002, 0x0004, 0x0008, 0x0010, 0x0020, 0x0040, 0x0080,
+    0x0100, 0x0200, 0x0400, 0x0800, 0x1000, 0x2000, 0x4000, 0x8000
+  };
+  YMM_UInt64  tmp1, tmp2;
+  XMM_UInt32  tmp3 = { xMask, 0U, 0U, 0U };
+  XMM_UInt32  tmp4 = { yMask, 0U, 0U, 0U };
+  __asm__ ("vpbroadcastw %1, %t0" : "=x" (tmp1) : "x" (tmp3));
+  __asm__ ("vpbroadcastw %1, %t0" : "=x" (tmp2) : "x" (tmp4));
+  __asm__ ("vpand %t1, %t0, %t0" : "+x" (tmp2) : "x" (maskTbl));
+  __asm__ ("vpcmpeqw %t1, %t0, %t0" : "+x" (tmp2) : "x" (maskTbl));
+  __asm__ ("vpblendvb %t1, %t2, %t1, %t0" : "=x" (m) : "x" (tmp2), "x" (tmp1));
+#else
   std::uint64_t yMask0 = std::uint64_t(yMask & 0x0001U)
                          | (std::uint64_t(yMask & 0x0002U) << 15)
                          | (std::uint64_t(yMask & 0x0004U) << 30)
@@ -119,6 +101,49 @@ Renderer::TileMask::TileMask(
   m[1] = yMask1 * xMask;
   m[2] = yMask2 * xMask;
   m[3] = yMask3 * xMask;
+#endif
+}
+
+Renderer::TileMask::TileMask(
+    const NIFFile::NIFBounds& b, const NIFFile::NIFVertexTransform& vt,
+    int w, int h)
+{
+  FloatVector4  rX(vt.rotateXX, vt.rotateYX, vt.rotateZX, vt.rotateXY);
+  FloatVector4  rY(vt.rotateXY, vt.rotateYY, vt.rotateZY, vt.rotateXZ);
+  FloatVector4  rZ(vt.rotateXZ, vt.rotateYZ, vt.rotateZZ, vt.scale);
+  rX *= vt.scale;
+  rY *= vt.scale;
+  rZ *= vt.scale;
+  NIFFile::NIFBounds  screenBounds;
+  for (int i = 0; i < 8; i++)
+  {
+    screenBounds += ((rX * (!(i & 1) ? b.xMin() : b.xMax()))
+                     + (rY * (!(i & 2) ? b.yMin() : b.yMax()))
+                     + (rZ * (!(i & 4) ? b.zMin() : b.zMax())));
+  }
+  FloatVector4  vtOffs(vt.offsX, vt.offsY, vt.offsZ, vt.rotateXX);
+  screenBounds.boundsMin += vtOffs;
+  screenBounds.boundsMax += vtOffs;
+  if (screenBounds.boundsMin[0] > float(w) ||
+      screenBounds.boundsMin[1] > float(h) ||
+      screenBounds.boundsMin[2] > 16777216.0f ||
+      screenBounds.boundsMax[0] < -1.0f || screenBounds.boundsMax[1] < -1.0f ||
+      screenBounds.boundsMax[2] < 0.0f || w < 1 || h < 1)
+  {
+    *this = TileMask();
+    return;
+  }
+  FloatVector4  tmp(screenBounds.xMin(), screenBounds.yMin(),
+                    screenBounds.xMax(), screenBounds.yMax());
+  tmp += FloatVector4(-1.25f, -1.25f, 1.25f, 1.25f);
+  tmp /= FloatVector4(float(w), float(h), float(w), float(h));
+  tmp *= 16.0f;
+  tmp.maxValues(FloatVector4(0.0f));
+  tmp.minValues(FloatVector4(15.5f));
+  (void) new(this) TileMask((unsigned int) int(tmp[0]),
+                            (unsigned int) int(tmp[1]),
+                            (unsigned int) int(tmp[2]),
+                            (unsigned int) int(tmp[3]));
 }
 
 inline bool Renderer::TileMask::overlapsWith(const TileMask& r) const
@@ -489,8 +514,8 @@ bool Renderer::setScreenAreaUsed(RenderObject& p)
         z1 = (z > z1 ? z : z1);
       }
     }
-    p.model.t.z0 = (signed short) (int(z0) - 32768);
-    p.model.t.z1 = (signed short) (int(z1) - 32768);
+    p.model.t.z0 = z0;
+    p.model.t.z1 = z1;
     modelBounds.boundsMin[2] = float(int(z0)) * zScale + zOffset;
     modelBounds.boundsMax[2] = float(int(z1)) * zScale + zOffset;
     vt = viewTransform;
@@ -542,6 +567,19 @@ bool Renderer::setScreenAreaUsed(RenderObject& p)
       return false;
   }
   p.z = roundFloat(screenBounds.zMin() * 64.0f);
+  if (BRANCH_UNLIKELY(!(p.flags & 0x02)))
+  {
+    FloatVector4  tmp(screenBounds.xMin(), screenBounds.yMin(),
+                      screenBounds.xMax(), screenBounds.yMax());
+    tmp += FloatVector4(1.25f, 1.25f, -0.75f, -0.75f);
+    tmp /= FloatVector4(float(width), float(height),
+                        float(width), float(height));
+    tmp *= 16.0f;
+    tmp.maxValues(FloatVector4(0.0f));
+    tmp.minValues(FloatVector4(15.5f));
+    p.flags2 = std::uint16_t(int(tmp[0]) | (int(tmp[1]) << 4)
+                             | (int(tmp[2]) << 8) | (int(tmp[3]) << 12));
+  }
   return true;
 }
 
@@ -576,6 +614,7 @@ void Renderer::addTerrainCell(const ESMFile::ESMRecord& r)
     return;
   RenderObject  tmp;
   tmp.flags = 0x0001;                   // terrain
+  tmp.flags2 = 0;
   tmp.z = 0;
   tmp.model.t.z0 = 0;           // will be calculated by setScreenAreaUsed()
   tmp.model.t.z1 = 0;
@@ -660,6 +699,7 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   }
   RenderObject  tmp;
   tmp.flags = 0x000C;                   // water cell, alpha blending
+  tmp.flags2 = 0;
   tmp.z = 0;
   tmp.model.t.x0 = 0;
   tmp.model.t.y0 = 0;
@@ -889,7 +929,8 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
     }
     materials.insert(std::pair< unsigned int, BGSMFile >(formID, m));
   }
-  p.flags = 0x40000010U;                // is decal, sort group = 2
+  p.flags = 0x4010;                     // is decal, sort group = 2
+  p.gradientMapV = 0;
   p.modelID = 0U;
   p.mswpFormID = (decalColor & 0x00FFFFFFU) | ((decalFlags & 0xFF00U) << 16);
   p.modelPath = (std::string *) 0;
@@ -922,7 +963,8 @@ const Renderer::BaseObject * Renderer::readModelProperties(
   {
     BaseObject  tmp;
     tmp.formID = r.formID;
-    tmp.flags = (r.flags >> 18) & 0x20U;        // is marker
+    tmp.flags = std::uint16_t((r.flags >> 18) & 0x20);  // is marker
+    tmp.gradientMapV = 0;
     tmp.modelID = 0xFFFFFFFFU;
     tmp.mswpFormID = 0U;
     tmp.obndX0 = 0;
@@ -1016,8 +1058,8 @@ const Renderer::BaseObject * Renderer::readModelProperties(
         else if (f == "MODC" && f.size() >= 4)
         {
           float   n = f.readFloat();
-          n = std::min(std::max(n, 0.0f), 1.0f) * 65280.0f + 192.0f;
-          tmp.flags = (tmp.flags & ~0xFF80U) | (unsigned int) (int(n) & 0xFF80);
+          n = std::min(std::max(n, 0.0f), 1.0f) * 65534.0f + 1.0f;
+          tmp.gradientMapV = std::uint16_t(roundFloat(n));
         }
         else if (f == "WNAM" && r == "ACTI" && f.size() >= 4)
         {
@@ -1047,9 +1089,9 @@ const Renderer::BaseObject * Renderer::readModelProperties(
       {
         continue;
       }
-      tmp.flags = tmp.flags | 0x20000002U
-                  | (!isWater ? 0U : 0x04U) | (!isHDModel ? 0U : 0x40U)
-                  | (!(r == "NPC_" || r == "CONT") ? 0U : 0x40000000U);
+      tmp.flags = tmp.flags | 0x2002
+                  | (!isWater ? 0 : 0x0004) | (!isHDModel ? 0 : 0x0040)
+                  | (!(r == "NPC_" || r == "CONT") ? 0 : 0x4000);
       const BA2File::FileDeclaration  *fd = ba2File.findFile(stringBuf);
       if (!fd)
         tmp.flags = 0;
@@ -1079,6 +1121,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
   if (!(o->flags & 0x17))
     return (BaseObject *) 0;
   p.flags = o->flags;
+  p.flags2 = o->gradientMapV;
   p.model.o.b = o;
   return o;
 }
@@ -1122,7 +1165,7 @@ void Renderer::addSCOLObjects(
     else if (f == "DATA" && o)
     {
       if (modc_SCOL)
-        tmp.flags = (tmp.flags & ~0x0000FF80U) | modc_SCOL;
+        tmp.flags2 = std::uint16_t(modc_SCOL);
       while ((f.getPosition() + 28) <= f.size())
       {
         FloatVector4  d1(f.readFloatVector4()); // X, Y, Z, RX
@@ -1161,8 +1204,8 @@ void Renderer::addSCOLObjects(
     else if (f == "MODC" && f.size() >= 4)
     {
       float   n = f.readFloat();
-      n = std::min(std::max(n, 0.0f), 1.0f) * 65280.0f + 192.0f;
-      modc_SCOL = (unsigned int) (int(n) & 0xFF80);
+      n = std::min(std::max(n, 0.0f), 1.0f) * 65534.0f + 1.0f;
+      modc_SCOL = (unsigned int) roundFloat(n);
     }
   }
 }
@@ -1206,6 +1249,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
       continue;                         // ignore deleted and disabled records
     RenderObject  tmp;
     tmp.flags = 0;
+    tmp.flags2 = 0;
     tmp.z = 0;
     tmp.model.o.mswpFormID = 0U;
     tmp.model.o.mswpFormID2 = 0U;
@@ -1425,7 +1469,7 @@ void Renderer::sortObjectList()
            i = modelPathsUsed.begin(); i != modelPathsUsed.end(); i++, n++)
   {
     if (BRANCH_UNLIKELY((n & 0xFFU) >= modelBatchCnt) ||
-        BRANCH_UNLIKELY((i->first.o->flags ^ prvFlags) & 0xE0000000U))
+        BRANCH_UNLIKELY((i->first.o->flags ^ prvFlags) & 0xE000U))
     {
       n = (n + 0xFFU) & ~0xFFU;
       prvFlags = i->first.o->flags;
@@ -1670,10 +1714,10 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   t.renderer->m = i->second;
   const DDSTexture  *textures[10];
   unsigned int  textureMask = 0U;
-  if (p.model.d.b->flags & 0xFF80U)
+  if (p.model.d.b->gradientMapV)
   {
     t.renderer->m.s.gradientMapV =
-        float(int(p.model.d.b->flags & 0xFF80U) - 128) * (1.0f / 65280.0f);
+        float(int(p.model.d.b->gradientMapV) - 1) * (1.0f / 65534.0f);
   }
   unsigned int  texturePathMask = t.renderer->m.texturePathMask;
   texturePathMask &= ((((unsigned int) t.renderer->m.flags & 0x80U) >> 5)
@@ -1827,10 +1871,10 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
       }
       else
       {
-        if (p.flags & 0xFF80U)
+        if (p.flags2)
         {
           t.renderer->m.s.gradientMapV =
-              float(int(p.flags & 0xFF80U) - 128) * (1.0f / 65280.0f);
+              float(int(p.flags2) - 1) * (1.0f / 65534.0f);
         }
         if (p.model.o.b->mswpFormID)
           materialSwaps.materialSwap(*(t.renderer), p.model.o.b->mswpFormID);
@@ -2567,69 +2611,24 @@ bool Renderer::renderObjects(int t)
     }
     objectListPos++;
     // calculate object bounds on screen
-    NIFFile::NIFBounds  b;
-    if (o.flags & 0x02)
+    TileMask  tileMask;
+    if (BRANCH_LIKELY(o.flags & 0x02))
     {
       if (nifFiles[modelID & 0xFFU].usesAlphaBlending)
-        o.flags = o.flags | 0x08U;
-      b = nifFiles[modelID & 0xFFU].objectBounds;
+        o.flags = o.flags | 0x08;
+      NIFFile::NIFBounds  b(nifFiles[modelID & 0xFFU].objectBounds);
       if (BRANCH_UNLIKELY(!b))
         continue;
-    }
-    else if (o.flags & 0x10)
-    {
-      b.boundsMin =
-          FloatVector4(float(o.model.d.b->obndX0) * o.model.d.scaleX,
-                       float(o.model.d.b->obndY0),
-                       float(o.model.d.b->obndZ0) * o.model.d.scaleZ, 0.0f);
-      b.boundsMax =
-          FloatVector4(float(o.model.d.b->obndX1) * o.model.d.scaleX,
-                       float(o.model.d.b->obndY1),
-                       float(o.model.d.b->obndZ1) * o.model.d.scaleZ, 0.0f);
-      if (!(o.flags & 0x80))
-      {
-        b.boundsMin[1] += getDecalYOffsetMin(b.boundsMin);
-        b.boundsMax[1] += getDecalYOffsetMax(b.boundsMax);
-      }
+      NIFFile::NIFVertexTransform vt(o.modelTransform);
+      vt *= viewTransform;
+      (void) new(&tileMask) TileMask(b, vt, width, height);
     }
     else
     {
-      b.boundsMin = FloatVector4(float(o.model.t.x0), float(o.model.t.y0),
-                                 float(int(o.model.t.z0) + 32768), 0.0f);
-      b.boundsMax = FloatVector4(float(o.model.t.x1), float(o.model.t.y1),
-                                 float(int(o.model.t.z1) + 32768), 0.0f);
-      if (landData && !(o.flags & 4))
-      {
-        float   xyScale = 4096.0f / float(landData->getCellResolution());
-        float   zScale = (landData->getZMax() - landData->getZMin()) / 65535.0f;
-        float   xOffset = -xyScale * float(landData->getOriginX());
-        float   yOffset = xyScale * float(landData->getOriginY());
-        float   zOffset = landData->getZMin();
-        b.boundsMin *= FloatVector4(xyScale, -xyScale, zScale, 0.0f);
-        b.boundsMax *= FloatVector4(xyScale, -xyScale, zScale, 0.0f);
-        b.boundsMin += FloatVector4(xOffset, yOffset, zOffset, 0.0f);
-        b.boundsMax += FloatVector4(xOffset, yOffset, zOffset, 0.0f);
-      }
+      (void) new(&tileMask) TileMask(o.flags2 & 15U, (o.flags2 >> 4) & 15U,
+                                     (o.flags2 >> 8) & 15U,
+                                     (o.flags2 >> 12) & 15U);
     }
-    NIFFile::NIFVertexTransform vt(o.modelTransform);
-    vt *= viewTransform;
-    FloatVector4  rX(vt.rotateXX, vt.rotateYX, vt.rotateZX, vt.rotateXY);
-    FloatVector4  rY(vt.rotateXY, vt.rotateYY, vt.rotateZY, vt.rotateXZ);
-    FloatVector4  rZ(vt.rotateXZ, vt.rotateYZ, vt.rotateZZ, vt.scale);
-    rX *= vt.scale;
-    rY *= vt.scale;
-    rZ *= vt.scale;
-    NIFFile::NIFBounds  screenBounds;
-    for (int j = 0; j < 8; j++)
-    {
-      screenBounds += ((rX * (!(j & 1) ? b.xMin() : b.xMax()))
-                       + (rY * (!(j & 2) ? b.yMin() : b.yMax()))
-                       + (rZ * (!(j & 4) ? b.zMin() : b.zMax())));
-    }
-    FloatVector4  vtOffs(vt.offsX, vt.offsY, vt.offsZ, vt.rotateXX);
-    screenBounds.boundsMin += vtOffs;
-    screenBounds.boundsMax += vtOffs;
-    TileMask  tileMask(screenBounds, width, height);
     if (!tileMask)
       continue;
     // add next object to queue
