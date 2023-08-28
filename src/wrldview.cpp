@@ -82,6 +82,7 @@ static const char *usageStrings[] =
   "    -lmult FLOAT        land texture RGB level scale",
   "",
   "    -cam SCALE DIR X Y Z",
+  "    -cam SCALE -1 RX RY RZ X Y Z",
   "                        set view scale from world to image coordinates,",
   "                        view direction (0 to 19, see src/viewrtbl.cpp),",
   "                        and camera position",
@@ -1601,6 +1602,8 @@ int main(int argc, char **argv)
       if (std::strcmp(s, cmdOptsTable[n0] + 1) != 0)
         throw FO76UtilsError("invalid option: %s", argv[i]);
       int     n = int(cmdOptsTable[n0][0] - '0');
+      if (n0 == 1 && (i + 2) < argc && argv[i + 2][0] == '-')
+        n = n + 3;                      // "cam" with custom view rotations
       if ((i + n) >= argc)
         throw FO76UtilsError("missing argument for %s", argv[i]);
       args2.push_back(s);
