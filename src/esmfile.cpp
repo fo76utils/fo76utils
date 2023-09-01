@@ -6,7 +6,7 @@
 const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
 {
   if (r.formID == zlibBufRecord)
-    return zlibBuf[zlibBufIndex].data();
+    return zlibBuf.back().data();
   unsigned int  compressedSize;
   {
     FileBuffer  buf(r.fileData + 4, 4);
@@ -20,8 +20,8 @@ const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
   buf.setPosition(offs);
   unsigned int  uncompressedSize = buf.readUInt32();
   zlibBufRecord = 0xFFFFFFFFU;
-  zlibBuf[zlibBufIndex].resize(size_t(offs) + uncompressedSize);
-  unsigned char *p = zlibBuf[zlibBufIndex].data();
+  zlibBuf.back().resize(size_t(offs) + uncompressedSize);
+  unsigned char *p = zlibBuf.back().data();
   std::memcpy(p, buf.data(), offs);
   p[4] = (unsigned char) (uncompressedSize & 0xFF);
   p[5] = (unsigned char) ((uncompressedSize >> 8) & 0xFF);
@@ -34,9 +34,9 @@ const unsigned char * ESMFile::uncompressRecord(ESMRecord& r)
                          buf.data() + (offs + 4), compressedSize);
   if (recordSize != uncompressedSize)
     errorMessage("invalid compressed record size");
-  if ((zlibBufIndex + 1) < zlibBuf.size())
+  if (zlibBuf.size() < zlibBuf.capacity())
   {
-    zlibBufIndex++;
+    zlibBuf.emplace_back();
     r.flags = r.flags & ~0x00040000U;
     r.fileData = p;
   }
@@ -107,7 +107,6 @@ ESMFile::ESMFile(const char *fileNames, bool enableZLibCache)
     recordHdrSize(0),
     esmVersion(0),
     esmFlags(0),
-    zlibBufIndex(0),
     zlibBufRecord(0xFFFFFFFFU)
 {
   try
@@ -148,10 +147,10 @@ ESMFile::ESMFile(const char *fileNames, bool enableZLibCache)
         throw FO76UtilsError("%s: invalid ESM file header", fName);
       (void) esmFiles[i]->readUInt32();
       unsigned int  tmp = esmFiles[i]->readUInt16();
-      if (tmp < 0x0100)
+      if (tmp < 0x1000)
       {
         recordHdrSize = 24;
-        esmVersion = (unsigned char) tmp;
+        esmVersion = (unsigned short) tmp;
       }
       else if (tmp == 0x4548)           // "HE"
       {
@@ -218,7 +217,8 @@ ESMFile::ESMFile(const char *fileNames, bool enableZLibCache)
     {
       if (!enableZLibCache)
         compressedCnt = 1;
-      zlibBuf.resize(compressedCnt);
+      zlibBuf.reserve(compressedCnt);
+      zlibBuf.emplace_back();
     }
 
     unsigned int  n = 0;

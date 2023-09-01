@@ -102,11 +102,12 @@ BA2File::FileDeclaration * BA2File::addPackedFile(const std::string& fileName)
   return &(fdBuf.back());
 }
 
-void BA2File::loadBA2General(FileBuffer& buf, size_t archiveFile)
+void BA2File::loadBA2General(
+    FileBuffer& buf, size_t archiveFile, size_t hdrSize)
 {
   size_t  fileCnt = buf.readUInt32();
   size_t  nameOffs = buf.readUInt64();
-  if (nameOffs > buf.size() || (fileCnt * 36ULL + 24U) > nameOffs)
+  if (nameOffs > buf.size() || (fileCnt * 36ULL + hdrSize) > nameOffs)
     errorMessage("invalid BA2 file header");
   std::vector< FileDeclaration * >  fileDecls(fileCnt, (FileDeclaration *) 0);
   buf.setPosition(nameOffs);
@@ -126,7 +127,7 @@ void BA2File::loadBA2General(FileBuffer& buf, size_t archiveFile)
     if (!fileDecls[i])
       continue;
     FileDeclaration&  fileDecl = *(fileDecls[i]);
-    buf.setPosition(i * 36 + 24);
+    buf.setPosition(i * 36 + hdrSize);
     (void) buf.readUInt32Fast();        // unknown
     (void) buf.readUInt32Fast();        // extension
     (void) buf.readUInt32Fast();        // unknown
@@ -140,11 +141,12 @@ void BA2File::loadBA2General(FileBuffer& buf, size_t archiveFile)
   }
 }
 
-void BA2File::loadBA2Textures(FileBuffer& buf, size_t archiveFile)
+void BA2File::loadBA2Textures(
+    FileBuffer& buf, size_t archiveFile, size_t hdrSize)
 {
   size_t  fileCnt = buf.readUInt32();
   size_t  nameOffs = buf.readUInt64();
-  if (nameOffs > buf.size() || (fileCnt * 48ULL + 24U) > nameOffs)
+  if (nameOffs > buf.size() || (fileCnt * 48ULL + hdrSize) > nameOffs)
     errorMessage("invalid BA2 file header");
   std::vector< FileDeclaration * >  fileDecls(fileCnt, (FileDeclaration *) 0);
   buf.setPosition(nameOffs);
@@ -159,7 +161,7 @@ void BA2File::loadBA2Textures(FileBuffer& buf, size_t archiveFile)
       fileName += fixNameCharacter(buf.readUInt8Fast());
     fileDecls[i] = addPackedFile(fileName);
   }
-  buf.setPosition(24);
+  buf.setPosition(hdrSize);
   for (size_t i = 0; i < fileCnt; i++)
   {
     if ((buf.getPosition() + 24) > buf.size())
@@ -461,7 +463,7 @@ void BA2File::loadArchiveFile(const char *fileName)
     unsigned int  hdr1 = buf.readUInt32();
     unsigned int  hdr2 = buf.readUInt32();
     unsigned int  hdr3 = buf.readUInt32();
-    if (hdr1 == 0x58445442 && hdr2 == 0x00000001)       // "BTDX", version
+    if (hdr1 == 0x58445442 && hdr2 && hdr2 <= 2U)       // "BTDX", version <= 2
     {
       if (hdr3 == 0x4C524E47)                           // "GNRL"
         archiveType = 0;
@@ -473,10 +475,11 @@ void BA2File::loadArchiveFile(const char *fileName)
       if (hdr2 >= 103 && hdr2 <= 105)
         archiveType = int(hdr2);
     }
+    size_t  hdrSize = (hdr2 == 1U ? 24 : 32);
     if (archiveType == 0)
-      loadBA2General(buf, archiveFiles.size());
+      loadBA2General(buf, archiveFiles.size(), hdrSize);
     else if (archiveType == 1)
-      loadBA2Textures(buf, archiveFiles.size());
+      loadBA2Textures(buf, archiveFiles.size(), hdrSize);
     else if (archiveType >= 0)
       loadBSAFile(buf, archiveFiles.size(), archiveType);
     else

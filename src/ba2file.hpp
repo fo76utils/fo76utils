@@ -57,8 +57,8 @@ class BA2File
   }
   static inline std::uint32_t hashFunction(const std::string& s);
   FileDeclaration *addPackedFile(const std::string& fileName);
-  void loadBA2General(FileBuffer& buf, size_t archiveFile);
-  void loadBA2Textures(FileBuffer& buf, size_t archiveFile);
+  void loadBA2General(FileBuffer& buf, size_t archiveFile, size_t hdrSize);
+  void loadBA2Textures(FileBuffer& buf, size_t archiveFile, size_t hdrSize);
   void loadBSAFile(FileBuffer& buf, size_t archiveFile, int archiveType);
   void loadFile(FileBuffer& buf, size_t archiveFile, const char *fileName);
   void loadArchivesFromDir(const char *pathName);

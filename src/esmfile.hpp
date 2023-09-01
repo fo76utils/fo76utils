@@ -55,7 +55,7 @@ class ESMFile
   };
  protected:
   unsigned int  recordCnt;
-  unsigned char recordHdrSize;  // 20 for Oblivion, 24 for Fallout 3 and newer
+  unsigned int  recordHdrSize;  // 20 for Oblivion, 24 for Fallout 3 and newer
   // 0x00: Oblivion
   // 0x02: Fallout 3/New Vegas
   // 0x0F: Fallout 3/New Vegas DLC
@@ -68,9 +68,9 @@ class ESMFile
   // 0xC2: Fallout 76 (Wastelanders)
   // 0xC3: Fallout 76 (Steel Dawn and newer)
   // 0xC5: Fallout 76 (The Pitt and newer?)
-  unsigned char esmVersion;
+  // > 0xFF: Starfield
+  unsigned short  esmVersion;
   unsigned short  esmFlags;     // 0x80: localized strings
-  unsigned int  zlibBufIndex;
   unsigned int  zlibBufRecord;
   std::vector< ESMRecord >    recordBuf;
   std::vector< unsigned int > formIDMap;
