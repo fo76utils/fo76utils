@@ -13,7 +13,7 @@ class BA2File
     const unsigned char *fileData;
     unsigned int  packedSize;           // 0 if the file is uncompressed
     unsigned int  unpackedSize;         // not valid for compressed BSA files
-    // 0: BA2 general, 1: BA2 textures,
+    // 0: BA2 general, 1: BA2 textures, 2: Starfield BA2 textures,
     // >= 103: BSA (version + flags, 0x40000000: compressed, 0x0100: full name)
     int           archiveType;
     unsigned int  archiveFile;

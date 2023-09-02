@@ -197,7 +197,7 @@ void BA2File::loadBA2Textures(
       fileDecl.fileData = fileData;
       fileDecl.packedSize = packedSize;
       fileDecl.unpackedSize = unpackedSize;
-      fileDecl.archiveType = 1;
+      fileDecl.archiveType = (hdrSize == 24 ? 1 : 2);
       fileDecl.archiveFile = (unsigned int) archiveFile;
     }
   }
@@ -463,7 +463,7 @@ void BA2File::loadArchiveFile(const char *fileName)
     unsigned int  hdr1 = buf.readUInt32();
     unsigned int  hdr2 = buf.readUInt32();
     unsigned int  hdr3 = buf.readUInt32();
-    if (hdr1 == 0x58445442 && hdr2 && hdr2 <= 2U)       // "BTDX", version <= 2
+    if (hdr1 == 0x58445442 && hdr2 && hdr2 <= 3U)       // "BTDX", version <= 3
     {
       if (hdr3 == 0x4C524E47)                           // "GNRL"
         archiveType = 0;
@@ -475,11 +475,10 @@ void BA2File::loadArchiveFile(const char *fileName)
       if (hdr2 >= 103 && hdr2 <= 105)
         archiveType = int(hdr2);
     }
-    size_t  hdrSize = (hdr2 == 1U ? 24 : 32);
     if (archiveType == 0)
-      loadBA2General(buf, archiveFiles.size(), hdrSize);
+      loadBA2General(buf, archiveFiles.size(), (hdr2 == 1U ? 24 : 32));
     else if (archiveType == 1)
-      loadBA2Textures(buf, archiveFiles.size(), hdrSize);
+      loadBA2Textures(buf, archiveFiles.size(), (hdr2 == 1U ? 24 : 36));
     else if (archiveType >= 0)
       loadBSAFile(buf, archiveFiles.size(), archiveType);
     else
@@ -779,11 +778,18 @@ void BA2File::extractBlock(
   {
     if (offs >= fileBuf.size() || (offs + packedSize) > fileBuf.size())
       errorMessage("invalid packed data offset or size");
-    if (ZLibDecompressor::decompressData(buf.data() + n, unpackedSize,
-                                         p, packedSize) != unpackedSize)
+    if (BRANCH_UNLIKELY(fileDecl.archiveType == 2))
     {
-      errorMessage("invalid or corrupt ZLib compressed data");
+      n = ZLibDecompressor::decompressLZ4Raw(
+              buf.data() + n, unpackedSize, p, packedSize);
     }
+    else
+    {
+      n = ZLibDecompressor::decompressData(
+              buf.data() + n, unpackedSize, p, packedSize);
+    }
+    if (n != unpackedSize)
+      errorMessage("invalid or corrupt compressed data in archive");
   }
 }
 
@@ -808,7 +814,7 @@ void BA2File::extractFile(std::vector< unsigned char >& buf,
     return;
   buf.reserve(unpackedSize);
 
-  if (archiveType == 1)
+  if (archiveType == 1 || archiveType == 2)
   {
     (void) extractBA2Texture(buf, fileDecl);
     return;
@@ -838,7 +844,7 @@ int BA2File::extractTexture(std::vector< unsigned char >& buf,
     return mipOffset;
   buf.reserve(unpackedSize);
 
-  if (archiveType == 1)
+  if (archiveType == 1 || archiveType == 2)
     return extractBA2Texture(buf, fileDecl, mipOffset);
 
   extractBlock(buf, unpackedSize, fileDecl, p, packedSize);
