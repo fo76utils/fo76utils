@@ -73,6 +73,10 @@ class ZLibDecompressor
   static size_t decompressData(unsigned char *buf, size_t uncompressedSize,
                                const unsigned char *inBuf,
                                size_t compressedSize);
+  // decompress headerless LZ4 block data
+  static size_t decompressLZ4Raw(unsigned char *buf, size_t uncompressedSize,
+                                 const unsigned char *inBuf,
+                                 size_t compressedSize);
 };
 
 #endif

@@ -589,10 +589,9 @@ unsigned int ZLibDecompressor::calculateAdler32(
   return ((s1 % 65521U) | ((s2 % 65521U) << 16));
 }
 
-size_t ZLibDecompressor::decompressData(unsigned char *buf,
-                                        size_t uncompressedSize,
-                                        const unsigned char *inBuf,
-                                        size_t compressedSize)
+size_t ZLibDecompressor::decompressData(
+    unsigned char *buf, size_t uncompressedSize,
+    const unsigned char *inBuf, size_t compressedSize)
 {
   ZLibDecompressor  zlibDecompressor(inBuf, compressedSize);
   // CMF, FLG
@@ -602,5 +601,70 @@ size_t ZLibDecompressor::decompressData(unsigned char *buf,
   if ((h & 0x8F20) != 0x0800 || (h % 31) != 0)
     errorMessage("invalid or unsupported ZLib compression method");
   return zlibDecompressor.decompressZLib(buf, uncompressedSize);
+}
+
+size_t ZLibDecompressor::decompressLZ4Raw(
+    unsigned char *buf, size_t uncompressedSize,
+    const unsigned char *inBuf, size_t compressedSize)
+{
+  unsigned char *wp = buf;
+  size_t  bytesLeft = uncompressedSize;
+  const unsigned char *inBufEnd = inBuf + compressedSize;
+  while (inBuf < inBufEnd)
+  {
+    unsigned char t = *(inBuf++);       // token
+    size_t  litLen = t >> 4;
+    if (litLen == 15)
+    {
+      unsigned char c;
+      do
+      {
+        if (inBuf >= inBufEnd)
+          errorMessage("invalid or corrupt LZ4 compressed data");
+        c = *(inBuf++);
+        litLen = litLen + c;
+      }
+      while (c == 0xFF);
+    }
+    if ((inBuf + litLen) > inBufEnd)
+      errorMessage("invalid or corrupt LZ4 compressed data");
+    if (litLen > bytesLeft)
+      errorMessage("uncompressed LZ4 data larger than output buffer");
+    bytesLeft = bytesLeft - litLen;
+    for ( ; litLen; wp++, litLen--)
+      *wp = *(inBuf++);
+    size_t  lzLen = t & 0x0F;
+    if (inBuf >= inBufEnd && !lzLen)
+      break;
+    if ((inBuf + 2) > inBufEnd)
+      errorMessage("invalid or corrupt LZ4 compressed data");
+    size_t  offs = size_t(inBuf[0]) | (size_t(inBuf[1]) << 8);
+    inBuf = inBuf + 2;
+    if (offs < 1 || offs > size_t(wp - buf))
+      errorMessage("invalid or corrupt LZ4 compressed data");
+    if (lzLen == 15)
+    {
+      unsigned char c;
+      do
+      {
+        if (inBuf >= inBufEnd)
+          errorMessage("invalid or corrupt LZ4 compressed data");
+        c = *(inBuf++);
+        lzLen = lzLen + c;
+      }
+      while (c == 0xFF);
+    }
+    lzLen = lzLen + 4;
+    if (lzLen > bytesLeft)
+      errorMessage("uncompressed LZ4 data larger than output buffer");
+    bytesLeft = bytesLeft - lzLen;
+    const unsigned char *rp = wp - offs;
+    for ( ; lzLen; rp++, wp++, lzLen--)
+      *wp = *rp;
+  }
+  if (bytesLeft)
+    uncompressedSize = uncompressedSize - bytesLeft;
+
+  return uncompressedSize;
 }
 
