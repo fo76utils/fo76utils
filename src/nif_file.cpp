@@ -735,7 +735,25 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
   if (bsVersion >= 0x84)
     (void) readUInt32();
   readString(headerStrings[1], 1);              // process script name
-  readString(headerStrings[2], 1);              // export script name
+  if (BRANCH_UNLIKELY(bsVersion == 0xAC))
+  {
+    headerStrings[2] = "0x0000000000000000";
+    size_t  n = readUInt8();
+    for (size_t i = 0; i < n; i++)
+    {
+      unsigned char c1 = readUInt8();
+      if (i >= 8)
+        continue;
+      unsigned char c2 = c1 >> 4;
+      c1 = c1 & 0x0F;
+      headerStrings[2][17 - (i << 1)] = char(c1 + (c1 < 10 ? 0x30 : 0x37));
+      headerStrings[2][16 - (i << 1)] = char(c2 + (c2 < 10 ? 0x30 : 0x37));
+    }
+  }
+  else
+  {
+    readString(headerStrings[2], 1);            // export script name
+  }
 
   std::vector< unsigned char >  blockTypes;
   if (bsVersion >= 0x80 && bsVersion < 0x84)
