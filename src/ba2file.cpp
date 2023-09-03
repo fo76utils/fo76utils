@@ -197,7 +197,7 @@ void BA2File::loadBA2Textures(
       fileDecl.fileData = fileData;
       fileDecl.packedSize = packedSize;
       fileDecl.unpackedSize = unpackedSize;
-      fileDecl.archiveType = (hdrSize == 24 ? 1 : 2);
+      fileDecl.archiveType = (hdrSize != 36 ? 1 : 2);
       fileDecl.archiveFile = (unsigned int) archiveFile;
     }
   }
@@ -468,21 +468,34 @@ void BA2File::loadArchiveFile(const char *fileName)
       if (hdr3 == 0x4C524E47)                           // "GNRL"
         archiveType = 0;
       else if (hdr3 == 0x30315844)                      // "DX10"
-        archiveType = 1;
+        archiveType = int(hdr2);
     }
     else if (hdr1 == 0x00415342 && hdr3 == 0x00000024)  // "BSA\0", header size
     {
       if (hdr2 >= 103 && hdr2 <= 105)
         archiveType = int(hdr2);
     }
-    if (archiveType == 0)
-      loadBA2General(buf, archiveFiles.size(), (hdr2 == 1U ? 24 : 32));
-    else if (archiveType == 1)
-      loadBA2Textures(buf, archiveFiles.size(), (hdr2 == 1U ? 24 : 36));
-    else if (archiveType >= 0)
-      loadBSAFile(buf, archiveFiles.size(), archiveType);
-    else
-      loadFile(buf, archiveFiles.size(), fileName);
+    switch (archiveType)
+    {
+      case 0:
+        loadBA2General(buf, archiveFiles.size(), (hdr2 == 1U ? 24 : 32));
+        break;
+      case 1:
+        loadBA2Textures(buf, archiveFiles.size(), 24);
+        break;
+      case 2:
+        loadBA2Textures(buf, archiveFiles.size(), 32);
+        break;
+      case 3:
+        loadBA2Textures(buf, archiveFiles.size(), 36);
+        break;
+      default:
+        if (archiveType >= 0)
+          loadBSAFile(buf, archiveFiles.size(), archiveType);
+        else
+          loadFile(buf, archiveFiles.size(), fileName);
+        break;
+    }
     archiveFiles.push_back(bufp);
   }
   catch (...)
@@ -686,6 +699,7 @@ int BA2File::extractBA2Texture(std::vector< unsigned char >& buf,
     case 0x1B:                  // DXGI_FORMAT_R8G8B8A8_TYPELESS
     case 0x1C:                  // DXGI_FORMAT_R8G8B8A8_UNORM
     case 0x1D:                  // DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
+    case 0x1F:                  // DXGI_FORMAT_R8G8B8A8_SNORM
     case 0x57:                  // DXGI_FORMAT_B8G8R8A8_UNORM
     case 0x5A:                  // DXGI_FORMAT_B8G8R8A8_TYPELESS
     case 0x5B:                  // DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
