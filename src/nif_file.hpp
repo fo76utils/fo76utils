@@ -200,19 +200,20 @@ class NIFFile : public FileBuffer
   {
     // the complete list of block types is in nifblock.cpp
     BlkTypeUnknown = 0,
-    BlkTypeNiNode = 88,
+    BlkTypeNiNode = 89,
     BlkTypeBSFadeNode = 17,
-    BlkTypeBSMultiBoundNode = 31,
-    BlkTypeBSLeafAnimNode = 23,
-    BlkTypeNiSwitchNode = 130,
-    BlkTypeBSTriShape = 55,
-    BlkTypeBSMeshLODTriShape = 28,
+    BlkTypeBSMultiBoundNode = 32,
+    BlkTypeBSLeafAnimNode = 24,
+    BlkTypeNiSwitchNode = 131,
+    BlkTypeBSGeometry = 20,
+    BlkTypeBSTriShape = 56,
+    BlkTypeBSMeshLODTriShape = 29,
     BlkTypeBSEffectShaderProperty = 13,
-    BlkTypeNiAlphaProperty = 60,
-    BlkTypeBSLightingShaderProperty = 24,
-    BlkTypeBSShaderTextureSet = 47,
-    BlkTypeBSWaterShaderProperty = 57,
-    BlkTypeBSOrderedNode = 34
+    BlkTypeNiAlphaProperty = 61,
+    BlkTypeBSLightingShaderProperty = 25,
+    BlkTypeBSShaderTextureSet = 48,
+    BlkTypeBSWaterShaderProperty = 58,
+    BlkTypeBSOrderedNode = 35
   };
   struct NIFBlock
   {
@@ -304,8 +305,8 @@ class NIFFile : public FileBuffer
     virtual ~NIFBlkNiAlphaProperty();
   };
  protected:
-  static const char *blockTypeStrings[168];
-  static const unsigned char blockTypeBaseTable[168];
+  static const char *blockTypeStrings[169];
+  static const unsigned char blockTypeBaseTable[169];
   static int stringToBlockType(const char *s);
   static inline bool isNodeBlock(int blockType);
   static inline bool isTriShapeBlock(int blockType);
@@ -315,6 +316,7 @@ class NIFFile : public FileBuffer
   //     100: Skyrim
   //     130: Fallout 4
   //     155: Fallout 76
+  //     172: Starfield
   unsigned int  bsVersion;
   unsigned int  blockCnt;
   std::vector< size_t >     blockOffsets;
