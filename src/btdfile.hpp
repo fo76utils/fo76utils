@@ -22,6 +22,7 @@ class BTDFile : public FileBuffer
   size_t  ltexCnt;              // number of land textures
   size_t  ltexOffs;             // table of LTEX form IDs
   size_t  ltexMapOffs;          // 8 x (land texture + 1) for each cell quadrant
+  // all vertex color and ground cover related variables are zero for Starfield
   size_t  gcvrCnt;              // number of ground covers
   size_t  gcvrOffs;             // table of GCVR form IDs
   size_t  gcvrMapOffs;          // 8 x ground cover for each cell quadrant
@@ -58,6 +59,12 @@ class BTDFile : public FileBuffer
   std::vector< TileData > tileCache;
   size_t  tileCacheIndex;
   // ----------------
+  void loadBlock_SF(TileData& tileData, size_t dataOffs,
+                    size_t n, unsigned char l,
+                    std::vector< std::uint16_t >& zlibBuf);
+  void loadBlocks_SF(TileData& tileData, size_t x, size_t y,
+                     size_t threadIndex, size_t threadCnt,
+                     unsigned int blockMask);
   static void loadBlockLines_8(unsigned char *dst, const unsigned char *src);
   static void loadBlockLines_16(std::uint16_t *dst, const unsigned char *src,
                                 size_t xd, size_t yd);
