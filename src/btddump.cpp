@@ -194,17 +194,23 @@ int main(int argc, char **argv)
     int     outFmt =
         int(parseInteger(argv[3], 10, "invalid output format", 0, 9));
     int     xMin =
-        int(parseInteger(argv[4], 10, "invalid X range",
-                         btdFile.getCellMinX(), btdFile.getCellMaxX()));
+        int(parseInteger(argv[4], 10, "invalid X range", -32768, 32767));
     int     yMin =
-        int(parseInteger(argv[5], 10, "invalid Y range",
-                         btdFile.getCellMinY(), btdFile.getCellMaxY()));
+        int(parseInteger(argv[5], 10, "invalid Y range", -32768, 32767));
     int     xMax =
-        int(parseInteger(argv[6], 10, "invalid X range",
-                         xMin, btdFile.getCellMaxX()));
+        int(parseInteger(argv[6], 10, "invalid X range", xMin, 32767));
     int     yMax =
-        int(parseInteger(argv[7], 10, "invalid Y range",
-                         yMin, btdFile.getCellMaxY()));
+        int(parseInteger(argv[7], 10, "invalid Y range", yMin, 32767));
+    if (xMin < btdFile.getCellMinX() || yMin < btdFile.getCellMinY() ||
+        xMax > btdFile.getCellMaxX() || yMax > btdFile.getCellMaxY())
+    {
+      xMin = std::max(xMin, btdFile.getCellMinX());
+      yMin = std::max(yMin, btdFile.getCellMinY());
+      xMax = std::min(std::max(xMax, xMin), btdFile.getCellMaxX());
+      yMax = std::min(std::max(yMax, yMin), btdFile.getCellMaxY());
+      std::printf("Cell range limited to %d, %d, %d, %d\n",
+                  xMin, yMin, xMax, yMax);
+    }
     if (outFmt == 0 || outFmt == 1)
     {
       std::printf("Minimum height = %f, maximum height = %f\n",
