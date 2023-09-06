@@ -1,68 +1,46 @@
 
-// Appalachia.btd file format:
+// NewAtlantis.btd file format:
 //
 // 0x00000000-0x00000003: "BTDB"
-// 0x00000004-0x00000007: (int32) 6, format version?
-// 0x00000008-0x0000000B: (float) -700.0, mimimum height
-// 0x0000000C-0x0000000F: (float) 38209.996, maximum height
-// 0x00000010-0x00000013: (int32) 25728 (201 * 128), total resolution X
-// 0x00000014-0x00000017: (int32) 25728 (201 * 128), total resolution Y
-// 0x00000018-0x0000001B: (int32) -100, minimum cell X (west)
-// 0x0000001C-0x0000001F: (int32) -100, minimum cell Y (south)
-// 0x00000020-0x00000023: (int32) 100, maximum cell X (east)
-// 0x00000024-0x00000027: (int32) 100, maximum cell Y (north)
-// 0x00000028-0x0000002B: (int32) 43, number of land textures (LTEX records)
-// 0x0000002C-0x000000D7: 43 * int32, LTEX form IDs
-// 0x000000D8-0x0004EF5F: 201 * 201 * float[2], min, max height for each cell
-// 0x0004EF60-0x0018A97F: 201 * 2 * 201 * 2 * byte[8], cell quadrant land
-//                        textures (43 - LTEX_table_index, or zero if none)
-// 0x0018A980-0x0018A983: (int32) 30, number of ground covers (GCVR records)
-// 0x0018A984-0x0018A9FB: 30 * int32, GCVR form IDs
-// 0x0018A9FC-0x002C641B: 201 * 2 * 201 * 2 * byte[8], cell quadrant ground
-//                        covers (GCVR_table_index, or 0xFF if none)
-// 0x002C641C-0x007B4C9B: 201 * 8 * 201 * 8 * int16, LOD4 height map,
+// 0x00000004-0x00000007: (uint32) 5 or 6, format version?
+// 0x00000008-0x0000000B: (float) 0.0, mimimum height in meters
+// 0x0000000C-0x0000000F: (float) 260.502045, maximum height in meters
+// 0x00000010-0x00000013: (uint32) 1792 (14 * 128), total resolution X
+// 0x00000014-0x00000017: (uint32) 1792 (14 * 128), total resolution Y
+// 0x00000018-0x0000001B: (int32) 0, unused (was minimum cell X (west) in FO76)
+// 0x0000001C-0x0000001F: (int32) 0, unused (was minimum cell Y (south) in FO76)
+// 0x00000020-0x00000023: (int32) 0, unused (was maximum cell X (east) in FO76)
+// 0x00000024-0x00000027: (int32) 0, unused (was maximum cell Y (north) in FO76)
+// 0x00000028-0x0000002B: (uint32) 7, number of land textures (LTEX records)
+// 0x0000002C-0x00000047: 7 * uint32, LTEX form IDs
+// 0x00000048-0x00000667: 14 * 14 * float[2], min, max height for each cell
+// 0x00000668-0x00001EE7: 14 * 2 * 14 * 2 * byte[8], cell quadrant land
+//                        textures (LTEX_table_index - 1, or zero if none)
+// 0x00001EE8-0x000080E7: 14 * 8 * 14 * 8 * uint16, LOD4 height map,
 //                        0 to 65535 maps to minimum height to maximum height
-// 0x007B4C9C-0x00CA351B: 201 * 8 * 201 * 8 * int16, LOD4 land textures,
+// 0x000080E8-0x0000E2E7: 14 * 8 * 14 * 8 * uint16, LOD4 land textures,
 //                        bits[N * 3 to N * 3 + 2] = texture N alpha (0 to 7),
 //                        texture 6 is the base texture
-// 0x00CA351C-0x01191D9B: 201 * 8 * 201 * 8 * int16, LOD4 terrain color
-//                        type in packed 16-bit format, 5 bits per channel
-// 0x01191D9C-0x01250643: 97557 * (int32, int32), pairs of zlib compressed data
-//                        offset (relative to 0x01250644) and size
-// 0x01250644-EOF:        zlib compressed data blocks
-// zlib compressed blocks     0 to  1351 (26 * 26 * 2): LOD3, 8x8 cell groups
-//                         1352 to  6553 (51 * 51 * 2): LOD2, 4x4 cell groups
-//                         6554 to 16754   (101 * 101): LOD1, 2x2 cell groups
-//                        16755 to 57155   (201 * 201): LOD0 height map, LTEX
-//                        57156 to 97556   (201 * 201): LOD0 ground cover mask
-// LOD3, LOD2: pairs of height map, LTEX and terrain color blocks
-// LOD1: height map, land textures block only
+// 0x0000E2E8-0x0000EB2F: 265 * (uint32, uint32), pairs of zlib compressed data
+//                        offset (relative to 0x0000EB30) and size
+// 0x0000EB30-EOF:        zlib compressed data blocks
+// zlib compressed blocks     0 to   3 ( 2 *  2): LOD3, 8x8 cell groups
+//                            4 to  19 ( 4 *  4): LOD2, 4x4 cell groups
+//                           20 to  68 ( 7 *  7): LOD1, 2x2 cell groups
+//                           69 to 264 (14 * 14): LOD0 height map, LTEX
 // height map, LTEX block format:
-//   0x0000-0x5FFF: 64 * (64, 128) int16, height map, only the samples
-//                  not present at lower levels of detail
-//   0x6000-0xBFFF: 64 * (64, 128) int16, land texture alphas
-// terrain color block format (LOD3 and LOD2 only):
-//   0x0000-0x5FFF: 64 * (64, 128) int16
-//   0x6000-0x7FFF: unused
-// ground cover block format (LOD0 only):
-//   0x0000-0x3FFF: 128 * 128 bytes, bit N is set if ground cover N is enabled
-//
-// In Starfield BTD files, the SW and NE cell coordinates (0x0018-0x0027) are
-// zero, and terrain color and ground cover data are not present.
-// Height map and land texture blocks are in the following format:
-//   0x0000-0x7FFF: 128 * 128 int16 height map
-//   0x8000-0xFFFF: 128 * 128 int16 land texture alphas
+//   0x0000-0x7FFF: 128 * 128 uint16 height map
+//   0x8000-0xFFFF: 128 * 128 uint16 land texture alphas
 
 #include "common.hpp"
 #include "zlib.hpp"
 #include "btdfile.hpp"
 
-#include <bit>
 #include <thread>
 
-void BTDFile::loadBlock_SF(TileData& tileData, size_t dataOffs,
-                           size_t n, unsigned char l,
-                           std::vector< std::uint16_t >& zlibBuf)
+void BTDFile::loadBlock(TileData& tileData, size_t dataOffs,
+                        size_t n, unsigned char l,
+                        std::vector< std::uint16_t >& zlibBuf)
 {
   size_t  zlibBlkTableOffs = zlibBlkTableOffsLOD0 + (n << 3);
   if (l == 1)
@@ -101,9 +79,9 @@ void BTDFile::loadBlock_SF(TileData& tileData, size_t dataOffs,
   }
 }
 
-void BTDFile::loadBlocks_SF(TileData& tileData, size_t x, size_t y,
-                            size_t threadIndex, size_t threadCnt,
-                            unsigned int blockMask)
+void BTDFile::loadBlocks(TileData& tileData, size_t x, size_t y,
+                         size_t threadIndex, size_t threadCnt,
+                         unsigned int blockMask)
 {
   std::vector< std::uint16_t >  zlibBuf(0x8000, 0);
   size_t  t = 0;
@@ -125,138 +103,13 @@ void BTDFile::loadBlocks_SF(TileData& tileData, size_t x, size_t y,
         if (t == threadIndex)
         {
           size_t  n = yc * ((nCellsX + (1 << l) - 1) >> l) + xc;
-          loadBlock_SF(tileData, ((yy << 10) + xx) << (l + 7), n, l, zlibBuf);
+          loadBlock(tileData, ((yy << 10) + xx) << (l + 7), n, l, zlibBuf);
         }
         if (++t >= threadCnt)
           t = 0;
       }
     }
     break;
-  }
-}
-
-void BTDFile::loadBlockLines_8(unsigned char *dst, const unsigned char *src)
-{
-  for (size_t i = 0; i < 128; i++, dst++, src++)
-    *dst = *src;
-  dst = dst + (1024 - 128);
-  for (size_t i = 0; i < 128; i++, dst++, src++)
-    *dst = *src;
-}
-
-void BTDFile::loadBlockLines_16(std::uint16_t *dst, const unsigned char *src,
-                                size_t xd, size_t yd)
-{
-  for (size_t i = 0; i < 64; i++, dst = dst + xd, src = src + 2)
-  {
-    dst = dst + xd;
-    *dst = FileBuffer::readUInt16Fast(src);
-  }
-  dst = dst + yd;
-  for (size_t i = 0; i < 128; i++, dst = dst + xd, src = src + 2)
-    *dst = FileBuffer::readUInt16Fast(src);
-}
-
-void BTDFile::loadBlock(TileData& tileData, size_t dataOffs,
-                        size_t n, unsigned char l, unsigned char b,
-                        std::vector< std::uint16_t >& zlibBuf)
-{
-  if (l >= 2)
-    n = (n << 1) + b;
-  else if (l == 0 && b != 0)
-    n = n + (nCellsY * nCellsX);
-  size_t  zlibBlkTableOffs = zlibBlkTableOffsLOD0 + (n << 3);
-  if (l == 1)
-    zlibBlkTableOffs = zlibBlkTableOffsLOD1 + (n << 3);
-  else if (l == 2)
-    zlibBlkTableOffs = zlibBlkTableOffsLOD2 + (n << 3);
-  else if (l == 3)
-    zlibBlkTableOffs = zlibBlkTableOffsLOD3 + (n << 3);
-  FileBuffer  blockBuf(fileBuf + zlibBlkTableOffs,
-                       fileBufSize - zlibBlkTableOffs);
-  size_t  offs = blockBuf.readUInt32() + zlibBlocksDataOffs;
-  size_t  compressedSize = blockBuf.readUInt32();
-  if ((offs + compressedSize) > fileBufSize)
-    errorMessage("end of input file");
-  unsigned char *p = reinterpret_cast< unsigned char * >(zlibBuf.data());
-  if (ZLibDecompressor::decompressData(p,
-                                       zlibBuf.size() * sizeof(std::uint16_t),
-                                       fileBuf + offs, compressedSize)
-      != ((l == 0 && b != 0) ? 16384 : ((l >= 2 && b != 0) ? 32768 : 49152)))
-  {
-    errorMessage("error in compressed landscape data");
-  }
-  size_t  xd = 1 << (b == 0 || l == 0 ? l : (l - 2));
-  size_t  yd = (b == 0 || l == 0 ? (1024 - 128) : ((256 - 128) >> 2)) << l;
-  for (size_t y = 0; y < 128; y = y + 2)
-  {
-    if (b == 0)                 // vertex height
-    {
-      loadBlockLines_16(tileData.hmapData.data()
-                        + dataOffs + (y << (l + 10)), p, xd, yd);
-      p = p + 384;
-    }
-    else if (l == 0)            // ground cover
-    {
-      loadBlockLines_8(tileData.gcvrData.data() + dataOffs + (y << 10), p);
-      p = p + 256;
-    }
-    else                        // vertex color
-    {
-      loadBlockLines_16(tileData.vclrData.data()
-                        + dataOffs + (y << (l + 6)), p, xd, yd);
-      p = p + 384;
-    }
-  }
-  if (b != 0)
-    return;
-  for (size_t y = 0; y < 128; y = y + 2)
-  {
-    // landscape textures
-    loadBlockLines_16(tileData.ltexData.data()
-                      + dataOffs + (y << (l + 10)), p, xd, yd);
-    p = p + 384;
-  }
-}
-
-void BTDFile::loadBlocks(TileData& tileData, size_t x, size_t y,
-                         size_t threadIndex, size_t threadCnt,
-                         unsigned int blockMask)
-{
-  if (BRANCH_UNLIKELY(!vertexColorLOD4))
-  {
-    loadBlocks_SF(tileData, x, y, threadIndex, threadCnt, blockMask);
-    return;
-  }
-  std::vector< std::uint16_t >  zlibBuf(0x6000, 0);
-  size_t  t = 0;
-  // LOD3..LOD0
-  for (unsigned char l = 4; l-- > 0; )
-  {
-    for (size_t yy = 0; yy < size_t(8 >> l); yy++)
-    {
-      size_t  yc = (y >> l) + yy;
-      if (yc >= ((nCellsY + (1 << l) - 1) >> l))
-        break;
-      for (size_t xx = 0; xx < size_t(8 >> l); xx++)
-      {
-        size_t  xc = (x >> l) + xx;
-        if (xc >= ((nCellsX + (1 << l) - 1) >> l))
-          break;
-        if (t == threadIndex)
-        {
-          size_t  n = yc * ((nCellsX + (1 << l) - 1) >> l) + xc;
-          if ((blockMask & 0x55) & (1 << (l + l)))
-            loadBlock(tileData, ((yy << 10) + xx) << (l + 7), n, l, 0, zlibBuf);
-          if ((blockMask & 0xA0) & (1 << (l + l + 1)))
-            loadBlock(tileData, ((yy << 8) + xx) << (l + 5), n, l, 1, zlibBuf);
-          if ((blockMask & 0x02) & (1 << (l + l + 1)))
-            loadBlock(tileData, ((yy << 10) + xx) << (l + 7), n, l, 1, zlibBuf);
-        }
-        if (++t >= threadCnt)
-          t = 0;
-      }
-    }
   }
 }
 
@@ -299,28 +152,15 @@ const BTDFile::TileData& BTDFile::loadTile(int cellX, int cellY,
       tileCacheIndex = 0;
   }
   TileData& tileData = *(t->second);
-  blockMask = (blockMask & ~(tileData.blockMask)) & 0x03F7;
+  blockMask = (blockMask & ~(tileData.blockMask)) & 0x0155U;
   if (!blockMask)
     return tileData;
 
-  if (blockMask & 0x0155)
-  {
-    tileData.hmapData.resize(0x00100000);
-    tileData.ltexData.resize(0x00100000);
-  }
-  if (blockMask & 0x0002)
-    tileData.gcvrData.resize(0x00100000);
-  if (blockMask & 0x02A0)
-    tileData.vclrData.resize(0x00010000);
-  if (BRANCH_UNLIKELY(!vertexColorLOD4))
-  {
-    if (blockMask & 0x02A0)
-      std::memset(tileData.vclrData.data(), 0xFF, sizeof(std::uint16_t) << 16);
-    blockMask &= 0x0155U;
-  }
+  tileData.hmapData.resize(0x00100000);
+  tileData.ltexData.resize(0x00100000);
 
   // LOD4
-  if (blockMask & 0x0300)
+  if (blockMask == 0x0100)
   {
     for (size_t yy = 0; yy < 64; yy++)
     {
@@ -331,21 +171,16 @@ const BTDFile::TileData& BTDFile::loadTile(int cellX, int cellY,
         if ((cellMinX + int((xx >> 3) + x0)) > cellMaxX)
           break;
         size_t  offs = (yy + (y0 << 3)) * (nCellsX << 3) + (xx + (x0 << 3));
-        if (blockMask & 0x0155)
-        {
-          tileData.hmapData[((yy << 10) + xx) << 4] =
-              readUInt16(heightMapLOD4 + (offs << 1));
-          tileData.ltexData[((yy << 10) + xx) << 4] =
-              readUInt16(landTexturesLOD4 + (offs << 1));
-        }
-        if (blockMask & 0x02A0)
-        {
-          tileData.vclrData[((yy << 8) + xx) << 2] =
-              readUInt16(vertexColorLOD4 + (offs << 1));
-        }
+        tileData.hmapData[((yy << 10) + xx) << 4] =
+            readUInt16(heightMapLOD4 + (offs << 1));
+        tileData.ltexData[((yy << 10) + xx) << 4] =
+            readUInt16(landTexturesLOD4 + (offs << 1));
       }
     }
+    tileData.blockMask = tileData.blockMask | blockMask;
+    return tileData;
   }
+
   // LOD3..LOD0
   size_t  threadCnt = size_t(std::thread::hardware_concurrency());
   if (threadCnt < 1)
@@ -402,11 +237,8 @@ BTDFile::BTDFile(const char *fileName)
   cellMinY = readInt32();
   cellMaxX = readInt32();
   cellMaxY = readInt32();
-  bool    isStarfieldBTD = !(cellMinX | cellMinY | cellMaxX | cellMaxY);
-  if (BRANCH_UNLIKELY(isStarfieldBTD))
+  if (!(cellMinX | cellMinY | cellMaxX | cellMaxY))
   {
-    worldHeightMin *= 8.0f;             // FIXME: Z scale may be incorrect
-    worldHeightMax *= 8.0f;
     cellMinX = -(int(heightMapResX >> 8));
     cellMinY = -(int(heightMapResY >> 8));
     cellMaxX = cellMinX + int(heightMapResX >> 7) - 1;
@@ -422,52 +254,19 @@ BTDFile::BTDFile(const char *fileName)
   filePos = filePos + ((nCellsY * nCellsX) << 3);
   ltexMapOffs = filePos;
   filePos = filePos + ((nCellsY * nCellsX) << 5);
-  if (BRANCH_UNLIKELY(isStarfieldBTD))
-  {
-    gcvrCnt = 0;
-    gcvrOffs = 0;
-    gcvrMapOffs = 0;
-  }
-  else
-  {
-    gcvrCnt = readUInt32();
-    gcvrOffs = filePos;
-    for (size_t i = 0; i < gcvrCnt; i++)
-      (void) readUInt32();
-    gcvrMapOffs = filePos;
-    filePos = filePos + ((nCellsY * nCellsX) << 5);
-  }
   heightMapLOD4 = filePos;
   filePos = filePos + ((nCellsY * nCellsX) << 7);
   landTexturesLOD4 = filePos;
   filePos = filePos + ((nCellsY * nCellsX) << 7);
-  if (BRANCH_UNLIKELY(isStarfieldBTD))
-  {
-    vertexColorLOD4 = 0;
-    zlibBlocksTableOffs = filePos;
-    zlibBlkTableOffsLOD3 = filePos;
-    filePos = filePos + (((nCellsY + 7) >> 3) * ((nCellsX + 7) >> 3) * 8);
-    zlibBlkTableOffsLOD2 = filePos;
-    filePos = filePos + (((nCellsY + 3) >> 2) * ((nCellsX + 3) >> 2) * 8);
-    zlibBlkTableOffsLOD1 = filePos;
-    filePos = filePos + (((nCellsY + 1) >> 1) * ((nCellsX + 1) >> 1) * 8);
-    zlibBlkTableOffsLOD0 = filePos;
-    filePos = filePos + (nCellsY * nCellsX * 8);
-  }
-  else
-  {
-    vertexColorLOD4 = filePos;
-    filePos = filePos + ((nCellsY * nCellsX) << 7);
-    zlibBlocksTableOffs = filePos;
-    zlibBlkTableOffsLOD3 = filePos;
-    filePos = filePos + (((nCellsY + 7) >> 3) * ((nCellsX + 7) >> 3) * 2 * 8);
-    zlibBlkTableOffsLOD2 = filePos;
-    filePos = filePos + (((nCellsY + 3) >> 2) * ((nCellsX + 3) >> 2) * 2 * 8);
-    zlibBlkTableOffsLOD1 = filePos;
-    filePos = filePos + (((nCellsY + 1) >> 1) * ((nCellsX + 1) >> 1) * 8);
-    zlibBlkTableOffsLOD0 = filePos;
-    filePos = filePos + (nCellsY * nCellsX * 2 * 8);
-  }
+  zlibBlocksTableOffs = filePos;
+  zlibBlkTableOffsLOD3 = filePos;
+  filePos = filePos + (((nCellsY + 7) >> 3) * ((nCellsX + 7) >> 3) * 8);
+  zlibBlkTableOffsLOD2 = filePos;
+  filePos = filePos + (((nCellsY + 3) >> 2) * ((nCellsX + 3) >> 2) * 8);
+  zlibBlkTableOffsLOD1 = filePos;
+  filePos = filePos + (((nCellsY + 1) >> 1) * ((nCellsX + 1) >> 1) * 8);
+  zlibBlkTableOffsLOD0 = filePos;
+  filePos = filePos + (nCellsY * nCellsX * 8);
   zlibBlocksDataOffs = filePos;
   nCompressedBlocks = (filePos - zlibBlocksTableOffs) >> 3;
   (void) readUInt8();
@@ -513,13 +312,6 @@ unsigned int BTDFile::getLandTexture(size_t n) const
   return readUInt32(ltexOffs + (n << 2));
 }
 
-unsigned int BTDFile::getGroundCover(size_t n) const
-{
-  if (n >= gcvrCnt)
-    return 0U;
-  return readUInt32(gcvrOffs + (n << 2));
-}
-
 void BTDFile::getCellHeightMap(std::uint16_t *buf, int cellX, int cellY,
                                unsigned char l)
 {
@@ -550,11 +342,8 @@ void BTDFile::getCellLandTexture(std::uint16_t *buf, int cellX, int cellY,
   {
     for (size_t xc = 0; xc < n; xc++)
     {
-      unsigned int  tmp =
+      buf[(yc << m) | xc] =
           tileData.ltexData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
-      tmp = ((tmp & 0x7E00) >> 9) | (tmp & 0x01C0) | ((tmp & 0x003F) << 9);
-      tmp = ((tmp & 0x7038) >> 3) | (tmp & 0x01C0) | ((tmp & 0x0E07) << 3);
-      buf[(yc << m) | xc] = (std::uint16_t) tmp;
     }
   }
 }
@@ -562,51 +351,24 @@ void BTDFile::getCellLandTexture(std::uint16_t *buf, int cellX, int cellY,
 void BTDFile::getCellGroundCover(unsigned char *buf, int cellX, int cellY,
                                  unsigned char l)
 {
-  const TileData& tileData = loadTile(cellX, cellY, 0x0002);
-  size_t  x = size_t(cellX - cellMinX);
-  size_t  y = size_t(cellY - cellMinY);
-  size_t  x0 = (x & 7) << 7;
-  size_t  y0 = (y & 7) << 7;
   size_t  n = 128 >> l;
   unsigned char m = 7 - l;
-  unsigned int  gcvrMask = 0;
   for (size_t yc = 0; yc < n; yc++)
   {
     for (size_t xc = 0; xc < n; xc++)
-    {
-      if (!(xc & ((n >> 1) - 1)))
-      {
-        size_t  offs = ((((y << 1) | (yc >> (m - 1))) * (nCellsX << 1)
-                         + ((x << 1) | (xc >> (m - 1)))) << 3) + gcvrMapOffs;
-        for (unsigned char i = 8; i-- > 0; offs++)
-          gcvrMask |= ((unsigned int) (readUInt8(offs) < gcvrCnt) << i);
-      }
-      unsigned int  tmp =
-          tileData.gcvrData[((y0 + (yc << l)) << 10) + x0 + (xc << l)];
-      tmp = std::rotl(std::uint8_t(tmp), 4);
-      tmp = ((tmp & 0xCC) >> 2) | ((tmp & 0x33) << 2);
-      tmp = (((tmp & 0xAA) >> 1) | ((tmp & 0x55) << 1)) & gcvrMask;
-      buf[(yc << m) | xc] = (unsigned char) tmp;
-    }
+      buf[(yc << m) | xc] = 0x00;
   }
 }
 
 void BTDFile::getCellTerrainColor(std::uint16_t *buf, int cellX, int cellY,
                                   unsigned char l)
 {
-  const TileData& tileData = loadTile(cellX, cellY, (~0U << (l + l)) & 0x02A0U);
-  size_t  x0 = size_t((cellX - cellMinX) & 7) << 5;
-  size_t  y0 = size_t((cellY - cellMinY) & 7) << 5;
   size_t  n = 128 >> l;
   unsigned char m = 7 - l;
   for (size_t yc = 0; yc < n; yc++)
   {
-    size_t  yy = (l >= 2 ? (yc << (l - 2)) : (yc >> (2 - l)));
     for (size_t xc = 0; xc < n; xc++)
-    {
-      size_t  xx = (l >= 2 ? (xc << (l - 2)) : (xc >> (2 - l)));
-      buf[(yc << m) | xc] = tileData.vclrData[((y0 + yy) << 8) + x0 + xx];
-    }
+      buf[(yc << m) | xc] = 0xFFFF;
   }
 }
 
@@ -619,28 +381,21 @@ void BTDFile::getCellTextureSet(unsigned char *buf, int cellX, int cellY) const
     size_t  offs =
         (((y << 1) | (q >> 1)) * (nCellsX << 1) + ((x << 1) | (q & 1))) << 3;
     unsigned char *t = buf + (q << 4);
+    unsigned char baseTxt = 0xFF;
     for (size_t i = 0; i < 8; i++)
     {
       unsigned char tmp = readUInt8(ltexMapOffs + offs + i);
       if (tmp == 0 || tmp > ltexCnt)
         tmp = 0xFF;
       else
-        tmp = (unsigned char) (ltexCnt - tmp);
-      if (i < 5)
-        t[5 - i] = tmp;
-      if (tmp != 0xFF)
-        t[0] = tmp;             // default texture
+        baseTxt = --tmp;
+      t[i] = tmp;
     }
-    t[6] = 0xFF;
-    t[7] = 0xFF;
+    if (t[6] == 0xFF)
+      t[6] = baseTxt;
     unsigned char *g = buf + ((q << 4) + 8);
     for (size_t i = 0; i < 8; i++)
-    {
-      unsigned char tmp = readUInt8(gcvrMapOffs + offs + i);
-      if (tmp >= gcvrCnt)
-        tmp = 0xFF;
-      g[7 - i] = tmp;
-    }
+      g[i] = 0xFF;
   }
 }
 

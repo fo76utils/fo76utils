@@ -32,8 +32,6 @@ class LandscapeTexture
   const unsigned char *ltexData32;
   const unsigned char *vclrData24;
   const unsigned char *ltexData16;
-  const unsigned char *vclrData16;
-  const unsigned char *gcvrData;
   FloatVector4 (*renderPixelFunction)(
       const LandscapeTexture& p, FloatVector4 *n,
       int x, int y, int txtX, int txtY);
@@ -47,7 +45,6 @@ class LandscapeTexture
   bool    integerMip;
   bool    isFO76;
   unsigned char txtSetMip;
-  unsigned char fo76VClrMip;
   std::uint32_t defaultColor;
   static inline FloatVector4 rotateNormalFO76(const FloatVector4& n);
   static inline FloatVector4 blendColors(FloatVector4 c0, FloatVector4 c1,
@@ -63,9 +60,7 @@ class LandscapeTexture
   inline void getNormalReflLightF(FloatVector4 *n,
                                   size_t t, float x, float y, float m) const;
   static inline std::uint32_t normalToColor(FloatVector4 n);
-  inline std::uint32_t getFO76VertexColor(size_t offs) const;
   inline std::uint32_t getTES4VertexColor(size_t offs) const;
-  inline FloatVector4 getFO76VertexColor(int x, int y, int renderScale) const;
   inline FloatVector4 getTES4VertexColor(int x, int y, int renderScale) const;
   static FloatVector4 renderPixelFO76I_NoNormals(
       const LandscapeTexture& p, FloatVector4 *n,
@@ -77,12 +72,6 @@ class LandscapeTexture
       const LandscapeTexture& p, FloatVector4 *n,
       int x, int y, int txtX, int txtY);
   static FloatVector4 renderPixelFO76F(
-      const LandscapeTexture& p, FloatVector4 *n,
-      int x, int y, int txtX, int txtY);
-  static FloatVector4 renderPixelFO76I_GCVR(
-      const LandscapeTexture& p, FloatVector4 *n,
-      int x, int y, int txtX, int txtY);
-  static FloatVector4 renderPixelFO76F_GCVR(
       const LandscapeTexture& p, FloatVector4 *n,
       int x, int y, int txtX, int txtY);
   static FloatVector4 renderPixelTES4I_NoNormals(

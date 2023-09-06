@@ -22,13 +22,8 @@ class BTDFile : public FileBuffer
   size_t  ltexCnt;              // number of land textures
   size_t  ltexOffs;             // table of LTEX form IDs
   size_t  ltexMapOffs;          // 8 x (land texture + 1) for each cell quadrant
-  // all vertex color and ground cover related variables are zero for Starfield
-  size_t  gcvrCnt;              // number of ground covers
-  size_t  gcvrOffs;             // table of GCVR form IDs
-  size_t  gcvrMapOffs;          // 8 x ground cover for each cell quadrant
   size_t  heightMapLOD4;        // 1/8 cell resolution
   size_t  landTexturesLOD4;     // 1/8 cell resolution
-  size_t  vertexColorLOD4;      // 1/8 cell resolution
   size_t  nCompressedBlocks;    // number of ZLib compressed blocks
   size_t  zlibBlocksTableOffs;  // table of compressed block offsets and sizes
   size_t  zlibBlocksDataOffs;   // ZLib compressed data
@@ -41,35 +36,20 @@ class BTDFile : public FileBuffer
     unsigned short  x0;
     unsigned short  y0;
     // bit 0: LOD0 vertex height and land textures are loaded
-    // bit 1: LOD0 ground cover is loaded
     // bit 2: LOD1 vertex height and land textures are loaded
     // bit 4: LOD2 vertex height and land textures are loaded
-    // bit 5: LOD2 terrain color is loaded
     // bit 6: LOD3 vertex height and land textures are loaded
-    // bit 7: LOD3 terrain color is loaded
     // bit 8: LOD4 vertex height and land textures are loaded
-    // bit 9: LOD4 terrain color is loaded
     unsigned int  blockMask;
     std::vector< std::uint16_t >  hmapData;     // vertex height, 1024 * 1024
     std::vector< std::uint16_t >  ltexData;     // land textures, 1024 * 1024
-    std::vector< unsigned char >  gcvrData;     // ground cover, 1024 * 1024
-    std::vector< std::uint16_t >  vclrData;     // terrain color, 256 * 256
   };
   std::map< unsigned int, TileData * >  tileCacheMap;
   std::vector< TileData > tileCache;
   size_t  tileCacheIndex;
   // ----------------
-  void loadBlock_SF(TileData& tileData, size_t dataOffs,
-                    size_t n, unsigned char l,
-                    std::vector< std::uint16_t >& zlibBuf);
-  void loadBlocks_SF(TileData& tileData, size_t x, size_t y,
-                     size_t threadIndex, size_t threadCnt,
-                     unsigned int blockMask);
-  static void loadBlockLines_8(unsigned char *dst, const unsigned char *src);
-  static void loadBlockLines_16(std::uint16_t *dst, const unsigned char *src,
-                                size_t xd, size_t yd);
   void loadBlock(TileData& tileData, size_t dataOffs,
-                 size_t n, unsigned char l, unsigned char b,
+                 size_t n, unsigned char l,
                  std::vector< std::uint16_t >& zlibBuf);
   void loadBlocks(TileData& tileData, size_t x, size_t y,
                   size_t threadIndex, size_t threadCnt, unsigned int blockMask);
@@ -113,10 +93,13 @@ class BTDFile : public FileBuffer
   }
   inline size_t getGroundCoverCount() const
   {
-    return gcvrCnt;
+    return 0;
   }
   unsigned int getLandTexture(size_t n) const;
-  unsigned int getGroundCover(size_t n) const;
+  inline unsigned int getGroundCover(size_t n) const
+  {
+    return 0U;
+  }
   // N = 128 >> l, buffer size = N * N
   // height map in pixelFormatGRAY16 format
   void getCellHeightMap(std::uint16_t *buf, int cellX, int cellY,
