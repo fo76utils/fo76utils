@@ -1011,7 +1011,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
       ESMFile::ESMField f(esmFile, r);
       while (f.next())
       {
-        if (f == "OBND" && f.size() >= 6)
+        if (f == "OBND" && f.size() >= 12)
         {
           tmp.obndX0 = (signed short) uint16ToSigned(f.readUInt16Fast());
           tmp.obndY0 = (signed short) uint16ToSigned(f.readUInt16Fast());
