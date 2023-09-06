@@ -608,7 +608,7 @@ bool ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
     case 0x444E424F:            // "OBND"
       if (!tsvFormat)
       {
-        dataType = 3;
+        dataType = 7;
         arraySize = 6;
       }
       break;

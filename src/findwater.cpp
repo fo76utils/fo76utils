@@ -116,7 +116,8 @@ static void fillWaterMesh(const NIFFile::NIFTriShape *meshData, size_t meshCnt,
 }
 
 static void createMeshFromOBND(std::vector< NIFFile::NIFTriShape >& meshData,
-                               int x1, int y1, int z1, int x2, int y2, int z2)
+                               float x1, float y1, float z1,
+                               float x2, float y2, float z2)
 {
   meshData.resize(1);
   obndVertexBuf.push_back(std::vector< NIFFile::NIFVertex >());
@@ -124,9 +125,9 @@ static void createMeshFromOBND(std::vector< NIFFile::NIFTriShape >& meshData,
   vertexData.resize(8);
   for (unsigned char i = 0; i < 8; i++)
   {
-    vertexData[i].x = float(!(i & 1) ? x1 : x2);
-    vertexData[i].y = float(!(i & 2) ? y1 : y2);
-    vertexData[i].z = float(!(i & 4) ? z1 : z2);
+    vertexData[i].x = (!(i & 1) ? x1 : x2);
+    vertexData[i].y = (!(i & 2) ? y1 : y2);
+    vertexData[i].z = (!(i & 4) ? z1 : z2);
   }
   if (obndTriangleBuf.size() != 12)
   {
@@ -163,24 +164,24 @@ static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
   if (!(r == "ACTI" || r == "MSTT" || r == "PWAT" || r == "STAT"))
     return i->second;
   ESMFile::ESMField f(esmFile, r);
-  int     x1 = 0;
-  int     y1 = 0;
-  int     z1 = 0;
-  int     x2 = 0;
-  int     y2 = 0;
-  int     z2 = 0;
+  float   x1 = 0.0f;
+  float   y1 = 0.0f;
+  float   z1 = 0.0f;
+  float   x2 = 0.0f;
+  float   y2 = 0.0f;
+  float   z2 = 0.0f;
   std::string modelPath;
   bool    isWater = (r == "PWAT");
   while (f.next())
   {
-    if (f == "OBND" && f.size() >= 12)
+    if (f == "OBND" && f.size() >= 24)
     {
-      x1 = uint16ToSigned(f.readUInt16Fast());
-      y1 = uint16ToSigned(f.readUInt16Fast());
-      z1 = uint16ToSigned(f.readUInt16Fast());
-      x2 = uint16ToSigned(f.readUInt16Fast());
-      y2 = uint16ToSigned(f.readUInt16Fast());
-      z2 = uint16ToSigned(f.readUInt16Fast());
+      x1 = f.readFloat();
+      y1 = f.readFloat();
+      z1 = f.readFloat();
+      x2 = f.readFloat();
+      y2 = f.readFloat();
+      z2 = f.readFloat();
     }
     else if (f == "MODL" && f.size() >= 1)
     {
@@ -240,7 +241,7 @@ static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
       return i->second;
     }
   }
-  if (isWater && (x1 | y1 | z1 | x2 | y2 | z2) != 0)
+  if (isWater && (x2 > x1 || y2 > y1 || z2 > z1))
     createMeshFromOBND(i->second, x1, y1, z1, x2, y2, z2);
   return i->second;
 }

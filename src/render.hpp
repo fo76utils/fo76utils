@@ -39,12 +39,7 @@ class Renderer : protected Renderer_Base
                                         // scale * 65534 + 1
     unsigned int  modelID;              // b0 to b7: nifFiles index
     unsigned int  mswpFormID;           // color + flags (in alpha) for decals
-    signed short  obndX0;
-    signed short  obndY0;
-    signed short  obndZ0;
-    signed short  obndX1;
-    signed short  obndY1;
-    signed short  obndZ1;
+    NIFFile::NIFBounds  objectBounds;
     const std::string *modelPath;       // NULL for decals
   };
   struct RenderObject
@@ -302,7 +297,7 @@ class Renderer : protected Renderer_Base
   static inline float getDecalYOffsetMax(FloatVector4 boundsMax)
   {
     (void) boundsMax;
-    return 1000.0f;
+    return 15.0f;
   }
   void renderDecal(RenderThread& t, const RenderObject& p);
   void renderObject(RenderThread& t, const RenderObject& p);

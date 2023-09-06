@@ -451,10 +451,8 @@ bool Renderer::setScreenAreaUsed(RenderObject& p)
   NIFFile::NIFBounds  modelBounds;
   if (p.flags & 0x12)
   {
-    FloatVector4  b0(float(p.model.o.b->obndX0), float(p.model.o.b->obndY0),
-                     float(p.model.o.b->obndZ0), 0.0f);
-    FloatVector4  b1(float(p.model.o.b->obndX1), float(p.model.o.b->obndY1),
-                     float(p.model.o.b->obndZ1), 0.0f);
+    FloatVector4  b0(p.model.o.b->objectBounds.boundsMin);
+    FloatVector4  b1(p.model.o.b->objectBounds.boundsMax);
     FloatVector4  tmp(1.0f, 1.0f, 1.0f, 0.0f);
     if (BRANCH_UNLIKELY(p.flags & 0x10))
     {
@@ -481,7 +479,7 @@ bool Renderer::setScreenAreaUsed(RenderObject& p)
   {
     if (!landData)
       return false;
-    float   xyScale = 4096.0f / float(landData->getCellResolution());
+    float   xyScale = 100.0f / float(landData->getCellResolution());
     float   xOffset = -xyScale * float(landData->getOriginX());
     float   yOffset = xyScale * float(landData->getOriginY());
     float   zScale = (landData->getZMax() - landData->getZMin()) / 65535.0f;
@@ -703,14 +701,14 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   tmp.z = 0;
   tmp.model.t.x0 = 0;
   tmp.model.t.y0 = 0;
-  tmp.model.t.x1 = 4096;
-  tmp.model.t.y1 = 4096;
+  tmp.model.t.x1 = 100;
+  tmp.model.t.y1 = 100;
   tmp.model.t.z0 = 0;
   tmp.model.t.z1 = 0;
   tmp.model.t.waterFormID = 0U;
   tmp.formID = r.formID;
-  tmp.modelTransform.offsX = float(cellX) * 4096.0f;
-  tmp.modelTransform.offsY = float(cellY) * 4096.0f;
+  tmp.modelTransform.offsX = float(cellX) * 100.0f;
+  tmp.modelTransform.offsY = float(cellY) * 100.0f;
   tmp.modelTransform.offsZ = waterLevel;
   if (setScreenAreaUsed(tmp))
   {
@@ -749,14 +747,14 @@ bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
           {
             f2.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
           }
-          else if (f2 == "OBND" && f2.size() >= 12)
+          else if (f2 == "OBND" && f2.size() >= 24)
           {
-            p.obndX0 = f2.readInt16();
-            p.obndY0 = f2.readInt16();
-            p.obndZ0 = f2.readInt16();
-            p.obndX1 = f2.readInt16();
-            p.obndY1 = f2.readInt16();
-            p.obndZ1 = f2.readInt16();
+            p.objectBounds.boundsMin = f2.readFloatVector4();
+            p.objectBounds.boundsMax[0] = p.objectBounds.boundsMin[3];
+            p.objectBounds.boundsMax[1] = f2.readFloat();
+            p.objectBounds.boundsMax[2] = f2.readFloat();
+            p.objectBounds.boundsMin.clearV3();
+            p.objectBounds.boundsMax.clearV3();
             haveOBND = true;
           }
         }
@@ -772,14 +770,14 @@ bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
               {
                 f3.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
               }
-              else if (f3 == "OBND" && f3.size() >= 12)
+              else if (f3 == "OBND" && f3.size() >= 24)
               {
-                p.obndX0 = f3.readInt16();
-                p.obndY0 = f3.readInt16();
-                p.obndZ0 = f3.readInt16();
-                p.obndX1 = f3.readInt16();
-                p.obndY1 = f3.readInt16();
-                p.obndZ1 = f3.readInt16();
+                p.objectBounds.boundsMin = f3.readFloatVector4();
+                p.objectBounds.boundsMax[0] = p.objectBounds.boundsMin[3];
+                p.objectBounds.boundsMax[1] = f3.readFloat();
+                p.objectBounds.boundsMax[2] = f3.readFloat();
+                p.objectBounds.boundsMin.clearV3();
+                p.objectBounds.boundsMax.clearV3();
                 haveOBND = true;
               }
             }
@@ -794,12 +792,8 @@ bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
   {
     stringBuf = "meshes/markers/humanmarker.nif";
     p.flags = p.flags | 0x20;
-    p.obndX0 = -20;
-    p.obndY0 = -10;
-    p.obndZ0 = 0;
-    p.obndX1 = 24;
-    p.obndY1 = 15;
-    p.obndZ1 = 133;
+    p.objectBounds.boundsMin = FloatVector4(-0.31f, -0.31f, 0.0f, 0.0f);
+    p.objectBounds.boundsMax = FloatVector4(0.31f, 0.31f, 1.8f, 0.0f);
     return true;
   }
   return false;
@@ -823,17 +817,20 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
       float   decalWidth = (decalBounds[0] + decalBounds[1]) * 0.5f;
       float   decalHeight = (decalBounds[2] + decalBounds[3]) * 0.5f;
       float   decalDepth = f.readFloat();
-      decalWidth = std::min(std::max(decalWidth, 0.0f), 4096.0f);
-      decalHeight = std::min(std::max(decalHeight, 0.0f), 4096.0f);
-      decalDepth = std::min(std::max(decalDepth, 0.0f), 4096.0f);
-      p.obndX0 = (signed short) roundFloat(decalWidth * -0.5f);
-      p.obndY0 = (signed short) roundFloat(decalDepth * -0.5f);
-      p.obndZ0 = (signed short) roundFloat(decalHeight * -0.5f);
-      p.obndX1 = p.obndX0 + (signed short) roundFloat(decalWidth);
-      p.obndY1 = p.obndY0 + (signed short) roundFloat(decalDepth);
-      p.obndZ1 = p.obndZ0 + (signed short) roundFloat(decalHeight);
-      if (!(p.obndX1 > p.obndX0 && p.obndY1 > p.obndY0 && p.obndZ1 > p.obndZ0))
+      decalWidth = std::min(std::max(decalWidth, 0.0f), 100.0f);
+      decalHeight = std::min(std::max(decalHeight, 0.0f), 100.0f);
+      decalDepth = std::min(std::max(decalDepth, 0.0f), 100.0f);
+      p.objectBounds.boundsMin =
+          FloatVector4(decalWidth, decalDepth, decalHeight, 0.0f);
+      p.objectBounds.boundsMax = p.objectBounds.boundsMin;
+      if (!(p.objectBounds.boundsMax[0] > 0.0f &&
+            p.objectBounds.boundsMax[1] > 0.0f &&
+            p.objectBounds.boundsMax[2] > 0.0f))
+      {
         return;
+      }
+      p.objectBounds.boundsMin *= -0.5f;
+      p.objectBounds.boundsMax *= 0.5f;
       float   s = f.readFloat();        // shininess
       if (esmFile.getESMVersion() < 0x80)
         s = (s > 2.0f ? ((float(std::log2(s)) - 1.0f) * (1.0f / 9.0f)) : 0.0f);
@@ -967,12 +964,8 @@ const Renderer::BaseObject * Renderer::readModelProperties(
     tmp.gradientMapV = 0;
     tmp.modelID = 0xFFFFFFFFU;
     tmp.mswpFormID = 0U;
-    tmp.obndX0 = 0;
-    tmp.obndY0 = 0;
-    tmp.obndZ0 = 0;
-    tmp.obndX1 = 0;
-    tmp.obndY1 = 0;
-    tmp.obndZ1 = 0;
+    tmp.objectBounds.boundsMin = FloatVector4(0.0f);
+    tmp.objectBounds.boundsMax = FloatVector4(0.0f);
     tmp.modelPath = (std::string *) 0;
     do
     {
@@ -1011,14 +1004,14 @@ const Renderer::BaseObject * Renderer::readModelProperties(
       ESMFile::ESMField f(esmFile, r);
       while (f.next())
       {
-        if (f == "OBND" && f.size() >= 6)
+        if (f == "OBND" && f.size() >= 24)
         {
-          tmp.obndX0 = (signed short) uint16ToSigned(f.readUInt16Fast());
-          tmp.obndY0 = (signed short) uint16ToSigned(f.readUInt16Fast());
-          tmp.obndZ0 = (signed short) uint16ToSigned(f.readUInt16Fast());
-          tmp.obndX1 = (signed short) uint16ToSigned(f.readUInt16Fast());
-          tmp.obndY1 = (signed short) uint16ToSigned(f.readUInt16Fast());
-          tmp.obndZ1 = (signed short) uint16ToSigned(f.readUInt16Fast());
+          tmp.objectBounds.boundsMin = f.readFloatVector4();
+          tmp.objectBounds.boundsMax[0] = tmp.objectBounds.boundsMin[3];
+          tmp.objectBounds.boundsMax[1] = f.readFloat();
+          tmp.objectBounds.boundsMax[2] = f.readFloat();
+          tmp.objectBounds.boundsMin.clearV3();
+          tmp.objectBounds.boundsMax.clearV3();
           haveOBND = true;
         }
         else if ((f == "MODL" || (f == "MOD2" && r == "ARMO")) &&
@@ -1278,16 +1271,14 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
             if (f.size() >= 29 && (tmp.flags & 0x10) && f[28] == 0x01)  // box
             {
               tmp.flags = tmp.flags | 0x0080;
-              float   decalWidth = float(o->obndX1) - float(o->obndX0);
-              float   decalDepth = float(o->obndY1) - float(o->obndY0);
-              float   decalHeight = float(o->obndZ1) - float(o->obndZ0);
-              decalWidth = std::max(decalWidth * 0.5f, 0.5f);
-              decalDepth = std::max(decalDepth * 0.5f, 0.5f);
-              decalHeight = std::max(decalHeight * 0.5f, 0.5f);
+              FloatVector4  decalDimensions =
+                  o->objectBounds.boundsMax - o->objectBounds.boundsMin;
+              decalDimensions.maxValues(FloatVector4(0.01f));
               FloatVector4  b(f.readFloatVector4());
-              decalScaleX = b[0] / decalWidth;
-              scale = b[1] / decalDepth;
-              decalScaleZ = b[2] / decalHeight;
+              b /= (decalDimensions * 0.5f);
+              decalScaleX = b[0];
+              scale = b[1];
+              decalScaleZ = b[2];
             }
             break;
           case 0x50534D58U:             // "XMSP"
@@ -1640,12 +1631,8 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   vt *= viewTransform;
   FloatVector4  xpddScale(p.model.d.scaleX, 1.0f, p.model.d.scaleZ, 1.0f);
   NIFFile::NIFBounds  decalBounds;
-  decalBounds.boundsMin =
-      FloatVector4(float(p.model.d.b->obndX0), float(p.model.d.b->obndY0),
-                   float(p.model.d.b->obndZ0), 0.0f) * xpddScale;
-  decalBounds.boundsMax =
-      FloatVector4(float(p.model.d.b->obndX1), float(p.model.d.b->obndY1),
-                   float(p.model.d.b->obndZ1), 0.0f) * xpddScale;
+  decalBounds.boundsMin = p.model.d.b->objectBounds.boundsMin * xpddScale;
+  decalBounds.boundsMax = p.model.d.b->objectBounds.boundsMax * xpddScale;
   float   yOffset = 0.0f;
   if (!(p.flags & 0x80))
   {
@@ -1654,15 +1641,15 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
     yOffset = t.renderer->findDecalYOffset(p.modelTransform, decalBounds);
     yOffset = std::max(yOffset, 0.0f);
   }
-  decalBounds.boundsMin[1] = float(p.model.d.b->obndY0) + yOffset;
-  decalBounds.boundsMax[1] = float(p.model.d.b->obndY1) + yOffset;
+  decalBounds.boundsMin[1] = p.model.d.b->objectBounds.boundsMin[1] + yOffset;
+  decalBounds.boundsMax[1] = p.model.d.b->objectBounds.boundsMax[1] + yOffset;
   NIFFile::NIFBounds  b;
   NIFFile::NIFVertex  v;
   for (int i = 0; i < 8; i++)
   {
-    v.x = float(!(i & 1) ? decalBounds.boundsMin[0] : decalBounds.boundsMax[0]);
-    v.y = float(!(i & 2) ? decalBounds.boundsMin[1] : decalBounds.boundsMax[1]);
-    v.z = float(!(i & 4) ? decalBounds.boundsMin[2] : decalBounds.boundsMax[2]);
+    v.x = (!(i & 1) ? decalBounds.boundsMin[0] : decalBounds.boundsMax[0]);
+    v.y = (!(i & 2) ? decalBounds.boundsMin[1] : decalBounds.boundsMax[1]);
+    v.z = (!(i & 4) ? decalBounds.boundsMin[2] : decalBounds.boundsMax[2]);
     vt.transformXYZ(v.x, v.y, v.z);
     b += v;
   }
