@@ -1,10 +1,12 @@
-# fo76utils
+# ce2utils
 
-Simple command line utilities for extracting data from Elder Scrolls and Fallout game files, from Oblivion to Fallout 76.
+Simple command line utilities for extracting data from Starfield game files.
+
+**Note:** ce2utils is work in progress, and support for older games is deprecated in these tools. For Oblivion to Fallout 76, use [fo76utils](https://github.com/fo76utils/fo76utils/) instead.
 
 * [baunpack](doc/baunpack.md) - list the contents of, or extract from .BA2 or .BSA archives.
 * [bcdecode](doc/bcdecode.md) - convert BC1 to BC5 block compressed DDS textures to uncompressed RGBA image data in raw or DDS format. BC7 decompression is also supported, using code from [detex](https://github.com/hglm/detex).
-* [btddump](doc/btddump.md) - extract terrain data from Fallout 76 .BTD files to raw height map, land textures, ground cover, or terrain color.
+* [btddump](doc/btddump.md) - extract terrain data from Starfield .BTD files to raw height map or land textures.
 * [cubeview](doc/cubeview.md) - view cube maps or other textures from archive files.
 * [esmdump](doc/esmdump.md) - list records from .ESM files in text or TSV format.
 * [esmview](doc/esmview.md) - interactive version of esmdump, also includes a NIF viewer for objects with an associated model (MODL).
