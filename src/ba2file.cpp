@@ -381,10 +381,10 @@ void BA2File::loadArchivesFromDir(const char *pathName)
       {
         continue;
       }
-      if ((std::strncmp(baseName.c_str(), "oblivion", 8) == 0 ||
-           std::strncmp(baseName.c_str(), "fallout", 7) == 0 ||
-           std::strncmp(baseName.c_str(), "skyrim", 6) == 0 ||
-           std::strncmp(baseName.c_str(), "seventysix", 10) == 0) &&
+      if ((baseName.starts_with("oblivion") ||
+           baseName.starts_with("fallout") || baseName.starts_with("skyrim") ||
+           baseName.starts_with("seventysix") ||
+           baseName.starts_with("starfield")) &&
           baseName.find("update") == std::string::npos)
       {
         archiveNames1.insert(fullName);
@@ -863,5 +863,45 @@ int BA2File::extractTexture(std::vector< unsigned char >& buf,
 
   extractBlock(buf, unpackedSize, fileDecl, p, packedSize);
   return mipOffset;
+}
+
+size_t BA2File::extractFile(
+    const unsigned char*& fileData, std::vector< unsigned char >& buf,
+    const std::string& fileName) const
+{
+  fileData = (unsigned char *) 0;
+  buf.clear();
+  const FileDeclaration *fd = findFile(fileName);
+  if (!fd)
+    throw FO76UtilsError("file %s not found in archive", fileName.c_str());
+  const FileDeclaration&  fileDecl = *fd;
+  const unsigned char *p = fileDecl.fileData;
+  unsigned int  packedSize = fileDecl.packedSize;
+  unsigned int  unpackedSize = fileDecl.unpackedSize;
+  int     archiveType = fileDecl.archiveType;
+  if (archiveType & 0x40000100)         // BSA with compression or full names
+  {
+    unpackedSize = getBSAUnpackedSize(p, fileDecl);
+    packedSize = packedSize - (unsigned int) (p - fileDecl.fileData);
+  }
+  if (!unpackedSize)
+    return 0;
+  if (!(packedSize || archiveType == 1 || archiveType == 2))
+  {
+    const FileBuffer& fileBuf = *(archiveFiles[fileDecl.archiveFile]);
+    size_t  offs = size_t(p - fileBuf.data());
+    if (offs >= fileBuf.size() || (offs + unpackedSize) > fileBuf.size())
+      errorMessage("invalid packed data offset or size");
+    fileData = p;
+    return unpackedSize;
+  }
+
+  buf.reserve(unpackedSize);
+  if (archiveType == 1 || archiveType == 2)
+    (void) extractBA2Texture(buf, fileDecl);
+  else
+    extractBlock(buf, unpackedSize, fileDecl, p, packedSize);
+  fileData = buf.data();
+  return buf.size();
 }
 
