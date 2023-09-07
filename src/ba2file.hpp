@@ -98,6 +98,11 @@ class BA2File
   // returns the remaining number of mip levels to be skipped
   int extractTexture(std::vector< unsigned char >& buf,
                      const std::string& fileName, int mipOffset = 0) const;
+  // extract file to buf, or get data pointer only if the file is uncompressed
+  // returns the file size
+  size_t extractFile(const unsigned char*& fileData,
+                     std::vector< unsigned char >& buf,
+                     const std::string& fileName) const;
 };
 
 #endif
