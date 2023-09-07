@@ -37,7 +37,7 @@ libSources += ["src/terrmesh.cpp", "src/render.cpp", "src/rndrbase.cpp"]
 libSources += ["src/markers.cpp"]
 # detex source files
 libSources += ["src/bits.c", "src/bptc-tables.c", "src/decompress-bptc.c"]
-fo76utilsLib = env.StaticLibrary("fo76utils", libSources)
+ce2utilsLib = env.StaticLibrary("ce2utils", libSources)
 
 if int(ARGUMENTS.get("pymodule", 0)):
     pyModuleEnv = env.Clone()
@@ -49,10 +49,10 @@ if int(ARGUMENTS.get("pymodule", 0)):
     pyModuleEnv["SHLIBPREFIX"] = "_"
     pyModuleEnv["SWIGFLAGS"] = Split("-c++ -python -Isrc")
     pythonInterface = pyModuleEnv.SharedLibrary(
-                          "scripts/fo76utils",
-                          ["scripts/fo76utils.i"] + libSources)
+                          "scripts/ce2utils",
+                          ["scripts/ce2utils.i"] + libSources)
 
-env.Prepend(LIBS = [fo76utilsLib])
+env.Prepend(LIBS = [ce2utilsLib])
 nifViewEnv = env.Clone()
 buildCubeView = True
 try:
@@ -102,6 +102,6 @@ if "win" in sys.platform:
         pkgFiles += Split(".gitignore LICENSE README.md README.mman-win32")
         pkgFiles += Split("README.detex mapicons.py tes5cell.txt")
         package = env.Command(
-                      "../fo76utils-" + str(buildPackage) + ".7z", pkgFiles,
+                      "../ce2utils-" + str(buildPackage) + ".7z", pkgFiles,
                       "7za a -m0=lzma -mx=9 -x!src/*.o $TARGET $SOURCES")
 
