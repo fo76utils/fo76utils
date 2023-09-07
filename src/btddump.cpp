@@ -1,6 +1,7 @@
 
 #include "common.hpp"
 #include "filebuf.hpp"
+#include "ba2file.hpp"
 #include "btdfile.hpp"
 #include "fp32vec4.hpp"
 
@@ -26,7 +27,7 @@ void vertexNormals(DDSOutputFile& outFile, BTDFile& btdFile,
   std::vector< std::uint16_t >  buf((size_t(w) * size_t(h)) << 1, 0);
   std::vector< std::uint16_t >  cellBuf(size_t(16384 >> (l + l)), 0);
   float   zMin = btdFile.getMinHeight();
-  float   xyScale = 4096.0f / float(cellResolution);
+  float   xyScale = 100.0f / float(cellResolution);
   float   xyScale2 = xyScale * 65535.0f / (btdFile.getMaxHeight() - zMin);
   for (int y = 0; y < h; y++)
   {
@@ -169,89 +170,71 @@ static void loadPalette(unsigned long long *buf, const char *fileName)
 
 int main(int argc, char **argv)
 {
-  if (argc < 8 || argc > 10)
+  if (argc < 5 || argc > 7)
   {
-    std::fprintf(stderr, "Usage: btddump INFILE.BTD OUTFILE FMT "
-                         "XMIN YMIN XMAX YMAX [LOD [PALETTE.GPL]]\n");
+    std::fprintf(stderr, "Usage: btddump INFILE.BTD OUTFILE FMT ARCHIVEPATH "
+                         "[LOD [PALETTE.GPL]]\n");
     std::fprintf(stderr, "    FMT = 0: raw 16-bit height map\n");
     std::fprintf(stderr, "    FMT = 1: vertex normals in 24-bit RGB format\n");
     std::fprintf(stderr, "    FMT = 2: raw landscape textures "
                          "(2 bytes / vertex)\n");
     std::fprintf(stderr, "    FMT = 3: dithered 8-bit landscape texture\n");
-    std::fprintf(stderr, "    FMT = 4: raw ground cover (1 byte / vertex)\n");
-    std::fprintf(stderr, "    FMT = 5: dithered 8-bit ground cover\n");
-    std::fprintf(stderr, "    FMT = 6: raw 16-bit terrain color\n");
-    std::fprintf(stderr, "    FMT = 7: terrain color in 24-bit RGB format\n");
     std::fprintf(stderr, "    FMT = 8: cell texture sets as 8-bit IDs\n");
     std::fprintf(stderr, "    FMT = 9: cell texture sets as 32-bit form IDs\n");
-    std::fprintf(stderr, "Using a palette file changes formats 3 and 5 "
+    std::fprintf(stderr, "Using a palette file changes format 3 "
                          "from dithered 8-bit to RGB\n");
     return 1;
   }
   try
   {
-    BTDFile btdFile(argv[1]);
+    BA2File ba2File(argv[4]);
+    std::vector< unsigned char >  btdBuf;
+    const unsigned char *btdFileData = (unsigned char *) 0;
+    size_t  btdFileSize =
+        ba2File.extractFile(btdFileData, btdBuf, std::string(argv[1]));
+    BTDFile btdFile(btdFileData, btdFileSize);
     int     outFmt =
         int(parseInteger(argv[3], 10, "invalid output format", 0, 9));
-    int     xMin =
-        int(parseInteger(argv[4], 10, "invalid X range", -32768, 32767));
-    int     yMin =
-        int(parseInteger(argv[5], 10, "invalid Y range", -32768, 32767));
-    int     xMax =
-        int(parseInteger(argv[6], 10, "invalid X range", xMin, 32767));
-    int     yMax =
-        int(parseInteger(argv[7], 10, "invalid Y range", yMin, 32767));
-    if (xMin < btdFile.getCellMinX() || yMin < btdFile.getCellMinY() ||
-        xMax > btdFile.getCellMaxX() || yMax > btdFile.getCellMaxY())
-    {
-      xMin = std::max(xMin, btdFile.getCellMinX());
-      yMin = std::max(yMin, btdFile.getCellMinY());
-      xMax = std::min(std::max(xMax, xMin), btdFile.getCellMaxX());
-      yMax = std::min(std::max(yMax, yMin), btdFile.getCellMaxY());
-      std::printf("Cell range limited to %d, %d, %d, %d\n",
-                  xMin, yMin, xMax, yMax);
-    }
+    if (outFmt & 4)
+      errorMessage("invalid output format");
+    int     xMin = btdFile.getCellMinX();
+    int     yMin = btdFile.getCellMinY();
+    int     xMax = btdFile.getCellMaxX();
+    int     yMax = btdFile.getCellMaxY();
+    std::printf("Cell range: %d, %d (SW) to %d, %d (NE)\n",
+                xMin, yMin, xMax, yMax);
     if (outFmt == 0 || outFmt == 1)
     {
       std::printf("Minimum height = %f, maximum height = %f\n",
                   btdFile.getMinHeight(), btdFile.getMaxHeight());
     }
-    unsigned int  gcvrOffset = 0;
-    if (outFmt == 3 || outFmt == 5 || outFmt == 8)
+    if (outFmt == 3 || outFmt == 8)
     {
       for (size_t i = 0; i < btdFile.getLandTextureCount(); i++)
       {
         unsigned int  n = btdFile.getLandTexture(i);
         std::printf("Land texture %d: 0x%08X\n", int(i), n);
       }
-      gcvrOffset = (unsigned int) btdFile.getLandTextureCount();
-      for (size_t i = 0; i < btdFile.getGroundCoverCount(); i++)
-      {
-        unsigned int  n = btdFile.getGroundCover(i);
-        std::printf("Ground cover %d: 0x%08X\n", int(i + gcvrOffset), n);
-      }
     }
-    unsigned char l = (outFmt < 6 ? 0 : 2);
-    if (argc > 8)
+    unsigned char l = 0;
+    if (argc > 5)
     {
-      l = (unsigned char) parseInteger(argv[8], 10, "invalid level of detail",
-                                       ((outFmt & 14) != 6 ? 0 : 2), 4);
+      l = (unsigned char) parseInteger(argv[5], 10, "invalid level of detail",
+                                       0, 4);
     }
     if (outFmt == 8 || outFmt == 9)
       l = 6;
     unsigned char m = 7 - l;
     std::vector< unsigned char >  outBuf;
     std::vector< unsigned long long > ltexPalette;
-    if (argc > 9 && (outFmt == 3 || outFmt == 5))
+    if (argc > 6 && outFmt == 3)
     {
-      outFmt = (outFmt >> 1) + 9;       // 10: LTEX RGB, 11: GCVR RGB
+      outFmt = 10;                      // LTEX RGB
       ltexPalette.resize(256);
-      loadPalette(ltexPalette.data(), argv[9]);
+      loadPalette(ltexPalette.data(), argv[6]);
     }
     std::vector< std::uint16_t >  heightBuf;
     std::vector< std::uint16_t >  ltexBuf;
-    std::vector< unsigned char >  gcvrBuf;
-    std::vector< std::uint16_t >  vclrBuf;
     std::vector< unsigned char >  txtSetBuf(64, 0xFF);
     static const unsigned int outFmtDataSizes[12] =
     {
@@ -271,13 +254,13 @@ int main(int argc, char **argv)
     hdrBuf[1] = 0x444E414C;             // "LAND"
     hdrBuf[2] = (unsigned int) xMin;
     hdrBuf[3] = (unsigned int) yMin;
-    hdrBuf[4] = (unsigned int) int(btdFile.getMinHeight() - 0.5f);
+    hdrBuf[4] = (unsigned int) roundFloat(btdFile.getMinHeight());
     hdrBuf[5] = (unsigned int) xMax;
     hdrBuf[6] = (unsigned int) yMax;
-    hdrBuf[7] = (unsigned int) int(btdFile.getMaxHeight() + 0.5f);
+    hdrBuf[7] = (unsigned int) roundFloat(btdFile.getMaxHeight());
     hdrBuf[8] = 0;                      // water level
     hdrBuf[9] = 1U << m;
-    hdrBuf[10] = (outFmt >= 2 ? gcvrOffset : 1024U);    // default land level
+    hdrBuf[10] = (outFmt >= 2 ? 0U : 1024U);    // default land level
     DDSOutputFile outFile(argv[2],
                           (xMax + 1 - xMin) << ((outFmt & 14) != 8 ? m : 5),
                           (yMax + 1 - yMin) << m,
@@ -315,19 +298,8 @@ int main(int argc, char **argv)
           ltexBuf.resize(cellBufSize);
           btdFile.getCellLandTexture(ltexBuf.data(), x, y, l);
           break;
-        case 4:
-        case 5:
-        case 11:
-          gcvrBuf.resize(cellBufSize);
-          btdFile.getCellGroundCover(gcvrBuf.data(), x, y, l);
-          break;
-        case 6:
-        case 7:
-          vclrBuf.resize(cellBufSize);
-          btdFile.getCellTerrainColor(vclrBuf.data(), x, y, l);
-          break;
       }
-      if (outFmt == 3 || outFmt == 5 || outFmt >= 8)
+      if (outFmt == 3 || outFmt >= 8)
         btdFile.getCellTextureSet(txtSetBuf.data(), x, y);
       for (size_t yy = 0; yy < (1U << m); yy++)
       {
@@ -358,73 +330,24 @@ int main(int argc, char **argv)
               const unsigned char *txtSetPtr =
                   txtSetBuf.data()
                   + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4));
-              unsigned char tmp = txtSetPtr[0];
-              unsigned int  a = ltexBuf[(yy << m) | xx];
-              for (size_t i = 1; i < 6; i++, a = a >> 3)
+              unsigned char tmp = txtSetPtr[6];
+              unsigned int  a =
+                  std::uint32_t(std::int16_t(ltexBuf[(yy << m) | xx]));
+              for (size_t i = 6; i-- > 0; a = a << 3)
               {
                 tmp = blendDithered(tmp, txtSetPtr[i],
-                                    (unsigned char) (((a & 7) * 73U) >> 1),
+                                    (unsigned char)
+                                        ((((a >> 15) & 7) * 73U) >> 1),
                                     int(xx), int(127U - yy));
               }
               p[0] = tmp;
-            }
-            break;
-          case 4:               // raw ground cover
-            for (size_t xx = 0; xx < (1U << m); xx++, p++)
-              p[0] = gcvrBuf[(yy << m) | xx];
-            break;
-          case 5:               // dithered 8-bit ground cover
-            for (size_t xx = 0; xx < (1U << m); xx++, p++)
-            {
-              const unsigned long long  ditherGCVR = 0x0110028041145AFFULL;
-              const unsigned char *txtSetPtr =
-                  txtSetBuf.data()
-                  + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4) + 8);
-              unsigned char tmp = 0xFF;
-              unsigned char dx = (unsigned char) (xx & 3);
-              unsigned char dy = (unsigned char) ((127U - yy) & 1);
-              unsigned char n = (dy << 2) | dx;
-              for (unsigned int i = 0; i < 8; i++)
-              {
-                if (gcvrBuf[(yy << m) | xx] & (1U << i))
-                {
-                  if (ditherGCVR & (1ULL << n))
-                    tmp = txtSetPtr[i];
-                  n = n + 8;
-                }
-              }
-              if (tmp != 0xFF)
-                tmp = (unsigned char) (gcvrOffset + tmp);
-              p[0] = tmp;
-            }
-            break;
-          case 6:               // raw vertex colors
-            for (size_t xx = 0; xx < (1U << m); xx++, p = p + 2)
-            {
-              unsigned int  tmp = vclrBuf[(yy << m) | xx];
-              p[0] = (unsigned char) (tmp & 0xFF);
-              p[1] = (unsigned char) ((tmp >> 8) | 0x80);
-            }
-            break;
-          case 7:               // vertex colors in 24-bit RGB format
-            for (size_t xx = 0; xx < (1U << m); xx++, p = p + 3)
-            {
-              unsigned int  tmp = vclrBuf[(yy << m) | xx];
-              p[0] = (unsigned char) (((tmp & 0x001F) * 1053U + 64) >> 7);
-              p[1] = (unsigned char) (((tmp & 0x03E0) * 1053U + 2048) >> 12);
-              p[2] = (unsigned char) (((tmp & 0x7C00) * 1053U + 65536) >> 17);
             }
             break;
           case 8:               // texture set as 8-bit IDs
             for (size_t xx = 0; xx < (1U << m); xx++, p = p + 16)
             {
               for (size_t i = 0; i < 16; i++)
-              {
-                unsigned int  tmp = txtSetBuf[(((yy << m) | xx) << 4) | i];
-                if (i >= 8 && tmp != 0xFF)
-                  tmp += gcvrOffset;
-                p[i] = (unsigned char) tmp;
-              }
+                p[i] = txtSetBuf[(((yy << m) | xx) << 4) | i];
             }
             break;
           case 9:               // texture set as 32-bit form IDs
@@ -433,12 +356,10 @@ int main(int argc, char **argv)
               for (size_t i = 0; i < 16; i++)
               {
                 unsigned int  tmp = txtSetBuf[(((yy << m) | xx) << 4) | i];
-                if (tmp == 0xFF)
+                if (tmp == 0xFF || i >= 8)
                   tmp = 0U;
-                else if (i < 8)
-                  tmp = btdFile.getLandTexture(tmp);
                 else
-                  tmp = btdFile.getGroundCover(tmp);
+                  tmp = btdFile.getLandTexture(tmp);
                 p[i << 2] = (unsigned char) (tmp & 0xFF);
                 p[(i << 2) + 1] = (unsigned char) ((tmp >> 8) & 0xFF);
                 p[(i << 2) + 2] = (unsigned char) ((tmp >> 16) & 0xFF);
@@ -452,35 +373,13 @@ int main(int argc, char **argv)
               const unsigned char *txtSetPtr =
                   txtSetBuf.data()
                   + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4));
-              unsigned long long  tmp = ltexPalette[txtSetPtr[0]];
-              unsigned int  a = ltexBuf[(yy << m) | xx];
-              for (size_t i = 1; i < 6; i++, a = a >> 3)
+              unsigned long long  tmp = ltexPalette[txtSetPtr[6]];
+              unsigned int  a =
+                  std::uint32_t(std::int16_t(ltexBuf[(yy << m) | xx]));
+              for (size_t i = 6; i-- > 0; a = a << 3)
               {
                 tmp = blendRBG64(tmp, ltexPalette[txtSetPtr[i]],
-                                 ((a & 7) * 73U) >> 1);
-              }
-              tmp = tmp + 0x0000080000800008ULL;
-              p[0] = (unsigned char) ((tmp >> 4) & 0xFF);
-              p[1] = (unsigned char) ((tmp >> 24) & 0xFF);
-              p[2] = (unsigned char) ((tmp >> 44) & 0xFF);
-            }
-            break;
-          case 11:              // RGB ground cover
-            for (size_t xx = 0; xx < (1U << m); xx++, p = p + 3)
-            {
-              const unsigned char *txtSetPtr =
-                  txtSetBuf.data()
-                  + (((yy >> (m - 1)) << 5) + ((xx >> (m - 1)) << 4) + 8);
-              unsigned long long  tmp = ltexPalette[0xFF];
-              unsigned int  n = 0;
-              for (unsigned int i = 0; i < 8; i++)
-              {
-                unsigned int  g = txtSetPtr[i];
-                if (g == 0xFF || !(gcvrBuf[(yy << m) | xx] & (1U << i)))
-                  continue;
-                g = (gcvrOffset + g) & 0xFFU;
-                n++;
-                tmp = blendRBG64(tmp, ltexPalette[g], (256U + (n >> 1)) / n);
+                                 (((a >> 15) & 7) * 73U) >> 1);
               }
               tmp = tmp + 0x0000080000800008ULL;
               p[0] = (unsigned char) ((tmp >> 4) & 0xFF);
