@@ -171,7 +171,7 @@ int main(int argc, char **argv)
     if (stringsFileName)
     {
       if (!stringsPrefix)
-        stringsPrefix = "strings/seventysix_en";
+        stringsPrefix = "strings/starfield_en";
       esmFile.loadStrings(stringsFileName, stringsPrefix);
     }
     esmFile.setRecordFlagsMask(flagsIncluded, flagsExcluded);

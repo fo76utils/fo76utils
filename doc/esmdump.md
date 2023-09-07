@@ -4,7 +4,7 @@ List records from ESM file(s) in text or TSV format.
 
 * **FILENAME.ESM\[,...\]**: Path to ESM file, can be a comma separated pair of file names for base game + DLC.
 * **LOCALIZATION.BA2**: Archive file or directory containing localization files. Only used by Skyrim and newer games.
-* **STRINGS_PREFIX**: Name prefix of localization files to load, defaults to **seventysix_en** for Fallout 76 in English. Use **baunpack ARCHIVEPATH --list .ilstrings** to print the list of available localization files, for the Skyrim and Fallout 4 base game in English, the prefix should be **skyrim_english** and **fallout4_en**, respectively.
+* **STRINGS_PREFIX**: Name prefix of localization files to load, defaults to **strings/starfield_en** for Starfield in English. Use **baunpack ARCHIVEPATH --list .ilstrings** to print the list of available localization files, for the Skyrim and Fallout 4 base game in English, the prefix should be **skyrim_english** and **fallout4_en**, respectively.
 
 ### Options
 
@@ -52,9 +52,7 @@ After #, ;, or //, the rest of the line is ignored. Data types include:
 
 ### Examples
 
-    ./esmdump Fallout76/Data/SeventySix.esm Fallout76/Data | sed "s/<ID=........>//" > seventysix.txt
-    ./esmdump Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCCoast.esm Fallout4/Data fallout4_en -t -o fallout4fh.tsv
-    ./esmdump Skyrim/Data/Skyrim.esm Skyrim/Data skyrim_english -i CELL -x REFR -x ACHR -F tes5cell.txt -o skyrim_cells.txt
+    ./esmdump Starfield/Data/Starfield.esm Starfield/Data > starfield.txt
     ./esmdump Fallout4/Data/Fallout4.esm -u -edid -o fallout4vc.tsv
     ./esmdump Fallout4/Data/Fallout4.esm -u | python3 scripts/esmvcdisp.py -h 69 48 183 -
 

@@ -1005,7 +1005,7 @@ int main(int argc, char **argv)
         if (archivePath)
         {
           if (!stringsPrefix)
-            stringsPrefix = "strings/seventysix_en";
+            stringsPrefix = "strings/starfield_en";
           esmFilePtr->loadStrings(stringsPrefix);
         }
         esmFilePtr->findEDIDs();
