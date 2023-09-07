@@ -117,7 +117,6 @@ class RenderThread : public LandscapeTexture
   std::vector< unsigned char >  outBuf;
   RenderThread(const unsigned char *txtSetPtr, const unsigned char *ltex32Ptr,
                const unsigned char *vclr24Ptr, const unsigned char *ltex16Ptr,
-               const unsigned char *vclr16Ptr, const unsigned char *gcvrPtr,
                int vertexCntX, int vertexCntY, int cellResolution,
                const LandscapeTextureSet *landTxts, size_t landTxtCnt);
   RenderThread(const LandscapeData& landData,
@@ -130,12 +129,12 @@ class RenderThread : public LandscapeTexture
 RenderThread::RenderThread(
     const unsigned char *txtSetPtr, const unsigned char *ltex32Ptr,
     const unsigned char *vclr24Ptr, const unsigned char *ltex16Ptr,
-    const unsigned char *vclr16Ptr, const unsigned char *gcvrPtr,
     int vertexCntX, int vertexCntY, int cellResolution,
     const LandscapeTextureSet *landTxts, size_t landTxtCnt)
   : LandscapeTexture(txtSetPtr, ltex32Ptr, vclr24Ptr,
-                     ltex16Ptr, vclr16Ptr, gcvrPtr, vertexCntX, vertexCntY,
-                     cellResolution, landTxts, landTxtCnt),
+                     ltex16Ptr, (unsigned char *) 0, (unsigned char *) 0,
+                     vertexCntX, vertexCntY, cellResolution,
+                     landTxts, landTxtCnt),
     threadPtr((std::thread *) 0),
     xyScale(0)
 {
@@ -190,7 +189,6 @@ static const char *usageStrings[] =
   "",
   "DDS input file options:",
   "    -vclr FILENAME.DDS  vertex color file name",
-  "    -gcvr FILENAME.DDS  ground cover file name",
   "",
   "ESM/BTD input file options:",
   "    -btd FILENAME.BTD   read terrain data from Fallout 76 .btd file",
@@ -199,7 +197,6 @@ static const char *usageStrings[] =
   "    -l INT              level of detail to use from BTD file (0 to 4)",
   "    -deftxt FORMID      form ID of default texture",
   "    -no-vclr            do not use vertex color data",
-  "    -gcvr               use ground cover data",
   (char *) 0
 };
 
@@ -210,7 +207,6 @@ int main(int argc, char **argv)
   DDSInputFile  *inFile = (DDSInputFile *) 0;
   DDSInputFile  *txtSetFile = (DDSInputFile *) 0;
   DDSInputFile  *vclrFile = (DDSInputFile *) 0;
-  DDSInputFile  *gcvrFile = (DDSInputFile *) 0;
   ESMFile       *esmFile = (ESMFile *) 0;
   BA2File       *ba2File = (BA2File *) 0;
   LandscapeData *landData = (LandscapeData *) 0;
@@ -218,7 +214,6 @@ int main(int argc, char **argv)
   try
   {
     const char    *vclrFileName = (char *) 0;
-    const char    *gcvrFileName = (char *) 0;
     float         mipLevel = 5.0f;
     float         rgbScale = 1.0f;
     std::uint32_t defaultColor = 0x003F3F3F;
@@ -228,7 +223,6 @@ int main(int argc, char **argv)
     bool          verboseMode = true;
     bool          isFO76 = false;
     unsigned char txtSetMip = 0;
-    unsigned char fo76VClrMip = 0;
     const char    *archivePath = (char *) 0;
     const char    *btdFileName = (char *) 0;
     unsigned int  worldFormID = 0U;
@@ -240,7 +234,6 @@ int main(int argc, char **argv)
     unsigned char btdLOD = 2;
     unsigned char ssaaLevel = 0;
     bool          disableVCLR = false;
-    bool          disableGCVR = true;
     unsigned int  hdrBuf[11];
 
     std::vector< const char * > args;
@@ -322,12 +315,6 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         vclrFileName = argv[i];
       }
-      else if (std::strcmp(argv[i], "-gcvr") == 0)
-      {
-        if (++i >= argc)
-          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        gcvrFileName = argv[i];
-      }
       else if (std::strcmp(argv[i], "-btd") == 0)
       {
         if (++i >= argc)
@@ -371,10 +358,6 @@ int main(int argc, char **argv)
       {
         disableVCLR = true;
       }
-      else if (std::strcmp(argv[i], "-gcvr") == 0)
-      {
-        disableGCVR = false;
-      }
       else
       {
         throw FO76UtilsError("invalid command line option: %s", argv[i]);
@@ -390,7 +373,10 @@ int main(int argc, char **argv)
     threads.resize(size_t(threadCnt), (RenderThread *) 0);
 
     if (archivePath)
-      ba2File = new BA2File(archivePath, ".dds\t.bgsm", "/lod/\t/actors/");
+    {
+      ba2File =
+          new BA2File(archivePath, ".dds\t.bgsm\t.btd", "/lod/\t/actors/");
+    }
     int     width = 0;
     int     height = 0;
     if (ssaaLevel > 0)
@@ -433,28 +419,10 @@ int main(int argc, char **argv)
       {
         vclrFile = new DDSInputFile(vclrFileName,
                                     tmpWidth, tmpHeight, tmpPixelFormat);
-        if (!((tmpPixelFormat == DDSInputFile::pixelFormatRGBA16 && isFO76) ||
-              (tmpPixelFormat == DDSInputFile::pixelFormatRGB24 && !isFO76)))
-        {
+        if (tmpPixelFormat != DDSInputFile::pixelFormatRGB24 || isFO76)
           errorMessage("invalid vertex color file pixel format");
-        }
-        while (fo76VClrMip < 4 &&
-               !(width == (tmpWidth << fo76VClrMip) &&
-                 height == (tmpHeight << fo76VClrMip)))
-        {
-          fo76VClrMip++;
-        }
-        if (fo76VClrMip >= (unsigned char) (!isFO76 ? 1 : 4))
+        if (width != tmpWidth || height != tmpHeight)
           errorMessage("vertex color dimensions do not match input file");
-      }
-      if (gcvrFileName && !disableGCVR)
-      {
-        gcvrFile = new DDSInputFile(gcvrFileName,
-                                    tmpWidth, tmpHeight, tmpPixelFormat);
-        if (tmpPixelFormat != DDSInputFile::pixelFormatA8)
-          errorMessage("invalid ground cover file pixel format");
-        if (tmpWidth != width || tmpHeight != height)
-          errorMessage("ground cover dimensions do not match input file");
       }
       loadTextures(landTextures, args[3], (LandscapeData *) 0, verboseMode,
                    int(mipLevel), ba2File);
@@ -463,19 +431,15 @@ int main(int argc, char **argv)
     {
       // ESM/BTD input file(s)
       esmFile = new ESMFile(args[0]);
-      unsigned int  formatMask = 0x1A;
+      unsigned int  formatMask = 0x0A;
       if (disableVCLR)
         formatMask &= ~8U;
-      if (disableGCVR)
-        formatMask &= ~16U;
       landData = new LandscapeData(esmFile, btdFileName, ba2File,
                                    formatMask, worldFormID, defTxtID,
                                    btdLOD, xMin, yMin, xMax, yMax);
       isFO76 = (esmFile->getESMVersion() >= 0xC0U);
       while ((2 << txtSetMip) < landData->getCellResolution())
         txtSetMip++;
-      while ((32 << fo76VClrMip) < landData->getCellResolution())
-        fo76VClrMip++;
       width = landData->getImageWidth();
       height = landData->getImageHeight();
       hdrBuf[0] = (!isFO76 ? 0x5F344F46U : 0x36374F46U);        // "FO4_"/"FO76"
@@ -513,8 +477,6 @@ int main(int argc, char **argv)
         const unsigned char *ltexData32 = (unsigned char *) 0;
         const unsigned char *vclrData24 = (unsigned char *) 0;
         const unsigned char *ltexData16 = (unsigned char *) 0;
-        const unsigned char *vclrData16 = (unsigned char *) 0;
-        const unsigned char *gcvrData = (unsigned char *) 0;
         if (!isFO76)
         {
           ltexData32 = inFile->data();
@@ -524,14 +486,9 @@ int main(int argc, char **argv)
         else
         {
           ltexData16 = inFile->data();
-          if (vclrFile)
-            vclrData16 = vclrFile->data();
-          if (gcvrFile)
-            gcvrData = gcvrFile->data();
         }
         threads[i] = new RenderThread(txtSetFile->data(),
-                                      ltexData32, vclrData24,
-                                      ltexData16, vclrData16, gcvrData,
+                                      ltexData32, vclrData24, ltexData16,
                                       width >> xyScale, height >> xyScale,
                                       2 << txtSetMip, landTextures.data(),
                                       landTextures.size());
@@ -645,8 +602,6 @@ int main(int argc, char **argv)
     delete landData;
   if (esmFile)
     delete esmFile;
-  if (gcvrFile)
-    delete gcvrFile;
   if (vclrFile)
     delete vclrFile;
   if (txtSetFile)

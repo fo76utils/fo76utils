@@ -187,7 +187,7 @@ int main(int argc, char **argv)
   }
   try
   {
-    BA2File ba2File(argv[4]);
+    BA2File ba2File(argv[4], ".btd");
     std::vector< unsigned char >  btdBuf;
     const unsigned char *btdFileData = (unsigned char *) 0;
     size_t  btdFileSize =
