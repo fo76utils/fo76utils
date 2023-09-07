@@ -220,8 +220,8 @@ const BTDFile::TileData& BTDFile::loadTile(int cellX, int cellY,
   return tileData;
 }
 
-BTDFile::BTDFile(const char *fileName)
-  : FileBuffer(fileName)
+BTDFile::BTDFile(const unsigned char *fileData, size_t fileSize)
+  : FileBuffer(fileData, fileSize)
 {
   if (!checkType(readUInt32(), "BTDB"))
     errorMessage("input file format is not BTD");

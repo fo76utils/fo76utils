@@ -36,7 +36,7 @@ class LandscapeData
   std::vector< BGSMFile >     ltexMaterials;
   std::vector< std::uint32_t >  dataBuf;
   void allocateDataBuf(unsigned int formatMask, bool isFO76);
-  void loadBTDFile(const char *btdFileName,
+  void loadBTDFile(const unsigned char *btdFileData, size_t btdFileSize,
                    unsigned int formatMask, unsigned char mipLevel);
   // ((y + 32768) << 48) | ((x + 32768) << 32) | land_formID
   void findESMLand(ESMFile& esmFile,
@@ -55,9 +55,8 @@ class LandscapeData
   // formatMask & 2:  set to load land textures (pixelFormatL8A24)
   // formatMask & 4:  set to load vertex normals (pixelFormatRGB24)
   // formatMask & 8:  set to load vertex colors (pixelFormatRGB24 or RGBA16)
-  // formatMask & 16: set to load ground cover (pixelFormatL8A8)
   LandscapeData(ESMFile *esmFile, const char *btdFileName,
-                const BA2File *ba2File, unsigned int formatMask = 31U,
+                const BA2File *ba2File, unsigned int formatMask = 15U,
                 unsigned int worldID = 0U, unsigned int defTxtID = 0U,
                 int mipLevel = 2, int xMin = -32768, int yMin = -32768,
                 int xMax = 32767, int yMax = 32767);

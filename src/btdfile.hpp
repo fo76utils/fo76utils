@@ -59,7 +59,7 @@ class BTDFile : public FileBuffer
                                unsigned int blockMask);
   const TileData& loadTile(int cellX, int cellY, unsigned int blockMask);
  public:
-  BTDFile(const char *fileName);
+  BTDFile(const unsigned char *fileData, size_t fileSize);
   virtual ~BTDFile();
   // set the number of 8x8 cell (5.125 MiB) tiles to keep decompressed
   void setTileCacheSize(size_t n);

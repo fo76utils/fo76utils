@@ -1,4 +1,4 @@
-    btddump INFILE.BTD OUTFILE.DDS FMT XMIN YMIN XMAX YMAX [LOD [PALETTE.GPL]]
+    btddump INFILE.BTD OUTFILE.DDS FMT ARCHIVEPATH [LOD [PALETTE.GPL]]
 
 Extract terrain data from [Starfield .BTD files](../src/btdfile.cpp) to raw height map or land textures.
 
@@ -14,13 +14,6 @@ Extract terrain data from [Starfield .BTD files](../src/btdfile.cpp) to raw heig
 Using a palette file changes format 3 from dithered 8-bit to RGB.
 
 ### Options
-
-* **XMIN**: X coordinate of the cell in the SW corner.
-* **YMIN**: Y coordinate of the cell in the SW corner.
-* **XMAX**: X coordinate of the cell in the NE corner.
-* **YMAX**: Y coordinate of the cell in the NE corner.
-
-To extract all data, use a large range like -1000 -1000 1000 1000.
 
 * **LOD**: Level of detail from 0 to 4. Not supported by texture set output formats. Cell resolution is 128x128 at level 0, and 8x8 at level 4.
 

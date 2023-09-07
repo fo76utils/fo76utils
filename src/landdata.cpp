@@ -97,14 +97,15 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
   }
 }
 
-void LandscapeData::loadBTDFile(const char *btdFileName,
-                                unsigned int formatMask, unsigned char mipLevel)
+void LandscapeData::loadBTDFile(
+    const unsigned char *btdFileData, size_t btdFileSize,
+    unsigned int formatMask, unsigned char mipLevel)
 {
   if (mipLevel < (formatMask == 0x08 ? 2 : 0) || mipLevel > 4)
     errorMessage("LandscapeData: invalid mip level");
   cellResolution = 128 >> mipLevel;
   cellOffset = 64 >> mipLevel;
-  BTDFile btdFile(btdFileName);
+  BTDFile btdFile(btdFileData, btdFileSize);
   if (btdFile.getCellMinX() > cellMinX)
     cellMinX = btdFile.getCellMinX();
   if (btdFile.getCellMinY() > cellMinY)
@@ -762,7 +763,19 @@ LandscapeData::LandscapeData(
         btdFullName += ".btd";
       s = btdFullName.c_str();
     }
-    loadBTDFile(s, formatMask & 0x1B, l);
+    if (ba2File)
+    {
+      std::vector< unsigned char >  btdBuf;
+      const unsigned char *btdFileData = (unsigned char *) 0;
+      size_t  btdFileSize =
+          ba2File->extractFile(btdFileData, btdBuf, std::string(s));
+      loadBTDFile(btdFileData, btdFileSize, formatMask & 0x0B, l);
+    }
+    else
+    {
+      FileBuffer  btdBuf(s);
+      loadBTDFile(btdBuf.data(), btdBuf.size(), formatMask & 0x0B, l);
+    }
   }
   else if (esmFile)
   {
