@@ -637,7 +637,7 @@ void Renderer::addTerrainCell(const ESMFile::ESMRecord& r)
   {
     if (threadCnt > 1 && n >= 64)
     {
-      int     m = roundFloat(float(width) * float(height) * (1.0f / 16777216.0f)
+      int     m = roundFloat(float(width) * float(height) * (1.0f / 10000.0f)
                              / (viewTransform.scale * viewTransform.scale));
       if (n >= 128 && m < (int(threadCnt) << 2))
         n = n >> 1;
@@ -1876,8 +1876,10 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
             t.renderer->m.texturePaths[0].find("/temp_ground")
             != std::string::npos)
         {
+#if 0
           if ((texturePathMask & 0x0001U) || !(p.flags & 0x0020))
             continue;
+#endif
           textures[0] = &whiteTexture;  // marker with vertex colors only
           textureMask |= 0x0001U;
         }
@@ -2113,7 +2115,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     height(imageHeight),
     ba2File(archiveFiles),
     esmFile(masterFiles),
-    viewTransform(0.0625f, 3.14159265f, 0.0f, 0.0f,
+    viewTransform(4.0f, 3.14159265f, 0.0f, 0.0f,
                   float(imageWidth) * 0.5f, float(imageHeight) * 0.5f,
                   32768.0f),
     lightX(-0.6667f),
