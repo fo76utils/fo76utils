@@ -298,11 +298,13 @@ void BA2File::loadFile(FileBuffer& buf, size_t archiveFile,
       continue;
     fileName2 += c;
   }
-  if ((n = fileName2.rfind("/interface/")) != std::string::npos ||
+  if ((n = fileName2.rfind("/geometries/")) != std::string::npos ||
+      (n = fileName2.rfind("/interface/")) != std::string::npos ||
       (n = fileName2.rfind("/materials/")) != std::string::npos ||
       (n = fileName2.rfind("/meshes/")) != std::string::npos ||
       (n = fileName2.rfind("/sound/")) != std::string::npos ||
       (n = fileName2.rfind("/strings/")) != std::string::npos ||
+      (n = fileName2.rfind("/terrain/")) != std::string::npos ||
       (n = fileName2.rfind("/textures/")) != std::string::npos)
   {
     fileName2.erase(0, n + 1);
@@ -366,20 +368,31 @@ void BA2File::loadArchivesFromDir(const char *pathName)
           baseName[i] = baseName[i] + ('a' - 'A');
       }
       size_t  n = baseName.rfind('.');
-      if (n == std::string::npos || (n + 4) > baseName.length())
-        continue;
-      const char  *s = baseName.c_str() + (baseName.length() - 4);
-      if (!(FileBuffer::checkType(0x3261622E, s) ||     // ".ba2"
-            FileBuffer::checkType(0x6173622E, s) ||     // ".bsa"
-            FileBuffer::checkType(0x6D656762, s) ||     // "bgem"
-            FileBuffer::checkType(0x6D736762, s) ||     // "bgsm"
-            FileBuffer::checkType(0x6F74622E, s) ||     // ".bto"
-            FileBuffer::checkType(0x7274622E, s) ||     // ".btr"
-            FileBuffer::checkType(0x7364642E, s) ||     // ".dds"
-            FileBuffer::checkType(0x66696E2E, s) ||     // ".nif"
-            FileBuffer::checkType(0x73676E69, s)))      // "ings"
+      if (n == std::string::npos ||
+          ((((baseName.length() - n) - 3) & ~1ULL) &&
+           !baseName.ends_with("strings")))
       {
         continue;
+      }
+      const char  *s = baseName.c_str() + (baseName.length() - 4);
+      std::uint32_t fileType = FileBuffer::readUInt32Fast(s);
+      switch (fileType)
+      {
+        case 0x3261622EU:               // ".ba2"
+        case 0x6173622EU:               // ".bsa"
+        case 0x6474622EU:               // ".btd"
+        case 0x6F74622EU:               // ".bto"
+        case 0x7274622EU:               // ".btr"
+        case 0x7364642EU:               // ".dds"
+        case 0x74616D2EU:               // ".mat"
+        case 0x66696E2EU:               // ".nif"
+        case 0x6D656762U:               // "bgem"
+        case 0x6D736762U:               // "bgsm"
+        case 0x6873656DU:               // "mesh"
+        case 0x73676E69U:               // "ings"
+          break;
+        default:
+          continue;
       }
       if ((baseName.starts_with("oblivion") ||
            baseName.starts_with("fallout") || baseName.starts_with("skyrim") ||
