@@ -9,8 +9,6 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
   size_t  vnmlDataSize = 0;
   size_t  vclrData24Size = 0;
   size_t  ltexData16Size = 0;
-  size_t  vclrData16Size = 0;
-  size_t  gcvrDataSize = 0;
   size_t  txtSetDataSize = 0;
   size_t  vertexCnt = size_t(getImageWidth()) * size_t(getImageHeight());
   if (formatMask & 0x01)
@@ -28,25 +26,15 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
   {
     if (formatMask & 0x02)
       ltexData16Size = vertexCnt * sizeof(std::uint16_t);
-    if (formatMask & 0x08)
-    {
-      vclrData16Size = vertexCnt * sizeof(std::uint16_t);
-      if (cellResolution >= 128)
-        vclrData16Size = vclrData16Size >> 4;
-      else if (cellResolution >= 64)
-        vclrData16Size = vclrData16Size >> 2;
-    }
-    if (formatMask & 0x10)
-      gcvrDataSize = vertexCnt;
   }
-  if (formatMask & 0x12)
+  if (formatMask & 0x02)
   {
     txtSetDataSize =
         size_t(cellMaxX + 1 - cellMinX) * size_t(cellMaxY + 1 - cellMinY) * 64;
   }
   size_t  totalDataSize =
       (hmapDataSize + ltexData32Size + vnmlDataSize + vclrData24Size
-       + ltexData16Size + vclrData16Size + gcvrDataSize + txtSetDataSize)
+       + ltexData16Size + txtSetDataSize)
       / sizeof(std::uint32_t);
   if (totalDataSize < 1)
     return;
@@ -79,16 +67,6 @@ void LandscapeData::allocateDataBuf(unsigned int formatMask, bool isFO76)
     ltexData16 = reinterpret_cast< std::uint16_t * >(p);
     p = p + ltexData16Size;
   }
-  if (vclrData16Size)
-  {
-    vclrData16 = reinterpret_cast< std::uint16_t * >(p);
-    p = p + vclrData16Size;
-  }
-  if (gcvrDataSize)
-  {
-    gcvrData = p;
-    p = p + gcvrDataSize;
-  }
   if (txtSetDataSize)
   {
     txtSetData = p;
@@ -101,10 +79,9 @@ void LandscapeData::loadBTDFile(
     const unsigned char *btdFileData, size_t btdFileSize,
     unsigned int formatMask, unsigned char mipLevel)
 {
-  if (mipLevel < (formatMask == 0x08 ? 2 : 0) || mipLevel > 4)
+  if (mipLevel > 4)
     errorMessage("LandscapeData: invalid mip level");
   cellResolution = 128 >> mipLevel;
-  cellOffset = 64 >> mipLevel;
   BTDFile btdFile(btdFileData, btdFileSize);
   if (btdFile.getCellMinX() > cellMinX)
     cellMinX = btdFile.getCellMinX();
@@ -117,19 +94,13 @@ void LandscapeData::loadBTDFile(
   zMin = btdFile.getMinHeight();
   zMax = btdFile.getMaxHeight();
   size_t  ltexCnt = 0;
-  size_t  gcvrCnt = 0;
-  if (formatMask & 0x12)
-  {
+  if (formatMask & 0x02)
     ltexCnt = btdFile.getLandTextureCount();
-    gcvrCnt = btdFile.getGroundCoverCount();
-  }
-  ltexFormIDs.resize(ltexCnt + gcvrCnt);
+  ltexFormIDs.resize(ltexCnt);
   for (size_t i = 0; i < ltexCnt; i++)
     ltexFormIDs[i] = btdFile.getLandTexture(i);
-  for (size_t i = 0; i < gcvrCnt; i++)
-    ltexFormIDs[ltexCnt + i] = btdFile.getGroundCover(i);
-  ltexEDIDs.resize(ltexCnt + gcvrCnt);
-  ltexMaterials.resize(ltexCnt + gcvrCnt);
+  ltexEDIDs.resize(ltexCnt);
+  ltexMaterials.resize(ltexCnt);
   for (size_t i = 0; i < ltexMaterials.size(); i++)
     ltexMaterials[i].texturePaths.setTexturePath(0, "");
   allocateDataBuf(formatMask, true);
@@ -167,46 +138,7 @@ void LandscapeData::loadBTDFile(
           ltexData16[offs] = *bufp16;
       }
     }
-    if (formatMask & 0x08)              // terrain color
-    {
-      std::uint16_t *bufp16 = tmpBuf.data();
-      if (mipLevel > 2)
-      {
-        btdFile.getCellTerrainColor(bufp16, x, y, mipLevel);
-        for (size_t yy = 0; yy < n; yy++)
-        {
-          size_t  offs = size_t((cellMaxY - y) << m) | (~yy & (n - 1));
-          offs = ((offs * w) + size_t(x - cellMinX)) << m;
-          for (size_t xx = 0; xx < n; xx++, bufp16++, offs++)
-            vclrData16[offs] = *bufp16;
-        }
-      }
-      else
-      {
-        btdFile.getCellTerrainColor(bufp16, x, y, 2);
-        for (size_t yy = 0; yy < 32; yy++)
-        {
-          size_t  offs = size_t((cellMaxY - y) << 5) | (31U - yy);
-          offs = ((offs * w) + size_t(x - cellMinX)) << 5;
-          for (size_t xx = 0; xx < 32; xx++, bufp16++, offs++)
-            vclrData16[offs] = *bufp16;
-        }
-      }
-    }
-    if (formatMask & 0x10)              // ground cover
-    {
-      unsigned char   *bufp8 =
-          reinterpret_cast< unsigned char * >(tmpBuf.data());
-      btdFile.getCellGroundCover(bufp8, x, y, mipLevel);
-      for (size_t yy = 0; yy < n; yy++)
-      {
-        size_t  offs = size_t((cellMaxY - y) << m) | (~yy & (n - 1));
-        offs = ((offs * w) + size_t(x - cellMinX)) << m;
-        for (size_t xx = 0; xx < n; xx++, bufp8++, offs++)
-          gcvrData[offs] = *bufp8;
-      }
-    }
-    if (formatMask & 0x12)              // texture set
+    if (formatMask & 0x02)              // texture set
     {
       unsigned char   *bufp8 =
           reinterpret_cast< unsigned char * >(tmpBuf.data());
@@ -678,14 +610,11 @@ LandscapeData::LandscapeData(
     cellMaxX(xMax),
     cellMaxY(yMax),
     cellResolution(32),
-    cellOffset(0),
     hmapData((std::uint16_t *) 0),
     ltexData32((std::uint32_t *) 0),
     vnmlData((unsigned char *) 0),
     vclrData24((unsigned char *) 0),
     ltexData16((std::uint16_t *) 0),
-    gcvrData((unsigned char *) 0),
-    vclrData16((std::uint16_t *) 0),
     txtSetData((unsigned char *) 0),
     zMin(1.0e9f),
     zMax(-1.0e9f),
@@ -718,19 +647,26 @@ LandscapeData::LandscapeData(
     if (!(n > 4 && (FileBuffer::readUInt32Fast(s + (n - 4)) & 0xDFDFDFFFU)
                    == 0x4454422EU))     // ".BTD"
     {
-      btdFullName = btdFileName;
-      if (!btdFullName.empty())
+      if (!ba2File)
       {
-        if (btdFullName.back() != '/'
-#if defined(_WIN32) || defined(_WIN64)
-            && btdFullName.back() != '\\' && btdFullName.back() != ':'
-#endif
-            )
+        btdFullName = btdFileName;
+        if (!btdFullName.empty())
         {
-          btdFullName += '/';
+          if (btdFullName.back() != '/'
+#if defined(_WIN32) || defined(_WIN64)
+              && btdFullName.back() != '\\' && btdFullName.back() != ':'
+#endif
+              )
+          {
+            btdFullName += '/';
+          }
         }
+        btdFullName += "Terrain/";
       }
-      btdFullName += "Terrain/";
+      else
+      {
+        btdFullName = "terrain/";
+      }
       bool    nameFound = false;
       if (esmFile)
       {
@@ -749,6 +685,8 @@ LandscapeData::LandscapeData(
                   break;
                 if (!((unsigned char) c >= 0x20 && (unsigned char) c < 0x7F))
                   c = '_';
+                if (ba2File && c >= 'A' && c <= 'Z')
+                  c = c + ('a' - 'A');
                 btdFullName += c;
               }
               nameFound = true;
@@ -758,7 +696,7 @@ LandscapeData::LandscapeData(
         }
       }
       if (!nameFound)
-        btdFullName += "Appalachia.btd";
+        errorMessage("LandscapeData: no BTD file name");
       else
         btdFullName += ".btd";
       s = btdFullName.c_str();
@@ -769,12 +707,12 @@ LandscapeData::LandscapeData(
       const unsigned char *btdFileData = (unsigned char *) 0;
       size_t  btdFileSize =
           ba2File->extractFile(btdFileData, btdBuf, std::string(s));
-      loadBTDFile(btdFileData, btdFileSize, formatMask & 0x0B, l);
+      loadBTDFile(btdFileData, btdFileSize, formatMask & 0x03, l);
     }
     else
     {
       FileBuffer  btdBuf(s);
-      loadBTDFile(btdBuf.data(), btdBuf.size(), formatMask & 0x0B, l);
+      loadBTDFile(btdBuf.data(), btdBuf.size(), formatMask & 0x03, l);
     }
   }
   else if (esmFile)

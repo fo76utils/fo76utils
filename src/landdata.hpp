@@ -17,14 +17,11 @@ class LandscapeData
   int     cellMaxX;
   int     cellMaxY;
   int     cellResolution;
-  int     cellOffset;
   std::uint16_t *hmapData;
   std::uint32_t *ltexData32;
   unsigned char *vnmlData;
   unsigned char *vclrData24;
   std::uint16_t *ltexData16;
-  unsigned char *gcvrData;
-  std::uint16_t *vclrData16;
   unsigned char *txtSetData;
   float   zMin;
   float   zMax;
@@ -112,11 +109,11 @@ class LandscapeData
   // return the image X/Y position corresponding to 0.0,0.0 world coordinates
   inline int getOriginX() const
   {
-    return ((-cellMinX) * cellResolution + cellOffset);
+    return ((-cellMinX) * cellResolution);
   }
   inline int getOriginY() const
   {
-    return ((cellMaxY + 1) * cellResolution - (cellOffset + 1));
+    return ((cellMaxY + 1) * cellResolution - 1);
   }
   inline size_t getTextureCount() const
   {
@@ -176,15 +173,6 @@ class LandscapeData
   inline const std::uint16_t *getLandTexture16() const
   {
     return ltexData16;
-  }
-  inline const unsigned char *getGroundCover() const
-  {
-    return gcvrData;
-  }
-  inline const std::uint16_t *getVertexColor16() const
-  {
-    // the maximum cell resolution for this data is 32
-    return vclrData16;
   }
 };
 
