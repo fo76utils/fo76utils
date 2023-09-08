@@ -2,7 +2,7 @@
 #ifndef NIFBLOCK_CPP_INCLUDED
 #define NIFBLOCK_CPP_INCLUDED
 
-const char * NIFFile::blockTypeStrings[169] =
+const char * NIFFile::blockTypeStrings[174] =
 {
   "Unknown",                                    //   0
   "BSBehaviorGraphExtraData",                   //   1
@@ -21,168 +21,173 @@ const char * NIFFile::blockTypeStrings[169] =
   "BSEffectShaderPropertyColorController",      //  14
   "BSEffectShaderPropertyFloatController",      //  15
   "BSEyeCenterExtraData",                       //  16
-  "BSFadeNode",                                 //  17
-  "BSFrustumFOVController",                     //  18
-  "BSFurnitureMarkerNode",                      //  19
-  "BSGeometry",                                 //  20
-  "BSInvMarker",                                //  21
-  "BSLODTriShape",                              //  22
-  "BSLagBoneController",                        //  23
-  "BSLeafAnimNode",                             //  24
-  "BSLightingShaderProperty",                   //  25
-  "BSLightingShaderPropertyColorController",    //  26
-  "BSLightingShaderPropertyFloatController",    //  27
-  "BSMasterParticleSystem",                     //  28
-  "BSMeshLODTriShape",                          //  29
-  "BSMultiBound",                               //  30
-  "BSMultiBoundAABB",                           //  31
-  "BSMultiBoundNode",                           //  32
-  "BSMultiBoundOBB",                            //  33
-  "BSNiAlphaPropertyTestRefController",         //  34
-  "BSOrderedNode",                              //  35
-  "BSPSysHavokUpdateModifier",                  //  36
-  "BSPSysInheritVelocityModifier",              //  37
-  "BSPSysLODModifier",                          //  38
-  "BSPSysMultiTargetEmitterCtlr",               //  39
-  "BSPSysRecycleBoundModifier",                 //  40
-  "BSPSysScaleModifier",                        //  41
-  "BSPSysSimpleColorModifier",                  //  42
-  "BSPSysStripUpdateModifier",                  //  43
-  "BSPSysSubTexModifier",                       //  44
-  "BSParentVelocityModifier",                   //  45
-  "BSPositionData",                             //  46
-  "BSProceduralLightningController",            //  47
-  "BSShaderTextureSet",                         //  48
-  "BSSkin::BoneData",                           //  49
-  "BSSkin::Instance",                           //  50
-  "BSSkyShaderProperty",                        //  51
-  "BSStripPSysData",                            //  52
-  "BSStripParticleSystem",                      //  53
-  "BSSubIndexTriShape",                         //  54
-  "BSTreeNode",                                 //  55
-  "BSTriShape",                                 //  56
-  "BSValueNode",                                //  57
-  "BSWaterShaderProperty",                      //  58
-  "BSWindModifier",                             //  59
-  "BSXFlags",                                   //  60
-  "NiAlphaProperty",                            //  61
-  "NiBSBoneLODController",                      //  62
-  "NiBillboardNode",                            //  63
-  "NiBinaryExtraData",                          //  64
-  "NiBlendBoolInterpolator",                    //  65
-  "NiBlendFloatInterpolator",                   //  66
-  "NiBlendPoint3Interpolator",                  //  67
-  "NiBoolData",                                 //  68
-  "NiBoolInterpolator",                         //  69
-  "NiBoolTimelineInterpolator",                 //  70
-  "NiBooleanExtraData",                         //  71
-  "NiCamera",                                   //  72
-  "NiControllerManager",                        //  73
-  "NiControllerSequence",                       //  74
-  "NiDefaultAVObjectPalette",                   //  75
-  "NiExtraData",                                //  76
-  "NiFloatData",                                //  77
-  "NiFloatExtraData",                           //  78
-  "NiFloatExtraDataController",                 //  79
-  "NiFloatInterpolator",                        //  80
-  "NiIntegerExtraData",                         //  81
-  "NiLightColorController",                     //  82
-  "NiLightDimmerController",                    //  83
-  "NiLightRadiusController",                    //  84
-  "NiLookAtInterpolator",                       //  85
-  "NiMeshPSysData",                             //  86
-  "NiMeshParticleSystem",                       //  87
-  "NiMultiTargetTransformController",           //  88
-  "NiNode",                                     //  89
-  "NiPSysAgeDeathModifier",                     //  90
-  "NiPSysBombModifier",                         //  91
-  "NiPSysBoundUpdateModifier",                  //  92
-  "NiPSysBoxEmitter",                           //  93
-  "NiPSysColliderManager",                      //  94
-  "NiPSysCylinderEmitter",                      //  95
-  "NiPSysData",                                 //  96
-  "NiPSysDragModifier",                         //  97
-  "NiPSysEmitterCtlr",                          //  98
-  "NiPSysEmitterDeclinationCtlr",               //  99
-  "NiPSysEmitterDeclinationVarCtlr",            // 100
-  "NiPSysEmitterInitialRadiusCtlr",             // 101
-  "NiPSysEmitterLifeSpanCtlr",                  // 102
-  "NiPSysEmitterPlanarAngleCtlr",               // 103
-  "NiPSysEmitterPlanarAngleVarCtlr",            // 104
-  "NiPSysEmitterSpeedCtlr",                     // 105
-  "NiPSysGravityModifier",                      // 106
-  "NiPSysGravityStrengthCtlr",                  // 107
-  "NiPSysInitialRotSpeedCtlr",                  // 108
-  "NiPSysInitialRotSpeedVarCtlr",               // 109
-  "NiPSysMeshEmitter",                          // 110
-  "NiPSysModifierActiveCtlr",                   // 111
-  "NiPSysPlanarCollider",                       // 112
-  "NiPSysPositionModifier",                     // 113
-  "NiPSysResetOnLoopCtlr",                      // 114
-  "NiPSysRotationModifier",                     // 115
-  "NiPSysSpawnModifier",                        // 116
-  "NiPSysSphereEmitter",                        // 117
-  "NiPSysSphericalCollider",                    // 118
-  "NiPSysUpdateCtlr",                           // 119
-  "NiParticleSystem",                           // 120
-  "NiPathInterpolator",                         // 121
-  "NiPoint3Interpolator",                       // 122
-  "NiPointLight",                               // 123
-  "NiPosData",                                  // 124
-  "NiSkinData",                                 // 125
-  "NiSkinInstance",                             // 126
-  "NiSkinPartition",                            // 127
-  "NiSpotLight",                                // 128
-  "NiStringExtraData",                          // 129
-  "NiStringsExtraData",                         // 130
-  "NiSwitchNode",                               // 131
-  "NiTextKeyExtraData",                         // 132
-  "NiTransformController",                      // 133
-  "NiTransformData",                            // 134
-  "NiTransformInterpolator",                    // 135
-  "NiTriShape",                                 // 136
-  "NiTriShapeData",                             // 137
-  "NiTriStripsData",                            // 138
-  "NiVisController",                            // 139
-  "bhkBallAndSocketConstraint",                 // 140
-  "bhkBallSocketConstraintChain",               // 141
-  "bhkBlendCollisionObject",                    // 142
-  "bhkBoxShape",                                // 143
-  "bhkBreakableConstraint",                     // 144
-  "bhkCapsuleShape",                            // 145
-  "bhkCollisionObject",                         // 146
-  "bhkCompressedMeshShape",                     // 147
-  "bhkCompressedMeshShapeData",                 // 148
-  "bhkConvexTransformShape",                    // 149
-  "bhkConvexVerticesShape",                     // 150
-  "bhkCylinderShape",                           // 151
-  "bhkHingeConstraint",                         // 152
-  "bhkLimitedHingeConstraint",                  // 153
-  "bhkListShape",                               // 154
-  "bhkMoppBvTreeShape",                         // 155
-  "bhkNPCollisionObject",                       // 156
-  "bhkNiTriStripsShape",                        // 157
-  "bhkPhysicsSystem",                           // 158
-  "bhkPlaneShape",                              // 159
-  "bhkRagdollConstraint",                       // 160
-  "bhkRagdollSystem",                           // 161
-  "bhkRigidBody",                               // 162
-  "bhkRigidBodyT",                              // 163
-  "bhkSPCollisionObject",                       // 164
-  "bhkSimpleShapePhantom",                      // 165
-  "bhkSphereShape",                             // 166
-  "bhkStiffSpringConstraint",                   // 167
-  "bhkTransformShape"                           // 168
+  "BSFaceGenNiNode",                            //  17
+  "BSFadeNode",                                 //  18
+  "BSFrustumFOVController",                     //  19
+  "BSFurnitureMarkerNode",                      //  20
+  "BSGeometry",                                 //  21
+  "BSInvMarker",                                //  22
+  "BSLODTriShape",                              //  23
+  "BSLagBoneController",                        //  24
+  "BSLeafAnimNode",                             //  25
+  "BSLightingShaderProperty",                   //  26
+  "BSLightingShaderPropertyColorController",    //  27
+  "BSLightingShaderPropertyFloatController",    //  28
+  "BSMasterParticleSystem",                     //  29
+  "BSMeshLODTriShape",                          //  30
+  "BSMultiBound",                               //  31
+  "BSMultiBoundAABB",                           //  32
+  "BSMultiBoundNode",                           //  33
+  "BSMultiBoundOBB",                            //  34
+  "BSNiAlphaPropertyTestRefController",         //  35
+  "BSOrderedNode",                              //  36
+  "BSPSysHavokUpdateModifier",                  //  37
+  "BSPSysInheritVelocityModifier",              //  38
+  "BSPSysLODModifier",                          //  39
+  "BSPSysMultiTargetEmitterCtlr",               //  40
+  "BSPSysRecycleBoundModifier",                 //  41
+  "BSPSysScaleModifier",                        //  42
+  "BSPSysSimpleColorModifier",                  //  43
+  "BSPSysStripUpdateModifier",                  //  44
+  "BSPSysSubTexModifier",                       //  45
+  "BSParentVelocityModifier",                   //  46
+  "BSPositionData",                             //  47
+  "BSProceduralLightningController",            //  48
+  "BSShaderTextureSet",                         //  49
+  "BSSkin::BoneData",                           //  50
+  "BSSkin::Instance",                           //  51
+  "BSSkyShaderProperty",                        //  52
+  "BSStripPSysData",                            //  53
+  "BSStripParticleSystem",                      //  54
+  "BSSubIndexTriShape",                         //  55
+  "BSTreeNode",                                 //  56
+  "BSTriShape",                                 //  57
+  "BSValueNode",                                //  58
+  "BSWaterShaderProperty",                      //  59
+  "BSWeakReferenceNode",                        //  60
+  "BSWindModifier",                             //  61
+  "BSXFlags",                                   //  62
+  "BoneTranslations",                           //  63
+  "NiAlphaProperty",                            //  64
+  "NiBSBoneLODController",                      //  65
+  "NiBillboardNode",                            //  66
+  "NiBinaryExtraData",                          //  67
+  "NiBlendBoolInterpolator",                    //  68
+  "NiBlendFloatInterpolator",                   //  69
+  "NiBlendPoint3Interpolator",                  //  70
+  "NiBoolData",                                 //  71
+  "NiBoolInterpolator",                         //  72
+  "NiBoolTimelineInterpolator",                 //  73
+  "NiBooleanExtraData",                         //  74
+  "NiCamera",                                   //  75
+  "NiControllerManager",                        //  76
+  "NiControllerSequence",                       //  77
+  "NiDefaultAVObjectPalette",                   //  78
+  "NiExtraData",                                //  79
+  "NiFloatData",                                //  80
+  "NiFloatExtraData",                           //  81
+  "NiFloatExtraDataController",                 //  82
+  "NiFloatInterpolator",                        //  83
+  "NiIntegerExtraData",                         //  84
+  "NiIntegersExtraData",                        //  85
+  "NiLightColorController",                     //  86
+  "NiLightDimmerController",                    //  87
+  "NiLightRadiusController",                    //  88
+  "NiLookAtInterpolator",                       //  89
+  "NiMeshPSysData",                             //  90
+  "NiMeshParticleSystem",                       //  91
+  "NiMultiTargetTransformController",           //  92
+  "NiNode",                                     //  93
+  "NiPSysAgeDeathModifier",                     //  94
+  "NiPSysBombModifier",                         //  95
+  "NiPSysBoundUpdateModifier",                  //  96
+  "NiPSysBoxEmitter",                           //  97
+  "NiPSysColliderManager",                      //  98
+  "NiPSysCylinderEmitter",                      //  99
+  "NiPSysData",                                 // 100
+  "NiPSysDragModifier",                         // 101
+  "NiPSysEmitterCtlr",                          // 102
+  "NiPSysEmitterDeclinationCtlr",               // 103
+  "NiPSysEmitterDeclinationVarCtlr",            // 104
+  "NiPSysEmitterInitialRadiusCtlr",             // 105
+  "NiPSysEmitterLifeSpanCtlr",                  // 106
+  "NiPSysEmitterPlanarAngleCtlr",               // 107
+  "NiPSysEmitterPlanarAngleVarCtlr",            // 108
+  "NiPSysEmitterSpeedCtlr",                     // 109
+  "NiPSysGravityModifier",                      // 110
+  "NiPSysGravityStrengthCtlr",                  // 111
+  "NiPSysInitialRotSpeedCtlr",                  // 112
+  "NiPSysInitialRotSpeedVarCtlr",               // 113
+  "NiPSysMeshEmitter",                          // 114
+  "NiPSysModifierActiveCtlr",                   // 115
+  "NiPSysPlanarCollider",                       // 116
+  "NiPSysPositionModifier",                     // 117
+  "NiPSysResetOnLoopCtlr",                      // 118
+  "NiPSysRotationModifier",                     // 119
+  "NiPSysSpawnModifier",                        // 120
+  "NiPSysSphereEmitter",                        // 121
+  "NiPSysSphericalCollider",                    // 122
+  "NiPSysUpdateCtlr",                           // 123
+  "NiParticleSystem",                           // 124
+  "NiPathInterpolator",                         // 125
+  "NiPoint3Interpolator",                       // 126
+  "NiPointLight",                               // 127
+  "NiPosData",                                  // 128
+  "NiSkinData",                                 // 129
+  "NiSkinInstance",                             // 130
+  "NiSkinPartition",                            // 131
+  "NiSpotLight",                                // 132
+  "NiStringExtraData",                          // 133
+  "NiStringsExtraData",                         // 134
+  "NiSwitchNode",                               // 135
+  "NiTextKeyExtraData",                         // 136
+  "NiTransformController",                      // 137
+  "NiTransformData",                            // 138
+  "NiTransformInterpolator",                    // 139
+  "NiTriShape",                                 // 140
+  "NiTriShapeData",                             // 141
+  "NiTriStripsData",                            // 142
+  "NiVisController",                            // 143
+  "SkinAttach",                                 // 144
+  "bhkBallAndSocketConstraint",                 // 145
+  "bhkBallSocketConstraintChain",               // 146
+  "bhkBlendCollisionObject",                    // 147
+  "bhkBoxShape",                                // 148
+  "bhkBreakableConstraint",                     // 149
+  "bhkCapsuleShape",                            // 150
+  "bhkCollisionObject",                         // 151
+  "bhkCompressedMeshShape",                     // 152
+  "bhkCompressedMeshShapeData",                 // 153
+  "bhkConvexTransformShape",                    // 154
+  "bhkConvexVerticesShape",                     // 155
+  "bhkCylinderShape",                           // 156
+  "bhkHingeConstraint",                         // 157
+  "bhkLimitedHingeConstraint",                  // 158
+  "bhkListShape",                               // 159
+  "bhkMoppBvTreeShape",                         // 160
+  "bhkNPCollisionObject",                       // 161
+  "bhkNiTriStripsShape",                        // 162
+  "bhkPhysicsSystem",                           // 163
+  "bhkPlaneShape",                              // 164
+  "bhkRagdollConstraint",                       // 165
+  "bhkRagdollSystem",                           // 166
+  "bhkRigidBody",                               // 167
+  "bhkRigidBodyT",                              // 168
+  "bhkSPCollisionObject",                       // 169
+  "bhkSimpleShapePhantom",                      // 170
+  "bhkSphereShape",                             // 171
+  "bhkStiffSpringConstraint",                   // 172
+  "bhkTransformShape"                           // 173
 };
 
-const unsigned char NIFFile::blockTypeBaseTable[169] =
+const unsigned char NIFFile::blockTypeBaseTable[174] =
 {
     0,   1,   2,   3,   4,   5,   6,   7,   8,   9,     //   0
-   10,  11,  12,  25,  14,  15,  16,  89,  18,  19,     //  10
-   20,  21,  22,  23,  89,  25,  26,  27,  28,  56,     //  20
-   30,  31,  89,  33,  34,  89,  36,  37,  38,  39,     //  30
+   10,  11,  12,  26,  14,  15,  16,  17,  93,  19,     //  10
+   20,  57,  22,  23,  24,  93,  26,  27,  28,  29,     //  20
+   57,  31,  32,  93,  34,  35,  93,  37,  38,  39,     //  30
    40,  41,  42,  43,  44,  45,  46,  47,  48,  49,     //  40
-   50,  51,  52,  53,  56,  89,  56,  57,  58,  59,     //  50
+   50,  51,  52,  53,  54,  57,  93,  57,  58,  59,     //  50
    60,  61,  62,  63,  64,  65,  66,  67,  68,  69,     //  60
    70,  71,  72,  73,  74,  75,  76,  77,  78,  79,     //  70
    80,  81,  82,  83,  84,  85,  86,  87,  88,  89,     //  80
@@ -190,10 +195,11 @@ const unsigned char NIFFile::blockTypeBaseTable[169] =
   100, 101, 102, 103, 104, 105, 106, 107, 108, 109,     // 100
   110, 111, 112, 113, 114, 115, 116, 117, 118, 119,     // 110
   120, 121, 122, 123, 124, 125, 126, 127, 128, 129,     // 120
-  130,  89, 132, 133, 134, 135, 136, 137, 138, 139,     // 130
+  130, 131, 132, 133, 134,  93, 136, 137, 138, 139,     // 130
   140, 141, 142, 143, 144, 145, 146, 147, 148, 149,     // 140
   150, 151, 152, 153, 154, 155, 156, 157, 158, 159,     // 150
-  160, 161, 162, 163, 164, 165, 166, 167, 168           // 160
+  160, 161, 162, 163, 164, 165, 166, 167, 168, 169,     // 160
+  170, 171, 172, 173                                    // 170
 };
 
 int NIFFile::stringToBlockType(const char *s)
