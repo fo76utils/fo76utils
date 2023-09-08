@@ -121,6 +121,11 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile,
         std::fprintf(f, "    Alpha property: %3d\n",
                      triShapeBlock->alphaProperty);
       }
+      if (!triShapeBlock->meshFileName.empty())
+      {
+        std::fprintf(f, "    Mesh file: %s\n",
+                     triShapeBlock->meshFileName.c_str());
+      }
     }
     else if (lspBlock)
     {
@@ -532,6 +537,8 @@ int main(int argc, char **argv)
       fileNames.push_back(argv[i]);
     fileNames.push_back(".bgem");
     fileNames.push_back(".bgsm");
+    fileNames.push_back(".cdb");
+    fileNames.push_back(".mesh");
     if (outFmt >= 5)
       fileNames.push_back(".dds");
     BA2File ba2File(argv[1], &fileNames);
