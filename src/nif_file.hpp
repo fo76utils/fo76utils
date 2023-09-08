@@ -16,7 +16,7 @@ class NIFFile : public FileBuffer
     float   x;
     float   y;
     float   z;
-    std::uint32_t bitangent;            // 0x00ZZYYXX
+    std::uint32_t bitangent;            // X10Y10Z10
     std::uint32_t tangent;
     std::uint32_t normal;
     std::uint16_t u;                    // FP16 format
@@ -24,7 +24,7 @@ class NIFFile : public FileBuffer
     std::uint32_t vertexColor;          // 0xAABBGGRR
     NIFVertex()
       : x(0.0f), y(0.0f), z(0.0f),
-        bitangent(0x008080FFU), tangent(0x0080FF80U), normal(0x00FF8080U),
+        bitangent(0x1FF7FFFFU), tangent(0x1FFFFDFFU), normal(0x3FF7FDFFU),
         u(0), v(0), vertexColor(0xFFFFFFFFU)
     {
     }
@@ -45,24 +45,15 @@ class NIFFile : public FileBuffer
     }
     inline FloatVector4 getBitangent() const
     {
-      FloatVector4  tmp(&bitangent);
-      tmp *= (1.0f / 127.5f);
-      tmp -= 1.0f;
-      return tmp;
+      return FloatVector4::convertX10Y10Z10(bitangent);
     }
     inline FloatVector4 getTangent() const
     {
-      FloatVector4  tmp(&tangent);
-      tmp *= (1.0f / 127.5f);
-      tmp -= 1.0f;
-      return tmp;
+      return FloatVector4::convertX10Y10Z10(tangent);
     }
     inline FloatVector4 getNormal() const
     {
-      FloatVector4  tmp(&normal);
-      tmp *= (1.0f / 127.5f);
-      tmp -= 1.0f;
-      return tmp;
+      return FloatVector4::convertX10Y10Z10(normal);
     }
   };
   struct NIFTriangle

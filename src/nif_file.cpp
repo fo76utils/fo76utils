@@ -336,9 +336,7 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
   {
     NIFVertex&  v = vertexData[i];
     size_t  offs = f.getPosition();
-    int     bitangentX = 255;
-    int     bitangentY = 128;
-    int     bitangentZ = 128;
+    FloatVector4  bitangent(1.0f, 0.0f, 0.0f, 0.0f);
     if (xyzOffs >= 0)
     {
       f.setPosition(offs + size_t(xyzOffs));
@@ -347,7 +345,7 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
       v.x = xyz[0];
       v.y = xyz[1];
       v.z = xyz[2];
-      bitangentX = floatToUInt8Clamped(xyz[3] + 1.0f, 127.5f);
+      bitangent[0] = xyz[3];
     }
     if (uvOffs >= 0)
     {
@@ -358,24 +356,25 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
     if (normalOffs >= 0)
     {
       f.setPosition(offs + size_t(normalOffs));
-      v.normal = f.readUInt32Fast();
-      bitangentY = int((v.normal >> 24) & 0xFFU);
-      v.normal = v.normal & 0x00FFFFFFU;
+      FloatVector4  normal(f.readUInt32Fast());
+      normal = normal * (1.0f / 127.5f) - 1.0f;
+      bitangent[1] = normal[3];
+      v.normal = normal.convertToX10Y10Z10();
     }
     if (tangentOffs >= 0)
     {
       f.setPosition(offs + size_t(tangentOffs));
-      v.tangent = f.readUInt32Fast();
-      bitangentZ = int((v.tangent >> 24) & 0xFFU);
-      v.tangent = v.tangent & 0x00FFFFFFU;
+      FloatVector4  tangent(f.readUInt32Fast());
+      tangent = tangent * (1.0f / 127.5f) - 1.0f;
+      bitangent[2] = tangent[3];
+      v.tangent = tangent.convertToX10Y10Z10();
     }
     if (vclrOffs >= 0)
     {
       f.setPosition(offs + size_t(vclrOffs));
       v.vertexColor = f.readUInt32Fast();
     }
-    v.bitangent =
-        std::uint32_t(bitangentX | (bitangentY << 8) | (bitangentZ << 16));
+    v.bitangent = bitangent.convertToX10Y10Z10();
     f.setPosition(offs + vertexSize);
   }
   for (size_t i = 0; i < triangleCnt; i++)
