@@ -294,8 +294,8 @@ void TerrainMesh::createMesh(
   int     cellResolution = landData.getCellResolution();
   float   xOffset = float(x0 - landData.getOriginX());
   float   yOffset = float(landData.getOriginY() - y0);
-  xOffset = xOffset * (4096.0f / float(cellResolution));
-  yOffset = yOffset * (4096.0f / float(cellResolution));
+  xOffset = xOffset * (100.0f / float(cellResolution));
+  yOffset = yOffset * (100.0f / float(cellResolution));
   createMesh(hmapBuf.data(), w, h, ltexData, ltexMask, txtW, txtH,
              textureScale, 1, 1, w - 4, h - 4, cellResolution,
              xOffset, yOffset, landData.getZMin(), landData.getZMax());

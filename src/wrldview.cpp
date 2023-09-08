@@ -311,13 +311,13 @@ WorldSpaceViewer::WorldSpaceViewer(
     renderQuality(0),
     quitFlag(false),
     viewRotation(4),
-    viewScale(0.0625f),
+    viewScale(4.0f),
     viewRotationX(0.0f),
     viewRotationY(0.0f),
     viewRotationZ(180.0f),
     camPositionX(0.0f),
     camPositionY(0.0f),
-    camPositionZ(65536.0f),
+    camPositionZ(1024.0f),
     zMax(16777216.0f),
     rgbScale(1.0f),
     lightRotationY(70.5288f),
@@ -328,8 +328,8 @@ WorldSpaceViewer::WorldSpaceViewer(
     lightLevel(1.0f),
     envLevel(1.0f),
     reflZScale(2.0f),
-    waterUVScale(2048),
-    objectsMinScale(0.046875f),
+    waterUVScale(31),
+    objectsMinScale(3.0f),
     defaultEnvMap("textures/shared/cubemaps/mipblur_defaultoutside1.dds"),
     waterTexture("textures/water/defaultwater.dds"),
     ba2File(archivePath),
@@ -453,7 +453,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         break;
       case 1:                   // "cam"
         viewScale = float(parseFloat(argv[i + 1], "invalid view scale",
-                                     1.0f / 512.0f, 16.0f));
+                                     1.0f / 8.0f, 1024.0f));
         viewRotation =
             (signed char) parseInteger(argv[i + 2], 10,
                                        "invalid view direction", -1, 19);
@@ -478,11 +478,11 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           viewRotationZ = viewRotations[size_t(viewRotation) * 3 + 2];
         }
         camPositionX = float(parseFloat(argv[i + 3], "invalid camera position",
-                                        -1000000.0, 1000000.0));
+                                        -20000.0, 20000.0));
         camPositionY = float(parseFloat(argv[i + 4], "invalid camera position",
-                                        -1000000.0, 1000000.0));
+                                        -20000.0, 20000.0));
         camPositionZ = float(parseFloat(argv[i + 5], "invalid camera position",
-                                        -1000000.0, 1000000.0));
+                                        -20000.0, 20000.0));
         redrawWorldFlag = true;
         break;
       case 2:                   // "debug"
@@ -673,7 +673,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         break;
       case 18:                  // "minscale"
         objectsMinScale = float(parseFloat(argv[i + 1], "invalid view scale",
-                                           1.0f / 512.0f, 16.0f));
+                                           1.0f / 8.0f, 1024.0f));
         redrawWorldFlag = true;
         break;
       case 19:                  // "mip"
@@ -799,7 +799,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
       case 33:                  // "wscale"
         waterUVScale =
             int(parseInteger(argv[i + 1], 0,
-                             "invalid water texture tile size", 2, 32768));
+                             "invalid water texture tile size", 1, 800));
         redrawWorldFlag = true;
         break;
       case 34:                  // "wtxt"
@@ -915,7 +915,7 @@ void WorldSpaceViewer::updateDisplay()
       display.blitSurface();
       int     ltxtResolution = int(debugMode != 1 && debugMode != 2);
       ltxtResolution =
-          ltxtResolution << roundFloat(float(std::log2(viewScale)) + 11.9f);
+          ltxtResolution << roundFloat(float(std::log2(viewScale)) + 6.9f);
       ltxtResolution = std::min(ltxtResolution, ltxtMaxResolution);
       ltxtResolution = std::max(ltxtResolution, 128 >> btdLOD);
       renderer->setLandTxtResolution(ltxtResolution);
@@ -1211,7 +1211,7 @@ void WorldSpaceViewer::pollEvents()
       case SDLDisplay::SDLKeySymKPMinus:
         {
           int     tmp = roundFloat(float(std::log2(viewScale)) * 2.0f);
-          if (tmp > -18)
+          if (tmp > -6)
           {
             viewScale = float(std::exp2(float(tmp - 1) * 0.5f));
             redrawWorldFlag = true;
@@ -1222,7 +1222,7 @@ void WorldSpaceViewer::pollEvents()
       case SDLDisplay::SDLKeySymKPPlus:
         {
           int     tmp = roundFloat(float(std::log2(viewScale)) * 2.0f);
-          if (tmp < 4)
+          if (tmp < 16)
           {
             viewScale = float(std::exp2(float(tmp + 1) * 0.5f));
             redrawWorldFlag = true;

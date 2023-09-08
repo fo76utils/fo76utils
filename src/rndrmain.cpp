@@ -98,7 +98,7 @@ int main(int argc, char **argv)
     float   waterReflectionLevel = 1.0f;
     int     zMin = 0;
     int     zMax = 16777216;
-    float   viewScale = 0.0625f;
+    float   viewScale = 4.0f;
     float   viewRotationX = 180.0f;
     float   viewRotationY = 0.0f;
     float   viewRotationZ = 0.0f;
@@ -114,7 +114,7 @@ int main(int argc, char **argv)
     float   lightLevel = 1.0f;
     float   envLevel = 1.0f;
     float   reflZScale = 2.0f;
-    int     waterUVScale = 2048;
+    int     waterUVScale = 31;
     int     outputFormat = 0;
     unsigned short  renderQuality = 0;
     bool    waterMaskMode = false;
@@ -385,7 +385,7 @@ int main(int argc, char **argv)
         if ((i + 7) >= argc)
           throw FO76UtilsError("missing argument for %s", argv[i]);
         viewScale = float(parseFloat(argv[i + 1], "invalid view scale",
-                                     1.0 / 512.0, 16.0));
+                                     1.0 / 8.0, 1024.0));
         viewRotationX = float(parseFloat(argv[i + 2], "invalid view X rotation",
                                          -360.0, 360.0));
         viewRotationY = float(parseFloat(argv[i + 3], "invalid view Y rotation",
@@ -533,7 +533,7 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         waterUVScale =
             int(parseInteger(argv[i], 0, "invalid water texture tile size",
-                             2, 32768));
+                             1, 800));
       }
       else
       {

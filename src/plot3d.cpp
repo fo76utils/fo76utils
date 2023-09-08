@@ -100,7 +100,7 @@ size_t Plot3D_TriShape::transformVertexData(
     {
       FloatVector4  tmp(r.x, r.y, r.z, 0.0f);
       tmp = mt.transformXYZ(tmp);
-      tmp *= (float(int(waterUVScale)) * (1.0f / 65536.0f));
+      tmp *= (float(int(waterUVScale)) * (1.0f / 65535.0f));
       txtU = tmp[0];
       txtV = tmp[1];
       normal = mt.rotateXYZ(normal);
@@ -1314,7 +1314,7 @@ Plot3D_TriShape::Plot3D_TriShape(
     mipOffsetG(0.0f),
     renderMode((unsigned char) (mode & 15U)),
     usingSRGBColorSpace(renderMode < 12),
-    waterUVScale(32),
+    waterUVScale(2114),
     debugMode(0U),
     lightVector(0.0f, 0.0f, 1.0f, 0.0f),
     lightColor(1.0f),

@@ -217,10 +217,10 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   {
     envMapOffs = FloatVector4(x, y, z, 0.0f);
   }
-  // water U, V = world X, Y * s (default: 1.0 / 2048.0)
+  // water U, V = world X, Y * s (default: 1.0 / 31.0)
   inline void setWaterUVScale(float s)
   {
-    waterUVScale = std::uint16_t(roundFloat(s * 65536.0f));
+    waterUVScale = std::uint16_t(roundFloat(std::min(s * 65535.0f, 65535.0f)));
   }
   // c = light source (multiplies diffuse and specular, but not glow/cube maps)
   // a = ambient light (added to diffuse light level after multiplying with c)
