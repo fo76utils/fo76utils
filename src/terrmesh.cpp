@@ -61,7 +61,7 @@ void TerrainMesh::createMesh(
   m.s.specularSmoothness = 1.0f;
   NIFFile::NIFVertex    *vertexPtr = vertexDataBuf.data();
   NIFFile::NIFTriangle  *trianglePtr = triangleDataBuf.data();
-  float   xyScale = 4096.0f / float(cellResolution);
+  float   xyScale = 100.0f / float(cellResolution);
   float   zScale = (zMax - zMin) / 65535.0f;
   m.textureScaleU = 1.0f / float(txtWP2 >> textureScale);
   m.textureScaleV = 1.0f / float(txtHP2 >> textureScale);
@@ -122,15 +122,9 @@ void TerrainMesh::createMesh(
       bitangent.normalize3Fast();
       FloatVector4  tangent(0.0f, -(normal[2]), normal[1], 0.0f);
       tangent.normalize3Fast();
-      bitangent += 1.0f;
-      bitangent *= 127.5f;
-      tangent += 1.0f;
-      tangent *= 127.5f;
-      normal += 1.0f;
-      normal *= 127.5f;
-      vertexPtr->bitangent = std::uint32_t(bitangent) & 0x00FFFFFFU;
-      vertexPtr->tangent = std::uint32_t(tangent) & 0x00FFFFFFU;
-      vertexPtr->normal = std::uint32_t(normal) & 0x00FFFFFFU;
+      vertexPtr->bitangent = bitangent.convertToX10Y10Z10();
+      vertexPtr->tangent = tangent.convertToX10Y10Z10();
+      vertexPtr->normal = normal.convertToX10Y10Z10();
       vertexPtr->u = convertToFloat16(float(x - x0));
       vertexPtr->v = convertToFloat16(float(y - y0));
       if (x != x1 && y != y0)
