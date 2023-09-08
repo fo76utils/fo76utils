@@ -77,7 +77,7 @@ void readStarfieldMeshFile(std::vector< NIFFile::NIFVertex >& vertexData,
     maxVertexNum = std::max(maxVertexNum, int(triangleData[i].v2));
   }
 
-  float   xyzScale = buf.readFloat();
+  float   xyzScale = buf.readFloat() / 32767.0f;
   (void) buf.readUInt32();
   unsigned int  vertexCnt = buf.readUInt32();
   if (vertexCnt > 65536U)
