@@ -16,7 +16,7 @@
 // uint32               Size of next chunk (n1), either 0 or vCnt.
 // n1 * 4 bytes         Unknown optional vertex attribute.
 // uint32               Size of vertex color data (vclrCnt), either 0 or vCnt.
-// uint32 * vclrCnt     Vertex colors (optional) in R8G8B8A8 format.
+// uint32 * vclrCnt     Vertex colors (optional) in B8G8R8A8 format.
 // uint32               Number of vertex normals, should be equal to vCnt.
 // uint32 * vCnt        Normals (Z axis of tangent space) in X10Y10Z10 format:
 //                          b0  to b9  = (X + 1.0) * 511.5
@@ -121,7 +121,11 @@ void readStarfieldMeshFile(std::vector< NIFFile::NIFVertex >& vertexData,
   if ((buf.getPosition() + (size_t(n) * 4)) > buf.size())
     errorMessage("unexpected end of mesh file");
   for (size_t i = 0; i < n; i++)
-    vertexData[i].vertexColor = buf.readUInt32Fast();
+  {
+    std::uint32_t c = buf.readUInt32Fast();
+    vertexData[i].vertexColor =
+        (c & 0xFF00FF00U) | ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU);
+  }
 
   if (buf.readUInt32() != vertexCnt)
     errorMessage("invalid vertex normal data size in mesh file");
