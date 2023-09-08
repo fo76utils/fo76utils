@@ -4,6 +4,7 @@
 #include "ba2file.hpp"
 #include "bgsmfile.hpp"
 #include "fp32vec4.hpp"
+#include "meshfile.hpp"
 
 #include "nifblock.cpp"
 
@@ -244,7 +245,7 @@ NIFFile::NIFBlkNiNode::~NIFBlkNiNode()
 {
 }
 
-NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
+NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f, const BA2File *ba2File)
   : NIFBlock(NIFFile::BlkTypeBSTriShape)
 {
   nameID = f.readInt32();
@@ -260,7 +261,28 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
   boundCenterY = f.readFloat();
   boundCenterZ = f.readFloat();
   boundRadius = f.readFloat();
-  if (f.bsVersion < 0x90)
+  if (f.bsVersion >= 0x90)
+  {
+    boundMinX = f.readFloat();
+    boundMinY = f.readFloat();
+    boundMinZ = f.readFloat();
+    boundMaxX = f.readFloat();
+    boundMaxY = f.readFloat();
+    boundMaxZ = f.readFloat();
+    if (f.bsVersion >= 0xA0)
+    {
+      float   tmpX = boundMinX;
+      float   tmpY = boundMinY;
+      float   tmpZ = boundMinZ;
+      boundMinX = tmpX - boundMaxX;
+      boundMinY = tmpY - boundMaxY;
+      boundMinZ = tmpZ - boundMaxZ;
+      boundMaxX = tmpX + boundMaxX;
+      boundMaxY = tmpY + boundMaxY;
+      boundMaxZ = tmpZ + boundMaxZ;
+    }
+  }
+  else
   {
     boundMinX = 0.0f;
     boundMinY = 0.0f;
@@ -269,18 +291,35 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f)
     boundMaxY = 0.0f;
     boundMaxZ = 0.0f;
   }
-  else
-  {
-    boundMinX = f.readFloat();
-    boundMinY = f.readFloat();
-    boundMinZ = f.readFloat();
-    boundMaxX = f.readFloat();
-    boundMaxY = f.readFloat();
-    boundMaxZ = f.readFloat();
-  }
   skinID = f.readBlockID();
   shaderProperty = f.readBlockID();
   alphaProperty = f.readBlockID();
+  if (f.bsVersion >= 0xA0)
+  {
+    // Starfield BSGeometry block
+    vertexFmtDesc = 0x0003B00000000000ULL;
+    if (f.readUInt8() != 0x01)
+      errorMessage("invalid or unsupported BSGeometry data in NIF file");
+    unsigned int  triangleCntx3 = f.readUInt32();
+    unsigned int  vertexCnt = f.readUInt32();
+    if ((triangleCntx3 % 3U) != 0U || vertexCnt > 0x00010000U)
+      errorMessage("invalid vertex or triangle data size in NIF file");
+    if (f.readUInt32() != 0x40U)
+      errorMessage("invalid or unsupported BSGeometry data in NIF file");
+    unsigned int  meshPathLen = f.readUInt32();
+    f.readPath(meshFileName, meshPathLen, "geometries/", ".mesh");
+    if (!ba2File)
+      errorMessage("loading Starfield BSGeometry block requires archives");
+    ba2File->extractFile(f.meshBuf, meshFileName);
+    FileBuffer  tmpBuf(f.meshBuf.data(), f.meshBuf.size());
+    readStarfieldMeshFile(vertexData, triangleData, tmpBuf);
+    if (vertexData.size() != vertexCnt ||
+        triangleData.size() != (triangleCntx3 / 3U))
+    {
+      errorMessage("invalid vertex or triangle data size in NIF file");
+    }
+    return;
+  }
   vertexFmtDesc = f.readUInt64();
   size_t  triangleCnt;
   if (f.bsVersion < 0x80)
@@ -815,7 +854,7 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
           blocks[i] = new NIFBlkNiNode(*this);
           break;
         case BlkTypeBSTriShape:
-          blocks[i] = new NIFBlkBSTriShape(*this);
+          blocks[i] = new NIFBlkBSTriShape(*this, ba2File);
           break;
         case BlkTypeBSLightingShaderProperty:
           {

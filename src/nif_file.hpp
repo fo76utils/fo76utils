@@ -191,20 +191,20 @@ class NIFFile : public FileBuffer
   {
     // the complete list of block types is in nifblock.cpp
     BlkTypeUnknown = 0,
-    BlkTypeNiNode = 89,
-    BlkTypeBSFadeNode = 17,
-    BlkTypeBSMultiBoundNode = 32,
-    BlkTypeBSLeafAnimNode = 24,
-    BlkTypeNiSwitchNode = 131,
-    BlkTypeBSGeometry = 20,
-    BlkTypeBSTriShape = 56,
-    BlkTypeBSMeshLODTriShape = 29,
+    BlkTypeNiNode = 93,
+    BlkTypeBSFadeNode = 18,
+    BlkTypeBSMultiBoundNode = 33,
+    BlkTypeBSLeafAnimNode = 25,
+    BlkTypeNiSwitchNode = 135,
+    BlkTypeBSGeometry = 21,
+    BlkTypeBSTriShape = 57,
+    BlkTypeBSMeshLODTriShape = 30,
     BlkTypeBSEffectShaderProperty = 13,
-    BlkTypeNiAlphaProperty = 61,
-    BlkTypeBSLightingShaderProperty = 25,
-    BlkTypeBSShaderTextureSet = 48,
-    BlkTypeBSWaterShaderProperty = 58,
-    BlkTypeBSOrderedNode = 35
+    BlkTypeNiAlphaProperty = 64,
+    BlkTypeBSLightingShaderProperty = 26,
+    BlkTypeBSShaderTextureSet = 49,
+    BlkTypeBSWaterShaderProperty = 59,
+    BlkTypeBSOrderedNode = 36
   };
   struct NIFBlock
   {
@@ -234,7 +234,7 @@ class NIFFile : public FileBuffer
     NIFVertexTransform  vertexTransform;
     int     collisionObject;
     float   boundCenterX, boundCenterY, boundCenterZ, boundRadius;
-    // bound min/max for Fallout 76 only
+    // bound min/max for Fallout 76 and Starfield only
     float   boundMinX, boundMinY, boundMinZ;
     float   boundMaxX, boundMaxY, boundMaxZ;
     int     skinID;
@@ -252,7 +252,8 @@ class NIFFile : public FileBuffer
     unsigned long long  vertexFmtDesc;
     std::vector< NIFVertex >    vertexData;
     std::vector< NIFTriangle >  triangleData;
-    NIFBlkBSTriShape(NIFFile& f);
+    std::string meshFileName;
+    NIFBlkBSTriShape(NIFFile& f, const BA2File *ba2File);
     virtual ~NIFBlkBSTriShape();
   };
   struct NIFBlkBSLightingShaderProperty : public NIFBlock
@@ -296,8 +297,8 @@ class NIFFile : public FileBuffer
     virtual ~NIFBlkNiAlphaProperty();
   };
  protected:
-  static const char *blockTypeStrings[169];
-  static const unsigned char blockTypeBaseTable[169];
+  static const char *blockTypeStrings[174];
+  static const unsigned char blockTypeBaseTable[174];
   static int stringToBlockType(const char *s);
   static inline bool isNodeBlock(int blockType);
   static inline bool isTriShapeBlock(int blockType);
@@ -314,6 +315,7 @@ class NIFFile : public FileBuffer
   std::vector< NIFBlock * > blocks;
   std::vector< std::string >  stringTable;
   std::string   stringBuf;
+  std::vector< unsigned char >  meshBuf;
   // authorName, processScriptName, exportScriptName
   std::vector< std::string >  headerStrings;
   void readString(std::string& s, size_t stringLengthSize);
