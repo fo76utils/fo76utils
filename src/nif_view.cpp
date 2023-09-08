@@ -617,6 +617,11 @@ static bool viewModelInfo(SDLDisplay& display, const NIFFile& nifFile)
         display.consolePrint("    Alpha property: %3d\n",
                              triShapeBlock->alphaProperty);
       }
+      if (!triShapeBlock->meshFileName.empty())
+      {
+        display.consolePrint("    Mesh file: %s\n",
+                             triShapeBlock->meshFileName.c_str());
+      }
       display.consolePrint("    Vertex count: %lu\n",
                            (unsigned long) triShapeBlock->vertexData.size());
       display.consolePrint("    Triangle count: %lu\n",
