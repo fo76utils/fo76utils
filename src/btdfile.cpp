@@ -348,30 +348,6 @@ void BTDFile::getCellLandTexture(std::uint16_t *buf, int cellX, int cellY,
   }
 }
 
-void BTDFile::getCellGroundCover(unsigned char *buf, int cellX, int cellY,
-                                 unsigned char l)
-{
-  size_t  n = 128 >> l;
-  unsigned char m = 7 - l;
-  for (size_t yc = 0; yc < n; yc++)
-  {
-    for (size_t xc = 0; xc < n; xc++)
-      buf[(yc << m) | xc] = 0x00;
-  }
-}
-
-void BTDFile::getCellTerrainColor(std::uint16_t *buf, int cellX, int cellY,
-                                  unsigned char l)
-{
-  size_t  n = 128 >> l;
-  unsigned char m = 7 - l;
-  for (size_t yc = 0; yc < n; yc++)
-  {
-    for (size_t xc = 0; xc < n; xc++)
-      buf[(yc << m) | xc] = 0xFFFF;
-  }
-}
-
 void BTDFile::getCellTextureSet(unsigned char *buf, int cellX, int cellY) const
 {
   size_t  x = size_t(cellX - cellMinX);

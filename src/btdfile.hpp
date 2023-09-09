@@ -91,15 +91,7 @@ class BTDFile : public FileBuffer
   {
     return ltexCnt;
   }
-  inline size_t getGroundCoverCount() const
-  {
-    return 0;
-  }
   unsigned int getLandTexture(size_t n) const;
-  inline unsigned int getGroundCover(size_t n) const
-  {
-    return 0U;
-  }
   // N = 128 >> l, buffer size = N * N
   // height map in pixelFormatGRAY16 format
   void getCellHeightMap(std::uint16_t *buf, int cellX, int cellY,
@@ -107,16 +99,9 @@ class BTDFile : public FileBuffer
   // land texture opacities in pixelFormatA16 format (see filebuf.hpp)
   void getCellLandTexture(std::uint16_t *buf, int cellX, int cellY,
                           unsigned char l = 0);
-  // ground cover mask in pixelFormatA8 format
-  void getCellGroundCover(unsigned char *buf, int cellX, int cellY,
-                          unsigned char l = 0);
-  // vertex colors in pixelFormatRGBA16 format, l >= 2
-  void getCellTerrainColor(std::uint16_t *buf, int cellX, int cellY,
-                           unsigned char l = 2);
-  // buf[0..5]   = SW quadrant land texture IDs (0xFF: no texture),
+  // buf[0..6]   = SW quadrant land texture IDs (0xFF: no texture),
   //               getLandTexture() returns the corresponding form IDs
-  // buf[8..15]  = SW quadrant ground cover IDs (0xFF: none)
-  // buf[16..31] = SE quadrant land texture and ground cover IDs
+  // buf[16..31] = SE quadrant land texture IDs
   // buf[32..63] = NW and NE quadrants
   void getCellTextureSet(unsigned char *buf, int cellX, int cellY) const;
 };
