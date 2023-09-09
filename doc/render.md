@@ -38,7 +38,7 @@ Compiling with **rgb10a2=1** is required to actually increase frame buffer preci
 * **-tc INT** or **-txtcache INT**: Texture cache size in megabytes.
 * **-mc INT**: Model cache size, the number of models to load at the same time (1 to 64, defaults to 16).
 * **-mip INT**: Base mip level for all textures other than cube maps and the water texture. Defaults to 2.
-* **-env FILENAME.DDS**: Default environment map texture path in archives. Defaults to **textures/shared/cubemaps/mipblur_defaultoutside1.dds**. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures, and [cubeview](cubeview.md) to preview them.
+* **-env FILENAME.DDS**: Default environment map texture path in archives. Defaults to **textures/cubemaps/cell_spacecube.dds**. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures, and [cubeview](cubeview.md) to preview them.
 
 ### Terrain options
 
@@ -77,7 +77,7 @@ For testing view and light settings, it is recommended to use faster low quality
 
 ### Water options
 
-* **-wtxt FILENAME.DDS**: Water normal map texture path in archives. Defaults to **textures/water/defaultwater.dds**. Setting the path to an empty string disables normal mapping on water.
+* **-wtxt FILENAME.DDS**: Water normal map texture path in archives. Defaults to **textures/water/defaultwater_normal.dds**. Setting the path to an empty string disables normal mapping on water.
 * **-watercolor UINT32**: Water color (A7R8G8B8), 0 disables water, 0x7FFFFFFF (the default) uses values from the ESM file. The alpha channel determines the depth at which water reaches maximum opacity, maxDepth = (128 - a) \* (128 - a) / 2.
 * **-wrefl FLOAT**: Water environment map scale, the default is 1.0.
 * **-wscale INT**: Water texture tile size, defaults to 2048.

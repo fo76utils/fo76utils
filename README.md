@@ -5,17 +5,17 @@ Simple command line utilities for extracting data from Starfield game files.
 **Note:** ce2utils is work in progress, and support for older games is deprecated in these tools. For Oblivion to Fallout 76, use [fo76utils](https://github.com/fo76utils/fo76utils/) instead.
 
 * [baunpack](doc/baunpack.md) - list the contents of, or extract from .BA2 or .BSA archives.
-* [bcdecode](doc/bcdecode.md) - convert BC1 to BC5 block compressed DDS textures to uncompressed RGBA image data in raw or DDS format. BC7 decompression is also supported, using code from [detex](https://github.com/hglm/detex).
+* [bcdecode](doc/bcdecode.md) - convert BC1 to BC5 block compressed DDS textures to uncompressed RGBA image data in raw or DDS format. BC6H and BC7 decompression are also supported, using code from [detex](https://github.com/hglm/detex).
 * [btddump](doc/btddump.md) - extract terrain data from Starfield .BTD files to raw height map or land textures.
 * [cubeview](doc/cubeview.md) - view cube maps or other textures from archive files.
 * [esmdump](doc/esmdump.md) - list records from .ESM files in text or TSV format.
 * [esmview](doc/esmview.md) - interactive version of esmdump, also includes a NIF viewer for objects with an associated model (MODL).
-* [findwater](doc/findwater.md) - create a height map of water bodies, optionally using .NIF meshes for Skyrim and newer games.
+* [findwater](doc/findwater.md) - create a height map of water bodies, optionally using .NIF meshes.
 * [fo4land](doc/fo4land.md) - extract landscape data from Oblivion, Fallout 3, Skyrim, and Fallout 4.
 * [landtxt](doc/landtxt.md) - create an RGB land texture from the output of btddump (formats 2 and 8) or fo4land (formats 2, 4, and 5), or directly from terrain data in ESM/BTD file(s), using a set of DDS texture files.
 * [markers](doc/markers.md) - find references to a set of form IDs defined in a text file, and mark their locations on an RGBA format map, optionally using DDS icon files.
 * [nif\_info](doc/nif_info.md) - list data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ format, or render the model to a DDS file, or display it.
-* [render](doc/render.md) - render a world, cell, or object from ESM file(s), terrain data, and archives. Supports Fallout 76 and Fallout 4, and partly the older games (TES4/FO3/FNV are limited to terrain and water only).
+* [render](doc/render.md) - render a Starfield world, cell, or object from ESM file(s), terrain data, and archives. Currently does not support textures.
 * [terrain](doc/terrain.md) - older and simpler program to render terrain and water only to an RGB image, using files created by btddump, findwater, or fo4land. Includes 2D and isometric mode.
 * [wrldview](doc/wrldview.md) - interactive version of render.
 

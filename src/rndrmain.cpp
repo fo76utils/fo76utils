@@ -118,9 +118,8 @@ int main(int argc, char **argv)
     int     outputFormat = 0;
     unsigned short  renderQuality = 0;
     bool    waterMaskMode = false;
-    const char  *defaultEnvMap =
-        "textures/shared/cubemaps/mipblur_defaultoutside1.dds";
-    const char  *waterTexture = "textures/water/defaultwater.dds";
+    const char  *defaultEnvMap = "textures/cubemaps/cell_spacecube.dds";
+    const char  *waterTexture = "textures/water/defaultwater_normal.dds";
     std::vector< const char * > hdModelNamePatterns;
     std::vector< const char * > excludeModelPatterns;
     float   d = float(std::atan(1.0) / 45.0);   // degrees to radians

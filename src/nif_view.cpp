@@ -9,32 +9,40 @@
 
 static const std::uint32_t  defaultWaterColor = 0xC0804000U;
 
-static const char *cubeMapPaths[24] =
+static const char *cubeMapPaths[32] =
 {
   "textures/cubemaps/bleakfallscube_e.dds",                     // Skyrim
   "textures/shared/cubemaps/mipblur_defaultoutside1.dds",       // Fallout 4
   "textures/shared/cubemaps/mipblur_defaultoutside1.dds",       // Fallout 76
+  "textures/cubemaps/cell_spacecube.dds",                       // Starfield
   "textures/cubemaps/wrtemple_e.dds",
   "textures/shared/cubemaps/outsideoldtownreflectcube_e.dds",
   "textures/shared/cubemaps/outsideoldtownreflectcube_e.dds",
+  "textures/cubemaps/newatlantislodgeint_cm.dds",
   "textures/cubemaps/duncaveruingreen_e.dds",
   "textures/shared/cubemaps/cgprewarstreet_e.dds",
   "textures/shared/cubemaps/swampcube.dds",
+  "textures/cubemaps/cell_cavecube.dds",
   "textures/cubemaps/chrome_e.dds",
   "textures/shared/cubemaps/metalchrome01cube_e.dds",
   "textures/shared/cubemaps/metalchrome01cube_e.dds",
+  "textures/cubemaps/cell_shipinteriorcube.dds",
   "textures/cubemaps/cavegreencube_e.dds",
   "textures/shared/cubemaps/outsideday01.dds",
   "textures/shared/cubemaps/outsideday01.dds",
+  "textures/cubemaps/milkywaycubemap.dds",
   "textures/cubemaps/mghallcube_e.dds",
   "textures/shared/cubemaps/cgplayerhousecube.dds",
   "textures/shared/cubemaps/chrome_e.dds",
+  "textures/cubemaps/cell_hitechhallcube.dds",
   "textures/cubemaps/caveicecubemap_e.dds",
   "textures/shared/cubemaps/inssynthproductionpoolcube.dds",
   "textures/shared/cubemaps/vault111cryocube.dds",
+  "textures/cubemaps/cell_kreetbase01cube.dds",
   "textures/cubemaps/minecube_e.dds",
   "textures/shared/cubemaps/memorydencube.dds",
-  "textures/shared/cubemaps/mipblur_defaultoutside_pitt.dds"
+  "textures/shared/cubemaps/mipblur_defaultoutside_pitt.dds",
+  "textures/cubemaps/lgt_cubemap_research_002.dds"
 };
 
 void NIF_View::threadFunction(NIF_View *p, size_t n)
@@ -155,12 +163,12 @@ const DDSTexture * NIF_View::loadTexture(const std::string& texturePath,
 
 void NIF_View::setDefaultTextures()
 {
-  int     n = 0;
-  if (nifFile && nifFile->getVersion() >= 0x80)
-    n = (nifFile->getVersion() < 0x90 ? 1 : 2);
-  n = n + ((defaultEnvMapNum & 7) * 3);
+  int     n = 3;
+  if (nifFile)
+    n = std::min(std::max(int(nifFile->getVersion() >> 4) - 7, 0), 3);
+  n = n + ((defaultEnvMapNum & 7) << 2);
   defaultEnvMap = cubeMapPaths[n];
-  waterTexture = "textures/water/defaultwater.dds";
+  waterTexture = "textures/water/defaultwater_normal.dds";
 }
 
 NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
