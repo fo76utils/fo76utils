@@ -37,6 +37,7 @@ libSources += ["src/landtxt.cpp", "src/terrmesh.cpp", "src/render.cpp"]
 libSources += ["src/rndrbase.cpp", "src/markers.cpp"]
 # detex source files
 libSources += ["src/bits.c", "src/bptc-tables.c", "src/decompress-bptc.c"]
+libSources += ["src/decompress-bptc-float.c"]
 ce2utilsLib = env.StaticLibrary("ce2utils", libSources)
 
 if int(ARGUMENTS.get("pymodule", 0)):
