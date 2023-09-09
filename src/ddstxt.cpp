@@ -4,9 +4,15 @@
 
 #include <new>
 
+extern "C" bool detexDecompressBlockBPTC_FLOAT(
+    const std::uint8_t *bitstring, std::uint32_t mode_mask,
+    std::uint32_t flags, std::uint8_t *pixel_buffer);           // BC6U
+extern "C" bool detexDecompressBlockBPTC_SIGNED_FLOAT(
+    const std::uint8_t *bitstring, std::uint32_t mode_mask,
+    std::uint32_t flags, std::uint8_t *pixel_buffer);           // BC6S
 extern "C" bool detexDecompressBlockBPTC(
     const std::uint8_t *bitstring, std::uint32_t mode_mask,
-    std::uint32_t flags, std::uint8_t *pixel_buffer);
+    std::uint32_t flags, std::uint8_t *pixel_buffer);           // BC7
 
 static inline std::uint64_t decodeBC3Alpha(std::uint64_t& a,
                                            const unsigned char *src,
@@ -188,6 +194,42 @@ size_t DDSTexture::decodeBlock_BC5S(
   return 16;
 }
 
+size_t DDSTexture::decodeBlock_BC6U(
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
+{
+  std::uint8_t  tmp[128];
+  (void) detexDecompressBlockBPTC_FLOAT(
+             reinterpret_cast< const std::uint8_t * >(src),
+             0xFFFFFFFFU, 0U, tmp);
+  for (unsigned int i = 0; i < 16; i++)
+  {
+    std::uint64_t b = FileBuffer::readUInt64Fast(&(tmp[i << 3]));
+    FloatVector4  c(FloatVector4::convertFloat16(b));
+    c.maxValues(FloatVector4(0.0f));
+    c = c / (c + 4.0f);
+    dst[(i >> 2) * w + (i & 3)] = std::uint32_t(c.srgbCompress());
+  }
+  return 16;
+}
+
+size_t DDSTexture::decodeBlock_BC6S(
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
+{
+  std::uint8_t  tmp[128];
+  (void) detexDecompressBlockBPTC_SIGNED_FLOAT(
+             reinterpret_cast< const std::uint8_t * >(src),
+             0xFFFFFFFFU, 0U, tmp);
+  for (unsigned int i = 0; i < 16; i++)
+  {
+    std::uint64_t b = FileBuffer::readUInt64Fast(&(tmp[i << 3]));
+    FloatVector4  c(FloatVector4::convertFloat16(b));
+    c.maxValues(FloatVector4(-1.0f));
+    c.minValues(FloatVector4(1.0f));
+    dst[(i >> 2) * w + (i & 3)] = std::uint32_t(c * 127.5f + 127.5f);
+  }
+  return 16;
+}
+
 size_t DDSTexture::decodeBlock_BC7(
     std::uint32_t *dst, const unsigned char *src, unsigned int w)
 {
@@ -301,8 +343,22 @@ size_t DDSTexture::decodeLine_R8(
   return size_t(w);
 }
 
+size_t DDSTexture::decodeLine_RGBA64F(
+    std::uint32_t *dst, const unsigned char *src, unsigned int w)
+{
+  for (unsigned int x = 0; x < w; x++, dst++, src = src + 8)
+  {
+    std::uint64_t b = FileBuffer::readUInt64Fast(src);
+    FloatVector4  c(FloatVector4::convertFloat16(b));
+    c.maxValues(FloatVector4(0.0f));
+    c = c / (c + 4.0f);
+    *dst = std::uint32_t(c.srgbCompress());
+  }
+  return (size_t(w) << 3);
+}
+
 void DDSTexture::loadTextureData(
-    const unsigned char *srcPtr, int n, size_t blockSize,
+    const unsigned char *srcPtr, int n, bool isCompressed,
     size_t (*decodeFunction)(std::uint32_t *,
                              const unsigned char *, unsigned int))
 {
@@ -314,7 +370,7 @@ void DDSTexture::loadTextureData(
     unsigned int  h = (yMaskMip0 >> (unsigned char) i) + 1U;
     if (i <= int(maxMipLevel))
     {
-      if (blockSize < 8)
+      if (!isCompressed)
       {
         // uncompressed format
         for (unsigned int y = 0; y < h; y++)
@@ -429,6 +485,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     errorMessage("unsupported texture file format");
   unsigned int  dataOffs = 128;
   size_t  blockSize = 8;
+  bool    isCompressed = true;
   size_t  (*decodeFunction)(std::uint32_t *, const unsigned char *,
                             unsigned int) = &decodeBlock_BC1;
   unsigned int  formatFlags = buf.readUInt32();
@@ -446,15 +503,23 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
           buf.setPosition(0x58);
           formatFlags &= ~0x04U;
           break;
+        case 0x0A:                      // DXGI_FORMAT_R16G16B16A16_FLOAT
+          haveAlpha = true;
+          blockSize = 8;
+          isCompressed = false;
+          decodeFunction = &decodeLine_RGBA64F;
+          break;
         case 0x1C:                      // DXGI_FORMAT_R8G8B8A8_UNORM
         case 0x1D:                      // DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
           haveAlpha = true;
           blockSize = 4;
+          isCompressed = false;
           decodeFunction = &decodeLine_RGBA;
           break;
         case 0x3D:                      // DXGI_FORMAT_R8_UNORM
         case 0x3E:                      // DXGI_FORMAT_R8_UINT
           blockSize = 1;
+          isCompressed = false;
           decodeFunction = &decodeLine_R8;
           break;
         case 0x47:                      // DXGI_FORMAT_BC1_UNORM
@@ -489,7 +554,18 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
         case 0x57:                      // DXGI_FORMAT_B8G8R8A8_UNORM
           haveAlpha = true;
           blockSize = 4;
+          isCompressed = false;
           decodeFunction = &decodeLine_BGRA;
+          break;
+        case 0x5F:                      // DXGI_FORMAT_BC6H_UF16
+          haveAlpha = true;
+          blockSize = 16;
+          decodeFunction = &decodeBlock_BC6U;
+          break;
+        case 0x60:                      // DXGI_FORMAT_BC6H_SF16
+          haveAlpha = true;
+          blockSize = 16;
+          decodeFunction = &decodeBlock_BC6S;
           break;
         case 0x62:                      // DXGI_FORMAT_BC7_UNORM
         case 0x63:                      // DXGI_FORMAT_BC7_UNORM_SRGB
@@ -547,6 +623,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     if (blockSize != 16 && blockSize != 24 && blockSize != 32)
       errorMessage("unsupported texture file format");
     blockSize = blockSize >> 3;
+    isCompressed = false;
     unsigned long long  rgMask = buf.readUInt64();
     unsigned long long  baMask = buf.readUInt64();
     if (blockSize < 4 || !(formatFlags & 0x03))
@@ -567,7 +644,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       errorMessage("unsupported texture file format");
   }
   size_t  sizeRequired = 0;
-  if (blockSize < 8)
+  if (!isCompressed)
   {
     for (unsigned int i = 0; i <= maxMipLevel; i++)
     {
@@ -602,7 +679,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   {
     unsigned int  w = xMaskMip0 + 1U;
     unsigned int  h = yMaskMip0 + 1U;
-    if (blockSize < 8)
+    if (!isCompressed)
       srcPtr = srcPtr + (size_t(w) * h * blockSize);
     else
       srcPtr = srcPtr + (size_t((w + 3) >> 2) * ((h + 3) >> 2) * blockSize);
@@ -636,7 +713,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   for (size_t i = 0; i < textureCnt; i++)
   {
     loadTextureData(srcPtr + (i * sizeRequired), int(i),
-                    blockSize, decodeFunction);
+                    isCompressed, decodeFunction);
   }
   if (mipOffset > 0 && dataOffsets[1])
   {

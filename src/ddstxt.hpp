@@ -32,6 +32,10 @@ class DDSTexture
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC5S(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
+  static size_t decodeBlock_BC6U(
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
+  static size_t decodeBlock_BC6S(
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC7(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_RGB(
@@ -50,7 +54,9 @@ class DDSTexture
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_R8(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
-  void loadTextureData(const unsigned char *srcPtr, int n, size_t blockSize,
+  static size_t decodeLine_RGBA64F(
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
+  void loadTextureData(const unsigned char *srcPtr, int n, bool isCompressed,
                        size_t (*decodeFunction)(std::uint32_t *,
                                                 const unsigned char *,
                                                 unsigned int));
