@@ -95,21 +95,22 @@ static void fillWaterMesh(const NIFFile::NIFTriShape *meshData, size_t meshCnt,
           meshData[i].vertexData[meshData[i].triangleData[j].v1];
       NIFFile::NIFVertex  v2 =
           meshData[i].vertexData[meshData[i].triangleData[j].v2];
-      t.transformXYZ(v0.x, v0.y, v0.z);
-      t.transformXYZ(v1.x, v1.y, v1.z);
-      t.transformXYZ(v2.x, v2.y, v2.z);
-      int     x0 = convertX(v0.x);
-      int     y0 = convertY(v0.y);
-      int     x1 = convertX(v1.x);
-      int     y1 = convertY(v1.y);
-      int     x2 = convertX(v2.x);
-      int     y2 = convertY(v2.y);
+      v0.xyz = t.transformXYZ(v0.xyz);
+      v1.xyz = t.transformXYZ(v1.xyz);
+      v2.xyz = t.transformXYZ(v2.xyz);
+      int     x0 = convertX(v0.xyz[0]);
+      int     y0 = convertY(v0.xyz[1]);
+      int     x1 = convertX(v1.xyz[0]);
+      int     y1 = convertY(v1.xyz[1]);
+      int     x2 = convertX(v2.xyz[0]);
+      int     y2 = convertY(v2.xyz[1]);
       if (!((x0 < 0 && x1 < 0 && x2 < 0) || (y0 < 0 && y1 < 0 && y2 < 0) ||
             (x0 >= landWidth && x1 >= landWidth && x2 >= landWidth) ||
             (y0 >= landHeight && y1 >= landHeight && y2 >= landHeight)))
       {
         Plot3D< WaterHeightMap, float > plot3d;
-        plot3d.drawTriangle(x0, y0, v0.z, x1, y1, v1.z, x2, y2, v2.z);
+        plot3d.drawTriangle(x0, y0, v0.xyz[2], x1, y1, v1.xyz[2],
+                            x2, y2, v2.xyz[2]);
       }
     }
   }
@@ -125,9 +126,9 @@ static void createMeshFromOBND(std::vector< NIFFile::NIFTriShape >& meshData,
   vertexData.resize(8);
   for (unsigned char i = 0; i < 8; i++)
   {
-    vertexData[i].x = (!(i & 1) ? x1 : x2);
-    vertexData[i].y = (!(i & 2) ? y1 : y2);
-    vertexData[i].z = (!(i & 4) ? z1 : z2);
+    vertexData[i].xyz[0] = (!(i & 1) ? x1 : x2);
+    vertexData[i].xyz[1] = (!(i & 2) ? y1 : y2);
+    vertexData[i].xyz[2] = (!(i & 4) ? z1 : z2);
   }
   if (obndTriangleBuf.size() != 12)
   {
@@ -228,7 +229,7 @@ static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
     {
       std::vector< unsigned char >  fileBuf;
       meshArchiveFile->extractFile(fileBuf, modelPath);
-      nifFile = new NIFFile(fileBuf.data(), fileBuf.size());
+      nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), *meshArchiveFile);
       nifFile->getMesh(i->second);
       nifFiles.push_back(nifFile);
       return i->second;

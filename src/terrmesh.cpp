@@ -81,9 +81,12 @@ void TerrainMesh::createMesh(
         z[i] = float(int(hmapData[size_t(yc) * size_t(hmapWidth) + size_t(xc)]))
                * zScale + zMin;
       }
-      vertexPtr->x = xOffset + (float(x) * xyScale);
-      vertexPtr->y = yOffset - (float(y) * xyScale);
-      vertexPtr->z = z[4];
+      vertexPtr->xyz[0] = xOffset + (float(x) * xyScale);
+      vertexPtr->xyz[1] = yOffset - (float(y) * xyScale);
+      vertexPtr->xyz[2] = z[4];
+      vertexPtr->xyz[3] = 1.0f;
+      vertexPtr->texCoord =
+          FloatVector4(float(x - x0), float(y - y0), 0.0f, 0.0f);
       FloatVector4  v_n(0.0f, xyScale, z[1] - z[4], 0.0f);
       FloatVector4  v_w(-xyScale, 0.0f, z[3] - z[4], 0.0f);
       FloatVector4  v_s(0.0f, -xyScale, z[7] - z[4], 0.0f);
@@ -118,15 +121,13 @@ void TerrainMesh::createMesh(
         normal += calculateNormal(v_s, v_e);
       }
       normal.normalize();
-      FloatVector4  bitangent(normal[2], 0.0f, -(normal[0]), 0.0f);
-      bitangent.normalize3Fast();
-      FloatVector4  tangent(0.0f, -(normal[2]), normal[1], 0.0f);
+      FloatVector4  tangent(normal[2], 0.0f, -(normal[0]), 0.0f);
       tangent.normalize3Fast();
-      vertexPtr->bitangent = bitangent.convertToX10Y10Z10();
-      vertexPtr->tangent = tangent.convertToX10Y10Z10();
+      FloatVector4  bitangent(0.0f, -(normal[2]), normal[1], 0.0f);
+      bitangent.normalize3Fast();
       vertexPtr->normal = normal.convertToX10Y10Z10();
-      vertexPtr->u = convertToFloat16(float(x - x0));
-      vertexPtr->v = convertToFloat16(float(y - y0));
+      vertexPtr->tangent = tangent.convertToX10Y10Z10();
+      vertexPtr->bitangent = bitangent.convertToX10Y10Z10();
       if (x != x1 && y != y0)
       {
         int     v0 = int(vertexPtr - vertexDataBuf.data());     // SW
