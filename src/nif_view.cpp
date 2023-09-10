@@ -246,7 +246,7 @@ NIF_View::~NIF_View()
   }
 }
 
-void NIF_View::loadModel(const std::string& fileName)
+void NIF_View::loadModel(const std::string& fileName, int l)
 {
   meshData.clear();
   textureSet.shrinkTextureCache();
@@ -259,7 +259,7 @@ void NIF_View::loadModel(const std::string& fileName)
     return;
   std::vector< unsigned char >& fileBuf = threadFileBuffers[0];
   ba2File.extractFile(fileBuf, fileName);
-  nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), &ba2File);
+  nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), ba2File, l);
   try
   {
     nifFile->getMesh(meshData);
@@ -836,7 +836,7 @@ static const char *keyboardUsageString =
 #endif
 
 bool NIF_View::viewModels(SDLDisplay& display,
-                          const std::vector< std::string >& nifFileNames)
+                          const std::vector< std::string >& nifFileNames, int l)
 {
 #ifdef HAVE_SDL2
   if (nifFileNames.size() < 1)
@@ -859,7 +859,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
     {
       messageBuf += nifFileNames[fileNum];
       messageBuf += '\n';
-      loadModel(nifFileNames[fileNum]);
+      loadModel(nifFileNames[fileNum], l);
 
       bool    nextFileFlag = false;
       // 1: screenshot, 2: high quality screenshot, 4: view info, 8: browse file

@@ -56,7 +56,7 @@ class NIF_View : protected Renderer_Base
   std::map< unsigned int, BGSMFile >  waterMaterials;
   NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr = (ESMFile *) 0);
   virtual ~NIF_View();
-  void loadModel(const std::string& fileName);
+  void loadModel(const std::string& fileName, int l = 0);
   void renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
                    int imageWidth, int imageHeight);
   void addMaterialSwap(unsigned int formID);
@@ -71,7 +71,7 @@ class NIF_View : protected Renderer_Base
                          int imageWidth, int imageHeight);
   // returns false if the window is closed
   bool viewModels(SDLDisplay& display,
-                  const std::vector< std::string >& nifFileNames);
+                  const std::vector< std::string >& nifFileNames, int l = 0);
 };
 
 #endif
