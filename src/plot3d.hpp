@@ -13,21 +13,20 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   static const float  fresnelRoughTable[1024];
   static const float  fresnelPoly3N_Glass[4];
   static const float  fresnelPoly3_Water[4];
-  static const float  fresnelPoly3_FO4[4];
   struct Vertex
   {
     FloatVector4  xyz;
-    FloatVector4  bitangent;            // bitangent[3] = texture U
-    FloatVector4  tangent;              // tangent[3] = texture V
+    FloatVector4  tangent;              // tangent[3] = texture U
+    FloatVector4  bitangent;            // bitangent[3] = texture V
     FloatVector4  normal;
     FloatVector4  vertexColor;
     inline const float& u() const
     {
-      return bitangent[3];
+      return tangent[3];
     }
     inline const float& v() const
     {
-      return tangent[3];
+      return bitangent[3];
     }
   };
   struct Fragment : public Vertex
@@ -61,21 +60,12 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   };
   float   *bufZ;
   std::uint32_t *bufRGBA;
+  std::uint32_t *bufN;                  // normals for decal rendering
   int     width;
   int     height;
-  const DDSTexture  *textureD;          // diffuse texture
-  const DDSTexture  *textureG;          // gradient (grayscale to palette) map
-  const DDSTexture  *textureN;          // normal map
-  const DDSTexture  *textureE;          // environment map
-  const DDSTexture  *textureS;          // TES5 _em.dds, FO4 _s.dds, FO76 _l.dds
-  const DDSTexture  *textureR;          // Fallout 76 reflection map
-  const DDSTexture  *textureGlow;       // glow map
-  float   mipOffsetN;
-  float   mipOffsetS;
-  float   mipOffsetR;
-  float   mipOffsetG;                   // for the glow map
+  const DDSTexture  *textures[10];
+  float   mipOffsets[10];
   unsigned char renderMode;
-  bool    usingSRGBColorSpace;
   std::uint16_t waterUVScale;
   unsigned int  debugMode;
   FloatVector4  lightVector;
@@ -92,7 +82,6 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   FloatVector4  halfwayVector;          // V + L normalized
   float   vDotL;
   float   vDotH;
-  std::uint32_t *bufN;                  // normals for decal rendering
   std::vector< Vertex > vertexBuf;
   std::vector< Triangle > triangleBuf;
   NIFFile::NIFVertexTransform viewTransform;
@@ -112,55 +101,33 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // c = albedo, e = environment, f0 = reflectance
   // r = roughness, s_i = smoothness * 255
   // returns sRGB color
-  inline FloatVector4 calculateLighting_FO76(
+  inline FloatVector4 calculateLighting_SF(
       FloatVector4 c, FloatVector4 e, FloatVector4 specular,
       float ao, FloatVector4 f0, const Fragment& z,
       float nDotL, float nDotV, float r, int s_i) const;
-  inline FloatVector4 calculateLighting_FO4(
-      FloatVector4 c, FloatVector4 e, float specular, float specLevel,
-      const Fragment& z, float nDotL, float nDotV, float smoothness) const;
-  inline FloatVector4 calculateLighting_TES5(
-      FloatVector4 c, FloatVector4 e, float specular, float envLevel,
-      float specLevel, const Fragment& z, float nDotL, float nDotV) const;
   // simplified functions for diffuse texture/normal map only (n = normal)
-  inline FloatVector4 calculateLighting_FO76(
-      FloatVector4 c, const Fragment& z) const;
-  inline FloatVector4 calculateLighting_FO4(
-      FloatVector4 c, const Fragment& z) const;
-  inline FloatVector4 calculateLighting_TES5(
+  inline FloatVector4 calculateLighting_SF(
       FloatVector4 c, const Fragment& z) const;
   // returns reflected view vector
   inline FloatVector4 calculateReflection(const Vertex& v) const;
   inline FloatVector4 environmentMap(
-      FloatVector4 reflectedView, float smoothness,
-      bool isSRGB, bool invZ) const;
-  // fresnelPoly != NULL also enables normalization
-  inline float specularPhong(
-      FloatVector4 reflectedView, float smoothness, float nDotL, float nDotV,
-      const float *fresnelPoly = (float *) 0) const;
+      FloatVector4 reflectedView, float smoothness) const;
   inline FloatVector4 specularGGX(
       FloatVector4 reflectedView, float roughness, float nDotL, float nDotV,
       const float *fresnelPoly, FloatVector4 f0) const;
   // c0 = terrain color (scaled to 1.0), a = water transparency
   inline FloatVector4 calculateLighting_Water(
-      FloatVector4 c0, float a, Fragment& z, bool isFO76) const;
+      FloatVector4 c0, float a, Fragment& z) const;
   // fill with water
   static void drawPixel_Water(Plot3D_TriShape& p, Fragment& z);
   static void drawPixel_Effect(Plot3D_TriShape& p, Fragment& z);
-  // for Fallout 76 with GGX specular
-  static void drawPixel_Water_G(Plot3D_TriShape& p, Fragment& z);
-  static void drawPixel_Effect_G(Plot3D_TriShape& p, Fragment& z);
   FloatVector4 glowMap(const Fragment& z) const;
   // returns true if the pixel is visible (alpha >= threshold)
   static bool getDiffuseColor_Effect(
       const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
-  static bool getDiffuseColor_sRGB_G(
+  static bool getDiffuseColor_G(
       const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
-  static bool getDiffuseColor_sRGB(
-      const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
-  static bool getDiffuseColor_Linear_G(
-      const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
-  static bool getDiffuseColor_Linear(
+  static bool getDiffuseColor_C(
       const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
   inline bool getDiffuseColor(FloatVector4& c, Fragment& z) const
   {
@@ -168,27 +135,19 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   }
   static void drawPixel_Debug(Plot3D_TriShape& p, Fragment& z);
   // diffuse texture only
-  static void drawPixel_D_TES5(Plot3D_TriShape& p, Fragment& z);
+  static void drawPixel_D_SF(Plot3D_TriShape& p, Fragment& z);
   // diffuse + normal map only
-  static void drawPixel_N_TES5(Plot3D_TriShape& p, Fragment& z);
-  static void drawPixel_TES5(Plot3D_TriShape& p, Fragment& z);
-  static void drawPixel_D_FO4(Plot3D_TriShape& p, Fragment& z);
-  static void drawPixel_N_FO4(Plot3D_TriShape& p, Fragment& z);
-  static void drawPixel_FO4(Plot3D_TriShape& p, Fragment& z);
-  static void drawPixel_D_FO76(Plot3D_TriShape& p, Fragment& z);
-  static void drawPixel_N_FO76(Plot3D_TriShape& p, Fragment& z);
-  static void drawPixel_FO76(Plot3D_TriShape& p, Fragment& z);
+  static void drawPixel_N_SF(Plot3D_TriShape& p, Fragment& z);
+  static void drawPixel_SF(Plot3D_TriShape& p, Fragment& z);
   inline void drawPixel(int x, int y, Fragment& v,
                         const Vertex& v0, const Vertex& v1, const Vertex& v2,
                         float w0f, float w1f, float w2f);
   void drawLine(Fragment& v, const Vertex& v0, const Vertex& v1);
   void drawTriangles();
  public:
-  // mode =  4: Skyrim
-  // mode =  8: Fallout 4
-  // mode = 12: Fallout 76
-  //       | 1: enable normal mapping
-  //       | 3: enable full quality
+  // mode & 3 = 0: diffuse texture only
+  //            1: enable normal mapping
+  //            3: enable full quality
   Plot3D_TriShape(std::uint32_t *outBufRGBA, float *outBufZ,
                   int imageWidth, int imageHeight, unsigned int mode);
   virtual ~Plot3D_TriShape();
@@ -206,8 +165,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   }
   inline void setRenderMode(unsigned int mode)
   {
-    renderMode = (unsigned char) (mode & 15U);
-    usingSRGBColorSpace = (renderMode < 12);
+    renderMode = (unsigned char) (mode & 3U);
   }
   void setViewAndLightVector(const NIFFile::NIFVertexTransform& vt,
                              float lightX, float lightY, float lightZ);
@@ -229,23 +187,24 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // setLighting() needs to be called again if the game type is changed.
   void setLighting(FloatVector4 c, FloatVector4 a, FloatVector4 e, float s);
   Plot3D_TriShape& operator=(const NIFFile::NIFTriShape& t);
-  // textures[0] = diffuse
-  // textures[1] = normal
-  // textures[2] = glow map
-  // textures[3] = gradient map
-  // textures[4] = environment map
-  // textures[5] = Skyrim environment mask
-  // textures[6] = Fallout 4 specular map
-  // textures[7] = wrinkles (unused)
-  // textures[8] = Fallout 76 reflection map
-  // textures[9] = Fallout 76 lighting map
+  // textureSet[0] = albedo (_color.dds)
+  // textureSet[1] = normal (_normal.dds)
+  // textureSet[2] = glow map (_emissive.dds)
+  // textureSet[3] = gradient map
+  // textureSet[4] = environment map
+  // textureSet[5] = opacity map (_opacity.dds)
+  // textureSet[6] = ambient occlusion map (_ao.dds)
+  // textureSet[7] = mask texture (_mask.dds)
+  // textureSet[8] = metalness map (_metal.dds)
+  // textureSet[9] = roughness map (_rough.dds)
   void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,
-                    const DDSTexture * const *textures,
+                    const DDSTexture * const *textureSet,
                     unsigned int textureMask);
  protected:
-  void drawEffect(const DDSTexture * const *textures, unsigned int textureMask);
-  void drawWater(const DDSTexture * const *textures, unsigned int textureMask,
-                 float viewScale);
+  void drawEffect(const DDSTexture * const *textureSet,
+                  unsigned int textureMask);
+  void drawWater(const DDSTexture * const *textureSet,
+                 unsigned int textureMask, float viewScale);
  public:
   // n = 0: default mode
   // n = 1: render c as a solid color (0xRRGGBB)
@@ -268,7 +227,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // c = color (sRGB) in bits 0 to 23, flags in bits 24 to 31
   //     subtextures (selected with b30 and b31) are enabled if b27 is not set
   void drawDecal(const NIFFile::NIFVertexTransform& modelTransform,
-                 const DDSTexture * const *textures, unsigned int textureMask,
+                 const DDSTexture * const *textureSet, unsigned int textureMask,
                  const NIFFile::NIFBounds& b, std::uint32_t c = 0xFFFFFFFFU);
 };
 
