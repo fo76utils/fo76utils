@@ -8,7 +8,7 @@
 //                      vertex numbers are in the range 0 to vCnt - 1.
 // float32              Vertex coordinate scale. All vertex coordinates
 //                      are multiplied by this number / 32767.0.
-// uint32               Unknown, usually 0, but can be in the range 0 to 8.
+// uint32               Number of weights per vertex, usually 0, can be up to 8.
 // uint32               Number of vertices (vCnt).
 // int16 * vCnt * 3     Vertex coordinates as signed 16-bit integers.
 // uint32               Number of vertex texture UVs, should be equal to vCnt.
@@ -29,16 +29,16 @@
 //                          b10 to b19 = (Y + 1.0) * 511.5
 //                          b20 to b29 = (Z + 1.0) * 511.5
 //                          b30 to b31 = unknown, either 00 or 11
-// uint32               Size of next chunk (n2).
-// n2 * 4 bytes         Unknown optional data.
-// uint32               Number of following chunks (n3).
+// uint32               Number of vertex weights, n2 = vCnt * weightsPerVertex.
+// uint32 * n2          Vertex weights * 2^32-1 as 32-bit integers (optional).
+// uint32               Number of LODs (n3), usually 0.
 // {
-//     uint32           Size of next chunk (n4).
-//     uint16 * n4      Unknown optional data.
+//     uint32           Number of LOD triangles * 3 (n4).
+//     uint16 * n4      Vertex list for LOD triangles.
 // } * n3
 // -------------------  The remaining data is optional, the file may end here.
-// uint32               Size of next chunk (n5).
-// n5 * 16 bytes        Unknown optional data.
+// uint32               Number of meshlets (n5).
+// n5 * 16 bytes        Meshlet data.
 // uint32               Number of bounding spheres (bndCnt).
 // {
 //     float32          Bounding sphere center X.
@@ -77,43 +77,49 @@ void readStarfieldMeshFile(std::vector< NIFFile::NIFVertex >& vertexData,
     maxVertexNum = std::max(maxVertexNum, int(triangleData[i].v2));
   }
 
-  float   xyzScale = buf.readFloat() / 32767.0f;
-  (void) buf.readUInt32();
+  float   xyzScale = buf.readFloat();
+  unsigned int  vertexWeightCnt = buf.readUInt32();
   unsigned int  vertexCnt = buf.readUInt32();
   if (vertexCnt > 65536U)
     errorMessage("invalid vertex count in mesh file");
   if ((unsigned int) (maxVertexNum + 1) > vertexCnt)
     errorMessage("vertex number out of range in mesh file");
-  if ((buf.getPosition() + (size_t(vertexCnt) * 6)) > buf.size())
+  if ((buf.getPosition() + (size_t(vertexCnt) * 6 + 2)) > buf.size())
     errorMessage("unexpected end of mesh file");
   vertexData.resize(vertexCnt);
   for (size_t i = 0; i < vertexCnt; i++)
   {
-    vertexData[i].x = float(int(std::int16_t(buf.readUInt16Fast()))) * xyzScale;
-    vertexData[i].y = float(int(std::int16_t(buf.readUInt16Fast()))) * xyzScale;
-    vertexData[i].z = float(int(std::int16_t(buf.readUInt16Fast()))) * xyzScale;
+    const unsigned char *p = buf.data() + buf.getPosition();
+    buf.setPosition(buf.getPosition() + 6);
+#if ENABLE_X86_64_AVX
+    const std::uint64_t&  tmp = *(reinterpret_cast< const std::uint64_t * >(p));
+#else
+    std::uint64_t tmp = FileBuffer::readUInt64Fast(p);
+#endif
+    vertexData[i].xyz = FloatVector4::convertInt16(tmp) * xyzScale / 32767.0f;
+    vertexData[i].xyz[3] = 1.0f;
   }
 
   if (buf.readUInt32() != vertexCnt)
     errorMessage("invalid vertex texture coordinate data size in mesh file");
-  if ((buf.getPosition() + (size_t(vertexCnt) * 4)) > buf.size())
+  size_t  texCoordOffs = buf.getPosition();
+  if ((texCoordOffs + (size_t(vertexCnt) * 4)) > buf.size())
     errorMessage("unexpected end of mesh file");
-  for (size_t i = 0; i < vertexCnt; i++)
-  {
-    vertexData[i].u = buf.readUInt16Fast();
-    vertexData[i].v = buf.readUInt16Fast();
-    if (BRANCH_UNLIKELY((vertexData[i].u & 0x7C00) == 0x7C00))  // Inf or NaN
-      vertexData[i].u = 0;
-    if (BRANCH_UNLIKELY((vertexData[i].v & 0x7C00) == 0x7C00))
-      vertexData[i].v = 0;
-  }
+  buf.setPosition(texCoordOffs + (size_t(vertexCnt) * 4));
 
   unsigned int  n = buf.readUInt32();
   if (n != 0U && n != vertexCnt)
-    errorMessage("invalid chunk size in mesh file");
+    errorMessage("invalid vertex texture coordinate data size in mesh file");
   if ((buf.getPosition() + (size_t(n) * 4)) > buf.size())
     errorMessage("unexpected end of mesh file");
-  buf.setPosition(buf.getPosition() + (size_t(n) * 4));
+  for (size_t i = 0; i < vertexCnt; i++)
+  {
+    std::uint64_t tmp =
+        FileBuffer::readUInt32Fast(buf.data() + (texCoordOffs + (i << 2)));
+    if (n)
+      tmp = tmp | (std::uint64_t(buf.readUInt32Fast()) << 32);
+    vertexData[i].texCoord = FloatVector4::convertFloat16(tmp, true);
+  }
 
   n = buf.readUInt32();
   if (n != 0U && n != vertexCnt)
@@ -141,16 +147,31 @@ void readStarfieldMeshFile(std::vector< NIFFile::NIFVertex >& vertexData,
   for (size_t i = 0; i < vertexCnt; i++)
   {
     std::uint32_t tmp = buf.readUInt32Fast() & 0x3FFFFFFFU;
-    vertexData[i].bitangent = tmp;
+    vertexData[i].tangent = tmp;
     FloatVector4  normal(FloatVector4::convertX10Y10Z10(vertexData[i].normal));
-    FloatVector4  bitangent(FloatVector4::convertX10Y10Z10(tmp));
+    FloatVector4  tangent(FloatVector4::convertX10Y10Z10(tmp));
     // calculate cross product
-    FloatVector4  tangent(
-                      (bitangent[1] * normal[2]) - (bitangent[2] * normal[1]),
-                      (bitangent[2] * normal[0]) - (bitangent[0] * normal[2]),
-                      (bitangent[0] * normal[1]) - (bitangent[1] * normal[0]),
+    FloatVector4  bitangent(
+                      (tangent[1] * normal[2]) - (tangent[2] * normal[1]),
+                      (tangent[2] * normal[0]) - (tangent[0] * normal[2]),
+                      (tangent[0] * normal[1]) - (tangent[1] * normal[0]),
                       0.0f);
-    vertexData[i].tangent = tangent.convertToX10Y10Z10();
+    vertexData[i].bitangent = bitangent.convertToX10Y10Z10();
+  }
+
+  n = buf.readUInt32();
+  if (n)
+  {
+    if (n != (std::uint64_t(vertexWeightCnt) * vertexCnt))
+      errorMessage("invalid vertex weight data size in mesh file");
+    if ((buf.getPosition() + (size_t(n) * 4)) > buf.size())
+      errorMessage("unexpected end of mesh file");
+    for (size_t i = 0; i < vertexCnt; i++)
+    {
+      std::int32_t  tmp = std::int32_t(buf.readUInt32Fast() >> 1);
+      vertexData[i].xyz[3] = float(tmp) * (1.0f / 2147483648.0f);
+      buf.setPosition(buf.getPosition() + ((vertexWeightCnt - 1U) << 2));
+    }
   }
 }
 
