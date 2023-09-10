@@ -312,7 +312,7 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f, int l)
         errorMessage("invalid or unsupported BSGeometry data in NIF file");
       unsigned int  meshPathLen = f.readUInt32();
       f.readPath(meshFileName, meshPathLen, "geometries/", ".mesh");
-      if (f.readUInt8() == 0x00)
+      if (f.getPosition() >= f.size() || f.readUInt8Fast() == 0x00)
         break;
     }
     while (--l >= 0);
