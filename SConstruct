@@ -7,9 +7,11 @@ env = Environment(tools = [*filter(None, ARGUMENTS.get('tools','').split(','))] 
 env["CCFLAGS"] = Split("-Wall -Isrc")
 env["CFLAGS"] = Split("-std=c99")
 env["CXXFLAGS"] = Split("-std=c++20")
-if int(ARGUMENTS.get("avx2", 0)):
+avxLevel = int(ARGUMENTS.get("avx", 2))
+avx2Flag = int(ARGUMENTS.get("avx2", 1))
+if avxLevel > 1 and avx2Flag > 0:
     env.Append(CCFLAGS = ["-march=haswell"])
-elif int(ARGUMENTS.get("avx", 1)):
+elif avxLevel > 0:
     env.Append(CCFLAGS = ["-march=sandybridge"])
 env.Append(CCFLAGS = ["-mtune=generic"])
 env.Append(LIBS = ["m"])
