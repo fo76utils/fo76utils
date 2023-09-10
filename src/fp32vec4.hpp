@@ -74,7 +74,10 @@ struct FloatVector4
                       const std::uint32_t *p1_2, const std::uint32_t *p2_2,
                       const std::uint32_t *p1_3, const std::uint32_t *p2_3,
                       float xf, float yf, bool isSRGB = false);
-  static inline FloatVector4 convertFloat16(std::uint64_t n);
+  static inline FloatVector4 convertInt16(const std::uint64_t& n);
+  // if noInfNaN is true, Inf and NaN values are never returned
+  static inline FloatVector4 convertFloat16(std::uint64_t n,
+                                            bool noInfNaN = false);
   inline float& operator[](size_t n)
   {
     return v[n];
@@ -190,13 +193,33 @@ inline FloatVector4::FloatVector4(const float *p)
 {
 }
 
-inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n)
+inline FloatVector4 FloatVector4::convertInt16(const std::uint64_t& n)
+{
+  XMM_Float v;
+  __asm__ ("vpmovsxwd %1, %0" : "=x" (v) : "m" (n));
+  __asm__ ("vcvtdq2ps %0, %0" : "+x" (v));
+  return FloatVector4(v);
+}
+
+inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n, bool noInfNaN)
 {
   XMM_Float v;
 #if ENABLE_X86_64_AVX2
   __asm__ ("vmovq %1, %0" : "=x" (v) : "rm" (n));
+  if (noInfNaN)
+  {
+    const XMM_UInt16  expMaskTbl =
+    {
+      0x7C00, 0x7C00, 0x7C00, 0x7C00, 0, 0, 0, 0
+    };
+    XMM_UInt16  tmp;
+    __asm__ ("vpand %2, %1, %0" : "=x" (tmp) : "x" (v), "x" (expMaskTbl));
+    __asm__ ("vpcmpeqw %1, %0, %0" : "+x" (tmp) : "x" (expMaskTbl));
+    __asm__ ("vpandn %0, %1, %0" : "+x" (v) : "x" (tmp));
+  }
   __asm__ ("vcvtph2ps %0, %0" : "+x" (v));
 #else
+  (void) noInfNaN;
   XMM_Int32 tmp1;
   XMM_Int32 tmp2 =
   {
@@ -707,8 +730,17 @@ inline FloatVector4::FloatVector4(const float *p)
   v[3] = p[3];
 }
 
-inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n)
+inline FloatVector4 FloatVector4::convertInt16(const std::uint64_t& n)
 {
+  return FloatVector4(float(std::int16_t(n & 0xFFFFU)),
+                      float(std::int16_t((n >> 16) & 0xFFFFU)),
+                      float(std::int16_t((n >> 32) & 0xFFFFU)),
+                      float(std::int16_t((n >> 48) & 0xFFFFU)));
+}
+
+inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n, bool noInfNaN)
+{
+  (void) noInfNaN;
   return FloatVector4(::convertFloat16(std::uint16_t(n & 0xFFFFU)),
                       ::convertFloat16(std::uint16_t((n >> 16) & 0xFFFFU)),
                       ::convertFloat16(std::uint16_t((n >> 32) & 0xFFFFU)),
