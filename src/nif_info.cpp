@@ -314,11 +314,12 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
     for (size_t j = 0; j < ts.vertexCnt; j++)
     {
       NIFFile::NIFVertex  v = ts.vertexData[j];
-      ts.vertexTransform.transformXYZ(v.x, v.y, v.z);
+      v.xyz = ts.vertexTransform.transformXYZ(v.xyz);
       FloatVector4  normal(ts.vertexTransform.rotateXYZ(v.getNormal()));
       std::fprintf(f, "    %4d: XYZ: (%f, %f, %f), normals: (%f, %f, %f), "
                    "UV: (%f, %f), color: 0x%08X\n",
-                   int(j), v.x, v.y, v.z, normal[0], normal[1], normal[2],
+                   int(j), v.xyz[0], v.xyz[1], v.xyz[2],
+                   normal[0], normal[1], normal[2],
                    v.getU(), v.getV(), (unsigned int) v.vertexColor);
     }
     std::fprintf(f, "  Triangle list:\n");
@@ -332,7 +333,7 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
 }
 
 static void printOBJData(std::FILE *f, const NIFFile& nifFile,
-                         const char *mtlFileName)
+                         const char *mtlFileName, bool enableVertexColors)
 {
   std::vector< NIFFile::NIFTriShape > meshData;
   nifFile.getMesh(meshData);
@@ -346,11 +347,33 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
       tsName = nifFile.getString(ts.nameID)->c_str();
     std::fprintf(f, "# %s\n\ng %s\n", tsName, tsName);
     std::fprintf(f, "usemtl Material%06u\n\n", (unsigned int) (i + 1));
+    bool    haveVertexColors = false;
+    if (enableVertexColors)
+    {
+      for (size_t j = 0; j < ts.vertexCnt; j++)
+      {
+        if (ts.vertexData[j].vertexColor != 0xFFFFFFFFU)
+        {
+          haveVertexColors = true;
+          break;
+        }
+      }
+    }
     for (size_t j = 0; j < ts.vertexCnt; j++)
     {
       NIFFile::NIFVertex  v = ts.vertexData[j];
-      ts.vertexTransform.transformXYZ(v.x, v.y, v.z);
-      std::fprintf(f, "v %.8f %.8f %.8f\n", v.x, v.y, v.z);
+      v.xyz = ts.vertexTransform.transformXYZ(v.xyz);
+      if (haveVertexColors)
+      {
+        FloatVector4  c(&(v.vertexColor));
+        c *= (1.0f / 255.0f);
+        std::fprintf(f, "v %.8f %.8f %.8f %.4f %.4f %.4f\n",
+                     v.xyz[0], v.xyz[1], v.xyz[2], c[0], c[1], c[2]);
+      }
+      else
+      {
+        std::fprintf(f, "v %.8f %.8f %.8f\n", v.xyz[0], v.xyz[1], v.xyz[2]);
+      }
     }
     for (size_t j = 0; j < ts.vertexCnt; j++)
     {
@@ -431,7 +454,9 @@ int main(int argc, char **argv)
     int     outFmt = 0;
     int     renderWidth = 1344;
     int     renderHeight = 896;
+    unsigned char l = 0;
     bool    verboseMaterialInfo = false;
+    bool    enableVertexColors = false;
     for ( ; argc >= 2 && argv[1][0] == '-'; argc--, argv++)
     {
       if (std::strcmp(argv[1], "--") == 0)
@@ -455,6 +480,14 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[1], "-mtl") == 0)
       {
         outFmt = 4;
+      }
+      else if (std::strcmp(argv[1], "-c") == 0)
+      {
+        enableVertexColors = true;
+      }
+      else if (argv[1][1] == 'l' && argv[1][2] >= '0' && argv[1][2] <= '9')
+      {
+        l = (unsigned char) (argv[1][2] & 0x0F);
       }
       else if (std::strncmp(argv[1], "-render", 7) == 0 ||
                std::strncmp(argv[1], "-view", 5) == 0)
@@ -525,6 +558,8 @@ int main(int argc, char **argv)
       std::fprintf(stderr, "    -m      Print detailed material information\n");
       std::fprintf(stderr, "    -obj    Print model data in .obj format\n");
       std::fprintf(stderr, "    -mtl    Print material data in .mtl format\n");
+      std::fprintf(stderr, "    -c      Enable vertex colors in .obj output\n");
+      std::fprintf(stderr, "    -lN     Set level of detail (default: -l0)\n");
       std::fprintf(stderr, "    -render[WIDTHxHEIGHT] DDSFILE   "
                            "Render model to DDS file\n");
 #ifdef HAVE_SDL2
@@ -570,7 +605,7 @@ int main(int argc, char **argv)
         std::sort(fileNames.begin(), fileNames.end());
         SDLDisplay  display(renderWidth, renderHeight, "nif_info", 4U, 48);
         display.setDefaultTextColor(0x00, 0xC0);
-        renderer->viewModels(display, fileNames);
+        renderer->viewModels(display, fileNames, l);
       }
       delete renderer;
       return 0;
@@ -606,7 +641,7 @@ int main(int argc, char **argv)
         printAuthorName(outFile, fileBuf, fileNames[i].c_str());
         continue;
       }
-      NIFFile nifFile(fileBuf.data(), fileBuf.size(), &ba2File);
+      NIFFile nifFile(fileBuf.data(), fileBuf.size(), ba2File, l);
       if (outFmt == 0 || outFmt == 2)
         printBlockList(outFile, nifFile, verboseMaterialInfo);
       if (outFmt == 2)
@@ -621,14 +656,14 @@ int main(int argc, char **argv)
         std::string mtlName(fileNames[i].c_str() + n);
         mtlName.resize(mtlName.length() - 3);
         mtlName += "mtl";
-        printOBJData(outFile, nifFile, mtlName.c_str());
+        printOBJData(outFile, nifFile, mtlName.c_str(), enableVertexColors);
       }
       if (outFmt == 4)
         printMTLData(outFile, nifFile);
       if (outFmt == 5)
       {
         std::fprintf(stderr, "%s\n", fileNames[i].c_str());
-        renderer->loadModel(fileNames[i]);
+        renderer->loadModel(fileNames[i], l);
         renderer->renderModelToFile(outFileName, renderWidth, renderHeight);
         break;
       }
