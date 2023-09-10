@@ -154,7 +154,7 @@ ESMView::ESMView(
   {
     ba2File = new BA2File(archivePath,
 #ifdef HAVE_SDL2
-                          ".bgem\t.bgsm\t.bto\t.btr\t.dds\t.nif\t"
+                          ".bgem\t.bgsm\t.bto\t.btr\t.dds\t.mat\t.mesh\t.nif\t"
 #endif
                           ".dlstrings\t.ilstrings\t.strings");
   }
