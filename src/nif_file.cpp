@@ -176,8 +176,9 @@ void NIFFile::NIFTriShape::calculateBounds(NIFBounds& b,
   NIFBounds bTmp(b);
   for (size_t i = 0; i < vertexCnt; i++)
   {
-    bTmp += ((rotateX * vertexData[i].x) + (rotateY * vertexData[i].y)
-             + (rotateZ * vertexData[i].z) + offsXYZ);
+    bTmp += ((rotateX * vertexData[i].xyz[0])
+             + (rotateY * vertexData[i].xyz[1])
+             + (rotateZ * vertexData[i].xyz[2]) + offsXYZ);
   }
   b = bTmp;
 }
@@ -235,7 +236,7 @@ NIFFile::NIFBlkNiNode::NIFBlkNiNode(NIFFile& f)
     unsigned int  childBlock = f.readUInt32();
     if (childBlock == 0xFFFFFFFFU)
       continue;
-    if (childBlock >= f.blocks.size())
+    if (childBlock >= f.blockCnt)
       errorMessage("invalid child block number in NIF node");
     children.push_back(childBlock);
   }
@@ -245,7 +246,7 @@ NIFFile::NIFBlkNiNode::~NIFBlkNiNode()
 {
 }
 
-NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f, const BA2File *ba2File)
+NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f, int l)
   : NIFBlock(NIFFile::BlkTypeBSTriShape)
 {
   nameID = f.readInt32();
@@ -300,17 +301,22 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f, const BA2File *ba2File)
     vertexFmtDesc = 0x0003B00000000000ULL;
     if (f.readUInt8() != 0x01)
       errorMessage("invalid or unsupported BSGeometry data in NIF file");
-    unsigned int  triangleCntx3 = f.readUInt32();
-    unsigned int  vertexCnt = f.readUInt32();
-    if ((triangleCntx3 % 3U) != 0U || vertexCnt > 0x00010000U)
-      errorMessage("invalid vertex or triangle data size in NIF file");
-    if (f.readUInt32() != 0x40U)
-      errorMessage("invalid or unsupported BSGeometry data in NIF file");
-    unsigned int  meshPathLen = f.readUInt32();
-    f.readPath(meshFileName, meshPathLen, "geometries/", ".mesh");
-    if (!ba2File)
-      errorMessage("loading Starfield BSGeometry block requires archives");
-    ba2File->extractFile(f.meshBuf, meshFileName);
+    unsigned int  triangleCntx3, vertexCnt;
+    do
+    {
+      triangleCntx3 = f.readUInt32();
+      vertexCnt = f.readUInt32();
+      if ((triangleCntx3 % 3U) != 0U || vertexCnt > 0x00010000U)
+        errorMessage("invalid vertex or triangle data size in NIF file");
+      if (f.readUInt32() != 0x40U)
+        errorMessage("invalid or unsupported BSGeometry data in NIF file");
+      unsigned int  meshPathLen = f.readUInt32();
+      f.readPath(meshFileName, meshPathLen, "geometries/", ".mesh");
+      if (f.readUInt8() == 0x00)
+        break;
+    }
+    while (--l >= 0);
+    f.ba2File.extractFile(f.meshBuf, meshFileName);
     FileBuffer  tmpBuf(f.meshBuf.data(), f.meshBuf.size());
     readStarfieldMeshFile(vertexData, triangleData, tmpBuf);
     if (vertexData.size() != vertexCnt ||
@@ -348,7 +354,7 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f, const BA2File *ba2File)
   int     xyzOffs = -1;
   int     uvOffs = -1;
   int     normalOffs = -1;
-  int     tangentOffs = -1;
+  int     bitangentOffs = -1;
   int     vclrOffs = -1;
   bool    useFloat16 = (f.bsVersion >= 0x80 && !(vertexFmtDesc & (1ULL << 54)));
   if (vertexFmtDesc & (1ULL << 44))
@@ -358,13 +364,13 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f, const BA2File *ba2File)
   if (vertexFmtDesc & (1ULL << 47))
     normalOffs = int((vertexFmtDesc >> 16) & 0x0FU) << 2;
   if (vertexFmtDesc & (1ULL << 48))
-    tangentOffs = int((vertexFmtDesc >> 20) & 0x0FU) << 2;
+    bitangentOffs = int((vertexFmtDesc >> 20) & 0x0FU) << 2;
   if (vertexFmtDesc & (1ULL << 49))
     vclrOffs = int((vertexFmtDesc >> 24) & 0x0FU) << 2;
   if ((xyzOffs >= 0 && (xyzOffs + (useFloat16 ? 8 : 16)) > int(vertexSize)) ||
       (uvOffs >= 0 && (uvOffs + 4) > int(vertexSize)) ||
       (normalOffs >= 0 && (normalOffs + 4) > int(vertexSize)) ||
-      (tangentOffs >= 0 && (tangentOffs + 4) > int(vertexSize)) ||
+      (bitangentOffs >= 0 && (bitangentOffs + 4) > int(vertexSize)) ||
       (vclrOffs >= 0 && (vclrOffs + 4) > int(vertexSize)))
   {
     errorMessage("invalid vertex format in NIF file");
@@ -375,45 +381,41 @@ NIFFile::NIFBlkBSTriShape::NIFBlkBSTriShape(NIFFile& f, const BA2File *ba2File)
   {
     NIFVertex&  v = vertexData[i];
     size_t  offs = f.getPosition();
-    FloatVector4  bitangent(1.0f, 0.0f, 0.0f, 0.0f);
+    FloatVector4  tangent(1.0f, 0.0f, 0.0f, 0.0f);
     if (xyzOffs >= 0)
     {
       f.setPosition(offs + size_t(xyzOffs));
-      FloatVector4  xyz(!useFloat16 ?
-                        f.readFloatVector4() : f.readFloat16Vector4());
-      v.x = xyz[0];
-      v.y = xyz[1];
-      v.z = xyz[2];
-      bitangent[0] = xyz[3];
+      v.xyz = (!useFloat16 ? f.readFloatVector4() : f.readFloat16Vector4());
+      tangent[0] = v.xyz[3];
+      v.xyz[3] = 1.0f;
     }
     if (uvOffs >= 0)
     {
       f.setPosition(offs + size_t(uvOffs));
-      v.u = f.readUInt16Fast();
-      v.v = f.readUInt16Fast();
+      v.texCoord = FloatVector4::convertFloat16(f.readUInt32Fast(), true);
     }
     if (normalOffs >= 0)
     {
       f.setPosition(offs + size_t(normalOffs));
       FloatVector4  normal(f.readUInt32Fast());
       normal = normal * (1.0f / 127.5f) - 1.0f;
-      bitangent[1] = normal[3];
+      tangent[1] = normal[3];
       v.normal = normal.convertToX10Y10Z10();
     }
-    if (tangentOffs >= 0)
+    if (bitangentOffs >= 0)
     {
-      f.setPosition(offs + size_t(tangentOffs));
-      FloatVector4  tangent(f.readUInt32Fast());
-      tangent = tangent * (1.0f / 127.5f) - 1.0f;
-      bitangent[2] = tangent[3];
-      v.tangent = tangent.convertToX10Y10Z10();
+      f.setPosition(offs + size_t(bitangentOffs));
+      FloatVector4  bitangent(f.readUInt32Fast());
+      bitangent = bitangent * (1.0f / 127.5f) - 1.0f;
+      tangent[2] = bitangent[3];
+      v.bitangent = bitangent.convertToX10Y10Z10();
     }
     if (vclrOffs >= 0)
     {
       f.setPosition(offs + size_t(vclrOffs));
       v.vertexColor = f.readUInt32Fast();
     }
-    v.bitangent = bitangent.convertToX10Y10Z10();
+    v.tangent = tangent.convertToX10Y10Z10();
     f.setPosition(offs + vertexSize);
   }
   for (size_t i = 0; i < triangleCnt; i++)
@@ -602,8 +604,7 @@ static std::uint64_t decodeFO76ShaderFlags(FileBuffer& f)
 }
 
 NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
-    NIFFile& f, size_t nxtBlk, int nxtBlkType, bool isEffect,
-    const BA2File *ba2File)
+    NIFFile& f, size_t nxtBlk, int nxtBlkType, bool isEffect)
   : NIFBlock(NIFFile::BlkTypeBSLightingShaderProperty)
 {
   shaderType = (!isEffect ? 0U : 0xFFFFFFFFU);
@@ -632,11 +633,11 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
   flags = 0ULL;
   textureSet = -1;
   bool    haveMaterial = false;
-  if (!f.stringBuf.empty() && ba2File)  // f.stringBuf = material path
+  if (!f.stringBuf.empty())             // f.stringBuf = material path
   {
     try
     {
-      material.loadBGSMFile(*ba2File, f.stringBuf);
+      material.loadBGSMFile(f.ba2File, f.stringBuf);
       haveMaterial = true;
     }
     catch (FO76UtilsError&)
@@ -756,7 +757,7 @@ void NIFFile::readString(std::string& s, size_t stringLengthSize)
   }
 }
 
-void NIFFile::loadNIFFile(const BA2File *ba2File)
+void NIFFile::loadNIFFile(int l)
 {
   if (fileBufSize < 57 ||
       std::memcmp(fileBuf, "Gamebryo File Format, Version ", 30) != 0)
@@ -814,7 +815,8 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
       blockTypes[i] = (unsigned char) tmpBlkTypes[blockType];
     }
   }
-  blockOffsets.resize(blockCnt + 1, 0);
+  blockOffsets = new size_t[blockCnt + 1];
+  blockOffsets[0] = 0;
   for (size_t i = 1; i <= blockCnt; i++)
   {
     unsigned int  blockSize = readUInt32Fast();
@@ -836,7 +838,9 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
       errorMessage("invalid block size in NIF file");
   }
 
-  blocks.resize(blockCnt, (NIFBlock *) 0);
+  blocks = new NIFBlock*[blockCnt];
+  for (size_t i = 0; i < blockCnt; i++)
+    blocks[i] = (NIFBlock *) 0;
   const unsigned char *savedFileBuf = fileBuf;
   size_t  savedFileBufSize = fileBufSize;
   try
@@ -854,7 +858,7 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
           blocks[i] = new NIFBlkNiNode(*this);
           break;
         case BlkTypeBSTriShape:
-          blocks[i] = new NIFBlkBSTriShape(*this, ba2File);
+          blocks[i] = new NIFBlkBSTriShape(*this, l);
           break;
         case BlkTypeBSLightingShaderProperty:
           {
@@ -863,8 +867,7 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
               t = blockTypeBaseTable[blockTypes[i + 1]];
             blocks[i] = new NIFBlkBSLightingShaderProperty(
                                 *this, i + 1, t,
-                                (blockType == BlkTypeBSEffectShaderProperty),
-                                ba2File);
+                                (blockType == BlkTypeBSEffectShaderProperty));
           }
           break;
         case BlkTypeBSShaderTextureSet:
@@ -885,7 +888,7 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
     fileBuf = savedFileBuf;
     fileBufSize = savedFileBufSize;
     filePos = savedFileBufSize;
-    for (size_t i = 0; i < blocks.size(); i++)
+    for (size_t i = 0; i < blockCnt; i++)
     {
       if (blocks[i])
         delete blocks[i];
@@ -943,7 +946,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       if (blockType == BlkTypeNiSwitchNode && i != switchActive)
         continue;
       unsigned int  n = children[i];
-      if (n >= blocks.size())
+      if (n >= blockCnt)
         continue;
       if (!blocks[n]->isTriShape())
       {
@@ -1029,39 +1032,83 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   v.push_back(t);
 }
 
-NIFFile::NIFFile(const char *fileName, const BA2File *ba2File)
-  : FileBuffer(fileName)
+NIFFile::NIFFile(const char *fileName, const BA2File& archiveFiles, int l)
+  : FileBuffer(fileName),
+    blockOffsets((size_t *) 0),
+    blocks((NIFBlock **) 0),
+    ba2File(archiveFiles)
 {
-  loadNIFFile(ba2File);
+  try
+  {
+    loadNIFFile(l);
+  }
+  catch (...)
+  {
+    if (blocks)
+      delete[] blocks;
+    if (blockOffsets)
+      delete[] blockOffsets;
+    throw;
+  }
 }
 
 NIFFile::NIFFile(const unsigned char *buf, size_t bufSize,
-                 const BA2File *ba2File)
-  : FileBuffer(buf, bufSize)
+                 const BA2File& archiveFiles, int l)
+  : FileBuffer(buf, bufSize),
+    blockOffsets((size_t *) 0),
+    blocks((NIFBlock **) 0),
+    ba2File(archiveFiles)
 {
-  loadNIFFile(ba2File);
+  try
+  {
+    loadNIFFile(l);
+  }
+  catch (...)
+  {
+    if (blocks)
+      delete[] blocks;
+    if (blockOffsets)
+      delete[] blockOffsets;
+    throw;
+  }
 }
 
-NIFFile::NIFFile(FileBuffer& buf, const BA2File *ba2File)
-  : FileBuffer(buf.data(), buf.size())
+NIFFile::NIFFile(FileBuffer& buf, const BA2File& archiveFiles, int l)
+  : FileBuffer(buf.data(), buf.size()),
+    blockOffsets((size_t *) 0),
+    blocks((NIFBlock **) 0),
+    ba2File(archiveFiles)
 {
-  loadNIFFile(ba2File);
+  try
+  {
+    loadNIFFile(l);
+  }
+  catch (...)
+  {
+    if (blocks)
+      delete[] blocks;
+    if (blockOffsets)
+      delete[] blockOffsets;
+    throw;
+  }
 }
 
 NIFFile::~NIFFile()
 {
-  for (size_t i = 0; i < blocks.size(); i++)
+  for (size_t i = 0; i < blockCnt; i++)
   {
     if (blocks[i])
       delete blocks[i];
   }
+  delete[] blocks;
+  delete[] blockOffsets;
 }
 
 void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int rootNode,
                       unsigned int switchActive, bool noRootNodeTransform) const
 {
   v.clear();
-  if (rootNode < blocks.size() &&
+  if (rootNode < blockCnt &&
       (blocks[rootNode]->isNode() || blocks[rootNode]->isTriShape()))
   {
     std::vector< unsigned int > parentBlocks;

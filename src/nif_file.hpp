@@ -13,47 +13,43 @@ class NIFFile : public FileBuffer
  public:
   struct NIFVertex
   {
-    float   x;
-    float   y;
-    float   z;
-    std::uint32_t bitangent;            // X10Y10Z10
-    std::uint32_t tangent;
-    std::uint32_t normal;
-    std::uint16_t u;                    // FP16 format
-    std::uint16_t v;
+    FloatVector4  xyz;                  // xyz[3] is the first vertex weight
+    FloatVector4  texCoord;             // u, v, u2, v2
     std::uint32_t vertexColor;          // 0xAABBGGRR
+    std::uint32_t normal;               // Z axis of tangent space (X10Y10Z10)
+    std::uint32_t tangent;              // X axis of tangent space
+    std::uint32_t bitangent;            // Y axis of tangent space
     NIFVertex()
-      : x(0.0f), y(0.0f), z(0.0f),
-        bitangent(0x1FF7FFFFU), tangent(0x1FFFFDFFU), normal(0x3FF7FDFFU),
-        u(0), v(0), vertexColor(0xFFFFFFFFU)
+      : xyz(0.0f, 0.0f, 0.0f, 1.0f),
+        texCoord(0.0f, 0.0f, 0.0f, 0.0f),
+        vertexColor(0xFFFFFFFFU),
+        normal(0x3FF7FDFFU), tangent(0x1FF7FFFFU), bitangent(0x1FF001FFU)
     {
     }
     inline float getU() const
     {
-      return convertFloat16(u);
+      return texCoord[0];
     }
     inline float getV() const
     {
-      return convertFloat16(v);
+      return texCoord[1];
     }
     inline void getUV(float& u_f, float& v_f) const
     {
-      FloatVector4  tmp(FloatVector4::convertFloat16(
-                            std::uint32_t(u) | (std::uint32_t(v) << 16)));
-      u_f = tmp[0];
-      v_f = tmp[1];
+      u_f = texCoord[0];
+      v_f = texCoord[1];
     }
-    inline FloatVector4 getBitangent() const
+    inline FloatVector4 getNormal() const
     {
-      return FloatVector4::convertX10Y10Z10(bitangent);
+      return FloatVector4::convertX10Y10Z10(normal);
     }
     inline FloatVector4 getTangent() const
     {
       return FloatVector4::convertX10Y10Z10(tangent);
     }
-    inline FloatVector4 getNormal() const
+    inline FloatVector4 getBitangent() const
     {
-      return FloatVector4::convertX10Y10Z10(normal);
+      return FloatVector4::convertX10Y10Z10(bitangent);
     }
   };
   struct NIFTriangle
@@ -96,9 +92,8 @@ class NIFFile : public FileBuffer
     }
     inline NIFBounds& operator+=(const NIFVertex& v)
     {
-      FloatVector4  tmp(v.x, v.y, v.z, 0.0f);
-      boundsMin.minValues(tmp);
-      boundsMax.maxValues(tmp);
+      boundsMin.minValues(v.xyz);
+      boundsMax.maxValues(v.xyz);
       return (*this);
     }
     inline NIFBounds& operator+=(FloatVector4 v)
@@ -241,11 +236,11 @@ class NIFFile : public FileBuffer
     int     shaderProperty;
     int     alphaProperty;
     // bits  0 -  3: vertex data size / 4
-    // bits  4 -  7: offset of vertex coordinates (X, Y, Z, bitangent X) / 4
+    // bits  4 -  7: offset of vertex coordinates (X, Y, Z, tangent X) / 4
     // bits  8 - 11: offset of texture coordinates (U, V) / 4
     // bits 12 - 15: offset of texture coordinates 2 / 4
-    // bits 16 - 19: offset of vertex normal (X, Y, Z, bitangent Y) / 4
-    // bits 20 - 23: offset of vertex tangent (X, Y, Z, bitangent Z) / 4
+    // bits 16 - 19: offset of vertex normal (X, Y, Z, tangent Y) / 4
+    // bits 20 - 23: offset of vertex bitangent (X, Y, Z, tangent Z) / 4
     // bits 24 - 27: offset of vertex color / 4
     // bits 44 - 53: set if attribute N - 44 is present
     // bit  54:      set if X, Y, Z are 32-bit floats (always for Skyrim)
@@ -253,7 +248,7 @@ class NIFFile : public FileBuffer
     std::vector< NIFVertex >    vertexData;
     std::vector< NIFTriangle >  triangleData;
     std::string meshFileName;
-    NIFBlkBSTriShape(NIFFile& f, const BA2File *ba2File);
+    NIFBlkBSTriShape(NIFFile& f, int l);
     virtual ~NIFBlkBSTriShape();
   };
   struct NIFBlkBSLightingShaderProperty : public NIFBlock
@@ -271,7 +266,7 @@ class NIFFile : public FileBuffer
     void readEffectShaderProperty(NIFFile& f);
     void readLightingShaderProperty(NIFFile& f);
     NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType,
-                                   bool isEffect, const BA2File *ba2File);
+                                   bool isEffect);
     virtual ~NIFBlkBSLightingShaderProperty();
     inline const std::string *materialName() const
     {
@@ -311,8 +306,9 @@ class NIFFile : public FileBuffer
   //     172: Starfield
   unsigned int  bsVersion;
   unsigned int  blockCnt;
-  std::vector< size_t >     blockOffsets;
-  std::vector< NIFBlock * > blocks;
+  size_t    *blockOffsets;              // blockCnt + 1 elements
+  NIFBlock  **blocks;                   // blockCnt elements
+  const BA2File&  ba2File;
   std::vector< std::string >  stringTable;
   std::string   stringBuf;
   std::vector< unsigned char >  meshBuf;
@@ -322,17 +318,18 @@ class NIFFile : public FileBuffer
   inline int readBlockID()
   {
     int     n = readInt32();
-    return (n >= 0 && size_t(n) < blocks.size() ? n : -1);
+    return (n >= 0 && (unsigned int) n < blockCnt ? n : -1);
   }
-  void loadNIFFile(const BA2File *ba2File);
+  void loadNIFFile(int l);
   void getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
                std::vector< unsigned int >& parentBlocks,
                unsigned int switchActive, bool noRootNodeTransform) const;
  public:
-  NIFFile(const char *fileName, const BA2File *ba2File = (BA2File *) 0);
+  // l = LOD
+  NIFFile(const char *fileName, const BA2File& archiveFiles, int l = 0);
   NIFFile(const unsigned char *buf, size_t bufSize,
-          const BA2File *ba2File = (BA2File *) 0);
-  NIFFile(FileBuffer& buf, const BA2File *ba2File = (BA2File *) 0);
+          const BA2File& archiveFiles, int l = 0);
+  NIFFile(FileBuffer& buf, const BA2File& archiveFiles, int l = 0);
   virtual ~NIFFile();
   inline unsigned int getVersion() const;
   inline const std::string& getAuthorName() const;
