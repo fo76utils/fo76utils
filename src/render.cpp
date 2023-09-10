@@ -1031,19 +1031,6 @@ const Renderer::BaseObject * Renderer::readModelProperties(
             }
           }
         }
-        else if (f == "MNAM" && f.size() == 1040 && modelLOD && !isHDModel)
-        {
-          for (int j = (modelLOD - 1) & 3; j >= 0; j--)
-          {
-            f.setPosition(size_t(j * 260));
-            if (f[f.getPosition()] != 0)
-            {
-              f.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
-              if (!stringBuf.empty())
-                break;
-            }
-          }
-        }
         else if (f == "MODS" && f.size() >= 4)
         {
           tmp.mswpFormID = f.readUInt32Fast();
@@ -1594,10 +1581,12 @@ bool Renderer::loadModel(const BaseObject& o, size_t threadNum)
   {
     std::vector< unsigned char >& fileBuf = renderThreads[threadNum].fileBuf;
     ba2File.extractFile(fileBuf, *(o.modelPath));
-    nifFiles[n].nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), &ba2File);
-    bool    isHDModel = bool(o.flags & 0x0040);
-    nifFiles[n].nifFile->getMesh(nifFiles[n].meshData, 0U,
-                                 (unsigned int) (modelLOD && !isHDModel), true);
+    unsigned char l = 0;
+    if (!(o.flags & 0x0040))
+      l = modelLOD;
+    nifFiles[n].nifFile =
+        new NIFFile(fileBuf.data(), fileBuf.size(), ba2File, l);
+    nifFiles[n].nifFile->getMesh(nifFiles[n].meshData, 0U, 0U, true);
     size_t  meshCnt = nifFiles[n].meshData.size();
     for (size_t i = 0; i < meshCnt; i++)
     {
@@ -1647,10 +1636,10 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   NIFFile::NIFVertex  v;
   for (int i = 0; i < 8; i++)
   {
-    v.x = (!(i & 1) ? decalBounds.boundsMin[0] : decalBounds.boundsMax[0]);
-    v.y = (!(i & 2) ? decalBounds.boundsMin[1] : decalBounds.boundsMax[1]);
-    v.z = (!(i & 4) ? decalBounds.boundsMin[2] : decalBounds.boundsMax[2]);
-    vt.transformXYZ(v.x, v.y, v.z);
+    v.xyz[0] = (!(i & 1) ? decalBounds.boundsMin[0] : decalBounds.boundsMax[0]);
+    v.xyz[1] = (!(i & 2) ? decalBounds.boundsMin[1] : decalBounds.boundsMax[1]);
+    v.xyz[2] = (!(i & 4) ? decalBounds.boundsMin[2] : decalBounds.boundsMax[2]);
+    v.xyz = vt.transformXYZ(v.xyz);
     b += v;
   }
   int     x0 = roundFloat(b.xMin());
@@ -1973,10 +1962,11 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
     int     y1 = p.model.t.y1;
     for (int j = 0; j < 4; j++)
     {
-      vTmp[j].x = float(j == 0 || j == 3 ? x0 : x1);
-      vTmp[j].y = float(j == 0 || j == 1 ? y0 : y1);
-      vTmp[j].u = (unsigned short) (j == 0 || j == 3 ? 0x0000 : 0x4000);
-      vTmp[j].v = (unsigned short) (j == 0 || j == 1 ? 0x0000 : 0x4000);
+      vTmp[j].xyz = FloatVector4(float(j == 0 || j == 3 ? x0 : x1),
+                                 float(j == 0 || j == 1 ? y0 : y1), 0.0f, 1.0f);
+      vTmp[j].texCoord = FloatVector4((j == 0 || j == 3 ? 0.0f : 2.0f),
+                                      (j == 0 || j == 1 ? 0.0f : 2.0f),
+                                      0.0f, 0.0f);
     }
     tTmp[0].v0 = 0;
     tTmp[0].v1 = 1;
