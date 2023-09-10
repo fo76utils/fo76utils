@@ -31,14 +31,16 @@ Running any of the programs without arguments prints detailed usage information.
         pacman -Su
         pacman -S --needed base-devel mingw-w64-x86_64-toolchain
         pacman -S msys/scons
-* Optionally, install SDL 2 for cubeview, wrldview, and the NIF viewer mode of esmview and nif\_info, matplotlib for plotting scripts, and SWIG for building the Python interface to libfo76utils:
+* Optionally, install SDL 2 for cubeview, wrldview, and the NIF viewer mode of esmview and nif\_info, matplotlib for plotting scripts, and SWIG for building the Python interface to libce2utils:
   *     pacman -S mingw64/mingw-w64-x86_64-SDL2
         pacman -S mingw64/mingw-w64-x86_64-python-matplotlib
         pacman -S mingw64/mingw-w64-x86_64-swig
 * The installed MSYS2 and MinGW packages can be updated anytime by running **pacman -Syu** again.
-* In the MSYS2 MinGW x64 terminal, compile the utilities with **scons**. Use **scons -j 8** for building with 8 parallel jobs, and **scons -c** to clean up and delete the object files and executables. Running scons with the **rgb10a2=1** option compiles all tools that can render NIF files with RGB10A2 frame buffer format, and adding **pymodule=1** builds a Python interface to libfo76utils under scripts.
+* In the MSYS2 MinGW x64 terminal, compile the utilities with **scons**. Use **scons -j 8** for building with 8 parallel jobs, and **scons -c** to clean up and delete the object files and executables.
+* By default, the code generated is compatible with Intel Haswell or newer CPUs. Adding **avx=1** disables the use of instruction set extensions (including F16C, FMA and AVX2) that are not compatible with Sandy Bridge, while **avx=0** disables all instruction set extensions and compiles for a generic x86\_64 CPU.
+* Running scons with the **rgb10a2=1** option compiles all tools that can render NIF files with RGB10A2 frame buffer format.
+* Adding the **pymodule=1** option builds a Python interface to libce2utils under scripts.
 * If Visual Studio is also installed on the system, **tools=mingw** needs to be added to the scons options.
-* By default, the code generated is compatible with Intel Sandy Bridge or newer CPUs. Adding **avx=0** or **avx2=1** disables instruction set extensions or also enables them for Haswell or newer, respectively.
 * Optionally, for the makemap and icon extraction scripts only, download and install [ImageMagick](https://imagemagick.org/script/download.php#windows) and [SWFTools](http://www.swftools.org/download.html).
 
 #### Example 1
@@ -50,7 +52,7 @@ Running any of the programs without arguments prints detailed usage information.
 
 #### Example 2
 
-    ./baunpack Fallout76/Data -- textures/interface/season/season
+    ./baunpack Starfield/Data -- textures/cubemaps/
 
 #### Example 3
 
@@ -58,27 +60,19 @@ Running any of the programs without arguments prints detailed usage information.
 
 #### Example 4
 
-    ./esmview Skyrim/Data/Skyrim.esm Skyrim/Data skyrim_english -F tes5cell.txt
+    ./esmview Starfield/Data/Starfield.esm Starfield/Data
 
 #### Example 5
 
-    # list options
-    scons -f SConstruct.maps game=tes5 listvars=1
-    # build Skyrim map
-    scons -f SConstruct.maps game=tes5
-    # extract the map icons only
-    scons -f SConstruct.maps game=tes5 interface/tes5icon_02.dds
+    ./nif_info -obj -o airpurifier01.obj Starfield/Data meshes/setdressing/airpurifier01.nif
+    ./nif_info -view1920x1080 Starfield/Data meshes/
+    ./cubeview 3200 1800 Starfield/Data textures/
 
 #### Example 6
 
-    ./nif_info -render1920x1080 glassdome.dds Fallout76/Data palaceofthewindingpath/palace_bld_glassdome01.nif
-    ./nif_info -render1920x1080 44.dds Fallout76/Data weapons/44/44load.nif
-    ./nif_info -view1920x1080 Fallout76/Data meshes/test/testpbrmaterials01.nif
-    ./cubeview 1280 720 Fallout76/Data textures/shared/cubemaps/outsideoldtownreflectcube_e.dds
+    ./render Starfield/Data/Starfield.esm /tmp/newatlantis.dds 4096 4096 Starfield/Data -w 0x0001251B -textures 0 -cam 5 54.7356 180 135 -1238.59 -1164.737 1428.076 -ssaa 2
 
 #### Example 7
 
-    ./render Fallout76/Data/SeventySix.esm whitespring.dds 4096 4096 Fallout76/Data -r -32 -32 32 32 -cam 0.125 54.7356 180 -135 53340 -99681 74002.25 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ssaa 1 -rq 0x2F -ltxtres 512
-    ./markers Fallout76/Data/SeventySix.esm fo76mmap.dds 4096,4096,0.125,54.7356,180,-135,4096,-256,16384 fo76icondefs.txt
-    ./render Fallout76/Data/SeventySix.esm watoga.dds 9024 9024 Fallout76/Data -r 0 -71 71 0 -cam 0.25 180 0 0 146368.4 -141504.4 65536 -light 1.7 70.5288 135 -ssaa 1 -rq 0x2F -ltxtres 2048 -mip 1 -lmip 2
+    ./wrldview Starfield/Data/Starfield.esm 3200 1800 Starfield/Data -w 0x0001251B -textures 0 -minscale 1 -cam 2.828427 1 -1188.59 -1014.737 1428.076
 
