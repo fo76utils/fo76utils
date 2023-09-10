@@ -135,7 +135,7 @@ FloatVector4 FileBuffer::readFloat16Vector4()
   tmp = (std::uint64_t) readUInt32Fast();
   tmp = tmp | ((std::uint64_t) readUInt32Fast() << 32);
 #endif
-  return FloatVector4::convertFloat16(tmp);
+  return FloatVector4::convertFloat16(tmp, true);
 }
 
 std::uint64_t FileBuffer::readUInt64()
