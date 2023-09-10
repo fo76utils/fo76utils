@@ -1880,11 +1880,7 @@ void Plot3D_TriShape::drawDecal(
       FloatVector4(vt.rotateXX, vt.rotateYX, vt.rotateZX, vt.rotateXY);
   v.tangent =
       FloatVector4(vt.rotateXZ, vt.rotateYZ, vt.rotateZZ, vt.scale) * -1.0f;
-  v.vertexColor = FloatVector4(c | 0xFF000000U);
-  if (!usingSRGBColorSpace)
-    v.vertexColor *= (1.0f / 255.0f);
-  else
-    v.vertexColor.srgbExpand();
+  v.vertexColor = FloatVector4(c | 0xFF000000U) * (1.0f / 255.0f);
   v.mipLevel =
       std::min(std::max(FloatVector4::log2Fast(mipScale), 0.0f), 15.0f);
   v.invNormals = false;
