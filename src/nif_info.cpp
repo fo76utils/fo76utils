@@ -333,7 +333,8 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
 }
 
 static void printOBJData(std::FILE *f, const NIFFile& nifFile,
-                         const char *mtlFileName, bool enableVertexColors)
+                         const char *mtlFileName,
+                         bool enableVertexColors, bool enableVertexWeights)
 {
   std::vector< NIFFile::NIFTriShape > meshData;
   nifFile.getMesh(meshData);
@@ -348,6 +349,7 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
     std::fprintf(f, "# %s\n\ng %s\n", tsName, tsName);
     std::fprintf(f, "usemtl Material%06u\n\n", (unsigned int) (i + 1));
     bool    haveVertexColors = false;
+    bool    haveVertexWeights = false;
     if (enableVertexColors)
     {
       for (size_t j = 0; j < ts.vertexCnt; j++)
@@ -359,20 +361,37 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
         }
       }
     }
+    if (enableVertexWeights)
+    {
+      for (size_t j = 0; j < ts.vertexCnt; j++)
+      {
+        if (ts.vertexData[j].xyz[3] != 1.0f)
+        {
+          haveVertexWeights = true;
+          break;
+        }
+      }
+    }
     for (size_t j = 0; j < ts.vertexCnt; j++)
     {
       NIFFile::NIFVertex  v = ts.vertexData[j];
       v.xyz = ts.vertexTransform.transformXYZ(v.xyz);
-      if (haveVertexColors)
+      if (!(haveVertexColors || haveVertexWeights))
       {
-        FloatVector4  c(&(v.vertexColor));
-        c *= (1.0f / 255.0f);
-        std::fprintf(f, "v %.8f %.8f %.8f %.4f %.4f %.4f\n",
-                     v.xyz[0], v.xyz[1], v.xyz[2], c[0], c[1], c[2]);
+        std::fprintf(f, "v %.8f %.8f %.8f\n", v.xyz[0], v.xyz[1], v.xyz[2]);
       }
       else
       {
-        std::fprintf(f, "v %.8f %.8f %.8f\n", v.xyz[0], v.xyz[1], v.xyz[2]);
+        std::fprintf(f, "v %.8f %.8f %.8f", v.xyz[0], v.xyz[1], v.xyz[2]);
+        if (haveVertexWeights)
+          std::fprintf(f, " %.6f", ts.vertexData[j].xyz[3]);
+        if (haveVertexColors)
+        {
+          FloatVector4  c(&(v.vertexColor));
+          c *= (1.0f / 255.0f);
+          std::fprintf(f, " %.4f %.4f %.4f", c[0], c[1], c[2]);
+        }
+        std::fputc('\n', f);
       }
     }
     for (size_t j = 0; j < ts.vertexCnt; j++)
@@ -457,6 +476,7 @@ int main(int argc, char **argv)
     unsigned char l = 0;
     bool    verboseMaterialInfo = false;
     bool    enableVertexColors = false;
+    bool    enableVertexWeights = false;
     for ( ; argc >= 2 && argv[1][0] == '-'; argc--, argv++)
     {
       if (std::strcmp(argv[1], "--") == 0)
@@ -484,6 +504,10 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[1], "-c") == 0)
       {
         enableVertexColors = true;
+      }
+      else if (std::strcmp(argv[1], "-w") == 0)
+      {
+        enableVertexWeights = true;
       }
       else if (argv[1][1] == 'l' && argv[1][2] >= '0' && argv[1][2] <= '9')
       {
@@ -559,6 +583,8 @@ int main(int argc, char **argv)
       std::fprintf(stderr, "    -obj    Print model data in .obj format\n");
       std::fprintf(stderr, "    -mtl    Print material data in .mtl format\n");
       std::fprintf(stderr, "    -c      Enable vertex colors in .obj output\n");
+      std::fprintf(stderr, "    -w      Enable vertex weights in .obj "
+                           "output\n");
       std::fprintf(stderr, "    -lN     Set level of detail (default: -l0)\n");
       std::fprintf(stderr, "    -render[WIDTHxHEIGHT] DDSFILE   "
                            "Render model to DDS file\n");
@@ -656,7 +682,8 @@ int main(int argc, char **argv)
         std::string mtlName(fileNames[i].c_str() + n);
         mtlName.resize(mtlName.length() - 3);
         mtlName += "mtl";
-        printOBJData(outFile, nifFile, mtlName.c_str(), enableVertexColors);
+        printOBJData(outFile, nifFile, mtlName.c_str(),
+                     enableVertexColors, enableVertexWeights);
       }
       if (outFmt == 4)
         printMTLData(outFile, nifFile);

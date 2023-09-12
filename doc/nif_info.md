@@ -12,6 +12,7 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **-obj**: Print model data in .obj format.
 * **-mtl**: Print material data in .mtl format.
 * **-c**: Enable vertex colors in .obj output.
+* **-w**: Enable vertex weights in .obj output (only the first weight is printed).
 * **-lN**: Set level of detail (default: -l0).
 * **-render[WIDTHxHEIGHT] DDSFILE**: Render model to DDS file.
 * **-view[WIDTHxHEIGHT]**: View model. Full screen mode is enabled if the specified width and height match the current screen resolution.
