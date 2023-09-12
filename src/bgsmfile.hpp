@@ -144,7 +144,8 @@ struct BGSMFile
   float   textureOffsetV;
   float   textureScaleU;
   float   textureScaleV;
-  // 11: Oblivion, 34: Fallout 3, 100: Skyrim, 130: Fallout 4, 155: Fallout 76
+  // 11: Oblivion, 34: Fallout 3, 100: Skyrim, 130: Fallout 4, 155: Fallout 76,
+  // 172: Starfield
   std::uint32_t nifVersion;
   std::uint32_t texturePathMask;        // bit N = 1 if texture path N is valid
   TextureSet    texturePaths;
@@ -160,7 +161,7 @@ struct BGSMFile
   void loadBGSMFile(FileBuffer& buf);
   void loadBGSMFile(const BA2File& ba2File, const std::string& fileName);
   void updateAlphaProperties();
-  // alpha channel of c = 256 - sqrt(maxDepth * 8)
+  // alpha channel of c = 256 - sqrt(maxDepth * 512)
   void setWaterColor(std::uint32_t c, float reflectionLevel);
 };
 

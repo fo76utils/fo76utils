@@ -322,7 +322,7 @@ unsigned int Renderer_Base::getWaterMaterial(
   while (f.next())
   {
     if (((f == "WNAM" && *r == "ACTI") || (f == "XCWT" && *r == "CELL") ||
-         (f == "NAM2" && *r == "WRLD")) && f.size() >= 4)
+         (f == "NAM3" && *r == "WRLD")) && f.size() >= 4)
     {
       waterFormID = f.readUInt32Fast();
     }
@@ -367,15 +367,21 @@ unsigned int Renderer_Base::getWaterMaterial(
       }
       else
       {
-        // Fallout 76
+        // Fallout 76 or Starfield
         tmp.w.maxDepth = f2.readFloat();
         tmp.w.shallowColor = f2.readFloatVector4(); // opacity for each channel
         tmp.w.shallowColor[3] = 0.5f;
         f2.setPosition(f2.getPosition() - 4);
         tmp.w.deepColor = f2.readFloatVector4();    // base color
+        if (esmFile.getESMVersion() > 0xFFU)
+        {
+          // Starfield water color, may be incorrect
+          tmp.w.deepColor = FloatVector4(f2.readUInt32()).srgbExpand();
+        }
         tmp.w.deepColor[3] = 0.9375f;
       }
-      tmp.w.maxDepth = std::min(std::max(tmp.w.maxDepth, 0.125f), 8128.0f);
+      tmp.w.maxDepth =
+          std::min(std::max(tmp.w.maxDepth, 1.0f / 512.0f), 127.0f);
       tmp.w.shallowColor.maxValues(FloatVector4(0.0f));
       tmp.w.shallowColor.minValues(FloatVector4(1.0f));
       tmp.w.deepColor.maxValues(FloatVector4(0.0f));

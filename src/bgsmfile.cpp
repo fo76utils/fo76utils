@@ -412,7 +412,7 @@ void BGSMFile::setWaterColor(std::uint32_t c, float reflectionLevel)
     tmp *= (1.0f / 255.0f);
   else
     tmp.srgbExpand();
-  w.maxDepth = (d * 0.125f - 64.0f) * d + 8192.0f;
+  w.maxDepth = d * d * (1.0f / 512.0f) + 128.0f - d;
   w.envMapScale = reflectionLevel;
   w.specularSmoothness = 1.0f;
   if (nifVersion < 0x90U && version < 20)
