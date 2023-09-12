@@ -584,7 +584,7 @@ unsigned int LandscapeData::loadWorldInfo(ESMFile& esmFile,
       landLevel = f.readFloat();
       waterLevel = f.readFloat();
     }
-    else if (f == "NAM2" && f.size() >= 4)
+    else if (f == "NAM3" && f.size() >= 4)
     {
       waterFormID = f.readUInt32Fast();
     }
