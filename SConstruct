@@ -78,6 +78,7 @@ findwater = env.Program("findwater", ["src/findwater.cpp"])
 fo4land = env.Program("fo4land", ["src/fo4land.cpp"])
 landtxt = env.Program("landtxt", ["src/ltxtmain.cpp"])
 markers = env.Program("markers", ["src/markmain.cpp"])
+mat_info = env.Program("mat_info", ["src/mat_info.cpp"])
 nif_info = nifViewEnv.Program("nif_info", ["src/nif_info.cpp"])
 esm_view_o = env.Object("esm_view", ["src/esmview.cpp"])
 sdlvstub_o = env.Object("sdlvstub", ["src/sdlvideo.cpp"])
@@ -93,8 +94,8 @@ terrain = env.Program("terrain", ["src/terrain.cpp"])
 if "win" in sys.platform:
     if buildPackage:
         pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, esm_view]
-        pkgFiles += [findwater, fo4land, landtxt, markers, nif_info, render]
-        pkgFiles += [terrain]
+        pkgFiles += [findwater, fo4land, landtxt, markers, mat_info, nif_info]
+        pkgFiles += [render, terrain]
         if buildCubeView:
             pkgFiles += [cubeview, wrldview]
             pkgFiles += ["/mingw64/bin/SDL2.dll", "LICENSE.SDL"]
