@@ -22,6 +22,7 @@ enumBlockTypes += ["BSOrderedNode"]
 
 blockTypeMap = {}
 blockTypeMap["BSEffectShaderProperty"] = "BSLightingShaderProperty"
+blockTypeMap["BSFaceGenNiNode"] = "NiNode"
 blockTypeMap["BSFadeNode"] = "NiNode"
 blockTypeMap["BSGeometry"] = "BSTriShape"
 blockTypeMap["BSLeafAnimNode"] = "NiNode"
