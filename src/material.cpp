@@ -3,19 +3,60 @@
 #include "material.hpp"
 #include "filebuf.hpp"
 
-unsigned int CE2MaterialDB::hashFunction(const void *p, size_t n)
+#ifndef ENABLE_CDB_DEBUG
+#  define ENABLE_CDB_DEBUG  1
+#endif
+
+void CE2MaterialDB::calculateHash(
+    MaterialNameHash& h, const std::string& fileName)
 {
-  unsigned int  crcValue = 0U;
-  for (size_t i = 0; i < n; i++)
+  size_t  baseNamePos = fileName.rfind('/');
+  size_t  baseNamePos2 = fileName.rfind('\\');
+  size_t  extPos = fileName.rfind('.');
+  if (baseNamePos == std::string::npos ||
+      (baseNamePos2 != std::string::npos && baseNamePos2 > baseNamePos))
   {
-    unsigned char c = reinterpret_cast< const unsigned char * >(p)[i];
+    baseNamePos = baseNamePos2;
+  }
+  if (extPos == std::string::npos ||
+      (baseNamePos != std::string::npos && extPos < baseNamePos))
+  {
+    extPos = fileName.length();
+  }
+  size_t  i = 0;
+  unsigned int  crcValue = 0U;
+  if (baseNamePos != std::string::npos)
+  {
+    for ( ; i < baseNamePos; i++)
+    {
+      unsigned char c = (unsigned char) fileName.c_str()[i];
+      if (c >= 0x41 && c <= 0x5A)       // 'A' - 'Z'
+        c = c | 0x20;                   // convert to lower case
+      else if (c == 0x2F)               // '/'
+        c = 0x5C;                       // convert to '\\'
+      crcValue = (crcValue >> 8) ^ crc32Table[(crcValue ^ c) & 0xFFU];
+    }
+    i++;
+  }
+  h.h = std::uint64_t(crcValue) << 32;
+  crcValue = 0U;
+  for ( ; i < extPos; i++)
+  {
+    unsigned char c = (unsigned char) fileName.c_str()[i];
     if (c >= 0x41 && c <= 0x5A)         // 'A' - 'Z'
       c = c | 0x20;                     // convert to lower case
     else if (c == 0x2F)                 // '/'
       c = 0x5C;                         // convert to '\\'
     crcValue = (crcValue >> 8) ^ crc32Table[(crcValue ^ c) & 0xFFU];
   }
-  return crcValue;
+  h.h = h.h | crcValue;
+  i++;
+  if ((i + 3) <= fileName.length())
+    h.e = FileBuffer::readUInt32Fast(fileName.c_str() + i);
+  else if ((i + 2) <= fileName.length())
+    h.e = FileBuffer::readUInt16Fast(fileName.c_str() + i);
+  else if (i < fileName.length())
+    h.e = (unsigned char) fileName.c_str()[i];
 }
 
 int CE2MaterialDB::findString(const std::string& s)
@@ -52,6 +93,113 @@ int CE2MaterialDB::findString(unsigned int strtOffs) const
   return -1;
 }
 
+CE2MaterialDB::MaterialDBObject::~MaterialDBObject()
+{
+  if (!p)
+  {
+    type = 0;
+    return;
+  }
+  switch (type)
+  {
+    case 1:
+      delete static_cast< CE2Material * >(p);
+      break;
+    case 2:
+      delete static_cast< CE2Material::Blender * >(p);
+      break;
+    case 3:
+      delete static_cast< CE2Material::Layer * >(p);
+      break;
+    case 4:
+      delete static_cast< CE2Material::Material * >(p);
+      break;
+    case 5:
+      delete static_cast< CE2Material::TextureSet * >(p);
+      break;
+    case 6:
+      delete static_cast< CE2Material::UVStream * >(p);
+      break;
+    default:
+      delete p;
+      break;
+  }
+  p = (CE2MaterialObject *) 0;
+  type = 0;
+}
+
+void CE2MaterialDB::allocateObject(std::uint32_t objectID, int type)
+{
+  if (BRANCH_UNLIKELY(!type))
+  {
+    objectList[objectID].~MaterialDBObject();
+    return;
+  }
+  if (objectList[objectID].p)
+  {
+    if (BRANCH_LIKELY(objectList[objectID].type == type))
+      return;
+    throw FO76UtilsError("conflicting types for object 0x%08X "
+                         "in material database", (unsigned int) objectID);
+  }
+  switch (type)
+  {
+    case 1:
+      {
+        CE2Material *p = new CE2Material;
+        p->layerMask = 0U;
+        for (size_t i = 0; i < 10; i++)
+          p->layers[i] = 0U;
+        for (size_t i = 0; i < 9; i++)
+          p->blenders[i] = 0U;
+        for (size_t i = 0; i < 3; i++)
+          p->lodMaterials[i] = 0U;
+        objectList[objectID].p = p;
+      }
+      break;
+    case 2:
+      {
+        CE2Material::Blender  *p = new CE2Material::Blender;
+        p->uvStream = 0U;
+        p->texturePathMask = 0U;
+        objectList[objectID].p = p;
+      }
+      break;
+    case 3:
+      {
+        CE2Material::Layer  *p = new CE2Material::Layer;
+        p->material = 0U;
+        p->uvStream = 0U;
+        objectList[objectID].p = p;
+      }
+      break;
+    case 4:
+      {
+        CE2Material::Material *p = new CE2Material::Material;
+        p->textureSet = 0U;
+        objectList[objectID].p = p;
+      }
+      break;
+    case 5:
+      {
+        CE2Material::TextureSet *p = new CE2Material::TextureSet;
+        p->texturePathMask = 0U;
+        objectList[objectID].p = p;
+      }
+      break;
+    case 6:
+      {
+        CE2Material::UVStream *p = new CE2Material::UVStream;
+        objectList[objectID].p = p;
+      }
+      break;
+    default:
+      objectList[objectID].p = new CE2MaterialObject;
+      break;
+  }
+  objectList[objectID].type = type;
+}
+
 CE2MaterialDB::CE2MaterialDB(const BA2File& ba2File, const char *fileName)
 {
   std::vector< unsigned char >  fileBuf;
@@ -63,76 +211,107 @@ CE2MaterialDB::CE2MaterialDB(const BA2File& ba2File, const char *fileName)
   if (buf.readUInt64() != 0x0000000848544542ULL)        // "BETH", 8
     errorMessage("invalid or unsupported material database file");
   (void) buf.readUInt32();              // unknown, 4
+
+  // first pass: create tables
+  const unsigned char *componentInfoPtr = (unsigned char *) 0;
+  size_t  componentInfoCnt = 0;
+  size_t  componentID = 0;
+  size_t  componentDataPos = 0;
   for (unsigned int chunkCnt = buf.readUInt32(); chunkCnt > 1U; chunkCnt--)
   {
-    unsigned int  chunkType = buf.readUInt32();
-    unsigned int  chunkSize = buf.readUInt32();
-    std::printf("Chunk type = %c%c%c%c, size = %8u bytes\n",
-                char(chunkType & 0x7FU), char((chunkType >> 8) & 0x7FU),
-                char((chunkType >> 16) & 0x7FU),
-                char((chunkType >> 24) & 0x7FU), chunkSize);
+    if ((buf.getPosition() + 8ULL) > buf.size())
+      errorMessage("unexpected end of material database file");
+    unsigned int  chunkType = buf.readUInt32Fast();
+    unsigned int  chunkSize = buf.readUInt32Fast();
+#if ENABLE_CDB_DEBUG
+    char    chunkTypeStr[8];
+    chunkTypeStr[0] = char(chunkType & 0x7FU);
+    chunkTypeStr[1] = char((chunkType >> 8) & 0x7FU);
+    chunkTypeStr[2] = char((chunkType >> 16) & 0x7FU);
+    chunkTypeStr[3] = char((chunkType >> 24) & 0x7FU);
+    chunkTypeStr[4] = '\0';
+    std::printf("Chunk type = %s, offset = 0x%08X, size = %8u bytes\n",
+                chunkTypeStr, (unsigned int) buf.getPosition() - 8U, chunkSize);
+#endif
     if ((buf.getPosition() + std::uint64_t(chunkSize)) > buf.size())
       errorMessage("unexpected end of material database file");
+    if (BRANCH_LIKELY(chunkType == 0x46464944U || chunkType == 0x544A424FU))
+    {                                           // "DIFF" or "OBJT"
+      size_t  objIDOffs =
+          buf.getPosition() + (chunkType == 0x544A424FU ? 4U : 8U);
+      buf.setPosition(buf.getPosition() + chunkSize);
+      if (componentID >= componentInfoCnt)
+        continue;
+      if ((objIDOffs + 4ULL) > buf.size())
+      {
+        componentID++;
+        continue;
+      }
+      std::uint32_t objectID2 =
+          FileBuffer::readUInt32Fast(buf.data() + objIDOffs);
+      // allocate and link objects
+      const unsigned char *cmpInfoPtr = componentInfoPtr + (componentID << 3);
+      unsigned int  objectID = FileBuffer::readUInt32Fast(cmpInfoPtr);
+      unsigned int  componentType = FileBuffer::readUInt16Fast(cmpInfoPtr + 6);
+      componentID++;
+      if (!(objectID && objectID < objectList.size() && objectID2 &&
+            componentType >= 0x0067U && componentType <= 0x006CU))
+      {
+        continue;
+      }
+      if (objectID2 >= objectList.size())
+      {
+#if ENABLE_CDB_DEBUG
+        std::printf("Warning: invalid object ID in material database\n");
+#endif
+        continue;
+      }
+      int     objectType = int(componentType) - 0x0065;
+      objectType = (objectType < 7 ? objectType : 1);
+      allocateObject(objectID2, objectType);
+#if ENABLE_CDB_DEBUG
+      if (objectList[objectID2].parent)
+      {
+        std::printf("Warning: object 0x%08X has more than one parent\n",
+                    (unsigned int) objectID2);
+      }
+#endif
+      objectList[objectID2].parent = objectID;
+      continue;
+    }
     FileBuffer  buf2(buf.data() + buf.getPosition(), chunkSize);
     buf.setPosition(buf.getPosition() + chunkSize);
-    if (chunkType == 0x46464944U)               // "DIFF"
+    if (chunkType == 0x54525453U)               // "STRT" (string table)
     {
-      int     t = findString(buf2.readUInt32());
-      if (t >= 0)
-        std::printf("    %s\n", stringTable[t]);
-      else
-        std::printf("Warning: unrecognized string ID in DIFF chunk\n");
-      if (t == 39 ||                            // "BSComponentDB::CTName"
-          t == 74)                              // "BSMaterial::MRTextureFile"
+      if (stringMap.size() > 0)
+        errorMessage("duplicate string table in material database");
+      // create string table
+      while (buf2.getPosition() < buf2.size())
       {
-        std::printf("    0x%04X", (unsigned int) buf2.readUInt16());
-        unsigned int  len = buf2.readUInt16();
-        if (t == 74)
-          buf2.readPath(stringBuf, len, "textures/", ".dds");
-        else
-          buf2.readString(stringBuf, len);
-        std::printf(", \"%s\"\n", stringBuf.c_str());
-      }
-      else if (chunkSize == 16U)
-      {
-        std::printf("    0x%08X", buf2.readUInt32());
-        std::printf(", 0x%08X", buf2.readUInt32());
-        std::printf(", 0x%08X\n", buf2.readUInt32());
-      }
-    }
-    else if (chunkType == 0x5453494CU)          // "LIST"
-    {
-      int     t = findString(buf2.readUInt32());
-      if (t >= 0)
-        std::printf("    %s\n", stringTable[t]);
-      else
-        std::printf("Warning: unrecognized string ID in LIST chunk\n");
-      if (t == 37)              // "BSComponentDB2::DBFileIndex::ObjectInfo"
-      {
-        for (unsigned int n = buf2.readUInt32(); n; n--)
+        unsigned int  strtOffs = (unsigned int) buf2.getPosition();
+        buf2.readString(stringBuf);
+        int     stringNum = findString(stringBuf);
+        if (stringNum >= 0)
         {
-          // hash of the base name without extension
-          std::printf("    0x%08X", buf2.readUInt32());
-          // extension ("mat\0")
-          std::printf(", 0x%08X", buf2.readUInt32());
-          // hash of the directory name
-          std::printf(", 0x%08X", buf2.readUInt32());
-          // object ID
-          std::printf(", 0x%08X", buf2.readUInt32());
-          // parent object ID?
-          std::printf(", 0x%08X", buf2.readUInt32());
-          // 0 if the previous value is 0, 1 otherwise
-          std::printf(", 0x%02X\n", buf2.readUInt8());
+          stringMap.push_back((std::uint64_t(stringNum) << 32) | strtOffs);
         }
+#if ENABLE_CDB_DEBUG
+        else
+        {
+          std::printf("Warning: unrecognized string in material database: %s\n",
+                      stringBuf.c_str());
+        }
+#endif
       }
     }
+#if ENABLE_CDB_DEBUG
     else if (chunkType == 0x4350414DU)          // "MAPC"
     {
-      int     t = findString(buf2.readUInt32());
+      int     t = -1;
+      if (chunkSize >= 4U)
+        t = findString(buf2.readUInt32Fast());
       if (t >= 0)
         std::printf("    %s\n", stringTable[t]);
-      else
-        std::printf("Warning: unrecognized string ID in MAPC chunk\n");
       if (t == 107)                             // "BSResource::ID"
       {
         (void) buf2.readUInt32();
@@ -151,29 +330,417 @@ CE2MaterialDB::CE2MaterialDB(const BA2File& ba2File, const char *fileName)
         }
       }
     }
-    else if (chunkType == 0x54525453U)          // "STRT" (string table)
+#endif
+    else if (chunkType == 0x5453494CU)          // "LIST"
     {
-      while (buf2.getPosition() < buf2.size())
+      int     t = -1;
+      if (chunkSize >= 4U)
+        t = findString(buf2.readUInt32Fast());
+#if ENABLE_CDB_DEBUG
+      if (t >= 0)
+        std::printf("    %s\n", stringTable[t]);
+#endif
+      if (t == 37)              // "BSComponentDB2::DBFileIndex::ObjectInfo"
       {
-        unsigned int  strtOffs = (unsigned int) buf2.getPosition();
-        buf2.readString(stringBuf);
-        int     stringNum = findString(stringBuf);
-        if (stringNum >= 0)
+        unsigned int  n = buf2.readUInt32();
+        if ((buf2.getPosition() + (std::uint64_t(n) * 21UL)) > buf2.size())
+          errorMessage("unexpected end of LIST chunk in material database");
+        unsigned int  maxObjID = 0U;
+        for (unsigned int i = 0U; i < n; i++)
         {
-          stringMap.push_back((std::uint64_t(stringNum) << 32) | strtOffs);
+          unsigned int  objectID =
+              FileBuffer::readUInt32Fast(buf2.data() + (i * 21U + 20U));
+          maxObjID = std::max(maxObjID, objectID);
         }
-        else
+        if (maxObjID > 0x00FFFFFFU)
+          errorMessage("invalid object ID in material database");
+        if (objectMap.size() > 0 || objectList.size() > 0)
+          errorMessage("duplicate ObjectInfo list in material database");
+        objectMap.reserve(n);
+        objectList.resize(size_t(maxObjID) + 1);
+        for ( ; n; n--)
         {
-          std::printf("Warning: unrecognized string in material database: %s\n",
-                      stringBuf.c_str());
+          std::uint32_t nameHash = buf2.readUInt32Fast();
+          std::uint32_t nameExt = buf2.readUInt32Fast();
+          std::uint32_t dirHash = buf2.readUInt32Fast();
+          std::uint32_t objectID = buf2.readUInt32Fast();
+          std::uint32_t unknown1 = buf2.readUInt32Fast();
+          unsigned char unknown2 = buf2.readUInt8Fast();
+          if (BRANCH_UNLIKELY(!objectID || objectID > maxObjID))
+            continue;
+          MaterialNameHash  h;
+          h.h = std::uint64_t(nameHash) | (std::uint64_t(dirHash) << 32);
+          h.e = nameExt;
+          h.objectID = objectID;
+          objectMap.push_back(h);
+          if (nameExt == 0x0074616DU)           // "mat\0"
+            allocateObject(objectID, 1);
+#if ENABLE_CDB_DEBUG
+          std::printf("    0x%08X, 0x%08X, 0x%08X, 0x%08X, 0x%08X, 0x%02X\n",
+                      (unsigned int) nameHash, (unsigned int) nameExt,
+                      (unsigned int) dirHash, (unsigned int) objectID,
+                      (unsigned int) unknown1, (unsigned int) unknown2);
+#endif
         }
       }
+      else if (t == 34)         // "BSComponentDB2::DBFileIndex::ComponentInfo"
+      {
+        unsigned int  n = buf2.readUInt32();
+        if ((buf2.getPosition() + (std::uint64_t(n) << 3)) > buf2.size())
+          errorMessage("unexpected end of LIST chunk in material database");
+        if (componentInfoPtr)
+          errorMessage("duplicate ComponentInfo list in material database");
+        componentInfoPtr = buf2.data() + buf2.getPosition();
+        componentInfoCnt = n;
+        componentID = 0;
+        componentDataPos = buf.getPosition();
+#if ENABLE_CDB_DEBUG
+        while (n--)
+        {
+          // object ID
+          std::printf("    0x%08X", buf2.readUInt32());
+          // component index
+          std::printf(", 0x%04X", (unsigned int) buf2.readUInt16());
+          // component type
+          std::printf(", 0x%04X\n", (unsigned int) buf2.readUInt16());
+        }
+#endif
+      }
+#if ENABLE_CDB_DEBUG
+      else if (t == 36)         // "BSComponentDB2::DBFileIndex::EdgeInfo"
+      {
+        unsigned int  n = buf2.readUInt32();
+        if ((buf2.getPosition() + (std::uint64_t(n) * 12UL)) > buf2.size())
+          errorMessage("unexpected end of LIST chunk in material database");
+        while (n--)
+        {
+          // child object ID
+          std::printf("    0x%08X", buf2.readUInt32());
+          // parent object ID
+          std::printf(", 0x%08X", buf2.readUInt32());
+          // unknown, always 0
+          std::printf(", 0x%04X", (unsigned int) buf2.readUInt16());
+          // unknown, always 0x0064
+          std::printf(", 0x%04X\n", (unsigned int) buf2.readUInt16());
+        }
+      }
+#endif
+    }
+  }
+  if (stringMap.size() < 1)
+    errorMessage("missing string table in material database");
+  if (objectMap.size() < 1 || objectList.size() < 1)
+    errorMessage("missing ObjectInfo list in material database");
+  if (!componentInfoPtr || !componentInfoCnt)
+    errorMessage("missing ComponentInfo list in material database");
+  std::sort(objectMap.begin(), objectMap.end());
+
+  // second pass: load components
+  buf.setPosition(componentDataPos);
+  for (componentID = 0; componentID < componentInfoCnt; )
+  {
+    if ((buf.getPosition() + 8ULL) > buf.size())
+      errorMessage("unexpected end of material database file");
+    unsigned int  chunkType = buf.readUInt32Fast();
+    unsigned int  chunkSize = buf.readUInt32Fast();
+    if ((buf.getPosition() + std::uint64_t(chunkSize)) > buf.size())
+      errorMessage("unexpected end of material database file");
+    FileBuffer  buf2(buf.data() + buf.getPosition(), chunkSize);
+    buf.setPosition(buf.getPosition() + chunkSize);
+    if (BRANCH_UNLIKELY(chunkType != 0x46464944U && chunkType != 0x544A424FU))
+      continue;                                 // not "DIFF" or "OBJT"
+    const unsigned char *cmpInfoPtr = componentInfoPtr + (componentID << 3);
+    unsigned int  objectID = FileBuffer::readUInt32Fast(cmpInfoPtr);
+    unsigned int  componentIndex = FileBuffer::readUInt16Fast(cmpInfoPtr + 4);
+    unsigned int  componentType = FileBuffer::readUInt16Fast(cmpInfoPtr + 6);
+    componentID++;
+    if (BRANCH_UNLIKELY(chunkSize < 4U))
+      continue;
+#if ENABLE_CDB_DEBUG
+    char    chunkTypeStr[8];
+    chunkTypeStr[0] = char(chunkType & 0x7FU);
+    chunkTypeStr[1] = char((chunkType >> 8) & 0x7FU);
+    chunkTypeStr[2] = char((chunkType >> 16) & 0x7FU);
+    chunkTypeStr[3] = char((chunkType >> 24) & 0x7FU);
+    chunkTypeStr[4] = '\0';
+    std::printf("%s at 0x%08X, size =%5u, objectID = 0x%08X, ",
+                chunkTypeStr,
+                (unsigned int) (buf.getPosition() - (chunkSize + 8U)),
+                chunkSize, objectID);
+    int     t = findString(buf2.readUInt32Fast());
+    if (t < 0)
+    {
+      std::printf("component 0x%04X slot %3u: ", componentType, componentIndex);
+    }
+    else
+    {
+      std::printf("component 0x%04X (%s) slot %3u: ",
+                  componentType, stringTable[t], componentIndex);
+    }
+#endif
+    if (!objectID || objectID >= objectList.size())
+    {
+#if ENABLE_CDB_DEBUG
+      std::printf("\nWarning: invalid object ID in material database\n");
+#endif
+      continue;
+    }
+    {
+      size_t  tmp = 2;
+      if (componentType >= 0x0067U && componentType <= 0x006CU)
+        tmp = 4;
+      if (chunkType == 0x544A424FU)             // "OBJT"
+        buf2.setPosition(4);
+      else
+        buf2.setPosition(tmp + 4);
+      if ((buf2.getPosition() + tmp) > buf2.size())
+      {
+#if ENABLE_CDB_DEBUG
+        std::fputc('\n', stdout);
+#endif
+        continue;
+      }
+    }
+    MaterialDBObject& o = objectList[objectID];
+    switch (componentType)
+    {
+      case 0x0061:                      // "BSComponentDB::CTName"
+        if (o.p)
+        {
+          unsigned int  len = buf2.readUInt16Fast();
+          buf2.readString(stringBuf, len);
+          o.p->name = stringBuf;
+#if ENABLE_CDB_DEBUG
+          std::printf("%s\n", stringBuf.c_str());
+#endif
+        }
+#if ENABLE_CDB_DEBUG
+        else
+        {
+          std::printf("\nWarning: name for NULL object in material database\n");
+        }
+#endif
+        break;
+      case 0x0067:                      // "BSMaterial::BlenderID"
+      case 0x0068:                      // "BSMaterial::LayerID"
+      case 0x0069:                      // "BSMaterial::MaterialID"
+      case 0x006A:                      // "BSMaterial::TextureSetID"
+      case 0x006B:                      // "BSMaterial::UVStreamID"
+      case 0x006C:                      // "BSMaterial::LODMaterialID"
+        {
+          std::uint32_t objectID2 = buf2.readUInt32Fast();
+#if ENABLE_CDB_DEBUG
+          std::printf("0x%08X\n", (unsigned int) objectID2);
+#endif
+          if (objectID2 >= objectList.size())
+          {
+#if ENABLE_CDB_DEBUG
+            std::printf("Warning: invalid object ID in material database\n");
+#endif
+            objectID2 = 0U;
+          }
+          switch (componentType)
+          {
+            case 0x0067:                // "BSMaterial::BlenderID"
+              if (o.type == 1 && componentIndex < 9U)
+              {
+                static_cast< CE2Material * >(
+                    o.p)->blenders[componentIndex] = objectID2;
+              }
+#if ENABLE_CDB_DEBUG
+              else
+              {
+                std::printf("Warning: invalid blender link in CDB file\n");
+              }
+#endif
+              break;
+            case 0x0068:                // "BSMaterial::LayerID"
+              if (o.type == 1 && componentIndex < 10U)
+              {
+                CE2Material *m = static_cast< CE2Material * >(o.p);
+                m->layers[componentIndex] = objectID2;
+                if (!objectID2)
+                  m->layerMask &= ~(1U << componentIndex);
+                else
+                  m->layerMask |= (1U << componentIndex);
+              }
+#if ENABLE_CDB_DEBUG
+              else
+              {
+                std::printf("Warning: invalid layer link in CDB file\n");
+              }
+#endif
+              break;
+            case 0x0069:                // "BSMaterial::MaterialID"
+              if (o.type == 3)
+                static_cast< CE2Material::Layer * >(o.p)->material = objectID2;
+#if ENABLE_CDB_DEBUG
+              else
+                std::printf("Warning: invalid material link in CDB file\n");
+#endif
+              break;
+            case 0x006A:                // "BSMaterial::TextureSetID"
+              if (o.type == 4)
+              {
+                static_cast< CE2Material::Material * >(
+                    o.p)->textureSet = objectID2;
+              }
+#if ENABLE_CDB_DEBUG
+              else
+              {
+                std::printf("Warning: invalid texture set link in CDB file\n");
+              }
+#endif
+              break;
+            case 0x006B:                // "BSMaterial::UVStreamID"
+              if (o.type == 2)
+              {
+                static_cast< CE2Material::Blender * >(
+                    o.p)->uvStream = objectID2;
+              }
+              else if (o.type == 3)
+              {
+                static_cast< CE2Material::Layer * >(o.p)->uvStream = objectID2;
+              }
+#if ENABLE_CDB_DEBUG
+              else
+              {
+                std::printf("Warning: invalid UV stream link in CDB file\n");
+              }
+#endif
+              break;
+            case 0x006C:                // "BSMaterial::LODMaterialID"
+              if (o.type == 1 && componentIndex < 3U)
+              {
+                static_cast< CE2Material * >(
+                    o.p)->lodMaterials[componentIndex] = objectID2;
+              }
+#if ENABLE_CDB_DEBUG
+              else
+              {
+                std::printf("Warning: invalid LOD material link in CDB file\n");
+              }
+#endif
+              break;
+          }
+        }
+        break;
+      case 0x006F:      // "BSMaterial::MaterialOverrideColorTypeComponent"
+        {
+          unsigned int  len = buf2.readUInt16Fast();
+          buf2.readString(stringBuf, len);
+#if ENABLE_CDB_DEBUG
+          std::printf("%s\n", stringBuf.c_str());
+#endif
+        }
+        break;
+      case 0x0091:      // "BSMaterial::Color"
+#if ENABLE_CDB_DEBUG
+        {
+          FloatVector4  c(1.0f);
+          while ((buf2.getPosition() + 6ULL) <= buf2.size())
+          {
+            unsigned int  n = buf2.readUInt16Fast();
+            if (n < 4U)
+              c[n] = std::min(std::max(buf2.readFloat(), 0.0f), 1.0f);
+            else
+              (void) buf2.readUInt32Fast();
+          }
+          std::printf("%f, %f, %f, %f\n", c[0], c[1], c[2], c[3]);
+        }
+#endif
+        break;
+      case 0x0097:      // "BSMaterial::MRTextureFile"
+        if ((o.type == 2 || o.type == 5) && componentIndex < 12U)
+        {
+          unsigned int  len = buf2.readUInt16Fast();
+          buf2.readPath(stringBuf, len, "textures/", ".dds");
+          if (o.type == 2)
+          {
+            CE2Material::Blender  *blender =
+                static_cast< CE2Material::Blender * >(o.p);
+            blender->texturePaths[componentIndex] = stringBuf;
+            if (stringBuf.empty())
+              blender->texturePathMask &= ~(1U << componentIndex);
+            else
+              blender->texturePathMask |= (1U << componentIndex);
+          }
+          else
+          {
+            CE2Material::TextureSet *txtSet =
+                static_cast< CE2Material::TextureSet * >(o.p);
+            txtSet->texturePaths[componentIndex] = stringBuf;
+            if (stringBuf.empty())
+              txtSet->texturePathMask &= ~(1U << componentIndex);
+            else
+              txtSet->texturePathMask |= (1U << componentIndex);
+          }
+#if ENABLE_CDB_DEBUG
+          std::printf("%s\n", stringBuf.c_str());
+#endif
+        }
+#if ENABLE_CDB_DEBUG
+        else if (!o.p)
+        {
+          std::printf("\nWarning: texture file for NULL object "
+                      "in material database\n");
+        }
+        else if (o.type != 2 && o.type != 5)
+        {
+          std::printf("\nWarning: invalid texture file link in CDB file\n");
+        }
+#endif
+        break;
+      case 0x009C:      // "BSMaterial::TextureAddressModeComponent"
+        {
+          unsigned int  len = buf2.readUInt16Fast();
+          buf2.readString(stringBuf, len);
+#if ENABLE_CDB_DEBUG
+          std::printf("%s\n", stringBuf.c_str());
+#endif
+        }
+        break;
+      default:
+#if ENABLE_CDB_DEBUG
+        std::fputc('\n', stdout);
+#endif
+        break;
     }
   }
 }
 
 CE2MaterialDB::~CE2MaterialDB()
 {
+}
+
+const CE2Material * CE2MaterialDB::findMaterial(
+    const std::string& fileName) const
+{
+  MaterialNameHash  h;
+  h.objectID = 0U;
+  calculateHash(h, fileName);
+  size_t  n0 = 0;
+  size_t  n2 = objectMap.size();
+  while (n2 > (n0 + 1))
+  {
+    size_t  n1 = (n0 + n2) >> 1;
+    if (h < objectMap[n1])
+      n2 = n1;
+    else
+      n0 = n1;
+  }
+  if (n2 > n0 && h.h == objectMap[n0].h && h.e == objectMap[n0].e)
+  {
+    if (objectMap[n0].objectID && objectMap[n0].objectID < objectList.size())
+    {
+      if (objectList[objectMap[n0].objectID].type == 1)
+      {
+        return static_cast< const CE2Material * >(
+            objectList[objectMap[n0].objectID].p);
+      }
+    }
+  }
+  return (CE2Material *) 0;
 }
 
 #if 0
