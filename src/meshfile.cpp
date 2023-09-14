@@ -13,8 +13,8 @@
 // int16 * vCnt * 3     Vertex coordinates as signed 16-bit integers.
 // uint32               Number of vertex texture UVs, should be equal to vCnt.
 // float16 * vCnt * 2   Vertex texture U, V coordinates as 16-bit floats.
-// uint32               Size of next chunk (n1), either 0 or vCnt.
-// n1 * 4 bytes         Unknown optional vertex attribute.
+// uint32               Number of second texture coordinates (n1), 0 or vCnt.
+// float16 * n1 * 2     Second set of vertex texture coordinates (optional).
 // uint32               Size of vertex color data (vclrCnt), either 0 or vCnt.
 // uint32 * vclrCnt     Vertex colors (optional) in B8G8R8A8 format.
 // uint32               Number of vertex normals, should be equal to vCnt.
