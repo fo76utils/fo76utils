@@ -146,8 +146,9 @@ void readStarfieldMeshFile(std::vector< NIFFile::NIFVertex >& vertexData,
     errorMessage("unexpected end of mesh file");
   for (size_t i = 0; i < vertexCnt; i++)
   {
-    std::uint32_t tmp = buf.readUInt32Fast() & 0x3FFFFFFFU;
-    vertexData[i].tangent = tmp;
+    std::uint32_t tmp = buf.readUInt32Fast();
+    vertexData[i].tangent = tmp & 0x3FFFFFFFU;
+    tmp = (!(tmp & 0x80000000U) ? tmp : ~tmp);
     FloatVector4  normal(FloatVector4::convertX10Y10Z10(vertexData[i].normal));
     FloatVector4  tangent(FloatVector4::convertX10Y10Z10(tmp));
     // calculate cross product
