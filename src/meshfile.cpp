@@ -28,7 +28,8 @@
 //                          b0  to b9  = (X + 1.0) * 511.5
 //                          b10 to b19 = (Y + 1.0) * 511.5
 //                          b20 to b29 = (Z + 1.0) * 511.5
-//                          b30 to b31 = unknown, either 00 or 11
+//                          b30 to b31 = 00 if bitangent = tangent x normal
+//                                       11 if bitangent = normal x tangent
 // uint32               Number of vertex weights, n2 = vCnt * weightsPerVertex.
 // uint32 * n2          Vertex weights * 2^32-1 as 32-bit integers (optional).
 // uint32               Number of LODs (n3), usually 0.
