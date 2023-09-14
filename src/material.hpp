@@ -23,28 +23,33 @@
 
 struct CE2MaterialObject
 {
-  std::string name;
+  // 1: CE2Material
+  // 2: CE2Material::Blender
+  // 3: CE2Material::Layer
+  // 4: CE2Material::Material
+  // 5: CE2Material::TextureSet
+  // 6: CE2Material::UVStream
+  int     type;
+  unsigned int  objectID;
+  const std::string *name;
+  const CE2MaterialObject *parent;
+  float   scale;
+  float   offset;
 };
 
-struct CE2Material : public CE2MaterialObject
+struct CE2Material : public CE2MaterialObject   // object type 1
 {
-  struct Blender : public CE2MaterialObject
+  struct UVStream : public CE2MaterialObject    // object type 6
   {
-    std::uint32_t uvStream;
-    std::uint32_t texturePathMask;
-    std::string texturePaths[12];
+    // 0 = "Wrap", 1 = "Clamp", 2 = "Mirror", 3 = "Border"
+    unsigned char textureAddressMode;
   };
-  struct Layer : public CE2MaterialObject
+  struct TextureSet : public CE2MaterialObject  // object type 5
   {
-    std::uint32_t material;
-    std::uint32_t uvStream;
-  };
-  struct Material : public CE2MaterialObject
-  {
-    std::uint32_t textureSet;
-  };
-  struct TextureSet : public CE2MaterialObject
-  {
+    enum
+    {
+      maxTexturePaths = 21
+    };
     std::uint32_t texturePathMask;
     // texturePaths[0] =  albedo (_color.dds)
     // texturePaths[1] =  normal map (_normal.dds)
@@ -57,15 +62,45 @@ struct CE2Material : public CE2MaterialObject
     // texturePaths[8] =  translucency (_transmissive.dds)
     // texturePaths[9] =  _curvature.dds
     // texturePaths[10] = _mask.dds
-    std::string texturePaths[12];
+    const std::string *texturePaths[maxTexturePaths];
   };
-  struct UVStream : public CE2MaterialObject
+  struct Material : public CE2MaterialObject    // object type 4
   {
+    FloatVector4  color;
+    // MaterialOverrideColorTypeComponent, 0 = "Multiply", 1 = "Lerp"
+    unsigned char colorMode;
+    unsigned char textureAddressMode;
+    // TODO: alpha settings (0x0075)
+    const TextureSet  *textureSet;
+  };
+  struct Layer : public CE2MaterialObject       // object type 3
+  {
+    const Material  *material;
+    const UVStream  *uvStream;
+  };
+  struct Blender : public CE2MaterialObject     // object type 2
+  {
+    enum
+    {
+      maxFloatParams = 6,
+      maxBoolParams = 8
+    };
+    const UVStream  *uvStream;
+    const std::string *texturePath;
+    // parameters set via component types 0x0098 and 0x009A
+    float   floatParams[maxFloatParams];
+    bool    boolParams[maxBoolParams];
+  };
+  enum
+  {
+    maxLayers = 6,
+    maxBlenders = 5,
+    maxLODMaterials = 3
   };
   std::uint32_t layerMask;
-  std::uint32_t layers[10];
-  std::uint32_t blenders[9];
-  std::uint32_t lodMaterials[3];
+  const Layer   *layers[maxLayers];
+  const Blender *blenders[maxBlenders];
+  const CE2Material *lodMaterials[maxLODMaterials];
 };
 
 // Component types:
@@ -126,7 +161,11 @@ struct CE2Material : public CE2MaterialObject
 
 class CE2MaterialDB
 {
- public:
+ protected:
+  enum
+  {
+    stringHashMask = 0x000FFFFF
+  };
   struct MaterialNameHash
   {
     // b0 to b31 = base name hash (lower case, no extension)
@@ -140,26 +179,12 @@ class CE2MaterialDB
       return (h < r.h || (h == r.h && e < r.e));
     }
   };
- protected:
   struct MaterialDBObject
   {
     // object data
     CE2MaterialObject *p;
-    // type of object referenced by p:
-    //   0: none (NULL)
-    //   1: CE2Material
-    //   2: CE2Material::Blender
-    //   3: CE2Material::Layer
-    //   4: CE2Material::Material
-    //   5: CE2Material::TextureSet
-    //   6: CE2Material::UVStream
-    int     type;
-    // 0 = none
-    unsigned int  parent;
     inline MaterialDBObject()
-      : p((CE2MaterialObject *) 0),
-        type(0),
-        parent(0U)
+      : p((CE2MaterialObject *) 0)
     {
     }
     ~MaterialDBObject();
@@ -170,46 +195,20 @@ class CE2MaterialDB
   std::vector< MaterialDBObject > objectList;
   // STRT chunk offset | (stringTable index << 32)
   std::vector< std::uint64_t >  stringMap;
- public:
+  // stringHashMask + 2 elements, storedStringParams[stringHashMask + 1] = ""
+  std::vector< std::string >  storedStringParams;
   static void calculateHash(MaterialNameHash& h, const std::string& fileName);
- protected:
   static int findString(const std::string& s);
   int findString(unsigned int strtOffs) const;
   void allocateObject(std::uint32_t objectID, int type);
+  // type = 0: general string (stored without conversion)
+  // type = 1: DDS file name (prefix = "textures/", suffix = ".dds")
+  const std::string *readStringParam(std::string& stringBuf, FileBuffer& buf,
+                                     size_t len, int type);
  public:
   CE2MaterialDB(const BA2File& ba2File, const char *fileName = (char *) 0);
   virtual ~CE2MaterialDB();
   const CE2Material *findMaterial(const std::string& fileName) const;
-  inline const CE2Material::Blender *getBlender(std::uint32_t n) const
-  {
-    if (n >= objectList.size() || objectList[n].type != 2)
-      return (CE2Material::Blender *) 0;
-    return static_cast< const CE2Material::Blender * >(objectList[n].p);
-  }
-  inline const CE2Material::Layer *getLayer(std::uint32_t n) const
-  {
-    if (n >= objectList.size() || objectList[n].type != 3)
-      return (CE2Material::Layer *) 0;
-    return static_cast< const CE2Material::Layer * >(objectList[n].p);
-  }
-  inline const CE2Material::Material *getMaterial(std::uint32_t n) const
-  {
-    if (n >= objectList.size() || objectList[n].type != 4)
-      return (CE2Material::Material *) 0;
-    return static_cast< const CE2Material::Material * >(objectList[n].p);
-  }
-  inline const CE2Material::TextureSet *getTextureSet(std::uint32_t n) const
-  {
-    if (n >= objectList.size() || objectList[n].type != 5)
-      return (CE2Material::TextureSet *) 0;
-    return static_cast< const CE2Material::TextureSet * >(objectList[n].p);
-  }
-  inline const CE2Material::UVStream *getUVStream(std::uint32_t n) const
-  {
-    if (n >= objectList.size() || objectList[n].type != 6)
-      return (CE2Material::UVStream *) 0;
-    return static_cast< const CE2Material::UVStream * >(objectList[n].p);
-  }
 #if 0
   static void printTables(const BA2File& ba2File,
                           const char *fileName = (char *) 0);
