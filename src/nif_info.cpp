@@ -346,8 +346,17 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
     const char  *tsName = "";
     if (nifFile.getString(ts.nameID))
       tsName = nifFile.getString(ts.nameID)->c_str();
-    std::fprintf(f, "# %s\n\ng %s\n", tsName, tsName);
-    std::fprintf(f, "usemtl Material%06u\n\n", (unsigned int) (i + 1));
+    std::fprintf(f, "# %s\n\ng ", tsName);
+    for (size_t j = 0; tsName[j]; j++)
+    {
+      char    c = tsName[j];
+      if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+          (c >= '0' && c <= '9'))
+      {
+        std::fputc(c, f);
+      }
+    }
+    std::fprintf(f, "\nusemtl Material%06u\n\n", (unsigned int) (i + 1));
     bool    haveVertexColors = false;
     bool    haveVertexWeights = false;
     if (enableVertexColors)
