@@ -23,6 +23,7 @@
 
 struct CE2MaterialObject
 {
+  // 0: CE2MaterialObject
   // 1: CE2Material
   // 2: CE2Material::Blender
   // 3: CE2Material::Layer
@@ -32,6 +33,12 @@ struct CE2MaterialObject
   int     type;
   unsigned int  objectID;
   const std::string *name;
+  // b0 to b31 = base name hash (lower case, no extension)
+  // b32 to b63 = directory name hash (lower case with '\\', no trailing '\\')
+  std::uint64_t h;
+  // extension (0x0074616D for "mat\0")
+  std::uint32_t e;
+  std::uint32_t reserved;
   const CE2MaterialObject *parent;
   float   scale;
   float   offset;
@@ -164,50 +171,49 @@ class CE2MaterialDB
  protected:
   enum
   {
-    stringHashMask = 0x000FFFFF
-  };
-  struct MaterialNameHash
-  {
-    // b0 to b31 = base name hash (lower case, no extension)
-    // b32 to b63 = directory name hash (lower case with '\\', no trailing '\\')
-    std::uint64_t h;
-    // extension (0x0074616D for "mat\0")
-    std::uint32_t e;
-    std::uint32_t objectID;
-    inline bool operator<(const MaterialNameHash& r) const
-    {
-      return (h < r.h || (h == r.h && e < r.e));
-    }
-  };
-  struct MaterialDBObject
-  {
-    // object data
-    CE2MaterialObject *p;
-    inline MaterialDBObject()
-      : p((CE2MaterialObject *) 0)
-    {
-    }
-    ~MaterialDBObject();
+    objectIDHashMask = 0x001FFFFF,
+    objectNameHashMask = 0x000FFFFF,
+    stringBufShift = 16,
+    stringBufMask = 0xFFFF,
+    stringHashMask = 0x001FFFFF
   };
   static const std::uint32_t  crc32Table[256];
   static const char *stringTable[451];
-  std::vector< MaterialNameHash > objectMap;
-  std::vector< MaterialDBObject > objectList;
+  // objectIDHashMask + 1 elements
+  std::vector< CE2MaterialObject * >  objectIDMap;
+  // objectNameHashMask + 1 elements
+  std::vector< CE2MaterialObject * >  objectNameMap;
   // STRT chunk offset | (stringTable index << 32)
   std::vector< std::uint64_t >  stringMap;
-  // stringHashMask + 2 elements, storedStringParams[stringHashMask + 1] = ""
-  std::vector< std::string >  storedStringParams;
-  static void calculateHash(MaterialNameHash& h, const std::string& fileName);
-  static int findString(const std::string& s);
+  // stringHashMask + 1 elements
+  std::vector< std::uint32_t >  storedStringParams;
+  // stringBuffers[0][0] = ""
+  std::vector< std::vector< std::string > > stringBuffers;
+  // returns extension of fileName (0x0074616D for ".mat")
+  static std::uint32_t calculateHash(std::uint64_t& h,
+                                     const std::string& fileName);
+  static int findString(const char *s);
   int findString(unsigned int strtOffs) const;
-  void allocateObject(std::uint32_t objectID, int type);
+  inline const CE2MaterialObject *findObject(unsigned int objectID) const;
+  CE2MaterialObject *allocateObject(std::uint32_t objectID, int type);
   // type = 0: general string (stored without conversion)
   // type = 1: DDS file name (prefix = "textures/", suffix = ".dds")
   const std::string *readStringParam(std::string& stringBuf, FileBuffer& buf,
                                      size_t len, int type);
+  // returns the number of components, the position of buf is set to the
+  // beginning of the component data
+  size_t readTables(const unsigned char*& componentInfoPtr, FileBuffer& buf);
+  // should be called after readTables()
+  void readComponents(FileBuffer& buf, const unsigned char *componentInfoPtr,
+                      size_t componentCnt);
  public:
+  CE2MaterialDB();
   CE2MaterialDB(const BA2File& ba2File, const char *fileName = (char *) 0);
   virtual ~CE2MaterialDB();
+  void clear();
+  void loadCDBFile(FileBuffer& buf);
+  void loadCDBFile(const unsigned char *buf, size_t bufSize);
+  void loadCDBFile(const BA2File& ba2File, const char *fileName = (char *) 0);
   const CE2Material *findMaterial(const std::string& fileName) const;
 #if 0
   static void printTables(const BA2File& ba2File,
