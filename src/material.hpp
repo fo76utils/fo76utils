@@ -30,24 +30,22 @@ struct CE2MaterialObject
   // 4: CE2Material::Material
   // 5: CE2Material::TextureSet
   // 6: CE2Material::UVStream
-  int     type;
-  unsigned int  objectID;
-  const std::string *name;
+  std::int32_t  type;
+  // extension (0x0074616D for "mat\0")
+  std::uint32_t e;
   // b0 to b31 = base name hash (lower case, no extension)
   // b32 to b63 = directory name hash (lower case with '\\', no trailing '\\')
   std::uint64_t h;
-  // extension (0x0074616D for "mat\0")
-  std::uint32_t e;
-  std::uint32_t reserved;
+  const std::string *name;
   const CE2MaterialObject *parent;
-  float   scale;
-  float   offset;
 };
 
 struct CE2Material : public CE2MaterialObject   // object type 1
 {
   struct UVStream : public CE2MaterialObject    // object type 6
   {
+    // U scale, V scale, U offset, V offset
+    FloatVector4  scaleAndOffset;
     // 0 = "Wrap", 1 = "Clamp", 2 = "Mirror", 3 = "Border"
     unsigned char textureAddressMode;
   };
@@ -58,6 +56,7 @@ struct CE2Material : public CE2MaterialObject   // object type 1
       maxTexturePaths = 21
     };
     std::uint32_t texturePathMask;
+    float   floatParam;
     // texturePaths[0] =  albedo (_color.dds)
     // texturePaths[1] =  normal map (_normal.dds)
     // texturePaths[2] =  alpha (_opacity.dds)
@@ -76,8 +75,6 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     FloatVector4  color;
     // MaterialOverrideColorTypeComponent, 0 = "Multiply", 1 = "Lerp"
     unsigned char colorMode;
-    unsigned char textureAddressMode;
-    // TODO: alpha settings (0x0075)
     const TextureSet  *textureSet;
   };
   struct Layer : public CE2MaterialObject       // object type 3
@@ -100,14 +97,49 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   };
   enum
   {
+    textureNumColor = 0,
+    textureNumNormal = 1,
+    textureNumOpacity = 2,
+    textureNumRough = 3,
+    textureNumMetal = 4,
+    textureNumAO = 5,
+    textureNumHeight = 6,
+    textureNumEmissive = 7,
+    textureNumTransmissive = 8,
+    textureNumCurvature = 9,
+    textureNumMask = 10
+  };
+  enum
+  {
+    Flag_IsEffect = 0x00000004,
+    Flag_IsDecal = 0x00000008,
+    Flag_TwoSided = 0x00000010,
+    Flag_IsVegetation = 0x00000020,
+    Flag_Glow = 0x00000080,
+    Flag_IsTerrain = 0x00010000,
+    Flag_IsWater = 0x00020000,
+    Flag_AlphaTesting = 0x00040000,
+    Flag_AlphaBlending = 0x00080000
+  };
+  enum
+  {
     maxLayers = 6,
     maxBlenders = 5,
     maxLODMaterials = 3
   };
+  std::uint32_t flags;
+  float   alphaThreshold;
+  // 0 = "Lerp", 1 = "Additive", 2 = "Subtractive", 3 = "Multiplicative"
+  unsigned char opacityMode1;
+  unsigned char opacityMode2;
   std::uint32_t layerMask;
   const Layer   *layers[maxLayers];
   const Blender *blenders[maxBlenders];
   const CE2Material *lodMaterials[maxLODMaterials];
+  inline void setFlags(std::uint32_t m, bool n)
+  {
+    flags = (flags & ~m) | ((0U - std::uint32_t(n)) & m);
+  }
 };
 
 // Component types:
@@ -171,18 +203,16 @@ class CE2MaterialDB
  protected:
   enum
   {
-    objectIDHashMask = 0x001FFFFF,
-    objectNameHashMask = 0x000FFFFF,
+    objectNameHashMask = 0x001FFFFF,
     stringBufShift = 16,
     stringBufMask = 0xFFFF,
     stringHashMask = 0x001FFFFF
   };
   static const std::uint32_t  crc32Table[256];
   static const char *stringTable[451];
-  // objectIDHashMask + 1 elements
-  std::vector< CE2MaterialObject * >  objectIDMap;
   // objectNameHashMask + 1 elements
   std::vector< CE2MaterialObject * >  objectNameMap;
+  std::vector< std::vector< unsigned char > > objectBuffers;
   // STRT chunk offset | (stringTable index << 32)
   std::vector< std::uint64_t >  stringMap;
   // stringHashMask + 1 elements
@@ -194,23 +224,30 @@ class CE2MaterialDB
                                      const std::string& fileName);
   static int findString(const char *s);
   int findString(unsigned int strtOffs) const;
-  inline const CE2MaterialObject *findObject(unsigned int objectID) const;
-  CE2MaterialObject *allocateObject(std::uint32_t objectID, int type);
+  inline const CE2MaterialObject *findObject(
+      const std::vector< CE2MaterialObject * >& t, unsigned int objectID) const;
+  template< typename T > T *allocateObject();
+  CE2MaterialObject *allocateObject(
+      std::vector< CE2MaterialObject * >& objectTable,
+      std::uint32_t objectID, int type);
   // type = 0: general string (stored without conversion)
   // type = 1: DDS file name (prefix = "textures/", suffix = ".dds")
   const std::string *readStringParam(std::string& stringBuf, FileBuffer& buf,
                                      size_t len, int type);
   // returns the number of components, the position of buf is set to the
   // beginning of the component data
-  size_t readTables(const unsigned char*& componentInfoPtr, FileBuffer& buf);
+  size_t readTables(const unsigned char*& componentInfoPtr,
+                    std::vector< CE2MaterialObject * >& objectTable,
+                    FileBuffer& buf);
   // should be called after readTables()
-  void readComponents(FileBuffer& buf, const unsigned char *componentInfoPtr,
-                      size_t componentCnt);
+  void readComponents(
+      FileBuffer& buf,
+      const unsigned char *componentInfoPtr, size_t componentCnt,
+      const std::vector< CE2MaterialObject * >& objectTable);
  public:
   CE2MaterialDB();
   CE2MaterialDB(const BA2File& ba2File, const char *fileName = (char *) 0);
   virtual ~CE2MaterialDB();
-  void clear();
   void loadCDBFile(FileBuffer& buf);
   void loadCDBFile(const unsigned char *buf, size_t bufSize);
   void loadCDBFile(const BA2File& ba2File, const char *fileName = (char *) 0);
