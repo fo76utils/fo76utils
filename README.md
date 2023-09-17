@@ -45,10 +45,14 @@ Running any of the programs without arguments prints detailed usage information.
 
 #### Example 1
 
+**Note:** the environment variable **CE2UTILS\_DATAPATH** can be used to set the default input data path globally for all tools. If this environment variable is set, for example to "D:/SteamLibrary/steamapps/common/Starfield/Data", then the paths Starfield/Data and Starfield/Data/Starfield.esm can be replaced in all the following commands with "" and Starfield.esm, respectively.
+
     ./btddump terrain/newatlantis.btd newatlantis_hmap.dds 0 Starfield/Data
     ./btddump terrain/newatlantis.btd newatlantis_norm.dds 1 Starfield/Data
     ./btddump terrain/newatlantis.btd newatlantis_ltex.dds 2 Starfield/Data
     ./btddump terrain/newatlantis.btd newatlantis_txts.dds 8 Starfield/Data
+    export CE2UTILS_DATAPATH="./Starfield/Data"
+    ./btddump terrain/newatlantis.btd newatlantis_hmap.dds 0 ""
 
 #### Example 2
 
