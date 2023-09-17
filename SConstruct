@@ -29,6 +29,9 @@ else:
     env.Append(LINKFLAGS = ["-s"])
 if int(ARGUMENTS.get("rgb10a2", 0)):
     env.Append(CCFLAGS = ["-DUSE_PIXELFMT_RGB10A2=1"])
+cdbDebugLevel = int(ARGUMENTS.get("matdebug", -1))
+if cdbDebugLevel >= 0:
+    env.Append(CCFLAGS = ["-DENABLE_CDB_DEBUG=%d" % (cdbDebugLevel)])
 
 libSources = ["src/common.cpp", "src/filebuf.cpp", "src/zlib.cpp"]
 libSources += ["src/ba2file.cpp", "src/esmfile.cpp", "src/stringdb.cpp"]
