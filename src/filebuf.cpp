@@ -350,7 +350,7 @@ FileBuffer::~FileBuffer()
 bool FileBuffer::getDefaultDataPath(std::string& dataPath)
 {
   dataPath.clear();
-  const char  *s = std::getenv("FO76UTILS_DATAPATH");
+  const char  *s = std::getenv("CE2UTILS_DATAPATH");
   if (!s)
     return false;
   if (!(s[0] == '.' || s[0] == '/'
