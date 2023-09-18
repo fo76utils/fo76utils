@@ -30,6 +30,7 @@ struct CE2MaterialObject
   // 4: CE2Material::Material
   // 5: CE2Material::TextureSet
   // 6: CE2Material::UVStream
+  // For uninitialized objects, ~(base object ID) * 256 is added to type.
   std::int32_t  type;
   // extension (0x0074616D for "mat\0")
   std::uint32_t e;
@@ -69,6 +70,8 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     // texturePaths[9] =  _curvature.dds
     // texturePaths[10] = _mask.dds
     const std::string *texturePaths[maxTexturePaths];
+    // texture replacements are colors in R8G8B8A8 format
+    std::uint32_t textureReplacements[maxTexturePaths];
   };
   struct Material : public CE2MaterialObject    // object type 4
   {
@@ -86,11 +89,12 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   {
     enum
     {
-      maxFloatParams = 6,
+      maxFloatParams = 5,
       maxBoolParams = 8
     };
     const UVStream  *uvStream;
     const std::string *texturePath;
+    std::uint32_t textureReplacement;
     // parameters set via component types 0x0098 and 0x009A
     float   floatParams[maxFloatParams];
     bool    boolParams[maxBoolParams];
@@ -146,6 +150,7 @@ struct CE2Material : public CE2MaterialObject   // object type 1
 //   0x0061: "BSComponentDB::CTName"
 //   0x0062: "BSBind::DirectoryComponent"
 //   0x0063: "BSBind::ControllerComponent"
+//   0x0064: "BSComponentDB2::OuterEdge"
 //   0x0067: "BSMaterial::BlenderID"
 //   0x0068: "BSMaterial::LayerID"
 //   0x0069: "BSMaterial::MaterialID"
@@ -203,7 +208,7 @@ class CE2MaterialDB
  protected:
   enum
   {
-    objectNameHashMask = 0x001FFFFF,
+    objectNameHashMask = 0x0007FFFF,
     stringBufShift = 16,
     stringBufMask = 0xFFFF,
     stringHashMask = 0x001FFFFF
@@ -226,10 +231,11 @@ class CE2MaterialDB
   int findString(unsigned int strtOffs) const;
   inline const CE2MaterialObject *findObject(
       const std::vector< CE2MaterialObject * >& t, unsigned int objectID) const;
-  template< typename T > T *allocateObject();
+  void initializeObject(CE2MaterialObject *o,
+                        const std::vector< CE2MaterialObject * >& objectTable);
   CE2MaterialObject *allocateObject(
       std::vector< CE2MaterialObject * >& objectTable,
-      std::uint32_t objectID, int type);
+      std::uint32_t objectID, std::uint32_t baseObjID);
   // type = 0: general string (stored without conversion)
   // type = 1: DDS file name (prefix = "textures/", suffix = ".dds")
   const std::string *readStringParam(std::string& stringBuf, FileBuffer& buf,
