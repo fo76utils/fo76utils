@@ -369,7 +369,7 @@ void BA2File::loadArchivesFromDir(const char *pathName)
       }
       size_t  n = baseName.rfind('.');
       if (n == std::string::npos ||
-          ((((baseName.length() - n) - 3) & ~1ULL) &&
+          ((((baseName.length() - n) - 4) & ~1ULL) &&
            !baseName.ends_with("strings")))
       {
         continue;
