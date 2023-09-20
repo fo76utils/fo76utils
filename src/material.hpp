@@ -115,15 +115,16 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   };
   enum
   {
+    // flag values can be combined (bitwise OR) with NIFFile::NIFTriShape::flags
     Flag_IsEffect = 0x00000004,
     Flag_IsDecal = 0x00000008,
     Flag_TwoSided = 0x00000010,
     Flag_IsVegetation = 0x00000020,
     Flag_Glow = 0x00000080,
-    Flag_IsTerrain = 0x00010000,
-    Flag_IsWater = 0x00020000,
-    Flag_AlphaTesting = 0x00040000,
-    Flag_AlphaBlending = 0x00080000
+    Flag_AlphaBlending = 0x00001000,
+    Flag_IsWater = 0x00004000,
+    Flag_AlphaTesting = 0x00010000,
+    Flag_IsTerrain = 0x00020000
   };
   enum
   {
@@ -140,6 +141,7 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   const Layer   *layers[maxLayers];
   const Blender *blenders[maxBlenders];
   const CE2Material *lodMaterials[maxLODMaterials];
+  FloatVector4  emissiveColor;          // R, G, B, overall scale
   inline void setFlags(std::uint32_t m, bool n)
   {
     flags = (flags & ~m) | ((0U - std::uint32_t(n)) & m);

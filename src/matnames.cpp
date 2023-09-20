@@ -11,8 +11,8 @@ static const char *materialFlagNames[32] =
 {
   "", "", "Is effect", "Is decal", "Two sided",
   "Is vegetation", "", "Emissive", "", "",
-  "", "", "", "", "",
-  "", "Is terrain", "Is water", "Alpha testing", "Alpha blending",
+  "", "", "Alpha blending", "", "Is water",
+  "", "Alpha testing", "Is terrain", "", "",
   "", "", "", "", "",
   "", "", "", "", "",
   "", ""

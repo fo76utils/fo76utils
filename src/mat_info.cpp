@@ -137,6 +137,9 @@ static void printMaterialFile(
                indentString, opacityModeNames[o->opacityMode1 & 3]);
   std::fprintf(f, "%sOpacity mode 2: %s\n",
                indentString, opacityModeNames[o->opacityMode2 & 3]);
+  std::fprintf(f, "%sEmissive color and scale: %f, %f, %f, %f\n",
+               indentString, o->emissiveColor[0], o->emissiveColor[1],
+               o->emissiveColor[2], o->emissiveColor[3]);
   unsigned int  layerMask = o->layerMask;
   for (size_t i = 0; i < CE2Material::maxLayers && layerMask;
        i++, layerMask = layerMask >> 1)

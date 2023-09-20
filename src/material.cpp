@@ -186,6 +186,7 @@ void CE2MaterialDB::initializeObject(
           p->blenders[i] = (CE2Material::Blender *) 0;
         for (size_t i = 0; i < CE2Material::maxLODMaterials; i++)
           p->lodMaterials[i] = (CE2Material *) 0;
+        p->emissiveColor = FloatVector4(1.0f);
       }
       break;
     case 2:
@@ -873,7 +874,7 @@ void CE2MaterialDB::readComponents(
           CE2Material *m = static_cast< CE2Material * >(o);
           buf2.setPosition(buf2.getPosition() - 2);
           bool    readingStruct = false;
-          do
+          while ((buf2.getPosition() + 4ULL) <= buf2.size())
           {
             int     fieldNum = buf2.readUInt16Fast();
             if (fieldNum > 8)
@@ -898,7 +899,6 @@ void CE2MaterialDB::readComponents(
               case 4:                   // unknown booleans
               case 0x31:
               case 0x32:
-                if (buf2.getPosition() < buf2.size())
                 {
                   bool    tmp = bool(buf2.readUInt8Fast());
                   if (fieldNum == 0)
@@ -929,7 +929,6 @@ void CE2MaterialDB::readComponents(
               case 0x30:                // unknown, "Linear" (default),
                                         // "Additive" or "PositionContrast"
               case 0x33:                // unknown, "Red" (default) or "Alpha"
-                if ((buf2.getPosition() + 2ULL) <= buf2.size())
                 {
                   unsigned int  len = buf2.readUInt16Fast();
                   buf2.readString(stringBuf, len);
@@ -957,7 +956,6 @@ void CE2MaterialDB::readComponents(
                 break;
             }
           }
-          while ((buf2.getPosition() + 2ULL) <= buf2.size());
         }
         break;
       case 0x0076:      // "BSMaterial::DecalSettingsComponent"
@@ -968,10 +966,79 @@ void CE2MaterialDB::readComponents(
         }
         break;
       case 0x0078:      // "BSMaterial::EmissiveSettingsComponent"
-        if (objectType == 1)
+        if (objectType == 1 && isDiff)
         {
-          static_cast< CE2Material * >(
-              o)->setFlags(CE2Material::Flag_Glow, true);
+          CE2Material *m = static_cast< CE2Material * >(o);
+          buf2.setPosition(buf2.getPosition() - 2);
+          std::uint32_t structID = 0U;
+          while ((buf2.getPosition() + 4ULL) <= buf2.size())
+          {
+            unsigned int  n = buf2.readUInt16Fast();
+            if (n & 0x8000U)
+            {
+              if (!structID)
+                break;
+              structID = structID >> 8;
+              buf2.setPosition(buf2.getPosition() + 2);
+              continue;
+            }
+            n = n | (structID << 8);
+#if ENABLE_CDB_DEBUG
+            std::printf("  %02x: ", n);
+#endif
+            switch (n)
+            {
+              case 0:                   // 0: emissive enabled, default: false
+              case 0x8104:              // 1:4: unknown boolean, default: false
+              case 0x8107:              // 1:7
+                {
+                  bool    tmp = bool(buf2.readUInt8Fast());
+                  if (n == 0)
+                    m->setFlags(CE2Material::Flag_Glow, tmp);
+#if ENABLE_CDB_DEBUG
+                  std::printf("%d", int(tmp));
+#endif
+                }
+                break;
+              case 1:                   // structures
+              case 0x8101:
+                structID = (structID << 8) | ((n & 0xFFU) | 0x80U);
+                break;
+              case 0x00818100:          // 1:1:0: red
+              case 0x00818101:          // 1:1:1: green
+              case 0x00818102:          // 1:1:2: blue
+              case 0x00818103:          // 1:1:3: emissive scale
+              case 0x8103:              // 1:3: unknown float, default: 0.0
+              case 0x8105:              // 1:5: unknown float, default: 432.0
+              case 0x8106:              // 1:6: unknown float, default: 0.0
+              case 0x8108:              // 1:8: unknown float, default: 9999.0
+              case 0x8109:              // 1:9: unknown float, default: 0.0
+                if ((buf2.getPosition() + 4ULL) <= buf2.size())
+                {
+                  float   tmp = buf2.readFloat();
+                  n = n - 0x00818100U;
+                  if (!(n & ~3U))
+                    m->emissiveColor[n] = std::min(std::max(tmp, 0.0f), 1.0f);
+#if ENABLE_CDB_DEBUG
+                  std::printf("%f", tmp);
+#endif
+                }
+                break;
+              case 0x8100:              // unknown, default: "MATERIAL_LAYER_0"
+              case 0x8102:              // unknown, can be "None" or "Blender1"
+                {
+                  unsigned int  len = buf2.readUInt16Fast();
+                  buf2.readString(stringBuf, len);
+#if ENABLE_CDB_DEBUG
+                  std::printf("%s", stringBuf.c_str());
+#endif
+                }
+                break;
+              default:                  // unrecognized data field
+                buf2.setPosition(buf2.size());
+                break;
+            }
+          }
         }
         break;
       case 0x007C:      // "BSMaterial::EffectSettingsComponent"
@@ -986,7 +1053,7 @@ void CE2MaterialDB::readComponents(
         {
           CE2Material *m = static_cast< CE2Material * >(o);
           buf2.setPosition(buf2.getPosition() - 2);
-          do
+          while ((buf2.getPosition() + 4ULL) <= buf2.size())
           {
             int     fieldNum = buf2.readUInt16Fast();
             if (fieldNum > 9)
@@ -1003,7 +1070,6 @@ void CE2MaterialDB::readComponents(
               case 6:                   // default: "MATERIAL_LAYER_2"
               case 7:                   // default: "BLEND_LAYER_1"
               case 8:                   // default: "Lerp"
-                if ((buf2.getPosition() + 2ULL) <= buf2.size())
                 {
                   unsigned int  len = buf2.readUInt16Fast();
                   buf2.readString(stringBuf, len);
@@ -1028,7 +1094,6 @@ void CE2MaterialDB::readComponents(
                 break;
               case 1:                   // unknown booleans
               case 5:
-                if (buf2.getPosition() < buf2.size())
                 {
 #if ENABLE_CDB_DEBUG
                   bool    tmp = bool(buf2.readUInt8Fast());
@@ -1051,7 +1116,6 @@ void CE2MaterialDB::readComponents(
                 break;
             }
           }
-          while ((buf2.getPosition() + 2ULL) <= buf2.size());
         }
         break;
       case 0x0081:      // "BSMaterial::WaterSettingsComponent"
