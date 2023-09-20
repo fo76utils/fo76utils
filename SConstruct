@@ -37,9 +37,9 @@ libSources = ["src/common.cpp", "src/filebuf.cpp", "src/zlib.cpp"]
 libSources += ["src/ba2file.cpp", "src/esmfile.cpp", "src/stringdb.cpp"]
 libSources += ["src/btdfile.cpp", "src/ddstxt.cpp", "src/downsamp.cpp"]
 libSources += ["src/esmdbase.cpp", "src/nif_file.cpp", "src/meshfile.cpp"]
-libSources += ["src/bgsmfile.cpp", "src/material.cpp", "src/landdata.cpp"]
-libSources += ["src/plot3d.cpp", "src/landtxt.cpp", "src/terrmesh.cpp"]
-libSources += ["src/render.cpp", "src/rndrbase.cpp", "src/markers.cpp"]
+libSources += ["src/material.cpp", "src/landdata.cpp", "src/plot3d.cpp"]
+libSources += ["src/landtxt.cpp", "src/terrmesh.cpp", "src/render.cpp"]
+libSources += ["src/rndrbase.cpp", "src/markers.cpp"]
 # detex source files
 libSources += ["src/bits.c", "src/bptc-tables.c", "src/decompress-bptc.c"]
 libSources += ["src/decompress-bptc-float.c"]
@@ -78,7 +78,6 @@ bcdecode = env.Program("bcdecode", ["src/bcdecode.cpp"])
 btddump = env.Program("btddump", ["src/btddump.cpp"])
 esmdump = env.Program("esmdump", ["src/esmdump.cpp"])
 findwater = env.Program("findwater", ["src/findwater.cpp"])
-fo4land = env.Program("fo4land", ["src/fo4land.cpp"])
 landtxt = env.Program("landtxt", ["src/ltxtmain.cpp"])
 markers = env.Program("markers", ["src/markmain.cpp"])
 mat_info = env.Program("mat_info", ["src/mat_info.cpp"])
@@ -97,7 +96,7 @@ terrain = env.Program("terrain", ["src/terrain.cpp"])
 if "win" in sys.platform:
     if buildPackage:
         pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, esm_view]
-        pkgFiles += [findwater, fo4land, landtxt, markers, mat_info, nif_info]
+        pkgFiles += [findwater, landtxt, markers, mat_info, nif_info]
         pkgFiles += [render, terrain]
         if buildCubeView:
             pkgFiles += [cubeview, wrldview]
