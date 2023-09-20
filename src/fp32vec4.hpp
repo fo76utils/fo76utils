@@ -121,6 +121,7 @@ struct FloatVector4
   // ((x * p[0] + p[1]) * x + p[2]) * x + p[3]
   static inline float polynomial3(const float *p, float x);
   static inline float exp2Fast(float x);
+  inline FloatVector4& exp2V();
   inline FloatVector4& normalize(bool invFlag = false);
   // normalize first three elements (v[3] is cleared)
   inline FloatVector4& normalize3Fast();
@@ -479,6 +480,19 @@ inline float FloatVector4::exp2Fast(float x)
   m = m * m;
   __asm__ ("vpaddd %1, %0, %0" : "+x" (m) : "x" (e));
   return m;
+}
+
+inline FloatVector4& FloatVector4::exp2V()
+{
+  XMM_Float e;
+  __asm__ ("vroundps $0x09, %1, %0" : "=x" (e) : "x" (v));
+  XMM_Float m = v - e;          // e = floor(v)
+  __asm__ ("vcvtps2dq %0, %0" : "+x" (e));
+  __asm__ ("vpslld $0x17, %0, %0" : "+x" (e));
+  m = (m * 0.00825060f + 0.05924474f) * (m * m) + (m * 0.34671664f + 1.0f);
+  m = m * m;
+  __asm__ ("vpaddd %2, %1, %0" : "=x" (v) : "x" (m), "x" (e));
+  return (*this);
 }
 
 inline FloatVector4& FloatVector4::normalize(bool invFlag)
@@ -982,6 +996,15 @@ inline float FloatVector4::polynomial3(const float *p, float x)
 inline float FloatVector4::exp2Fast(float x)
 {
   return float(std::exp2(x));
+}
+
+inline FloatVector4& FloatVector4::exp2V()
+{
+  v[0] = float(std::exp2(v[0]));
+  v[1] = float(std::exp2(v[1]));
+  v[2] = float(std::exp2(v[2]));
+  v[3] = float(std::exp2(v[3]));
+  return (*this);
 }
 
 inline FloatVector4& FloatVector4::normalize(bool invFlag)
