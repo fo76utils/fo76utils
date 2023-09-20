@@ -3,7 +3,7 @@
 
 Find references to a set of form IDs defined in a text file, and mark their locations on an RGBA format map, optionally using DDS icon files.
 
-**LANDFILE.DDS** is the output of [fo4land](fo4land.md) or [btddump](btddump.md), to be used as reference for image size and mapping coordinates. Alternatively, a comma separated list of image width, height, view scale, X, Y, Z rotation, and X, Y, Z offsets can be specified, these parameters are used similarly to [render](render.md). The view transform may optionally also include a mip offset parameter, this is added to all mip levels in the marker definitions.
+**LANDFILE.DDS** is the output of [btddump](btddump.md), to be used as reference for image size and mapping coordinates. Alternatively, a comma separated list of image width, height, view scale, X, Y, Z rotation, and X, Y, Z offsets can be specified, these parameters are used similarly to [render](render.md). The view transform may optionally also include a mip offset parameter, this is added to all mip levels in the marker definitions.
 
 The format of **ICONLIST.TXT** is a tab separated list of form ID, marker type, icon file, icon mip level (0.0 = full size, 1.0 = half size, etc.), and an optional priority (0-15).
 
