@@ -1000,8 +1000,9 @@ void CE2MaterialDB::readComponents(
 #endif
                 }
                 break;
-              case 1:                   // structures
-              case 0x8101:
+              case 0x8101:              // structures
+                buf2.setPosition(buf2.getPosition() + 2);
+              case 1:
                 structID = (structID << 8) | ((n & 0xFFU) | 0x80U);
                 break;
               case 0x00818100:          // 1:1:0: red
