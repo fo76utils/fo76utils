@@ -68,7 +68,23 @@ static void loadTextures(
   else
   {
     for (size_t i = 0; i < landData->getTextureCount(); i++)
-      fileNames.push_back(landData->getTextureDiffuse(i));
+    {
+      const CE2Material *m = landData->getTextureMaterial(i);
+      const std::string *s = (std::string *) 0;
+      if (m && (m->layerMask & 1U))
+      {
+        const CE2Material::Layer  *l = m->layers[0];
+        if (l && l->material && l->material->textureSet &&
+            (l->material->textureSet->texturePathMask & 1U))
+        {
+          s = l->material->textureSet->texturePaths[0];
+        }
+      }
+      if (!s)
+        fileNames.emplace_back();
+      else
+        fileNames.push_back(*s);
+    }
   }
   if (fileNames.size() < 1)
     errorMessage("texture file list is empty");
@@ -115,8 +131,7 @@ class RenderThread : public LandscapeTexture
   std::thread *threadPtr;
   int     xyScale;
   std::vector< unsigned char >  outBuf;
-  RenderThread(const unsigned char *txtSetPtr, const unsigned char *ltex32Ptr,
-               const unsigned char *vclr24Ptr, const unsigned char *ltex16Ptr,
+  RenderThread(const unsigned char *txtSetPtr, const unsigned char *ltex16Ptr,
                int vertexCntX, int vertexCntY, int cellResolution,
                const LandscapeTextureSet *landTxts, size_t landTxtCnt);
   RenderThread(const LandscapeData& landData,
@@ -127,14 +142,11 @@ class RenderThread : public LandscapeTexture
 };
 
 RenderThread::RenderThread(
-    const unsigned char *txtSetPtr, const unsigned char *ltex32Ptr,
-    const unsigned char *vclr24Ptr, const unsigned char *ltex16Ptr,
+    const unsigned char *txtSetPtr, const unsigned char *ltex16Ptr,
     int vertexCntX, int vertexCntY, int cellResolution,
     const LandscapeTextureSet *landTxts, size_t landTxtCnt)
-  : LandscapeTexture(txtSetPtr, ltex32Ptr, vclr24Ptr,
-                     ltex16Ptr, (unsigned char *) 0, (unsigned char *) 0,
-                     vertexCntX, vertexCntY, cellResolution,
-                     landTxts, landTxtCnt),
+  : LandscapeTexture(txtSetPtr, ltex16Ptr, vertexCntX, vertexCntY,
+                     cellResolution, landTxts, landTxtCnt),
     threadPtr((std::thread *) 0),
     xyScale(0)
 {
@@ -161,7 +173,11 @@ RenderThread::~RenderThread()
 void RenderThread::renderLines(int y0, int y1)
 {
   outBuf.resize(size_t(width << xyScale) * size_t(y1 - y0) * 3U);
-  renderTexture(outBuf.data(), xyScale,
+  unsigned char *outBufs[8];
+  for (size_t i = 0; i < 8; i++)
+    outBufs[i] = (unsigned char *) 0;
+  outBufs[0] = outBuf.data();
+  renderTexture(outBufs, xyScale,
                 0, y0 >> xyScale, width - 1, (y1 >> xyScale) - 1);
 }
 
@@ -187,16 +203,12 @@ static const char *usageStrings[] =
   "    -ssaa INT           render at 2^N resolution and downsample",
   "    -q                  do not print texture file names",
   "",
-  "DDS input file options:",
-  "    -vclr FILENAME.DDS  vertex color file name",
-  "",
   "ESM/BTD input file options:",
-  "    -btd FILENAME.BTD   read terrain data from Fallout 76 .btd file",
+  "    -btd FILENAME.BTD   read terrain data from Starfield .btd file",
+  "    -cdb FILENAME.CDB   set material database file name",
   "    -w FORMID           form ID of world to use from ESM input file",
   "    -r X0 Y0 X1 Y1      limit range of cells to X0,Y0 (SW) to X1,Y1 (NE)",
   "    -l INT              level of detail to use from BTD file (0 to 4)",
-  "    -deftxt FORMID      form ID of default texture",
-  "    -no-vclr            do not use vertex color data",
   (char *) 0
 };
 
@@ -206,14 +218,13 @@ int main(int argc, char **argv)
   std::vector< RenderThread * > threads;
   DDSInputFile  *inFile = (DDSInputFile *) 0;
   DDSInputFile  *txtSetFile = (DDSInputFile *) 0;
-  DDSInputFile  *vclrFile = (DDSInputFile *) 0;
   ESMFile       *esmFile = (ESMFile *) 0;
   BA2File       *ba2File = (BA2File *) 0;
+  CE2MaterialDB *materials = (CE2MaterialDB *) 0;
   LandscapeData *landData = (LandscapeData *) 0;
   int     err = 1;
   try
   {
-    const char    *vclrFileName = (char *) 0;
     float         mipLevel = 5.0f;
     float         rgbScale = 1.0f;
     std::uint32_t defaultColor = 0x003F3F3F;
@@ -221,19 +232,17 @@ int main(int argc, char **argv)
     int           threadCnt = int(std::thread::hardware_concurrency());
     threadCnt = (threadCnt > 1 ? (threadCnt < 256 ? threadCnt : 256) : 1);
     bool          verboseMode = true;
-    bool          isFO76 = false;
     unsigned char txtSetMip = 0;
     const char    *archivePath = (char *) 0;
     const char    *btdFileName = (char *) 0;
+    const char    *cdbFileName = (char *) 0;
     unsigned int  worldFormID = 0U;
-    unsigned int  defTxtID = 0U;
     int           xMin = -32768;
     int           yMin = -32768;
     int           xMax = 32767;
     int           yMax = 32767;
     unsigned char btdLOD = 2;
     unsigned char ssaaLevel = 0;
-    bool          disableVCLR = false;
     unsigned int  hdrBuf[11];
 
     std::vector< const char * > args;
@@ -309,17 +318,17 @@ int main(int argc, char **argv)
       {
         verboseMode = false;
       }
-      else if (std::strcmp(argv[i], "-vclr") == 0)
-      {
-        if (++i >= argc)
-          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        vclrFileName = argv[i];
-      }
       else if (std::strcmp(argv[i], "-btd") == 0)
       {
         if (++i >= argc)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         btdFileName = argv[i];
+      }
+      else if (std::strcmp(argv[i], "-cdb") == 0)
+      {
+        if (++i >= argc)
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
+        cdbFileName = argv[i];
       }
       else if (std::strcmp(argv[i], "-w") == 0)
       {
@@ -346,18 +355,6 @@ int main(int argc, char **argv)
             (unsigned char) parseInteger(argv[i], 10, "invalid level of detail",
                                          0, 4);
       }
-      else if (std::strcmp(argv[i], "-deftxt") == 0)
-      {
-        if (++i >= argc)
-          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        defTxtID =
-            (unsigned int) parseInteger(argv[i], 0, "invalid default texture",
-                                        0L, 0x0FFFFFFFL);
-      }
-      else if (std::strcmp(argv[i], "-no-vclr") == 0)
-      {
-        disableVCLR = true;
-      }
       else
       {
         throw FO76UtilsError("invalid command line option: %s", argv[i]);
@@ -374,8 +371,8 @@ int main(int argc, char **argv)
 
     if (archivePath)
     {
-      ba2File =
-          new BA2File(archivePath, ".dds\t.bgsm\t.btd", "/lod/\t/actors/");
+      ba2File = new BA2File(archivePath, ".dds\t.cdb\t.btd", "/lod/\t/actors/");
+      materials = new CE2MaterialDB(*ba2File, cdbFileName);
     }
     int     width = 0;
     int     height = 0;
@@ -386,16 +383,10 @@ int main(int argc, char **argv)
       // DDS input files
       int     pixelFormat = 0;
       inFile = new DDSInputFile(args[0], width, height, pixelFormat, hdrBuf);
-      if (pixelFormat == DDSInputFile::pixelFormatA16 ||
-          pixelFormat == DDSInputFile::pixelFormatGRAY16 ||
-          pixelFormat == DDSInputFile::pixelFormatRGBA16 ||
-          pixelFormat == (DDSInputFile::pixelFormatUnknown + 16))
-      {
-        isFO76 = true;
-      }
-      else if (!(pixelFormat == DDSInputFile::pixelFormatA32 ||
-                 pixelFormat == DDSInputFile::pixelFormatRGBA32 ||
-                 pixelFormat == (DDSInputFile::pixelFormatUnknown + 32)))
+      if (!(pixelFormat == DDSInputFile::pixelFormatA16 ||
+            pixelFormat == DDSInputFile::pixelFormatGRAY16 ||
+            pixelFormat == DDSInputFile::pixelFormatRGBA16 ||
+            pixelFormat == (DDSInputFile::pixelFormatUnknown + 16)))
       {
         errorMessage("invalid input file pixel format");
       }
@@ -415,15 +406,6 @@ int main(int argc, char **argv)
         if (++txtSetMip >= 8)
           errorMessage("texture set dimensions do not match input file");
       }
-      if (vclrFileName && !disableVCLR)
-      {
-        vclrFile = new DDSInputFile(vclrFileName,
-                                    tmpWidth, tmpHeight, tmpPixelFormat);
-        if (tmpPixelFormat != DDSInputFile::pixelFormatRGB24 || isFO76)
-          errorMessage("invalid vertex color file pixel format");
-        if (width != tmpWidth || height != tmpHeight)
-          errorMessage("vertex color dimensions do not match input file");
-      }
       loadTextures(landTextures, args[3], (LandscapeData *) 0, verboseMode,
                    int(mipLevel), ba2File);
     }
@@ -431,19 +413,14 @@ int main(int argc, char **argv)
     {
       // ESM/BTD input file(s)
       esmFile = new ESMFile(args[0]);
-      unsigned int  formatMask = 0x0A;
-      if (disableVCLR)
-        formatMask &= ~8U;
-      landData = new LandscapeData(esmFile, btdFileName, ba2File,
-                                   formatMask, worldFormID, defTxtID,
-                                   btdLOD, xMin, yMin, xMax, yMax);
-      isFO76 = (esmFile->getESMVersion() >= 0xC0U);
+      landData = new LandscapeData(esmFile, btdFileName, ba2File, materials,
+                                   worldFormID, btdLOD, xMin, yMin, xMax, yMax);
       while ((2 << txtSetMip) < landData->getCellResolution())
         txtSetMip++;
       width = landData->getImageWidth();
       height = landData->getImageHeight();
-      hdrBuf[0] = (!isFO76 ? 0x5F344F46U : 0x36374F46U);        // "FO4_"/"FO76"
-      hdrBuf[1] = 0x444E414CU;                                  // "LAND"
+      hdrBuf[0] = 0x5F324543U;          // "CE2_"
+      hdrBuf[1] = 0x444E414CU;          // "LAND"
       hdrBuf[2] = (unsigned int) landData->getXMin();
       hdrBuf[3] = (unsigned int) landData->getYMin();
       hdrBuf[4] = (unsigned int) roundFloat(landData->getZMin());
@@ -474,21 +451,7 @@ int main(int argc, char **argv)
     {
       if (!landData)
       {
-        const unsigned char *ltexData32 = (unsigned char *) 0;
-        const unsigned char *vclrData24 = (unsigned char *) 0;
-        const unsigned char *ltexData16 = (unsigned char *) 0;
-        if (!isFO76)
-        {
-          ltexData32 = inFile->data();
-          if (vclrFile)
-            vclrData24 = vclrFile->data();
-        }
-        else
-        {
-          ltexData16 = inFile->data();
-        }
-        threads[i] = new RenderThread(txtSetFile->data(),
-                                      ltexData32, vclrData24, ltexData16,
+        threads[i] = new RenderThread(txtSetFile->data(), inFile->data(),
                                       width >> xyScale, height >> xyScale,
                                       2 << txtSetMip, landTextures.data(),
                                       landTextures.size());
@@ -602,12 +565,12 @@ int main(int argc, char **argv)
     delete landData;
   if (esmFile)
     delete esmFile;
-  if (vclrFile)
-    delete vclrFile;
   if (txtSetFile)
     delete txtSetFile;
   if (inFile)
     delete inFile;
+  if (materials)
+    delete materials;
   if (ba2File)
     delete ba2File;
   return err;

@@ -12,10 +12,10 @@ static const char *usageStrings[] =
   "    markers INFILE.ESM[,...] OUTFILE.DDS VIEWTRANSFORM ICONLIST.TXT "
   "[worldID]",
   "",
-  "LANDFILE.DDS is the output of fo4land or btddump, to be used as reference",
-  "for image size and mapping coordinates. Alternatively, a comma separated",
-  "list of image width, height, view scale, X, Y, Z rotation, and X, Y, Z",
-  "offsets can be specified, these parameters are used similarly to render.",
+  "LANDFILE.DDS is the output of btddump, to be used as reference for image",
+  "size and mapping coordinates. Alternatively, a comma separated list of",
+  "image width, height, view scale, X, Y, Z rotation, and X, Y, Z offsets",
+  "can be specified, these parameters are used similarly to render.",
   "The view transform may optionally also include a mip offset parameter,",
   "this is added to all mip levels in the marker definitions.",
   "",
@@ -175,7 +175,7 @@ int main(int argc, char **argv)
                                             0L, 0x0FFFFFFFL);
     }
     if (!worldID)
-      worldID = (esmFile.getESMVersion() < 0xC0U ? 0x0000003C : 0x0025DA15);
+      worldID = (esmFile.getESMVersion() < 0xC0U ? 0x0000003C : 0x0001251B);
     mapImage.findMarkers(worldID);
 
     DDSOutputFile outFile(argv[2], imageWidth, imageHeight,

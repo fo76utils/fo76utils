@@ -6,7 +6,7 @@
 #include "filebuf.hpp"
 #include "ba2file.hpp"
 #include "fp32vec4.hpp"
-#include "bgsmfile.hpp"
+#include "material.hpp"
 
 class NIFFile : public FileBuffer
 {
@@ -159,28 +159,30 @@ class NIFFile : public FileBuffer
 #endif
     }
   };
+  struct NIFBlkBSTriShape;
   struct NIFTriShape
   {
-    BGSMFile  m;
+    enum
+    {
+      // flag values can be combined (bitwise OR) with CE2Material::flags
+      Flag_TSEffect = 0x0004,
+      Flag_TSOrdered = 0x0800,  // for BSOrderedNode children, except the first
+      Flag_TSAlphaBlending = 0x1000,
+      Flag_TSVertexColors = 0x2000,
+      Flag_TSWater = 0x4000,
+      Flag_TSHidden = 0x8000
+    };
+    const CE2Material *m;
+    const NIFBlkBSTriShape  *ts;
     NIFVertexTransform  vertexTransform;
-    int       nameID;   // NIFFile::getString(nameID) returns the string
+    std::uint32_t flags;
     unsigned int  vertexCnt;
     unsigned int  triangleCnt;
     const NIFVertex   *vertexData;
     const NIFTriangle *triangleData;
     NIFTriShape();
     void calculateBounds(NIFBounds& b, const NIFVertexTransform *vt = 0) const;
-    // alphaProperties = flags | (threshold << 16) | (alpha << 24)
-    void setMaterial(const BGSMFile& material,
-                     std::uint32_t alphaProperties = 0U);
-    inline bool haveMaterialPath() const
-    {
-      return (bool(m.texturePaths) && !m.texturePaths.materialPath().empty());
-    }
-    inline const std::string& materialPath() const
-    {
-      return m.texturePaths.materialPath();
-    }
+    void setMaterial(const CE2Material *material);
   };
   enum
   {
@@ -258,29 +260,12 @@ class NIFFile : public FileBuffer
     // 1: environment map
     // 2: glow
     unsigned int  shaderType;
-    std::vector< unsigned int > extraData;
     int     controller;
-    int     textureSet;
-    unsigned long long  flags;
-    BGSMFile  material; // (material.flags & 4) != 0 if this is an effect shader
-    void readEffectShaderProperty(NIFFile& f);
-    void readLightingShaderProperty(NIFFile& f);
-    NIFBlkBSLightingShaderProperty(NIFFile& f, size_t nxtBlk, int nxtBlkType,
-                                   bool isEffect);
+    std::vector< unsigned int > extraData;
+    const CE2Material *material;
+    std::string materialPath;
+    NIFBlkBSLightingShaderProperty(NIFFile& f, const CE2MaterialDB *materials);
     virtual ~NIFBlkBSLightingShaderProperty();
-    inline const std::string *materialName() const
-    {
-      if (bool(material.texturePaths))
-        return &(material.texturePaths.materialPath());
-      return (std::string *) 0;
-    }
-  };
-  struct NIFBlkBSShaderTextureSet : public NIFBlock
-  {
-    BGSMFile::TextureSet  texturePaths;
-    std::uint32_t texturePathMask;
-    NIFBlkBSShaderTextureSet(NIFFile& f);
-    virtual ~NIFBlkBSShaderTextureSet();
   };
   struct NIFBlkNiAlphaProperty : public NIFBlock
   {
@@ -320,16 +305,18 @@ class NIFFile : public FileBuffer
     int     n = readInt32();
     return (n >= 0 && (unsigned int) n < blockCnt ? n : -1);
   }
-  void loadNIFFile(int l);
+  void loadNIFFile(const CE2MaterialDB *materials, int l);
   void getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
                std::vector< unsigned int >& parentBlocks,
                unsigned int switchActive, bool noRootNodeTransform) const;
  public:
   // l = LOD
-  NIFFile(const char *fileName, const BA2File& archiveFiles, int l = 0);
-  NIFFile(const unsigned char *buf, size_t bufSize,
-          const BA2File& archiveFiles, int l = 0);
-  NIFFile(FileBuffer& buf, const BA2File& archiveFiles, int l = 0);
+  NIFFile(const char *fileName, const BA2File& archiveFiles,
+          const CE2MaterialDB *materials, int l = 0);
+  NIFFile(const unsigned char *buf, size_t bufSize, const BA2File& archiveFiles,
+          const CE2MaterialDB *materials, int l = 0);
+  NIFFile(FileBuffer& buf, const BA2File& archiveFiles,
+          const CE2MaterialDB *materials, int l = 0);
   virtual ~NIFFile();
   inline unsigned int getVersion() const;
   inline const std::string& getAuthorName() const;
@@ -349,7 +336,6 @@ class NIFFile : public FileBuffer
   inline const NIFBlkBSTriShape *getTriShape(size_t n) const;
   inline const NIFBlkBSLightingShaderProperty *
       getLightingShaderProperty(size_t n) const;
-  inline const NIFBlkBSShaderTextureSet *getShaderTextureSet(size_t n) const;
   inline const NIFBlkNiAlphaProperty *getAlphaProperty(size_t n) const;
   void getMesh(std::vector< NIFTriShape >& v, unsigned int rootNode = 0U,
                unsigned int switchActive = 0U,
@@ -468,14 +454,6 @@ inline const NIFFile::NIFBlkBSLightingShaderProperty *
   if (getBaseBlockType(n) != BlkTypeBSLightingShaderProperty)
     return (NIFBlkBSLightingShaderProperty *) 0;
   return ((const NIFBlkBSLightingShaderProperty *) blocks[n]);
-}
-
-inline const NIFFile::NIFBlkBSShaderTextureSet *
-    NIFFile::getShaderTextureSet(size_t n) const
-{
-  if (getBaseBlockType(n) != BlkTypeBSShaderTextureSet)
-    return (NIFBlkBSShaderTextureSet *) 0;
-  return ((const NIFBlkBSShaderTextureSet *) blocks[n]);
 }
 
 inline const NIFFile::NIFBlkNiAlphaProperty *

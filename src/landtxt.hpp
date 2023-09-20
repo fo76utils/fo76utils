@@ -6,13 +6,22 @@
 #include "ddstxt.hpp"
 #include "landdata.hpp"
 #include "fp32vec4.hpp"
+#include "material.hpp"
 
 struct LandscapeTextureSet
 {
-  const DDSTexture  *textures[10];
+  // textures[0] = albedo (_color.dds)
+  // textures[1] = normal map (_normal.dds)
+  // textures[2] = alpha (_opacity.dds)
+  // textures[3] = roughness (_rough.dds)
+  // textures[4] = metalness (_metal.dds)
+  // textures[5] = ambient occlusion (_ao.dds)
+  // textures[6] = height map (_height.dds)
+  // textures[7] = glow map (_emissive.dds)
+  const DDSTexture  *textures[8];
   LandscapeTextureSet()
   {
-    for (size_t i = 0; i < 10; i++)
+    for (size_t i = 0; i < 8; i++)
       textures[i] = (DDSTexture *) 0;
   }
   inline const DDSTexture*& operator[](size_t n)
@@ -29,8 +38,6 @@ class LandscapeTexture
 {
  protected:
   const unsigned char *txtSetData;
-  const unsigned char *ltexData32;
-  const unsigned char *vclrData24;
   const unsigned char *ltexData16;
   FloatVector4 (*renderPixelFunction)(
       const LandscapeTexture& p, FloatVector4 *n,
@@ -43,57 +50,34 @@ class LandscapeTexture
   int     height;
   float   txtScale;
   bool    integerMip;
-  bool    isFO76;
   unsigned char txtSetMip;
   std::uint32_t defaultColor;
-  static inline FloatVector4 rotateNormalFO76(const FloatVector4& n);
+  static inline FloatVector4 rotateNormalSF(const FloatVector4& n);
   static inline FloatVector4 blendColors(FloatVector4 c0, FloatVector4 c1,
                                          float f);
   static inline void blendNormals(FloatVector4 *n, FloatVector4 *n2, float f);
   inline FloatVector4 getNormal(size_t t, int x, int y, int m) const;
-  inline void getNormalSpecI(FloatVector4 *n,
-                             size_t t, int x, int y, int m) const;
-  inline void getNormalSpecF(FloatVector4 *n,
-                             size_t t, float x, float y, float m) const;
-  inline void getNormalReflLightI(FloatVector4 *n,
-                                  size_t t, int x, int y, int m) const;
-  inline void getNormalReflLightF(FloatVector4 *n,
-                                  size_t t, float x, float y, float m) const;
+  inline void getPBRMapsI(FloatVector4 *n, size_t t, int x, int y, int m) const;
+  inline void getPBRMapsF(FloatVector4 *n,
+                          size_t t, float x, float y, float m) const;
   static inline std::uint32_t normalToColor(FloatVector4 n);
-  inline std::uint32_t getTES4VertexColor(size_t offs) const;
-  inline FloatVector4 getTES4VertexColor(int x, int y, int renderScale) const;
-  static FloatVector4 renderPixelFO76I_NoNormals(
+  static FloatVector4 renderPixelSF_I_NoNormals(
       const LandscapeTexture& p, FloatVector4 *n,
       int x, int y, int txtX, int txtY);
-  static FloatVector4 renderPixelFO76I_NoPBR(
+  static FloatVector4 renderPixelSF_I_NoPBR(
       const LandscapeTexture& p, FloatVector4 *n,
       int x, int y, int txtX, int txtY);
-  static FloatVector4 renderPixelFO76I(
+  static FloatVector4 renderPixelSF_I(
       const LandscapeTexture& p, FloatVector4 *n,
       int x, int y, int txtX, int txtY);
-  static FloatVector4 renderPixelFO76F(
-      const LandscapeTexture& p, FloatVector4 *n,
-      int x, int y, int txtX, int txtY);
-  static FloatVector4 renderPixelTES4I_NoNormals(
-      const LandscapeTexture& p, FloatVector4 *n,
-      int x, int y, int txtX, int txtY);
-  static FloatVector4 renderPixelTES4I_NoPBR(
-      const LandscapeTexture& p, FloatVector4 *n,
-      int x, int y, int txtX, int txtY);
-  static FloatVector4 renderPixelTES4I(
-      const LandscapeTexture& p, FloatVector4 *n,
-      int x, int y, int txtX, int txtY);
-  static FloatVector4 renderPixelTES4F(
+  static FloatVector4 renderPixelSF_F(
       const LandscapeTexture& p, FloatVector4 *n,
       int x, int y, int txtX, int txtY);
   void setRenderPixelFunction(bool haveNormalMaps, bool havePBRMaps);
   void copyTextureSet(const LandscapeTextureSet *landTxts, size_t landTxtCnt);
  public:
   LandscapeTexture(const unsigned char *txtSetPtr,
-                   const unsigned char *ltex32Ptr,
-                   const unsigned char *vclr24Ptr,
                    const unsigned char *ltex16Ptr,
-                   const unsigned char *vclr16Ptr, const unsigned char *gcvrPtr,
                    int vertexCntX, int vertexCntY, int cellResolution,
                    const LandscapeTextureSet *landTxts, size_t landTxtCnt);
   LandscapeTexture(const LandscapeData& landData,
@@ -109,22 +93,19 @@ class LandscapeTexture
     return renderPixelFunction(*this, n, x, y, txtX, txtY);
   }
  protected:
-  void renderTexture_NoNormals(unsigned char *outBuf, int renderScale,
+  void renderTexture_NoNormals(unsigned char **outBufs, int renderScale,
                                int x0, int y0, int x1, int y1);
-  void renderTexture_NoPBR(unsigned char *outBuf, int renderScale,
-                           int x0, int y0, int x1, int y1,
-                           unsigned char *outBufN);
+  void renderTexture_NoPBR(unsigned char **outBufs, int renderScale,
+                           int x0, int y0, int x1, int y1);
  public:
   // output resolution is 2^renderScale pixels per vertex
-  // outBuf: diffuse texture in B8G8R8 format
-  // outBufN: normal map in X8Y8 format
-  // outBufS: specular or lighting map (2 bytes per pixel)
-  // outBufR: reflectance map in B8G8R8 format
-  void renderTexture(unsigned char *outBuf, int renderScale,
-                     int x0, int y0, int x1, int y1,
-                     unsigned char *outBufN = (unsigned char *) 0,
-                     unsigned char *outBufS = (unsigned char *) 0,
-                     unsigned char *outBufR = (unsigned char *) 0);
+  // outBufs[0]: diffuse texture in B8G8R8 format
+  // outBufs[1]: normal map in X8Y8 format
+  // outBufs[3]: roughness map in R8 (grayscale) format
+  // outBufs[4]: metalness map in R8 (grayscale) format
+  // outBufs[5]: ambient occlusion map in R8 (grayscale) format
+  void renderTexture(unsigned char **outBufs, int renderScale,
+                     int x0, int y0, int x1, int y1);
 };
 
 #endif

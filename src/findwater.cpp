@@ -20,7 +20,7 @@ static float  xyRangeScale = 0.03125f;
 static int    cellSize = 128;
 static int    cellOffsetX = 12864;
 static int    cellOffsetY = 12863;
-static unsigned int worldFormID = 0x0025DA15;
+static unsigned int worldFormID = 0x0001251B;
 
 static BA2File  *meshArchiveFile = (BA2File *) 0;
 static std::vector< NIFFile * > nifFiles;

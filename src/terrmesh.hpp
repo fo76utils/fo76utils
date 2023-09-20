@@ -17,7 +17,7 @@ class TerrainMesh : public NIFFile::NIFTriShape
   std::vector< unsigned char >  textureBuf;
   std::vector< unsigned char >  textureBuf2;
   std::vector< std::uint16_t >  hmapBuf;
-  DDSTexture    *landTexture[10];
+  DDSTexture    *landTexture[8];
   unsigned int  landTextureMask;
  public:
   TerrainMesh();
