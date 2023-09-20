@@ -254,6 +254,8 @@ class CE2MaterialDB
       const std::vector< CE2MaterialObject * >& objectTable);
  public:
   CE2MaterialDB();
+  // fileName defaults to "materials/materialsbeta.cdb", it can be a comma
+  // separated list of multiple CDB file names
   CE2MaterialDB(const BA2File& ba2File, const char *fileName = (char *) 0);
   virtual ~CE2MaterialDB();
   void loadCDBFile(FileBuffer& buf);

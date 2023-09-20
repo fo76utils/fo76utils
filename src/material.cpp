@@ -1332,10 +1332,20 @@ void CE2MaterialDB::loadCDBFile(const BA2File& ba2File, const char *fileName)
   std::vector< unsigned char >  fileBuf;
   if (!fileName || fileName[0] == '\0')
     fileName = "materials/materialsbeta.cdb";
-  const unsigned char *buf = (unsigned char *) 0;
-  size_t  bufSize = ba2File.extractFile(buf, fileBuf, std::string(fileName));
-  FileBuffer  tmpBuf(buf, bufSize);
-  loadCDBFile(tmpBuf);
+  while (true)
+  {
+    size_t  len = 0;
+    while (fileName[len] != ',' && fileName[len] != '\0')
+      len++;
+    const unsigned char *buf = (unsigned char *) 0;
+    size_t  bufSize =
+        ba2File.extractFile(buf, fileBuf, std::string(fileName, len));
+    FileBuffer  tmpBuf(buf, bufSize);
+    loadCDBFile(tmpBuf);
+    if (!fileName[len])
+      break;
+    fileName = fileName + (len + 1);
+  }
 }
 
 const CE2Material * CE2MaterialDB::findMaterial(
