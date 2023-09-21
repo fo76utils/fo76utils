@@ -527,7 +527,7 @@ size_t CE2MaterialDB::readTables(
           if (BRANCH_UNLIKELY(objectNameMap[h]->h == o->h &&
                               objectNameMap[h]->e == o->e))
           {
-            if (objectNameMap[h]->type == o->type)
+            if (!((objectNameMap[h]->type ^ o->type) & 0xFF))
             {
               o = objectNameMap[h];
               break;
