@@ -3,9 +3,10 @@
 #define PLOT3D_HPP_INCLUDED
 
 #include "common.hpp"
-#include "ddstxt.hpp"
-#include "nif_file.hpp"
 #include "fp32vec4.hpp"
+#include "ddstxt.hpp"
+#include "material.hpp"
+#include "nif_file.hpp"
 
 class Plot3D_TriShape : public NIFFile::NIFTriShape
 {
@@ -63,10 +64,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   std::uint32_t *bufN;                  // normals for decal rendering
   int     width;
   int     height;
-  const DDSTexture  *textures[10];
-  float   mipOffsets[10];
-  unsigned char renderMode;
-  std::uint16_t waterUVScale;
+  const DDSTexture  *textures[9];
+  const DDSTexture  *textureE;          // environment map
+  float   mipOffsets[8];                // mipOffsets[N] is for textures[N + 1]
+  DDSTexture    *defaultTextures;
+  unsigned int  renderMode;
   unsigned int  debugMode;
   FloatVector4  lightVector;
   FloatVector4  lightColor;             // lightColor[3] = overall RGB scale
@@ -85,15 +87,59 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   std::vector< Vertex > vertexBuf;
   std::vector< Triangle > triangleBuf;
   NIFFile::NIFVertexTransform viewTransform;
+  float   waterDepthScale;              // -1.0 / viewTransform.scale
+  union MaterialParams                  // material properties
+  {
+    struct                              // shader material
+    {
+      float   alphaThreshold;           // scaled to 255.0
+      std::uint32_t alphaBlendMode;
+      float   unused1;
+      float   unused2;
+      FloatVector4  uvScaleAndOffset;
+      FloatVector4  baseColor;
+      FloatVector4  emissiveColor;
+      FloatVector4  unused3;
+    }
+    s;
+    struct                              // effect material
+    {
+      float   alphaThreshold;
+      std::uint32_t alphaBlendMode;
+      float   baseColorScale;
+      float   lightingInfluence;
+      FloatVector4  uvScaleAndOffset;
+      FloatVector4  baseColor;
+      FloatVector4  emissiveColor;
+      FloatVector4  falloffParams;
+    }
+    e;
+    struct                              // water material
+    {
+      float   normalScale;
+      std::uint32_t unused;             // always set to 0xFFFFFFFF for water
+      float   reflectivity;
+      float   specularScale;
+      FloatVector4  uvScaleAndOffset;
+      FloatVector4  baseColor;
+      FloatVector4  transparencyDepth0;
+      FloatVector4  depthMult;
+    }
+    w;
+    inline MaterialParams()
+    {
+    }
+  };
+  MaterialParams  mp;
   static FloatVector4 colorToSRGB(FloatVector4 c);
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform);
   inline bool glowEnabled() const
   {
-    return bool(m.flags & BGSMFile::Flag_Glow);
+    return bool(flags & CE2Material::Flag_Glow);
   }
   inline bool alphaBlendingEnabled() const
   {
-    return bool(m.flags & BGSMFile::Flag_TSAlphaBlending);
+    return bool(flags & CE2Material::Flag_AlphaBlending);
   }
   inline void storeNormal(FloatVector4 n, const std::uint32_t *cPtr);
   // a = alpha * 255
@@ -117,15 +163,13 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       const float *fresnelPoly, FloatVector4 f0) const;
   // c0 = terrain color (scaled to 1.0), a = water transparency
   inline FloatVector4 calculateLighting_Water(
-      FloatVector4 c0, float a, Fragment& z) const;
+      FloatVector4 c0, FloatVector4 a, Fragment& z) const;
   // fill with water
   static void drawPixel_Water(Plot3D_TriShape& p, Fragment& z);
   static void drawPixel_Effect(Plot3D_TriShape& p, Fragment& z);
   FloatVector4 glowMap(const Fragment& z) const;
   // returns true if the pixel is visible (alpha >= threshold)
   static bool getDiffuseColor_Effect(
-      const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
-  static bool getDiffuseColor_G(
       const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
   static bool getDiffuseColor_C(
       const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
@@ -144,6 +188,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                         float w0f, float w1f, float w2f);
   void drawLine(Fragment& v, const Vertex& v0, const Vertex& v1);
   void drawTriangles();
+  void setMaterialProperties(const DDSTexture * const *textureSet,
+                             unsigned int textureMask);
  public:
   // mode & 3 = 0: diffuse texture only
   //            1: enable normal mapping
@@ -169,17 +215,23 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   }
   void setViewAndLightVector(const NIFFile::NIFVertexTransform& vt,
                              float lightX, float lightY, float lightZ);
+  inline void setEnvironmentMap(const DDSTexture *t)
+  {
+    textureE = t;
+  }
   // Vector to be added to (image X, image Y, 0.0) for cube mapping.
   // Defaults to -(imageWidth / 2), -(imageHeight / 2), imageHeight.
   inline void setEnvMapOffset(float x, float y, float z)
   {
     envMapOffs = FloatVector4(x, y, z, 0.0f);
   }
-  // water U, V = world X, Y * s (default: 1.0 / 31.0)
-  inline void setWaterUVScale(float s)
-  {
-    waterUVScale = std::uint16_t(roundFloat(std::min(s * 65535.0f, 65535.0f)));
-  }
+  // deepColor is the base color in sRGB color space (0xBBGGRR)
+  // for channel N, alpha =
+  //     1.0 - ((1.0 - alphaDepth0[N]) * exp2(depthMult[N] * -depth))
+  void setWaterProperties(
+      std::uint32_t deepColor, FloatVector4 alphaDepth0, FloatVector4 depthMult,
+      float uvScale = 0.032258f, float normalScale = 1.0f,
+      float reflectivity = 0.02032076f, float specularScale = 1.0f);
   // c = light source (multiplies diffuse and specular, but not glow/cube maps)
   // a = ambient light (added to diffuse light level after multiplying with c)
   // e = environment map color and level, also multiplies ambient light
@@ -189,23 +241,16 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   Plot3D_TriShape& operator=(const NIFFile::NIFTriShape& t);
   // textureSet[0] = albedo (_color.dds)
   // textureSet[1] = normal (_normal.dds)
-  // textureSet[2] = glow map (_emissive.dds)
-  // textureSet[3] = gradient map
-  // textureSet[4] = environment map
-  // textureSet[5] = opacity map (_opacity.dds)
-  // textureSet[6] = ambient occlusion map (_ao.dds)
-  // textureSet[7] = mask texture (_mask.dds)
-  // textureSet[8] = metalness map (_metal.dds)
-  // textureSet[9] = roughness map (_rough.dds)
+  // textureSet[2] = opacity map (_opacity.dds)
+  // textureSet[3] = roughness map (_rough.dds)
+  // textureSet[4] = metalness map (_metal.dds)
+  // textureSet[5] = ambient occlusion map (_ao.dds)
+  // textureSet[6] = height map (_height.dds)
+  // textureSet[7] = glow map (_emissive.dds)
+  // textureSet[8] = translucency map (_transmissive.dds)
   void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,
                     const DDSTexture * const *textureSet,
                     unsigned int textureMask);
- protected:
-  void drawEffect(const DDSTexture * const *textureSet,
-                  unsigned int textureMask);
-  void drawWater(const DDSTexture * const *textureSet,
-                 unsigned int textureMask, float viewScale);
- public:
   // n = 0: default mode
   // n = 1: render c as a solid color (0xRRGGBB)
   // n = 2: Z * 16 (blue = LSB), or Z * 64 if USE_PIXELFMT_RGB10A2 is enabled
