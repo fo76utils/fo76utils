@@ -39,6 +39,7 @@ struct CE2MaterialObject
   std::uint64_t h;
   const std::string *name;
   const CE2MaterialObject *parent;
+  void printObjectInfo(std::string& buf, size_t indentCnt) const;
 };
 
 struct CE2Material : public CE2MaterialObject   // object type 1
@@ -49,6 +50,7 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     FloatVector4  scaleAndOffset;
     // 0 = "Wrap", 1 = "Clamp", 2 = "Mirror", 3 = "Border"
     unsigned char textureAddressMode;
+    void printObjectInfo(std::string& buf, size_t indentCnt) const;
   };
   struct TextureSet : public CE2MaterialObject  // object type 5
   {
@@ -72,6 +74,7 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     const std::string *texturePaths[maxTexturePaths];
     // texture replacements are colors in R8G8B8A8 format
     std::uint32_t textureReplacements[maxTexturePaths];
+    void printObjectInfo(std::string& buf, size_t indentCnt) const;
   };
   struct Material : public CE2MaterialObject    // object type 4
   {
@@ -79,11 +82,13 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     // MaterialOverrideColorTypeComponent, 0 = "Multiply", 1 = "Lerp"
     unsigned char colorMode;
     const TextureSet  *textureSet;
+    void printObjectInfo(std::string& buf, size_t indentCnt) const;
   };
   struct Layer : public CE2MaterialObject       // object type 3
   {
     const Material  *material;
     const UVStream  *uvStream;
+    void printObjectInfo(std::string& buf, size_t indentCnt) const;
   };
   struct Blender : public CE2MaterialObject     // object type 2
   {
@@ -98,6 +103,7 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     // parameters set via component types 0x0098 and 0x009A
     float   floatParams[maxFloatParams];
     bool    boolParams[maxBoolParams];
+    void printObjectInfo(std::string& buf, size_t indentCnt) const;
   };
   enum
   {
@@ -146,6 +152,8 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   {
     flags = (flags & ~m) | ((0U - std::uint32_t(n)) & m);
   }
+  void printObjectInfo(std::string& buf, size_t indentCnt,
+                       bool isLODMaterial = false) const;
 };
 
 // Component types:

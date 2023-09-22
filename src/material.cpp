@@ -528,10 +528,7 @@ size_t CE2MaterialDB::readTables(
                               objectNameMap[h]->e == o->e))
           {
             if (!((objectNameMap[h]->type ^ o->type) & 0xFF))
-            {
-              o = objectNameMap[h];
               break;
-            }
             errorMessage("duplicate object name hash in material database");
           }
           if (++collisionCnt >= 1024)
