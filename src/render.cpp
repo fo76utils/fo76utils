@@ -1041,7 +1041,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
           n = std::min(std::max(n, 0.0f), 1.0f) * 65534.0f + 1.0f;
           tmp.gradientMapV = std::uint16_t(roundFloat(n));
         }
-        else if (f == "WNAM" && r == "ACTI" && f.size() >= 4)
+        else if (f == "WTFM" && r == "ACTI" && f.size() >= 4)
         {
           isWater = true;
         }

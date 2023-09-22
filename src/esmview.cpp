@@ -602,7 +602,7 @@ bool ESMView::viewModel(unsigned int formID,
     {
       renderer->addColorSwap(f.readFloat());
     }
-    else if (f == "WNAM" && *r == "ACTI" && f.size() >= 4)
+    else if (f == "WTFM" && *r == "ACTI" && f.size() >= 4)
     {
       renderer->setWaterColor(f.readUInt32Fast());
     }

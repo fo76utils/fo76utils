@@ -201,7 +201,7 @@ static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
         modelPath += c;
       }
     }
-    else if (f == "WNAM" && f.size() >= 4)
+    else if (f == "WTFM" && f.size() >= 4)
     {
       isWater = true;
     }
