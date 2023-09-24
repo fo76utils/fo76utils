@@ -7,7 +7,7 @@
 
 #include "viewrtbl.cpp"
 
-static const std::uint32_t  defaultWaterColor = 0xC0804000U;
+static const std::uint32_t  defaultWaterColor = 0xC0402010U;
 
 static const char *cubeMapPaths[32] =
 {
@@ -60,7 +60,7 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
     for (size_t i = 0; i < p->meshData.size(); i++)
     {
       const NIFFile::NIFTriShape& ts = p->meshData[i];
-      if (ts.m.flags & BGSMFile::Flag_TSHidden)
+      if (ts.flags & NIFFile::NIFTriShape::Flag_TSHidden)
         continue;
       NIFFile::NIFBounds  b;
       ts.calculateBounds(b, &mt);
@@ -72,8 +72,8 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
         continue;
       }
       sortBuf.emplace(sortBuf.end(), i, b.zMin(),
-                      bool(ts.m.flags & BGSMFile::Flag_TSAlphaBlending));
-      if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSOrdered))
+                      bool(ts.flags & CE2Material::Flag_AlphaBlending));
+      if (BRANCH_UNLIKELY(ts.flags & NIFFile::NIFTriShape::Flag_TSOrdered))
         TriShapeSortObject::orderedNodeFix(sortBuf, p->meshData);
     }
     if (sortBuf.size() < 1)
@@ -85,41 +85,36 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
       ts = p->meshData[size_t(sortBuf[i])];
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
-      if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSWater))
+      if (BRANCH_UNLIKELY(ts.flags & CE2Material::Flag_IsWater))
       {
         if (bool(textures[1] = p->loadTexture(p->waterTexture, n)))
           textureMask |= 0x0002U;
-        if (bool(textures[4] = p->loadTexture(p->defaultEnvMap, n)))
-          textureMask |= 0x0010U;
-        if (p->waterFormID)
-          ts.setMaterial(p->waterMaterials[p->waterFormID]);
-        else
-          ts.m.setWaterColor(defaultWaterColor, p->waterEnvMapLevel);
+        if (!p->defaultEnvMap.empty())
+          ts.setEnvironmentMap(p->loadTexture(p->defaultEnvMap, n));
+        std::map< unsigned int, WaterProperties >::const_iterator j =
+            p->waterMaterials.find(p->waterFormID);
+        if (j == p->waterMaterials.end())
+          j = p->waterMaterials.find(0U);
+        ts.setWaterProperties(
+            j->second.deepColor, j->second.alphaDepth0, j->second.depthMult,
+            1.0f / 31.0f, 1.0f, 0.02032076f, p->waterEnvMapLevel);
       }
       else
       {
-        for (size_t j = 0; BRANCH_UNLIKELY(p->materialSwapTable[j]); j++)
+        const CE2Material::TextureSet *txtSet = findTextureSet(ts.m);
+        unsigned int  texturePathMask = 0U;
+        if (txtSet)
         {
-          if (p->materialSwapTable[j] & 0x80000000U)
-          {
-            ts.m.s.gradientMapV = float(int(~(p->materialSwapTable[j])))
-                                  * (1.0f / 16777216.0f);
-          }
-          else
-          {
-            p->materialSwaps.materialSwap(ts, p->materialSwapTable[j]);
-          }
-          if ((j + 1) >= (sizeof(p->materialSwapTable) / sizeof(unsigned int)))
-            break;
+          texturePathMask =
+              (!(ts.flags & CE2Material::Flag_Glow) ? 0x003FU : 0x00BFU)
+              & txtSet->texturePathMask;
         }
-        unsigned int  texturePathMask =
-            (!(ts.m.flags & BGSMFile::Flag_Glow) ? 0x037BU : 0x037FU)
-            & (unsigned int) ts.m.texturePathMask;
-        for (size_t j = 0; j < 10; j++, texturePathMask >>= 1)
+        for (size_t j = 0; texturePathMask; j++, texturePathMask >>= 1)
         {
           if (texturePathMask & 1)
           {
-            if (bool(textures[j] = p->loadTexture(ts.m.texturePaths[j], n)))
+            textures[j] = p->loadTexture(*(txtSet->texturePaths[j]), n);
+            if (textures[j])
               textureMask |= (1U << (unsigned char) j);
           }
         }
@@ -128,11 +123,8 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
           textures[0] = &(p->defaultTexture);
           textureMask |= 0x0001U;
         }
-        if (!(textureMask & 0x0010U) && ts.m.s.envMapScale > 0.0f)
-        {
-          if (bool(textures[4] = p->loadTexture(p->defaultEnvMap, n)))
-            textureMask |= 0x0010U;
-        }
+        if (!p->defaultEnvMap.empty())
+          ts.setEnvironmentMap(p->loadTexture(p->defaultEnvMap, n));
       }
       ts.drawTriShape(p->modelTransform, textures, textureMask);
     }
@@ -168,10 +160,11 @@ void NIF_View::setDefaultTextures()
     n = std::min(std::max(int(nifFile->getVersion() >> 4) - 7, 0), 3);
   n = n + ((defaultEnvMapNum & 7) << 2);
   defaultEnvMap = cubeMapPaths[n];
-  waterTexture = "textures/water/defaultwater_normal.dds";
+  waterTexture = "textures/water/wavesdefault_normal.dds";
 }
 
-NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
+NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
+                   const char *materialDBPath)
   : ba2File(archiveFiles),
     esmFile(esmFilePtr),
     textureSet(0x10000000),
@@ -180,6 +173,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
     lightZ(1.0f),
     nifFile((NIFFile *) 0),
     defaultTexture(0xFFFFFFFFU),
+    materials(ba2File, materialDBPath),
     modelRotationX(0.0f),
     modelRotationY(0.0f),
     modelRotationZ(0.0f),
@@ -207,8 +201,9 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
   threadErrMsg.resize(size_t(threadCnt));
   viewOffsetY.resize(size_t(threadCnt + 1), 0);
   threadFileBuffers.resize(size_t(threadCnt));
-  clearMaterialSwaps();
   setDefaultTextures();
+  getWaterMaterial(waterMaterials, *esmFile, (ESMFile::ESMRecord *) 0,
+                   defaultWaterColor, true);
   try
   {
     for (size_t i = 0; i < renderers.size(); i++)
@@ -259,7 +254,7 @@ void NIF_View::loadModel(const std::string& fileName, int l)
     return;
   std::vector< unsigned char >& fileBuf = threadFileBuffers[0];
   ba2File.extractFile(fileBuf, fileName);
-  nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), ba2File, l);
+  nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), ba2File, &materials, l);
   try
   {
     nifFile->getMesh(meshData);
@@ -345,7 +340,7 @@ void NIF_View::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
     for (size_t i = 0; i < meshData.size(); i++)
     {
       // ignore if hidden
-      if (!(meshData[i].m.flags & BGSMFile::Flag_TSHidden))
+      if (!(meshData[i].flags & NIFFile::NIFTriShape::Flag_TSHidden))
         meshData[i].calculateBounds(b, &t);
     }
     float   xScale = float(imageWidth) * 0.96875f;
@@ -391,35 +386,6 @@ void NIF_View::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
     }
     throw;
   }
-}
-
-void NIF_View::addMaterialSwap(unsigned int formID)
-{
-  if (!(formID & 0x80000000U))
-  {
-    unsigned int  n = formID;
-    formID = 0U;
-    if (n && esmFile)
-      formID = materialSwaps.loadMaterialSwap(ba2File, *esmFile, n);
-  }
-  if (!formID)
-    return;
-  size_t  i;
-  for (i = 0; i < (sizeof(materialSwapTable) / sizeof(unsigned int)); i++)
-  {
-    if (!materialSwapTable[i])
-    {
-      materialSwapTable[i] = formID;
-      break;
-    }
-  }
-}
-
-void NIF_View::clearMaterialSwaps()
-{
-  size_t  i;
-  for (i = 0; i < (sizeof(materialSwapTable) / sizeof(unsigned int)); i++)
-    materialSwapTable[i] = 0U;
 }
 
 void NIF_View::setWaterColor(unsigned int watrFormID)
@@ -576,8 +542,6 @@ static bool viewModelInfo(SDLDisplay& display, const NIFFile& nifFile)
     const NIFFile::NIFBlkBSTriShape *triShapeBlock = nifFile.getTriShape(i);
     const NIFFile::NIFBlkBSLightingShaderProperty *
         lspBlock = nifFile.getLightingShaderProperty(i);
-    const NIFFile::NIFBlkBSShaderTextureSet *
-        tsBlock = nifFile.getShaderTextureSet(i);
     const NIFFile::NIFBlkNiAlphaProperty *
         alphaPropertyBlock = nifFile.getAlphaProperty(i);
     if (nodeBlock)
@@ -639,108 +603,20 @@ static bool viewModelInfo(SDLDisplay& display, const NIFFile& nifFile)
     {
       if (lspBlock->controller >= 0)
         display.consolePrint("    Controller: %3d\n", lspBlock->controller);
-      if (lspBlock->material.version < 20)
+      if (lspBlock->material)
       {
-        display.consolePrint("    Flags: 0x%016llX\n",
-                             (unsigned long long) lspBlock->flags);
-      }
-      if (lspBlock->textureSet >= 0)
-        display.consolePrint("    Texture set: %3d\n", lspBlock->textureSet);
-      display.consolePrint("    Material version: %2u\n",
-                           (unsigned int) lspBlock->material.version);
-      display.consolePrint("    Material flags (defined in bgsmfile.hpp): "
-                           "0x%04X\n", (unsigned int) lspBlock->material.flags);
-      display.consolePrint("    Material alpha flags: 0x%04X\n",
-                           (unsigned int) lspBlock->material.alphaFlags);
-      display.consolePrint("    Material alpha threshold: %3u (%.3f)\n",
-                           (unsigned int) lspBlock->material.alphaThreshold,
-                           lspBlock->material.alphaThresholdFloat);
-      display.consolePrint("    Material alpha: %.3f\n",
-                           lspBlock->material.alpha);
-      display.consolePrint("    Material texture U, V offset: %.3f, %.3f\n",
-                           lspBlock->material.textureOffsetU,
-                           lspBlock->material.textureOffsetV);
-      display.consolePrint("    Material texture U, V scale: %.3f, %.3f\n",
-                           lspBlock->material.textureScaleU,
-                           lspBlock->material.textureScaleV);
-      if (lspBlock->material.flags & BGSMFile::Flag_TSWater)
-      {
-        unsigned int  shallowColor =
-            std::uint32_t(lspBlock->material.w.shallowColor * 255.0f);
-        unsigned int  deepColor =
-            std::uint32_t(lspBlock->material.w.deepColor * 255.0f);
-        display.consolePrint("    Water shallow color (0xAABBGGRR): 0x%08X\n",
-                             shallowColor);
-        display.consolePrint("    Water deep color (0xAABBGGRR): 0x%08X\n",
-                             deepColor);
-        display.consolePrint("    Water depth range: %.3f\n",
-                             lspBlock->material.w.maxDepth);
-        display.consolePrint("    Water environment map scale: %.3f\n",
-                             lspBlock->material.w.envMapScale);
-        display.consolePrint("    Water specular smoothness: %.3f\n",
-                             lspBlock->material.w.specularSmoothness);
-      }
-      else if (lspBlock->material.flags & BGSMFile::Flag_IsEffect)
-      {
-        unsigned int  baseColor =
-            std::uint32_t(lspBlock->material.e.baseColor * 255.0f);
-        display.consolePrint("    Effect base color (0xAABBGGRR): 0x%08X\n",
-                             baseColor);
-        display.consolePrint("    Effect base color scale: %.3f\n",
-                             lspBlock->material.e.baseColorScale);
-        display.consolePrint("    Effect lighting influence: %.3f\n",
-                             lspBlock->material.e.lightingInfluence);
-        display.consolePrint("    Effect environment map scale: %.3f\n",
-                             lspBlock->material.e.envMapScale);
-        display.consolePrint("    Effect specular smoothness: %.3f\n",
-                             lspBlock->material.e.specularSmoothness);
-        display.consolePrint("    Effect falloff parameters: "
-                             "%.3f, %.3f, %.3f, %.3f\n",
-                             lspBlock->material.e.falloffParams[0],
-                             lspBlock->material.e.falloffParams[1],
-                             lspBlock->material.e.falloffParams[2],
-                             lspBlock->material.e.falloffParams[3]);
-      }
-      else
-      {
-        display.consolePrint("    Material gradient map scale: %.3f\n",
-                             lspBlock->material.s.gradientMapV);
-        display.consolePrint("    Material environment map scale: %.3f\n",
-                             lspBlock->material.s.envMapScale);
-        unsigned int  specularColor =
-            std::uint32_t(lspBlock->material.s.specularColor * 255.0f);
-        unsigned int  emissiveColor =
-            std::uint32_t(lspBlock->material.s.emissiveColor * 255.0f);
-        display.consolePrint("    Material specular color (0xBBGGRR): 0x%06X\n",
-                             specularColor & 0x00FFFFFFU);
-        display.consolePrint("    Material specular scale: %.3f\n",
-                             lspBlock->material.s.specularColor[3]);
-        display.consolePrint("    Material specular smoothness: %.3f\n",
-                             lspBlock->material.s.specularSmoothness);
-        display.consolePrint("    Material emissive color (0xBBGGRR): 0x%06X\n",
-                             emissiveColor & 0x00FFFFFFU);
-        display.consolePrint("    Material emissive scale: %.3f\n",
-                             lspBlock->material.s.emissiveColor[3]);
-      }
-      unsigned int  m = lspBlock->material.texturePathMask;
-      for (size_t j = 0; m; j++, m = m >> 1)
-      {
-        if (!(m & 1U))
-          continue;
-        display.consolePrint(
-            "    Material texture %d: %s\n",
-            int(j), lspBlock->material.texturePaths[j].c_str());
-      }
-    }
-    else if (tsBlock)
-    {
-      unsigned int  m = tsBlock->texturePathMask;
-      for (size_t j = 0; m; j++, m = m >> 1)
-      {
-        if (!(m & 1U))
-          continue;
-        display.consolePrint("    Texture %2d: %s\n",
-                             int(j), tsBlock->texturePaths[j].c_str());
+        std::string tmpBuf("    MaterialFile ");
+        lspBlock->material->printObjectInfo(tmpBuf, 4, false);
+        std::string lineBuf;
+        for (size_t j = 0; j < tmpBuf.length(); )
+        {
+          size_t  n = tmpBuf.find('\n', j);
+          if (n == std::string::npos)
+            n = tmpBuf.length();
+          lineBuf.assign(tmpBuf, j, n - j);
+          j = n + 1;
+          display.consolePrint("%s\n", lineBuf.c_str());
+        }
       }
     }
     else if (alphaPropertyBlock)

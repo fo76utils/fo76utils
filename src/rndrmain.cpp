@@ -23,6 +23,7 @@ static const char *usageStrings[] =
   "    -ssaa INT           render at 2^N resolution and downsample",
   "    -f INT              output format, 0: RGB24, 1: A8R8G8B8, 2: RGB10A2",
   "    -rq INT             set render quality (0 - 2047, see doc/render.md)",
+  "    -cdb FILENAME       set material database file name(s)",
   "    -watermask BOOL     make non-water surfaces transparent or black",
   "    -q                  do not print messages other than errors",
   "",
@@ -76,7 +77,6 @@ int main(int argc, char **argv)
     bool    distantObjectsOnly = false;
     bool    noDisabledObjects = true;
     unsigned char ssaaLevel = 0;
-    bool    enableSCOL = false;
     bool    enableAllObjects = false;
     bool    enableTextures = true;
     unsigned char debugMode = 0;
@@ -87,7 +87,6 @@ int main(int argc, char **argv)
     int     terrainY0 = -32768;
     int     terrainX1 = 32767;
     int     terrainY1 = 32767;
-    unsigned int  defTxtID = 0U;
     std::uint32_t ltxtDefColor = 0x003F3F3FU;
     int     ltxtResolution = 128;
     int     textureMip = 2;
@@ -119,7 +118,8 @@ int main(int argc, char **argv)
     unsigned short  renderQuality = 0;
     bool    waterMaskMode = false;
     const char  *defaultEnvMap = "textures/cubemaps/cell_spacecube.dds";
-    const char  *waterTexture = "textures/water/defaultwater_normal.dds";
+    const char  *waterTexture = "textures/water/wavesdefault_normal.dds";
+    const char  *materialDBPath = (char *) 0;
     std::vector< const char * > hdModelNamePatterns;
     std::vector< const char * > excludeModelPatterns;
     float   d = float(std::atan(1.0) / 45.0);   // degrees to radians
@@ -144,7 +144,6 @@ int main(int argc, char **argv)
         if (!threadCnt)
           std::printf(" (uses default: %d)", Renderer::getDefaultThreadCount());
         std::printf("\n-debug %d\n", int(debugMode));
-        std::printf("-scol %d\n", int(enableSCOL));
         std::printf("-textures %d\n", int(enableTextures));
         std::printf("-txtcache %u\n", textureCacheSize);
         std::printf("-mc %u\n", (unsigned int) modelBatchCnt);
@@ -158,7 +157,6 @@ int main(int argc, char **argv)
         std::printf("\n-r %d %d %d %d\n",
                     terrainX0, terrainY0, terrainX1, terrainY1);
         std::printf("-l %d\n", btdLOD);
-        std::printf("-deftxt 0x%08X\n", defTxtID);
         std::printf("-defclr 0x%08X\n", (unsigned int) ltxtDefColor);
         std::printf("-ltxtres %d\n", ltxtResolution);
         std::printf("-mip %d\n", textureMip);
@@ -224,13 +222,6 @@ int main(int argc, char **argv)
         debugMode = (unsigned char) parseInteger(argv[i], 10,
                                                  "invalid debug mode", 0, 5);
       }
-      else if (std::strcmp(argv[i], "-scol") == 0)
-      {
-        if (++i >= argc)
-          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        enableSCOL =
-            bool(parseInteger(argv[i], 0, "invalid argument for -scol", 0, 1));
-      }
       else if (std::strcmp(argv[i], "-a") == 0)
       {
         enableAllObjects = true;
@@ -284,6 +275,12 @@ int main(int argc, char **argv)
             (unsigned short) parseInteger(argv[i], 0,
                                           "invalid render quality", 0, 2047);
       }
+      else if (std::strcmp(argv[i], "-cdb") == 0)
+      {
+        if (++i >= argc)
+          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
+        materialDBPath = argv[i];
+      }
       else if (std::strcmp(argv[i], "-watermask") == 0)
       {
         if (++i >= argc)
@@ -329,13 +326,6 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         btdLOD = int(parseInteger(argv[i], 10,
                                   "invalid terrain level of detail", 0, 4));
-      }
-      else if (std::strcmp(argv[i], "-deftxt") == 0)
-      {
-        if (++i >= argc)
-          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        defTxtID = (unsigned int) parseInteger(argv[i], 0, "invalid form ID",
-                                               0, 0x0FFFFFFF);
       }
       else if (std::strcmp(argv[i], "-defclr") == 0)
       {
@@ -602,14 +592,13 @@ int main(int argc, char **argv)
       zMax = (zMax < 16777216 ? zMax : 16777216);
     }
 
-    Renderer  renderer(width, height, ba2File, esmFile,
+    Renderer  renderer(width, height, ba2File, esmFile, materialDBPath,
                        (std::uint32_t *) 0, (float *) 0, zMax);
     renderer.setThreadCount(threadCnt);
     renderer.setTextureCacheSize(std::uint64_t(textureCacheSize) << 20);
     renderer.setModelCacheSize(modelBatchCnt);
     renderer.setDistantObjectsOnly(distantObjectsOnly);
     renderer.setNoDisabledObjects(noDisabledObjects);
-    renderer.setEnableSCOL(enableSCOL);
     renderer.setEnableAllObjects(enableAllObjects);
     renderer.setRenderQuality(renderQuality);
     renderer.setEnableTextures(enableTextures);
@@ -621,6 +610,7 @@ int main(int argc, char **argv)
     renderer.setLandTxtRGBScale(landTextureMult);
     renderer.setModelLOD(modelLOD);
     renderer.setWaterColor(waterColor);
+    renderer.setWaterUVScale(1.0f / float(waterUVScale));
     renderer.setWaterEnvMapScale(waterReflectionLevel);
     renderer.setViewTransform(
         viewScale, viewRotationX * d, viewRotationY * d, viewRotationZ * d,
@@ -632,7 +622,7 @@ int main(int argc, char **argv)
       renderer.setWaterTexture(std::string(waterTexture));
     renderer.setRenderParameters(
         lightColor, ambientColor, envColor, lightLevel, envLevel, rgbScale,
-        reflZScale, waterUVScale);
+        reflZScale);
 
     for (size_t i = 0; i < hdModelNamePatterns.size(); i++)
     {
@@ -650,7 +640,7 @@ int main(int argc, char **argv)
     {
       if (verboseMode)
         std::fprintf(stderr, "Loading terrain data and landscape textures\n");
-      renderer.loadTerrain(btdPath, worldID, defTxtID,
+      renderer.loadTerrain(btdPath, worldID,
                            btdLOD, terrainX0, terrainY0, terrainX1, terrainY1);
       renderPass = 0;
     }

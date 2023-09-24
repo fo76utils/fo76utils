@@ -7,7 +7,7 @@
 #include "ba2file.hpp"
 #include "esmfile.hpp"
 #include "ddstxt.hpp"
-#include "bgsmfile.hpp"
+#include "material.hpp"
 #include "nif_file.hpp"
 #include "plot3d.hpp"
 
@@ -63,15 +63,6 @@ struct Renderer_Base
     void shrinkTextureCache();
     void clear();
   };
-  struct MaterialSwaps
-  {
-    // materialSwaps[formID][materialPath] = replacement material
-    std::map< unsigned int, std::map< std::string, BGSMFile > >
-        materialSwaps;
-    unsigned int loadMaterialSwap(const BA2File& ba2File,
-                                  ESMFile& esmFile, unsigned int formID);
-    void materialSwap(Plot3D_TriShape& t, unsigned int formID) const;
-  };
   struct TriShapeSortObject
   {
     std::uint64_t n;
@@ -109,13 +100,38 @@ struct Renderer_Base
         std::vector< TriShapeSortObject >& sortBuf,
         const std::vector< NIFFile::NIFTriShape >& meshData);
   };
-  // Store water parameters in 'm', and return the form ID of the WATR record
-  // associated with 'r'. On error, 0 is returned and the material is
-  // initialized using the default color.
+  struct WaterProperties
+  {
+    std::uint32_t deepColor;
+    float   normalScale;
+    float   reflectivity;
+    float   specularScale;
+    FloatVector4  alphaDepth0;
+    FloatVector4  depthMult;
+    std::string texturePath;
+  };
+  // returns key to 'm' where the material properties have been stored
   static unsigned int getWaterMaterial(
-      std::map< unsigned int, BGSMFile >& m,
+      std::map< unsigned int, WaterProperties >& m,
       ESMFile& esmFile, const ESMFile::ESMRecord *r,
       unsigned int defaultColor, bool storeAsDefault = false);
+  static inline const CE2Material::TextureSet *
+      findTextureSet(const CE2Material *m)
+  {
+    if (BRANCH_LIKELY(m))
+    {
+      for (unsigned int i = 0U; i < CE2Material::maxLayers; i++)
+      {
+        if (BRANCH_LIKELY(m->layerMask & (1U << i)))
+        {
+          const CE2Material::Layer  *layer = m->layers[i];
+          if (layer && layer->material)
+            return layer->material->textureSet;
+        }
+      }
+    }
+    return (CE2Material::TextureSet *) 0;
+  }
   static inline std::uint32_t bgraToRGBA(std::uint32_t c)
   {
     return ((c & 0xFF00FF00U) | ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU));

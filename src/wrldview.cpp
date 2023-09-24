@@ -17,45 +17,44 @@ static const char *cmdOptsTable[] =
   "5cam",               //  1
   "1debug",             //  2
   "1defclr",            //  3
-  "1deftxt",            //  4
-  "1env",               //  5
-  "1ft",                //  6
-  "0h",                 //  7
-  "0help",              //  8
-  "1l",                 //  9
-  "5lcolor",            // 10
-  "3light",             // 11
-  "0list",              // 12
-  "0list-defaults",     // 13
-  "1lmult",             // 14
-  "1ltxtres",           // 15
-  "1markers",           // 16
-  "1mc",                // 17
-  "1minscale",          // 18
-  "1mip",               // 19
-  "1mlod",              // 20
-  "1ndis",              // 21
-  "4r",                 // 22
-  "1rq",                // 23
-  "1rscale",            // 24
-  "1tc",                // 25
-  "1textures",          // 26
-  "1threads",           // 27
-  "1txtcache",          // 28
-  "1vis",               // 29
-  "1w",                 // 30
-  "1watercolor",        // 31
-  "1wrefl",             // 32
-  "1wscale",            // 33
-  "1wtxt",              // 34
-  "1xm",                // 35
-  "0xm_clear",          // 36
-  "1zrange"             // 37
+  "1env",               //  4
+  "1ft",                //  5
+  "0h",                 //  6
+  "0help",              //  7
+  "1l",                 //  8
+  "5lcolor",            //  9
+  "3light",             // 10
+  "0list",              // 11
+  "0list-defaults",     // 12
+  "1lmult",             // 13
+  "1ltxtres",           // 14
+  "1markers",           // 15
+  "1mc",                // 16
+  "1minscale",          // 17
+  "1mip",               // 18
+  "1mlod",              // 19
+  "1ndis",              // 20
+  "4r",                 // 21
+  "1rq",                // 22
+  "1rscale",            // 23
+  "1tc",                // 24
+  "1textures",          // 25
+  "1threads",           // 26
+  "1txtcache",          // 27
+  "1vis",               // 28
+  "1w",                 // 29
+  "1watercolor",        // 30
+  "1wrefl",             // 31
+  "1wscale",            // 32
+  "1wtxt",              // 33
+  "1xm",                // 34
+  "0xm_clear",          // 35
+  "1zrange"             // 36
 };
 
 static const char *usageStrings[] =
 {
-  "Usage: wrldview INFILE.ESM[,...] W H ARCHIVEPATH [OPTIONS...]",
+  "Usage: wrldview INFILE.ESM[,...] W H ARCHIVEPATH MATCDBPATH [OPTIONS...]",
   "",
   "Options:",
   "    --help | -h         print usage",
@@ -215,7 +214,6 @@ struct WorldSpaceViewer
   std::int16_t  terrainY0;
   std::int16_t  terrainX1;
   std::int16_t  terrainY1;
-  unsigned int  defTxtID;
   std::uint32_t ltxtDefColor;
   int     ltxtMaxResolution;
   int     textureMip;
@@ -265,6 +263,7 @@ struct WorldSpaceViewer
   const char  *dataPath;
   std::vector< char > tmpBuf;
   WorldSpaceViewer(int w, int h, const char *esmFiles, const char *archivePath,
+                   const char *materialDBPath,
                    int argc, const char * const *argv);
   virtual ~WorldSpaceViewer();
   void setViewTransform();
@@ -284,7 +283,7 @@ struct WorldSpaceViewer
 
 WorldSpaceViewer::WorldSpaceViewer(
     int w, int h, const char *esmFiles, const char *archivePath,
-    int argc, const char * const *argv)
+    const char *materialDBPath, int argc, const char * const *argv)
   : renderer((Renderer *) 0),
     threadCnt(0),
     modelBatchCnt(16),
@@ -300,7 +299,6 @@ WorldSpaceViewer::WorldSpaceViewer(
     terrainY0(-32768),
     terrainX1(32767),
     terrainY1(32767),
-    defTxtID(0U),
     ltxtDefColor(0x003F3F3FU),
     ltxtMaxResolution(2048),
     textureMip(2),
@@ -331,7 +329,7 @@ WorldSpaceViewer::WorldSpaceViewer(
     waterUVScale(31),
     objectsMinScale(3.0f),
     defaultEnvMap("textures/cubemaps/cell_spacecube.dds"),
-    waterTexture("textures/water/defaultwater_normal.dds"),
+    waterTexture("textures/water/wavesdefault_normal.dds"),
     ba2File(archivePath),
     esmFile(esmFiles),
     display(w, h, "World space viewer", 4U,
@@ -348,13 +346,12 @@ WorldSpaceViewer::WorldSpaceViewer(
   height = display.getHeight();
   imageDataSize = size_t(width) * size_t(height);
   imageBuf.resize(imageDataSize, 0U);
-  renderer = new Renderer(width, height, ba2File, esmFile, imageBuf.data());
+  renderer = new Renderer(width, height, ba2File, esmFile, materialDBPath,
+                          imageBuf.data());
   try
   {
-    if (esmFile.getESMVersion() < 0xC0U)
-      btdLOD = 2;
     if (!formID)
-      formID = (esmFile.getESMVersion() < 0xC0U ? 0x0000003CU : 0x0025DA15U);
+      formID = 0x0001251BU;
     worldID = Renderer::findParentWorld(esmFile, formID);
     if (worldID == 0xFFFFFFFFU)
     {
@@ -444,12 +441,9 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
     switch (n0)
     {
       case 0:                   // "btd"
-        if (esmFile.getESMVersion() >= 0xC0U)
-        {
-          btdPath = argv[i + 1];
-          renderer->clear();
-          redrawWorldFlag = true;
-        }
+        btdPath = argv[i + 1];
+        renderer->clear();
+        redrawWorldFlag = true;
         break;
       case 1:                   // "cam"
         viewScale = float(parseFloat(argv[i + 1], "invalid view scale",
@@ -497,25 +491,18 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
                                        0, 0x00FFFFFF));
         redrawWorldFlag = true;
         break;
-      case 4:                   // "deftxt"
-        defTxtID =
-            (unsigned int) parseInteger(argv[i + 1], 0,
-                                        "invalid form ID", 0, 0x0FFFFFFF);
-        renderer->clear();
-        redrawWorldFlag = true;
-        break;
-      case 5:                   // "env"
+      case 4:                   // "env"
         defaultEnvMap = argv[i + 1];
         renderer->setDefaultEnvMap(defaultEnvMap);
         redrawWorldFlag = true;
         break;
-      case 6:                   // "ft"
+      case 5:                   // "ft"
         frameTimeMin =
             std::uint16_t(parseInteger(argv[i + 1], 10,
                                        "invalid frame time", 10, 10000));
         break;
-      case 7:                   // "h"
-      case 8:                   // "help"
+      case 6:                   // "h"
+      case 7:                   // "help"
         for (size_t j = 0; usageStrings[j]; j++)
           display.consolePrint("%s\n", usageStrings[j]);
         if (cmdBuf.empty())
@@ -525,20 +512,13 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           return;
         }
         break;
-      case 9:                   // "l"
+      case 8:                   // "l"
         btdLOD = int(parseInteger(argv[i + 1], 10,
                                   "invalid terrain level of detail", 0, 4));
-        if (esmFile.getESMVersion() < 0xC0U)
-        {
-          btdLOD = 2;
-        }
-        else
-        {
-          renderer->clear();
-          redrawWorldFlag = true;
-        }
+        renderer->clear();
+        redrawWorldFlag = true;
         break;
-      case 10:                  // "lcolor"
+      case 9:                   // "lcolor"
         lightLevel = float(parseFloat(argv[i + 1], "invalid light source level",
                                       0.125, 4.0));
         lightColor = int(parseInteger(argv[i + 2], 0,
@@ -554,7 +534,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
                                         -1, 0x00FFFFFF));
         redrawWorldFlag = true;
         break;
-      case 11:                  // "light"
+      case 10:                  // "light"
         rgbScale = float(parseFloat(argv[i + 1], "invalid RGB scale",
                                     0.125, 4.0));
         lightRotationY = float(parseFloat(argv[i + 2],
@@ -565,8 +545,8 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
                                           -360.0, 360.0));
         redrawWorldFlag = true;
         break;
-      case 12:                  // "list"
-      case 13:                  // "list-defaults"
+      case 11:                  // "list"
+      case 12:                  // "list-defaults"
         display.consolePrint("threads: %u", (unsigned int) threadCnt);
         if (!threadCnt)
         {
@@ -588,7 +568,6 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
                              int(terrainX0), int(terrainY0),
                              int(terrainX1), int(terrainY1));
         display.consolePrint("l: %d\n", btdLOD);
-        display.consolePrint("deftxt: 0x%08X\n", defTxtID);
         display.consolePrint("defclr: 0x%08X\n", (unsigned int) ltxtDefColor);
         display.consolePrint("ltxtres: %d\n", ltxtMaxResolution);
         display.consolePrint("mip: %d\n", textureMip);
@@ -647,13 +626,13 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           return;
         }
         break;
-      case 14:                  // "lmult"
+      case 13:                  // "lmult"
         landTextureMult = float(parseFloat(argv[i + 1],
                                            "invalid land texture RGB scale",
                                            0.5, 8.0));
         redrawWorldFlag = true;
         break;
-      case 15:                  // "ltxtres"
+      case 14:                  // "ltxtres"
         ltxtMaxResolution =
             int(parseInteger(argv[i + 1], 0,
                              "invalid land texture resolution", 32, 4096));
@@ -661,39 +640,39 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           errorMessage("invalid land texture resolution");
         redrawWorldFlag = true;
         break;
-      case 16:                  // "markers"
+      case 15:                  // "markers"
         markerDefsFileName = argv[i + 1];
         redrawWorldFlag = true;
         break;
-      case 17:                  // "mc"
+      case 16:                  // "mc"
         modelBatchCnt =
             (unsigned char) parseInteger(argv[i + 1], 0,
                                          "invalid model cache size", 1, 64);
         redrawWorldFlag = true;
         break;
-      case 18:                  // "minscale"
+      case 17:                  // "minscale"
         objectsMinScale = float(parseFloat(argv[i + 1], "invalid view scale",
                                            1.0f / 8.0f, 1024.0f));
         redrawWorldFlag = true;
         break;
-      case 19:                  // "mip"
+      case 18:                  // "mip"
         textureMip = int(parseInteger(argv[i + 1], 10,
                                       "invalid texture mip level", 0, 15));
         renderer->clearTextureCache();
         redrawWorldFlag = true;
         break;
-      case 20:                  // "mlod"
+      case 19:                  // "mlod"
         modelLOD = int(parseInteger(argv[i + 1], 10,
                                     "invalid model LOD", 0, 4));
         redrawWorldFlag = true;
         break;
-      case 21:                  // "ndis"
+      case 20:                  // "ndis"
         noDisabledObjects =
             bool(parseInteger(argv[i + 1], 0,
                               "invalid argument for -ndis", 0, 1));
         redrawWorldFlag = true;
         break;
-      case 22:                  // "r"
+      case 21:                  // "r"
         terrainX0 =
             std::int16_t(parseInteger(argv[i + 1], 10,
                                       "invalid terrain X0", -32768, 32767));
@@ -709,18 +688,18 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         renderer->clear();
         redrawWorldFlag = true;
         break;
-      case 23:                  // "rq"
+      case 22:                  // "rq"
         {
           std::uint16_t tmp = renderQuality;
           renderQuality =
               std::uint16_t(parseInteger(argv[i + 1], 0,
                                          "invalid render quality", 0, 2047));
-          if ((tmp ^ renderQuality) & 0x73)
+          if ((tmp ^ renderQuality) & 0x72)
             renderer->clearObjectPropertyCache();
         }
         redrawWorldFlag = true;
         break;
-      case 24:                  // "rscale"
+      case 23:                  // "rscale"
         reflZScale =
             float(parseFloat(argv[i + 1],
                              "invalid reflection view vector Z scale",
@@ -728,45 +707,42 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         redrawWorldFlag = true;
         break;
 #if 0
-      case 25:                  // "tc"
+      case 24:                  // "tc"
         break;
 #endif
-      case 26:                  // "textures"
+      case 25:                  // "textures"
         enableTextures =
             bool(parseInteger(argv[i + 1], 0,
                               "invalid argument for -textures", 0, 1));
         redrawWorldFlag = true;
         break;
-      case 27:                  // "threads"
+      case 26:                  // "threads"
         threadCnt =
             (unsigned char) parseInteger(argv[i + 1], 10,
                                          "invalid number of threads", 0, 16);
         redrawWorldFlag = true;
         break;
-      case 25:                  // "tc"
-      case 28:                  // "txtcache"
+      case 24:                  // "tc"
+      case 27:                  // "txtcache"
         textureCacheSize =
             (unsigned int) parseInteger(argv[i + 1], 0,
                                         "invalid texture cache size",
                                         256, 65535);
         renderer->setTextureCacheSize(std::uint64_t(textureCacheSize) << 20);
         break;
-      case 29:                  // "vis"
+      case 28:                  // "vis"
         distantObjectsOnly =
             bool(parseInteger(argv[i + 1], 0,
                               "invalid argument for -vis", 0, 1));
         redrawWorldFlag = true;
         break;
-      case 30:                  // "w"
+      case 29:                  // "w"
         {
           unsigned int  tmp1, tmp2;
           tmp1 = (unsigned int) parseInteger(argv[i + 1], 0,
                                              "invalid form ID", 0, 0x0FFFFFFF);
           if (!tmp1)
-          {
-            tmp1 = (esmFile.getESMVersion() < 0xC0U ?
-                    0x0000003CU : 0x0025DA15U);
-          }
+            tmp1 = 0x0001251BU;
           tmp2 = Renderer::findParentWorld(esmFile, tmp1);
           if (tmp2 == 0xFFFFFFFFU)
             errorMessage("form ID not found in ESM, or invalid record type");
@@ -776,7 +752,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
         renderer->clear();
         redrawWorldFlag = true;
         break;
-      case 31:                  // "watercolor"
+      case 30:                  // "watercolor"
         {
           std::uint32_t tmp =
               std::uint32_t(parseInteger(argv[i + 1], 0, "invalid water color",
@@ -790,24 +766,24 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           redrawWorldFlag = true;
         }
         break;
-      case 32:                  // "wrefl"
+      case 31:                  // "wrefl"
         waterReflectionLevel =
             float(parseFloat(argv[i + 1],
                              "invalid water environment map scale", 0.0, 4.0));
         redrawWorldFlag = true;
         break;
-      case 33:                  // "wscale"
+      case 32:                  // "wscale"
         waterUVScale =
             int(parseInteger(argv[i + 1], 0,
                              "invalid water texture tile size", 1, 800));
         redrawWorldFlag = true;
         break;
-      case 34:                  // "wtxt"
+      case 33:                  // "wtxt"
         waterTexture = argv[i + 1];
         renderer->setWaterTexture(waterTexture);
         redrawWorldFlag = true;
         break;
-      case 35:                  // "xm"
+      case 34:                  // "xm"
         if (argv[i + 1][0])
         {
           excludeModelPatterns.push_back(std::string(argv[i + 1]));
@@ -816,7 +792,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           redrawWorldFlag = true;
         }
         break;
-      case 36:                  // "xm_clear"
+      case 35:                  // "xm_clear"
         if (excludeModelPatterns.size() > 0)
         {
           excludeModelPatterns.clear();
@@ -825,7 +801,7 @@ void WorldSpaceViewer::setRenderParams(int argc, const char * const *argv)
           redrawWorldFlag = true;
         }
         break;
-      case 37:                  // "zrange"
+      case 36:                  // "zrange"
         zMax = float(parseFloat(argv[i + 1],
                                 "invalid Z range", 1.0, 16777216.0));
         redrawWorldFlag = true;
@@ -897,8 +873,8 @@ void WorldSpaceViewer::updateDisplay()
     renderer->setLandTxtRGBScale(landTextureMult);
     renderer->setModelLOD(modelLOD);
     renderer->setWaterColor(waterColor);
+    renderer->setWaterUVScale(1.0f / float(waterUVScale));
     renderer->setWaterEnvMapScale(waterReflectionLevel);
-    renderer->setEnableSCOL(false);
     renderer->setEnableAllObjects(false);
     renderer->setRenderQuality(renderQuality);
     renderer->setDebugMode(debugMode);
@@ -906,7 +882,7 @@ void WorldSpaceViewer::updateDisplay()
     renderer->setLightDirection(lightRotationY * d, lightRotationZ * d);
     renderer->setRenderParameters(
         lightColor, ambientColor, envColor, lightLevel, envLevel,
-        rgbScale, reflZScale, waterUVScale);
+        rgbScale, reflZScale);
     if (worldID)
     {
       display.consolePrint("Loading terrain data and landscape textures\n");
@@ -920,12 +896,11 @@ void WorldSpaceViewer::updateDisplay()
       ltxtResolution = std::max(ltxtResolution, 128 >> btdLOD);
       renderer->setLandTxtResolution(ltxtResolution);
       int     ltxtMip =
-          (esmFile.getESMVersion() < 0x80U ? 14 : 15)
-          - (textureMip + int(std::bit_width((unsigned int) ltxtResolution)));
-      ltxtMip = std::max(std::min(ltxtMip, 15 - textureMip), 0);
+          textureMip + int(std::bit_width((unsigned int) ltxtResolution));
+      ltxtMip = std::max(std::min(15 - ltxtMip, 15 - textureMip), 0);
       renderer->setLandTextureMip(float(ltxtMip));
       renderer->loadTerrain((btdPath.empty() ? dataPath : btdPath.c_str()),
-                            worldID, defTxtID, btdLOD,
+                            worldID, btdLOD,
                             terrainX0, terrainY0, terrainX1, terrainY1);
       display.consolePrint("Rendering terrain\n");
       renderer->initRenderPass(0, worldID);
@@ -1610,7 +1585,7 @@ int main(int argc, char **argv)
       for ( ; n > 0; i++, n--)
         args2.push_back(argv[i + 1]);
     }
-    if (args.size() != 4)
+    if (args.size() != 5)
     {
       SDLDisplay::enableConsole();
       for (size_t i = 0; usageStrings[i]; i++)
@@ -1622,7 +1597,7 @@ int main(int argc, char **argv)
         int(parseInteger(args[1], 0, "invalid image width", 640, 16384));
     int     height =
         int(parseInteger(args[2], 0, "invalid image height", 360, 16384));
-    wrldView = new WorldSpaceViewer(width, height, args[0], args[3],
+    wrldView = new WorldSpaceViewer(width, height, args[0], args[3], args[4],
                                     int(args2.size()), args2.data());
     while (!wrldView->quitFlag)
     {

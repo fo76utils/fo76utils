@@ -4,7 +4,7 @@
 
 #include "common.hpp"
 #include "ba2file.hpp"
-#include "bgsmfile.hpp"
+#include "material.hpp"
 #include "nif_file.hpp"
 #include "ddstxt.hpp"
 #include "plot3d.hpp"
@@ -30,12 +30,10 @@ class NIF_View : protected Renderer_Base
   NIFFile *nifFile;
   NIFFile::NIFVertexTransform modelTransform;
   NIFFile::NIFVertexTransform viewTransform;
-  // MSWP form ID or (unsigned int) -1 - (gradientMapV * 16777216.0)
-  unsigned int  materialSwapTable[8];
-  MaterialSwaps materialSwaps;
   DDSTexture  defaultTexture;
   std::string defaultEnvMap;
   std::string waterTexture;
+  CE2MaterialDB materials;
   static void threadFunction(NIF_View *p, size_t n);
   const DDSTexture *loadTexture(const std::string& texturePath,
                                 size_t threadNum = 0);
@@ -53,19 +51,21 @@ class NIF_View : protected Renderer_Base
   unsigned int  waterFormID;
   int     defaultEnvMapNum;     // 0 to 7
   int     debugMode;            // 0 to 5
-  std::map< unsigned int, BGSMFile >  waterMaterials;
-  NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr = (ESMFile *) 0);
+  std::map< unsigned int, WaterProperties > waterMaterials;
+  NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr = (ESMFile *) 0,
+           const char *materialDBPath = (char *) 0);
   virtual ~NIF_View();
   void loadModel(const std::string& fileName, int l = 0);
   void renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
                    int imageWidth, int imageHeight);
-  void addMaterialSwap(unsigned int formID);
-  inline void addColorSwap(float gradientMapV)
+  void addMaterialSwap(unsigned int formID)
   {
-    float   tmp = std::min(std::max(gradientMapV, 0.0f), 1.0f) * 16777216.0f;
-    addMaterialSwap(~((unsigned int) roundFloat(tmp)));
+    // TODO: implement material swapping
+    (void) formID;
   }
-  void clearMaterialSwaps();
+  void clearMaterialSwaps()
+  {
+  }
   void setWaterColor(unsigned int watrFormID);
   void renderModelToFile(const char *outFileName,
                          int imageWidth, int imageHeight);

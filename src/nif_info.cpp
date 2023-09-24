@@ -10,15 +10,6 @@
 #include <algorithm>
 #include <ctime>
 
-static const char *materialFlagNames[32] =
-{
-  "tile U", "tile V", "is effect", "decal", "two sided", "tree",
-  "grayscale to alpha", "glow", "no Z buffer write", "falloff enabled",
-  "effect lighting", "ordered with previous", "alpha blending",
-  "has vertex colors", "is water", "hidden",
-  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
-};
-
 static void printAuthorName(std::FILE *f,
                             const std::vector< unsigned char >& fileBuf,
                             const char *nifFileName)
@@ -79,8 +70,6 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile,
     const NIFFile::NIFBlkBSTriShape *triShapeBlock = nifFile.getTriShape(i);
     const NIFFile::NIFBlkBSLightingShaderProperty *
         lspBlock = nifFile.getLightingShaderProperty(i);
-    const NIFFile::NIFBlkBSShaderTextureSet *
-        tsBlock = nifFile.getShaderTextureSet(i);
     const NIFFile::NIFBlkNiAlphaProperty *
         alphaPropertyBlock = nifFile.getAlphaProperty(i);
     if (nodeBlock)
@@ -131,123 +120,11 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile,
     {
       if (lspBlock->controller >= 0)
         std::fprintf(f, "    Controller: %3d\n", lspBlock->controller);
-      if (lspBlock->textureSet >= 0)
-        std::fprintf(f, "    Texture set: %3d\n", lspBlock->textureSet);
-      std::fprintf(f, "    Material version: %2u\n",
-                   (unsigned int) lspBlock->material.version);
-      if (!verboseMaterialInfo)
+      if (verboseMaterialInfo && lspBlock->material)
       {
-        std::fprintf(f, "    Material flags: 0x%04X\n",
-                     (unsigned int) lspBlock->material.flags);
-      }
-      else
-      {
-        std::uint32_t m = lspBlock->material.flags;
-        for (unsigned int j = 0U; m; j++, m = m >> 1)
-        {
-          if (!(m & 1U))
-            continue;
-          if ((m << j) != lspBlock->material.flags)
-            std::fprintf(f, ", %s", materialFlagNames[j]);
-          else
-            std::fprintf(f, "    Material flags: %s", materialFlagNames[j]);
-        }
-        if (lspBlock->material.flags)
-          std::fputc('\n', f);
-      }
-      std::fprintf(f, "    Material alpha flags: 0x%04X\n",
-                   (unsigned int) lspBlock->material.alphaFlags);
-      std::fprintf(f, "    Material alpha threshold: %3u (%.3f)\n",
-                   (unsigned int) lspBlock->material.alphaThreshold,
-                   lspBlock->material.alphaThresholdFloat);
-      std::fprintf(f, "    Material alpha: %.3f\n", lspBlock->material.alpha);
-      if (!verboseMaterialInfo)
-        continue;
-      std::fprintf(f, "    Material texture U, V offset: %.3f, %.3f\n",
-                   lspBlock->material.textureOffsetU,
-                   lspBlock->material.textureOffsetV);
-      std::fprintf(f, "    Material texture U, V scale: %.3f, %.3f\n",
-                   lspBlock->material.textureScaleU,
-                   lspBlock->material.textureScaleV);
-      if (lspBlock->material.flags & BGSMFile::Flag_TSWater)
-      {
-        unsigned int  shallowColor =
-            std::uint32_t(lspBlock->material.w.shallowColor * 255.0f);
-        unsigned int  deepColor =
-            std::uint32_t(lspBlock->material.w.deepColor * 255.0f);
-        std::fprintf(f, "    Water shallow color (0xAABBGGRR): 0x%08X\n",
-                     shallowColor);
-        std::fprintf(f, "    Water deep color (0xAABBGGRR): 0x%08X\n",
-                     deepColor);
-        std::fprintf(f, "    Water depth range: %.3f\n",
-                     lspBlock->material.w.maxDepth);
-        std::fprintf(f, "    Water environment map scale: %.3f\n",
-                     lspBlock->material.w.envMapScale);
-        std::fprintf(f, "    Water specular smoothness: %.3f\n",
-                     lspBlock->material.w.specularSmoothness);
-      }
-      else if (lspBlock->material.flags & BGSMFile::Flag_IsEffect)
-      {
-        unsigned int  baseColor =
-            std::uint32_t(lspBlock->material.e.baseColor * 255.0f);
-        std::fprintf(f, "    Effect base color (0xAABBGGRR): 0x%08X\n",
-                     baseColor);
-        std::fprintf(f, "    Effect base color scale: %.3f\n",
-                     lspBlock->material.e.baseColorScale);
-        std::fprintf(f, "    Effect lighting influence: %.3f\n",
-                     lspBlock->material.e.lightingInfluence);
-        std::fprintf(f, "    Effect environment map scale: %.3f\n",
-                     lspBlock->material.e.envMapScale);
-        std::fprintf(f, "    Effect specular smoothness: %.3f\n",
-                     lspBlock->material.e.specularSmoothness);
-        std::fprintf(f,
-                     "    Effect falloff parameters: %.3f, %.3f, %.3f, %.3f\n",
-                     lspBlock->material.e.falloffParams[0],
-                     lspBlock->material.e.falloffParams[1],
-                     lspBlock->material.e.falloffParams[2],
-                     lspBlock->material.e.falloffParams[3]);
-      }
-      else
-      {
-        std::fprintf(f, "    Material gradient map scale: %.3f\n",
-                     lspBlock->material.s.gradientMapV);
-        std::fprintf(f, "    Material environment map scale: %.3f\n",
-                     lspBlock->material.s.envMapScale);
-        unsigned int  specularColor =
-            std::uint32_t(lspBlock->material.s.specularColor * 255.0f);
-        unsigned int  emissiveColor =
-            std::uint32_t(lspBlock->material.s.emissiveColor * 255.0f);
-        std::fprintf(f, "    Material specular color (0xBBGGRR): 0x%06X\n",
-                     specularColor & 0x00FFFFFFU);
-        std::fprintf(f, "    Material specular scale: %.3f\n",
-                     lspBlock->material.s.specularColor[3]);
-        std::fprintf(f, "    Material specular smoothness: %.3f\n",
-                     lspBlock->material.s.specularSmoothness);
-        std::fprintf(f, "    Material emissive color (0xBBGGRR): 0x%06X\n",
-                     emissiveColor & 0x00FFFFFFU);
-        std::fprintf(f, "    Material emissive scale: %.3f\n",
-                     lspBlock->material.s.emissiveColor[3]);
-      }
-      unsigned int  m = lspBlock->material.texturePathMask;
-      for (size_t j = 0; m; j++, m = m >> 1)
-      {
-        if (m & 1U)
-        {
-          std::fprintf(f, "    Material texture %d: %s\n",
-                       int(j), lspBlock->material.texturePaths[j].c_str());
-        }
-      }
-    }
-    else if (tsBlock)
-    {
-      unsigned int  m = tsBlock->texturePathMask;
-      for (size_t j = 0; m; j++, m = m >> 1)
-      {
-        if (m & 1U)
-        {
-          std::fprintf(f, "    Texture %2d: %s\n",
-                       int(j), tsBlock->texturePaths[j].c_str());
-        }
+        std::string tmpBuf("    MaterialFile ");
+        lspBlock->material->printObjectInfo(tmpBuf, 4, false);
+        std::fwrite(tmpBuf.c_str(), sizeof(char), tmpBuf.length(), f);
       }
     }
     else if (alphaPropertyBlock)
@@ -273,43 +150,30 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
   {
     const NIFFile::NIFTriShape& ts = meshData[i];
     const char  *tsName = "";
-    if (nifFile.getString(ts.nameID))
-      tsName = nifFile.getString(ts.nameID)->c_str();
+    if (ts.ts && nifFile.getString(ts.ts->nameID))
+      tsName = nifFile.getString(ts.ts->nameID)->c_str();
     std::fprintf(f, "TriShape %3d (%s):\n", int(i), tsName);
     std::fprintf(f, "  Vertex count: %u\n", ts.vertexCnt);
     std::fprintf(f, "  Triangle count: %u\n", ts.triangleCnt);
-    if (ts.m.flags)
+    if (ts.flags)
     {
-      std::uint32_t m = ts.m.flags;
+      std::uint32_t m = ts.flags;
       for (unsigned int j = 0U; m; j++, m = m >> 1)
       {
         if (!(m & 1U))
           continue;
-        if ((m << j) != ts.m.flags)
-          std::fprintf(f, ", %s", materialFlagNames[j]);
+        if ((m << j) != ts.flags)
+          std::fprintf(f, ", %s", CE2Material::materialFlagNames[j]);
         else
-          std::fprintf(f, "  Flags: %s", materialFlagNames[j]);
+          std::fprintf(f, "  Flags: %s", CE2Material::materialFlagNames[j]);
       }
       std::fputc('\n', f);
     }
-    if (ts.m.alphaThresholdFloat > 0.0f)
-      std::fprintf(f, "  Alpha threshold: %.3f\n", ts.m.alphaThresholdFloat);
-    if (ts.m.flags & BGSMFile::Flag_TSAlphaBlending)
-    {
-      std::fprintf(f, "  Alpha blend scale: %.3f\n", ts.m.alpha);
-    }
+    if (ts.m && ts.m->alphaThreshold > 0.0f)
+      std::fprintf(f, "  Alpha threshold: %.3f\n", ts.m->alphaThreshold);
     printVertexTransform(f, ts.vertexTransform);
-    if (ts.haveMaterialPath())
-      std::fprintf(f, "  Material: %s\n", ts.materialPath().c_str());
-    std::fprintf(f, "  Texture UV offset, scale: (%f, %f), (%f, %f)\n",
-                 ts.m.textureOffsetU, ts.m.textureOffsetV,
-                 ts.m.textureScaleU, ts.m.textureScaleV);
-    unsigned int  m = ts.m.texturePathMask;
-    for (int j = 0; m; j++, m = m >> 1)
-    {
-      if (m & 1U)
-        std::fprintf(f, "  Texture %2d: %s\n", j, ts.m.texturePaths[j].c_str());
-    }
+    if (ts.m)
+      std::fprintf(f, "  Material: %s\n", ts.m->name->c_str());
     std::fprintf(f, "  Vertex list:\n");
     for (size_t j = 0; j < ts.vertexCnt; j++)
     {
@@ -332,10 +196,71 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
   }
 }
 
+struct ObjFileMaterialNames
+{
+  std::set< std::string > namesUsed;
+  std::map< const CE2Material *, std::string >  nameMap;
+  bool getMaterialName(std::string& s, const NIFFile::NIFTriShape& ts);
+};
+
+bool ObjFileMaterialNames::getMaterialName(
+    std::string& s, const NIFFile::NIFTriShape& ts)
+{
+  std::map< const CE2Material *, std::string >::const_iterator  i =
+      nameMap.find(ts.m);
+  if (i != nameMap.end())
+  {
+    s = i->second;
+    return false;
+  }
+  if (!(ts.m && !ts.m->name->empty()))
+    s = "DefaultMaterial";
+  else
+    s = *(ts.m->name);
+  for (size_t j = 0; j < s.length(); j++)
+  {
+    char    c = s[j];
+    if (!((c >= '0' && c <= '9') ||
+          (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')))
+    {
+      s[j] = '_';
+    }
+  }
+  while (namesUsed.find(s) != namesUsed.end())
+  {
+    if (!(s.length() > 5 && s[s.length() - 5] == '_' &&
+          (FileBuffer::readUInt32Fast(s.c_str() + (s.length() - 4))
+           & 0xF0F0F0F0U) == 0x30303030U))
+    {
+      s += "_0001";
+    }
+    else
+    {
+      for (size_t j = s.length() - 1; s[j] >= '0' && s[j] <= '9'; j--)
+      {
+        if (s[j] == '9')
+        {
+          s[j] = '0';
+          continue;
+        }
+        s[j]++;
+        break;
+      }
+      if (s.ends_with("_0000"))
+        s += '1';
+    }
+  }
+  namesUsed.insert(s);
+  nameMap.insert(std::pair< const CE2Material *, std::string >(ts.m, s));
+  return true;
+}
+
 static void printOBJData(std::FILE *f, const NIFFile& nifFile,
                          const char *mtlFileName,
                          bool enableVertexColors, bool enableVertexWeights)
 {
+  ObjFileMaterialNames  matNames;
+  std::string matName;
   std::vector< NIFFile::NIFTriShape > meshData;
   nifFile.getMesh(meshData);
   unsigned int  vertexNumBase = 1;
@@ -344,8 +269,8 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
   {
     const NIFFile::NIFTriShape& ts = meshData[i];
     const char  *tsName = "";
-    if (nifFile.getString(ts.nameID))
-      tsName = nifFile.getString(ts.nameID)->c_str();
+    if (ts.ts && nifFile.getString(ts.ts->nameID))
+      tsName = nifFile.getString(ts.ts->nameID)->c_str();
     std::fprintf(f, "# %s\n\ng ", tsName);
     for (size_t j = 0; tsName[j]; j++)
     {
@@ -356,7 +281,8 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
         std::fputc(c, f);
       }
     }
-    std::fprintf(f, "\nusemtl Material%06u\n\n", (unsigned int) (i + 1));
+    matNames.getMaterialName(matName, ts);
+    std::fprintf(f, "\nusemtl %s\n\n", matName.c_str());
     bool    haveVertexColors = false;
     bool    haveVertexWeights = false;
     if (enableVertexColors)
@@ -429,36 +355,53 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
 
 static void printMTLData(std::FILE *f, const NIFFile& nifFile)
 {
+  ObjFileMaterialNames  matNames;
+  std::string matName;
   std::vector< NIFFile::NIFTriShape > meshData;
   nifFile.getMesh(meshData);
   for (size_t i = 0; i < meshData.size(); i++)
   {
     const NIFFile::NIFTriShape& ts = meshData[i];
-    std::fprintf(f, "newmtl Material%06u\n", (unsigned int) (i + 1));
-    std::fprintf(f, "Ka 1.0 1.0 1.0\n");
-    std::fprintf(f, "Kd 1.0 1.0 1.0\n");
-    FloatVector4  specularColor(ts.m.s.specularColor);
-    float   specularScale = specularColor[3];
-    float   specularGlossiness = ts.m.s.specularSmoothness;
-    if (ts.m.texturePathMask & 0x0240)
+    if (!matNames.getMaterialName(matName, ts))
+      continue;
+    FloatVector4  baseColor(1.0f);
+    const CE2Material::TextureSet *txtSet = (CE2Material::TextureSet *) 0;
+    if (ts.m)
     {
-      specularScale *= 0.5f;
-      specularGlossiness *= 0.5f;
-    }
-    specularColor *= specularScale;
-    specularGlossiness =
-        float(std::pow(2.0f, std::min(specularGlossiness, 1.0f) * 9.0f + 1.0f));
-    std::fprintf(f, "Ks %.3f %.3f %.3f\n",
-                 specularColor[0], specularColor[1], specularColor[2]);
-    std::fprintf(f, "d 1.0\n");
-    std::fprintf(f, "Ns %.1f\n", specularGlossiness);
-    for (size_t j = 0; j < 2; j++)
-    {
-      if (ts.m.texturePathMask & (1U << (unsigned int) j))
+      for (unsigned int j = 0U; j < CE2Material::maxLayers; j++)
       {
-        std::fprintf(f, "%s %s\n",
-                     (!j ? "map_Kd" : "map_Kn"), ts.m.texturePaths[j].c_str());
+        if ((ts.m->layerMask & (1U << j)) && ts.m->layers[j])
+        {
+          if (ts.m->layers[j]->material)
+          {
+            baseColor = ts.m->layers[j]->material->color;
+            txtSet = ts.m->layers[j]->material->textureSet;
+            break;
+          }
+        }
       }
+    }
+    std::fprintf(f, "newmtl %s\n", matName.c_str());
+    std::fprintf(f, "Ka 1.000 1.000 1.000\n");
+    std::fprintf(f, "Kd %.3f %.3f %.3f\n",
+                 baseColor[0], baseColor[1], baseColor[2]);
+    std::fprintf(f, "Ks 1.000 1.000 1.000\n");
+    std::fprintf(f, "d %.3f\n", baseColor[3]);
+    std::fprintf(f, "Ns 32.0\n");
+    if (txtSet)
+    {
+      if (txtSet->texturePathMask & 0x0001U)
+        std::fprintf(f, "map_Kd %s\n", txtSet->texturePaths[0]->c_str());
+      if (txtSet->texturePathMask & 0x0002U)
+        std::fprintf(f, "map_Bump %s\n", txtSet->texturePaths[1]->c_str());
+      if (txtSet->texturePathMask & 0x0004U)
+        std::fprintf(f, "map_d %s\n", txtSet->texturePaths[2]->c_str());
+      if (txtSet->texturePathMask & 0x0008U)
+        std::fprintf(f, "map_Pr %s\n", txtSet->texturePaths[3]->c_str());
+      if (txtSet->texturePathMask & 0x0010U)
+        std::fprintf(f, "map_Pm %s\n", txtSet->texturePaths[4]->c_str());
+      if (txtSet->texturePathMask & 0x0080U)
+        std::fprintf(f, "map_Ke %s\n", txtSet->texturePaths[7]->c_str());
     }
     std::fprintf(f, "\n");
   }
@@ -480,12 +423,13 @@ int main(int argc, char **argv)
     // 5: render to DDS file
     // 6: render and view in real time (requires SDL 2)
     int     outFmt = 0;
-    int     renderWidth = 1344;
+    int     renderWidth = 1792;
     int     renderHeight = 896;
     unsigned char l = 0;
     bool    verboseMaterialInfo = false;
     bool    enableVertexColors = false;
     bool    enableVertexWeights = false;
+    const char  *materialDBPath = (char *) 0;
     for ( ; argc >= 2 && argv[1][0] == '-'; argc--, argv++)
     {
       if (std::strcmp(argv[1], "--") == 0)
@@ -557,6 +501,14 @@ int main(int argc, char **argv)
         argc--;
         argv++;
       }
+      else if (std::strcmp(argv[1], "-cdb") == 0)
+      {
+        if (argc < 3)
+          errorMessage("missing material database file name");
+        materialDBPath = argv[2];
+        argc--;
+        argv++;
+      }
       else if (std::strcmp(argv[1], "-m") == 0)
       {
         verboseMaterialInfo = true;
@@ -584,6 +536,7 @@ int main(int argc, char **argv)
       std::fprintf(stderr, "    --      Remaining options are file names\n");
       std::fprintf(stderr, "    -o FILENAME     Set output file name "
                            "(default: standard output)\n");
+      std::fprintf(stderr, "    -cdb FILENAME   Set material database path\n");
       std::fprintf(stderr, "    -q      Print author name, file name, "
                            "and file size only\n");
       std::fprintf(stderr, "    -v      Verbose mode, print block list, "
@@ -614,7 +567,7 @@ int main(int argc, char **argv)
     BA2File ba2File(argv[1], &fileNames);
     ba2File.getFileList(fileNames);
     if (outFmt >= 5)
-      renderer = new NIF_View(ba2File);
+      renderer = new NIF_View(ba2File, (ESMFile *) 0, materialDBPath);
     if (outFmt == 6)
     {
       for (size_t i = 0; i < fileNames.size(); )
@@ -645,6 +598,7 @@ int main(int argc, char **argv)
       delete renderer;
       return 0;
     }
+    CE2MaterialDB materials(ba2File, materialDBPath);
     if (outFileName)
     {
       outFile = std::fopen(outFileName, (outFmt != 5 ? "w" : "wb"));
@@ -676,7 +630,7 @@ int main(int argc, char **argv)
         printAuthorName(outFile, fileBuf, fileNames[i].c_str());
         continue;
       }
-      NIFFile nifFile(fileBuf.data(), fileBuf.size(), ba2File, l);
+      NIFFile nifFile(fileBuf.data(), fileBuf.size(), ba2File, &materials, l);
       if (outFmt == 0 || outFmt == 2)
         printBlockList(outFile, nifFile, verboseMaterialInfo);
       if (outFmt == 2)

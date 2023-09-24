@@ -33,9 +33,11 @@ class ESMView : public ESMDump, public SDLDisplay
   void printRecordHdr(unsigned int formID);
   void dumpRecord(unsigned int formID = 0U, bool noUnknownFields = false);
 #ifdef HAVE_SDL2
+  // returns true on success
+  bool readBaseObject(std::string& modelPath, unsigned int formID);
   // the following functions return false if the window is closed
   bool viewModel(unsigned int formID,
-                 unsigned int mswpFormID = 0U, float gradientMapV = -1.0f);
+                 const std::vector< unsigned int >& mswpFormIDs);
   bool browseRecord(unsigned int& formID);
 #endif
 };
@@ -154,7 +156,7 @@ ESMView::ESMView(
   {
     ba2File = new BA2File(archivePath,
 #ifdef HAVE_SDL2
-                          ".bgem\t.bgsm\t.bto\t.btr\t.dds\t.mat\t.mesh\t.nif\t"
+                          ".btd\t.bto\t.btr\t.cdb\t.dds\t.mat\t.mesh\t.nif\t"
 #endif
                           ".dlstrings\t.ilstrings\t.strings");
   }
@@ -546,8 +548,34 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
 }
 
 #ifdef HAVE_SDL2
+bool ESMView::readBaseObject(std::string& modelPath, unsigned int formID)
+{
+  const ESMRecord *r = findRecord(formID);
+  if (!(r && r->formID && !(*r == "GRUP")))
+    return false;
+  ESMField  f(*this, *r);
+  while (f.next())
+  {
+    if ((f == "MODL" || f == "MOD2") && f.size() > 4)
+    {
+      f.readPath(modelPath, std::string::npos, "meshes/", ".nif");
+    }
+    else if (f == "MOLM" && f.size() >= 6)
+    {
+      unsigned int  mswpCnt = f.readUInt16Fast();
+      for ( ; mswpCnt && (f.getPosition() + 4) <= f.size(); mswpCnt--)
+        renderer->addMaterialSwap(f.readUInt32Fast() & 0x7FFFFFFFU);
+    }
+    else if (f == "WTFM" && *r == "ACTI" && f.size() >= 4)
+    {
+      renderer->setWaterColor(f.readUInt32Fast());
+    }
+  }
+  return true;
+}
+
 bool ESMView::viewModel(unsigned int formID,
-                        unsigned int mswpFormID, float gradientMapV)
+                        const std::vector< unsigned int >& mswpFormIDs)
 {
   if (!renderer)
   {
@@ -559,62 +587,36 @@ bool ESMView::viewModel(unsigned int formID,
   if (!formID || !(r = findRecord(formID)))
     errorMessage("invalid form ID");
   renderer->clearMaterialSwaps();
-  unsigned int  refrMSWPFormID = 0U;
-  if (*r == "REFR")
+  std::vector< std::string >  nifFileNames(1, std::string());
+  std::string&  modelPath = nifFileNames[0];
+  bool    haveBaseObject = false;
+  if (*r == "REFR" || *r == "ACHR")
   {
-    unsigned int  refrName = 0U;
     ESMField  f(*r, *this);
     while (f.next())
     {
-      if (f == "NAME" && f.size() >= 4)
-        refrName = f.readUInt32Fast();
-      else if (f == "XMSP" && f.size() >= 4)
-        refrMSWPFormID = f.readUInt32Fast();
-    }
-    if (!refrName || !(r = findRecord(refrName)))
-      errorMessage("invalid record type");
-  }
-  std::vector< std::string >  nifFileNames(1, std::string());
-  std::string&  modelPath = nifFileNames[0];
-  ESMField  f(*this, *r);
-  while (f.next())
-  {
-    if ((f == "MODL" || f == "MOD2") && f.size() > 4)
-    {
-      f.readPath(modelPath, std::string::npos, "meshes/", ".nif");
-      if (*r == "SCOL" && getESMVersion() >= 0xC0)
+      if (f == "NAME" && f.size() >= 4 && !haveBaseObject)
       {
-        if (modelPath.find(".esm/", 0, 5) == std::string::npos)
-        {
-          // fix invalid SCOL model paths in SeventySix.esm
-          modelPath = "meshes/scol/seventysix.esm/cm00000000.nif";
-          unsigned int  n = r->formID;
-          for (int j = 36; n; j--, n = n >> 4)
-            modelPath[j] = char(n & 15U) + ((n & 15U) < 10U ? '0' : 'W');
-        }
+        haveBaseObject = readBaseObject(modelPath, f.readUInt32Fast());
+      }
+      else if (f == "XLMS" && f.size() >= 6)
+      {
+        unsigned int  mswpCnt = f.readUInt16Fast();
+        for ( ; mswpCnt && (f.getPosition() + 4) <= f.size(); mswpCnt--)
+          renderer->addMaterialSwap(f.readUInt32Fast() & 0x7FFFFFFFU);
       }
     }
-    else if ((f == "MODS" || f == "MO2S") && f.size() >= 4)
-    {
-      renderer->addMaterialSwap(f.readUInt32Fast() & 0x7FFFFFFFU);
-    }
-    else if (f == "MODC" && f.size() >= 4)
-    {
-      renderer->addColorSwap(f.readFloat());
-    }
-    else if (f == "WTFM" && *r == "ACTI" && f.size() >= 4)
-    {
-      renderer->setWaterColor(f.readUInt32Fast());
-    }
   }
+  else
+  {
+    haveBaseObject = readBaseObject(modelPath, formID);
+  }
+  if (!haveBaseObject)
+    errorMessage("invalid record type");
   if (modelPath.empty())
     errorMessage("model path not found in record");
-  if (refrMSWPFormID)
-    renderer->addMaterialSwap(refrMSWPFormID);
-  if (mswpFormID)
-    renderer->addMaterialSwap(mswpFormID);
-  if (gradientMapV >= 0.0f)
-    renderer->addColorSwap(gradientMapV);
+  for (size_t i = 0; i < mswpFormIDs.size(); i++)
+    renderer->addMaterialSwap(mswpFormIDs[i]);
   clearTextBuffer();
   std::uint32_t savedTextColor = defaultTextColor;
   bool    noQuitFlag = true;
@@ -835,7 +837,7 @@ static const char *usageString =
     "U:              toggle hexadecimal display of unknown field types\n"
     "V:              previous record in current group\n"
 #ifdef HAVE_SDL2
-    "W [MODS [MODC]] view model (MODL) of current record, if present\n"
+    "W [MOLM]        view model (MODL) of current record, if present\n"
     "Ctrl-A:         copy the contents of the text buffer to the clipboard\n"
 #endif
     "Q or Ctrl-D:    quit\n\n"
@@ -1310,24 +1312,20 @@ int main(int argc, char **argv)
 #ifdef HAVE_SDL2
         else if (cmdBuf[0] == 'w')
         {
-          unsigned int  mswpFormID = 0U;
-          float   gradientMapV = -1.0f;
+          std::vector< unsigned int > mswpFormIDs;
           const char  *s = cmdBuf.c_str() + 1;
-          while (*s == '\t' || *s == '\r' || *s == ' ')
-            s++;
-          s = esmFile.parseFormID(mswpFormID, s);
-          if (mswpFormID == 0xFFFFFFFFU)
-            mswpFormID = 0U;
-          while (*s == '\t' || *s == '\r' || *s == ' ')
-            s++;
-          if (*s != '\0')
+          while (*s)
           {
-            char    *endp = (char *) 0;
-            float   tmp = float(std::strtod(s, &endp));
-            if (endp && endp != s && tmp >= 0.0f && tmp <= 1.0f)
-              gradientMapV = tmp;
+            while (*s == '\t' || *s == '\r' || *s == ' ')
+              s++;
+            if (*s == '\0')
+              break;
+            unsigned int  mswpFormID = 0U;
+            s = esmFile.parseFormID(mswpFormID, s);
+            if (mswpFormID && mswpFormID != 0xFFFFFFFFU)
+              mswpFormIDs.push_back(mswpFormID);
           }
-          if (!esmFile.viewModel(formID, mswpFormID, gradientMapV))
+          if (!esmFile.viewModel(formID, mswpFormIDs))
           {
             delete esmFilePtr;
             esmFilePtr = (ESMView *) 0;

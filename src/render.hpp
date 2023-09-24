@@ -9,7 +9,7 @@
 #include "landdata.hpp"
 #include "ddstxt.hpp"
 #include "landtxt.hpp"
-#include "bgsmfile.hpp"
+#include "material.hpp"
 #include "nif_file.hpp"
 #include "terrmesh.hpp"
 #include "plot3d.hpp"
@@ -40,20 +40,20 @@ class Renderer : protected Renderer_Base
     unsigned int  modelID;              // b0 to b7: nifFiles index
     unsigned int  mswpFormID;           // color + flags (in alpha) for decals
     NIFFile::NIFBounds  objectBounds;
-    const std::string *modelPath;       // NULL for decals
+    std::string   modelPath;            // .mat file name for projected decals
   };
   struct RenderObject
   {
     // 1: terrain, 2: solid object, 4: water cell, 6: water mesh
     // 0x08: uses alpha blending
-    // 0x10: is decal (TXST object)
+    // 0x10: is decal (PDCL object)
     // 0x20: is marker
     // 0x40: high quality model
     // 0x80: decal reference uses XPRM (disables XPDD and finding impact point)
     // bits 13 to 15: sort group (higher = rendered later)
     //           0 = cell (terrain or water), no valid model ID
     //           1 = object
-    //           2 = decal (TXST)
+    //           2 = decal (PDCL)
     //           3 = object (e.g. actor) that decals cannot be projected onto
     std::uint16_t flags;
     // for cells and decals:
@@ -86,7 +86,7 @@ class Renderer : protected Renderer_Base
         // For terrain, the X and Y bounds are heightmap image coordinates,
         // and the Z bounds are raw 16-bit height values.
         // For water cells, the bounds are always x0 = y0 = z0 = z1 = 0
-        // and x1 = y1 = 4096.
+        // and x1 = y1 = 100.
         signed short  x0;
         signed short  y0;
         signed short  x1;
@@ -109,9 +109,7 @@ class Renderer : protected Renderer_Base
     {
       if ((o->flags ^ r.o->flags) & 0xE000U)
         return (o->flags < r.o->flags);
-      if (o->modelPath && r.o->modelPath)
-        return (*(o->modelPath) < *(r.o->modelPath));
-      return (o->formID < r.o->formID);
+      return (o->modelPath < r.o->modelPath);
     }
   };
   struct ModelData
@@ -242,10 +240,10 @@ class Renderer : protected Renderer_Base
   std::string defaultEnvMap;
   std::string defaultWaterTexture;
   std::vector< ModelData >    nifFiles;
-  MaterialSwaps materialSwaps;
   std::vector< RenderThread > renderThreads;
   RenderObjectQueue *renderObjectQueue;
   std::string stringBuf;
+  float   waterUVScale;
   float   waterReflectionLevel;
   int     zRangeMax;
   // 0: default, 1: disable built-in exclude patterns, 2 or 3: disable effects
@@ -258,9 +256,10 @@ class Renderer : protected Renderer_Base
   std::vector< std::int32_t > baseObjects;      // baseObjHashMask + 1 elements
   std::vector< std::vector< BaseObject > >  baseObjectBufs;
   DDSTexture  whiteTexture;
-  // for TXST and WATR objects, materials[0] is the default water
-  std::map< unsigned int, BGSMFile >  materials;
+  // for WATR objects, waterMaterials[0] is the default water
+  std::map< unsigned int, WaterProperties > waterMaterials;
   std::uint32_t *outBufN;               // normals for decal rendering
+  CE2MaterialDB materials;
   // returns false if the object is not visible
   bool setScreenAreaUsed(RenderObject& p);
   unsigned int getDefaultWorldID() const;
@@ -273,7 +272,7 @@ class Renderer : protected Renderer_Base
                                         const ESMFile::ESMRecord& r);
   void addSCOLObjects(const ESMFile::ESMRecord& r,      // SCOL
                       const NIFFile::NIFVertexTransform& vt,
-                      unsigned int refrFormID, unsigned int refrMSWPFormID);
+                      unsigned int refrFormID);
   // type = 0: terrain, type = 1: objects
   void findObjects(unsigned int formID, int type, bool isRecursive);
   void findObjects(unsigned int formID, int type);
@@ -304,8 +303,8 @@ class Renderer : protected Renderer_Base
   void renderThread(size_t threadNum);
   static void threadFunction(Renderer *p, size_t threadNum);
  public:
-  Renderer(int imageWidth, int imageHeight,
-           const BA2File& archiveFiles, ESMFile& masterFiles,
+  Renderer(int imageWidth, int imageHeight, const BA2File& archiveFiles,
+           ESMFile& masterFiles, const char *materialDBPath = (char *) 0,
            std::uint32_t *bufRGBA = 0, float *bufZ = 0, int zMax = 16777216);
   virtual ~Renderer();
   // returns 0 if formID is not in an exterior world, 0xFFFFFFFF on error
@@ -399,9 +398,8 @@ class Renderer : protected Renderer_Base
   }
   // 0: diffuse only, 4: normal mapping, 8: PBR on objects only, 12: full PBR
   // + 2: render references to any object type
-  // + 1: do not split pre-combined meshes
   // + 16: enable actors (experimental)
-  // + 32: enable TXST decals
+  // + 32: enable projected decals
   // + 64: enable marker objects
   // + 128: disable built-in exclude patterns for effect meshes
   // + 256: disable effect meshes
@@ -411,7 +409,6 @@ class Renderer : protected Renderer_Base
   {
     enableMarkers = bool(n & 0x40);
     enableDecals = bool(n & 0x20);
-    enableSCOL |= bool(n & 1);
     enableAllObjects |= bool(n & 2);
     renderQuality = (unsigned char) ((n >> 2) & 3);
     ignoreOBND = bool(n & 0x0200);
@@ -430,10 +427,6 @@ class Renderer : protected Renderer_Base
   void setNoDisabledObjects(bool n)
   {
     noDisabledObjects = n;      // ignore if initially disabled
-  }
-  void setEnableSCOL(bool n)
-  {
-    enableSCOL = n;             // do not split pre-combined meshes
   }
   void setEnableAllObjects(bool n)
   {
@@ -464,6 +457,10 @@ class Renderer : protected Renderer_Base
   void setWaterTexture(const std::string& s);
   // 0xAARRGGBB, -1 to use ESM water parameters, 0 to disable water
   void setWaterColor(std::uint32_t n);
+  void setWaterUVScale(float n)
+  {
+    waterUVScale = n;
+  }
   void setWaterEnvMapScale(float n)
   {
     waterReflectionLevel = n;
@@ -472,10 +469,10 @@ class Renderer : protected Renderer_Base
   // the default environment map
   void setRenderParameters(int lightColor, int ambientColor, int envColor,
                            float lightLevel, float envLevel, float rgbScale,
-                           float reflZScale = 2.0f, int waterUVScale = 2048);
+                           float reflZScale = 2.0f);
   void loadTerrain(const char *btdFileName = (char *) 0,
-                   unsigned int worldID = 0U, unsigned int defTxtID = 0U,
-                   int mipLevel = 2, int xMin = -32768, int yMin = -32768,
+                   unsigned int worldID = 0U, int mipLevel = 2,
+                   int xMin = -32768, int yMin = -32768,
                    int xMax = 32767, int yMax = 32767);
   // n = 0: terrain (exterior cells only, loadTerrain() must be called first)
   // n = 1: objects

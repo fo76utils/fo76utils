@@ -689,7 +689,7 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   }
   if (!(cellFlags & 0x02))              // cell has no water
     return;
-  if (!(waterLevel >= -1048576.0f && waterLevel <= 1048576.0f))
+  if (!(waterLevel >= -32768.0f && waterLevel <= 32768.0f))
   {
     if (cellFlags & 0x01)
       return;
@@ -713,7 +713,10 @@ void Renderer::addWaterCell(const ESMFile::ESMRecord& r)
   if (setScreenAreaUsed(tmp))
   {
     if (waterRenderMode < 0)
-      tmp.model.t.waterFormID = getWaterMaterial(materials, esmFile, &r, 0U);
+    {
+      tmp.model.t.waterFormID =
+          getWaterMaterial(waterMaterials, esmFile, &r, 0U);
+    }
     objectList.push_back(tmp);
   }
 }
@@ -788,7 +791,7 @@ bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
       }
     }
   }
-  if (enableMarkers && esmFile.getESMVersion() >= 0x80)
+  if (enableMarkers)
   {
     stringBuf = "meshes/markers/humanmarker.nif";
     p.flags = p.flags | 0x20;
@@ -801,136 +804,75 @@ bool Renderer::getNPCModel(BaseObject& p, const ESMFile::ESMRecord& r)
 
 void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
 {
-  if (!(r == "TXST"))
+  if (!(r == "PDCL"))
     return;
   ESMFile::ESMField f(r, esmFile);
-  float   specularSmoothness = 0.0f;
-  unsigned int  decalFlags = 0xFFFFFFFFU;
-  unsigned int  decalColor = 0xFFFFFFFFU;
-  bool    haveAlphaFlags = false;
+  bool    haveDATA = false;
   bool    haveDODT = false;
   while (f.next())
   {
-    if (f == "DODT" && f.size() >= 24)
+    if (f == "DATA" && f.size() >= 24)
     {
+      // 6 floats: min width, max width, min height, max height, depth, unknown
       FloatVector4  decalBounds(f.readFloatVector4());
-      float   decalWidth = (decalBounds[0] + decalBounds[1]) * 0.5f;
-      float   decalHeight = (decalBounds[2] + decalBounds[3]) * 0.5f;
+      float   decalWidth = decalBounds[0] * decalBounds[1];
+      float   decalHeight = decalBounds[2] * decalBounds[3];
       float   decalDepth = f.readFloat();
-      decalWidth = std::min(std::max(decalWidth, 0.0f), 100.0f);
-      decalHeight = std::min(std::max(decalHeight, 0.0f), 100.0f);
+      decalWidth = std::min(std::max(decalWidth, 0.0f), 10000.0f);
+      decalHeight = std::min(std::max(decalHeight, 0.0f), 10000.0f);
       decalDepth = std::min(std::max(decalDepth, 0.0f), 100.0f);
+      if (!(decalWidth > 0.0f && decalHeight > 0.0f && decalDepth > 0.0f))
+        return;
+      decalWidth = float(std::sqrt(decalWidth));
+      decalHeight = float(std::sqrt(decalHeight));
       p.objectBounds.boundsMin =
           FloatVector4(decalWidth, decalDepth, decalHeight, 0.0f);
       p.objectBounds.boundsMax = p.objectBounds.boundsMin;
-      if (!(p.objectBounds.boundsMax[0] > 0.0f &&
-            p.objectBounds.boundsMax[1] > 0.0f &&
-            p.objectBounds.boundsMax[2] > 0.0f))
-      {
-        return;
-      }
       p.objectBounds.boundsMin *= -0.5f;
       p.objectBounds.boundsMax *= 0.5f;
-      float   s = f.readFloat();        // shininess
-      if (esmFile.getESMVersion() < 0x80)
-        s = (s > 2.0f ? ((float(std::log2(s)) - 1.0f) * (1.0f / 9.0f)) : 0.0f);
-      specularSmoothness = std::min(std::max(s, 0.0f), 8.0f);
-      if (f.size() == 28)
-      {
-        decalFlags = FileBuffer::readUInt32Fast(f.data() + 24);
-        decalFlags = ((decalFlags & 0x01U) << 8) | ((decalFlags & 0x0EU) << 10);
-      }
-      else if (f.size() == 36)
-      {
-        decalFlags = FileBuffer::readUInt32Fast(f.data() + 28);
-        decalColor = FileBuffer::readUInt32Fast(f.data() + 32);
-        haveAlphaFlags = true;
-      }
-      haveDODT = true;
+      haveDATA = true;
       break;
     }
-  }
-  if (!haveDODT)
-    return;
-  unsigned int  formID = r.formID;
-  std::map< unsigned int, BGSMFile >::iterator  i = materials.find(formID);
-  if (i == materials.end())
-  {
-    BGSMFile  m;
-    m.nifVersion = 155U;                // Fallout 76
-    if (esmFile.getESMVersion() < 0x80)
-      m.nifVersion = 100U;              // Skyrim or older
-    else if (esmFile.getESMVersion() < 0xC0)
-      m.nifVersion = 130U;              // Fallout 4
-    m.s.specularSmoothness = specularSmoothness;
-    ESMFile::ESMField f2(r, esmFile);
-    while (f2.next())
+    else if (f == "DODT" && f.size() >= 4)
     {
-      if (f2 == "MNAM" && f2.size() > 0)
+      const ESMFile::ESMRecord  *r2 = esmFile.findRecord(f.readUInt32Fast());
+      if (!(r2 && *r2 == "MTPT"))
+        continue;
+      ESMFile::ESMField f2(*r2, esmFile);
+      while (f2.next() && !haveDODT)
       {
-        f2.readPath(stringBuf, std::string::npos, "materials/", ".bgsm");
-        if (!stringBuf.empty())
-          m.texturePaths.setMaterialPath(stringBuf);
-      }
-      else if ((f2.type & 0xF0FFFFFFU) == 0x30305854U)  // "TX00"
-      {
-        size_t  n = (f2.type >> 24) & 0x0F;
-        if (n < 10 && f2.size() > 0)
+        if (!(f2 == "REFL" && f2.size() > 16))
+          continue;
+        ESMFile::CDBRecord  f3(f2);
+        while (f3.next())
         {
-          if (n == 3 || n == 5 || n == 7)   // glow, environment, FO4 specular
-            n--;
-          else if (n == 2 && esmFile.getESMVersion() < 0x80)
-            n = 5;                          // Skyrim environment mask
-          f2.readPath(stringBuf, std::string::npos, "textures/", ".dds");
-          if (!stringBuf.empty())
+          if (!(f3 == "OBJT" && f3.size() > 6))
+            continue;
+          const char  *componentType =
+              f3.getStringFromTable(f3.readUInt32Fast());
+          if (std::strcmp(componentType, "BGSMaterialPathForm") != 0)
+            continue;
+          unsigned int  len = f3.readUInt16Fast();
+          if (len == (f3.size() - f3.getPosition()))
           {
-            m.texturePaths.setTexturePath(n, stringBuf.c_str());
-            m.texturePathMask = m.texturePathMask | std::uint32_t(1U << n);
+            f3.readPath(stringBuf, len, "materials/", ".mat");
+            if (!stringBuf.empty())
+            {
+              haveDODT = true;
+              break;
+            }
           }
         }
       }
     }
-    if (m.texturePaths && !m.texturePaths.materialPath().empty())
-    {
-      try
-      {
-        m.loadBGSMFile(ba2File, m.texturePaths.materialPath());
-      }
-      catch (FO76UtilsError&)
-      {
-        return;
-      }
-    }
-    if (!(m.texturePathMask & 0x0001))
-      return;
-    if (haveAlphaFlags)
-    {
-      m.alphaThreshold = (unsigned char) std::min(decalFlags >> 16, 0xFFU);
-      m.alphaFlags = 0x00EC;
-      m.alpha = 1.0f;
-      if (decalFlags & 0x0200U)         // alpha blending
-        m.alphaFlags = std::uint16_t(!(decalFlags & 0x1000U) ? 0x00ED : 0x0029);
-      if (decalFlags & 0x0400U)         // alpha testing
-        m.alphaFlags = m.alphaFlags | 0x1200;
-      m.updateAlphaProperties();
-    }
-    else if (!(m.flags & BGSMFile::Flag_TSAlphaBlending) &&
-             (~m.alphaFlags & 0x1200))
-    {
-      // default alpha testing and blending
-      m.flags = m.flags | BGSMFile::Flag_TSAlphaBlending;
-      m.alphaThreshold = 1;
-      m.alphaFlags = 0x12ED;
-      m.alpha = 1.0f;
-      m.alphaThresholdFloat = 1.0f;
-    }
-    materials.insert(std::pair< unsigned int, BGSMFile >(formID, m));
   }
+  if (!(haveDATA && haveDODT))
+    return;
   p.flags = 0x4010;                     // is decal, sort group = 2
   p.gradientMapV = 0;
   p.modelID = 0U;
-  p.mswpFormID = (decalColor & 0x00FFFFFFU) | ((decalFlags & 0xFF00U) << 16);
-  p.modelPath = (std::string *) 0;
+  p.mswpFormID = 0xFFFFFFFFU;
+  p.modelPath = stringBuf;
 }
 
 const Renderer::BaseObject * Renderer::readModelProperties(
@@ -966,7 +908,6 @@ const Renderer::BaseObject * Renderer::readModelProperties(
     tmp.mswpFormID = 0U;
     tmp.objectBounds.boundsMin = FloatVector4(0.0f);
     tmp.objectBounds.boundsMax = FloatVector4(0.0f);
-    tmp.modelPath = (std::string *) 0;
     do
     {
       if (tmp.flags && !enableMarkers)
@@ -985,7 +926,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
           if ((r.flags & 0x8000U) < std::uint32_t(distantObjectsOnly))
             continue;
           break;
-        case 0x54535854:                // "TXST"
+        case 0x4C434450:                // "PDCL"
           if (enableDecals)
             readDecalProperties(tmp, r);
           continue;
@@ -1019,27 +960,10 @@ const Renderer::BaseObject * Renderer::readModelProperties(
         {
           f.readPath(stringBuf, std::string::npos, "meshes/", ".nif");
           isHDModel = isHighQualityModel(stringBuf);
-          if (r == "SCOL" && esmFile.getESMVersion() >= 0xC0)
-          {
-            if (stringBuf.find(".esm/", 0, 5) == std::string::npos)
-            {
-              // fix invalid SCOL model paths in SeventySix.esm
-              stringBuf = "meshes/scol/seventysix.esm/cm00000000.nif";
-              unsigned int  n = r.formID;
-              for (int j = 36; n; j--, n = n >> 4)
-                stringBuf[j] = char(n & 15U) + ((n & 15U) < 10U ? '0' : 'W');
-            }
-          }
         }
-        else if (f == "MODS" && f.size() >= 4)
+        else if (f == "MOLM" && f.size() >= 6)
         {
-          tmp.mswpFormID = f.readUInt32Fast();
-        }
-        else if (f == "MODC" && f.size() >= 4)
-        {
-          float   n = f.readFloat();
-          n = std::min(std::max(n, 0.0f), 1.0f) * 65534.0f + 1.0f;
-          tmp.gradientMapV = std::uint16_t(roundFloat(n));
+          // TODO: implement material swapping
         }
         else if (f == "WTFM" && r == "ACTI" && f.size() >= 4)
         {
@@ -1076,14 +1000,9 @@ const Renderer::BaseObject * Renderer::readModelProperties(
       if (!fd)
         tmp.flags = 0;
       else
-        tmp.modelPath = &(fd->fileName);
+        tmp.modelPath = stringBuf;
     }
     while (false);
-    if (tmp.mswpFormID && (tmp.flags & 0x0002))
-    {
-      tmp.mswpFormID =
-          materialSwaps.loadMaterialSwap(ba2File, esmFile, tmp.mswpFormID);
-    }
     if (baseObjectBufs.size() < 1 ||
         baseObjectBufs.back().size() >= (baseObjBufMask + 1U))
     {
@@ -1108,31 +1027,21 @@ const Renderer::BaseObject * Renderer::readModelProperties(
 
 void Renderer::addSCOLObjects(
     const ESMFile::ESMRecord& r, const NIFFile::NIFVertexTransform& vt,
-    unsigned int refrFormID, unsigned int refrMSWPFormID)
+    unsigned int refrFormID)
 {
   RenderObject  tmp;
   tmp.z = 0;
   tmp.formID = refrFormID;
   ESMFile::ESMField f(esmFile, r);
-  unsigned int  mswpFormID_SCOL = 0U;
-  unsigned int  mswpFormID_ONAM = 0U;
-  unsigned int  modc_SCOL = 0U;
   const BaseObject  *o = (BaseObject *) 0;
   while (f.next())
   {
-    if (f == "MODS" && f.size() >= 4)
-    {
-      mswpFormID_SCOL = f.readUInt32Fast();
-    }
-    else if (f == "ONAM" && f.size() >= 4)
+    if (f == "ONAM" && f.size() >= 4)
     {
       o = (BaseObject *) 0;
       unsigned int  modelFormID = f.readUInt32Fast();
       if (!modelFormID)
         continue;
-      mswpFormID_ONAM = 0U;
-      if (f.size() >= 8)
-        mswpFormID_ONAM = f.readUInt32Fast();
       const ESMFile::ESMRecord  *r3 = esmFile.findRecord(modelFormID);
       if (!r3)
         continue;
@@ -1144,8 +1053,6 @@ void Renderer::addSCOLObjects(
     }
     else if (f == "DATA" && o)
     {
-      if (modc_SCOL)
-        tmp.flags2 = std::uint16_t(modc_SCOL);
       while ((f.getPosition() + 28) <= f.size())
       {
         FloatVector4  d1(f.readFloatVector4()); // X, Y, Z, RX
@@ -1157,35 +1064,11 @@ void Renderer::addSCOLObjects(
         tmp.modelTransform *= vt;
         if (setScreenAreaUsed(tmp))
         {
-          tmp.model.o.mswpFormID = mswpFormID_SCOL;
-          tmp.model.o.mswpFormID2 = mswpFormID_ONAM;
-          if (refrMSWPFormID)
-          {
-            if (tmp.model.o.mswpFormID2)
-              tmp.model.o.mswpFormID = tmp.model.o.mswpFormID2;
-            tmp.model.o.mswpFormID2 = refrMSWPFormID;
-          }
-          if (tmp.model.o.mswpFormID)
-          {
-            tmp.model.o.mswpFormID =
-                materialSwaps.loadMaterialSwap(
-                    ba2File, esmFile, tmp.model.o.mswpFormID);
-          }
-          if (tmp.model.o.mswpFormID2)
-          {
-            tmp.model.o.mswpFormID2 =
-                materialSwaps.loadMaterialSwap(
-                    ba2File, esmFile, tmp.model.o.mswpFormID2);
-          }
+          tmp.model.o.mswpFormID = 0U;
+          tmp.model.o.mswpFormID2 = 0U;
           objectList.push_back(tmp);
         }
       }
-    }
-    else if (f == "MODC" && f.size() >= 4)
-    {
-      float   n = f.readFloat();
-      n = std::min(std::max(n, 0.0f), 1.0f) * 65534.0f + 1.0f;
-      modc_SCOL = (unsigned int) roundFloat(n);
     }
   }
 }
@@ -1250,7 +1133,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
             if (f.size() >= 4 && !r2)
             {
               r2 = esmFile.findRecord(f.readUInt32Fast());
-              if (r2 && !(*r2 == "SCOL" && !enableSCOL))
+              if (r2 && !(*r2 == "SCOL"))
                 o = readModelProperties(tmp, *r2);
             }
             break;
@@ -1268,9 +1151,11 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
               decalScaleZ = b[2];
             }
             break;
-          case 0x50534D58U:             // "XMSP"
-            if (f.size() >= 4 && !(tmp.flags & 0x10))
-              tmp.model.o.mswpFormID = f.readUInt32Fast();
+          case 0x534D4C58U:             // "XLMS"
+            if (f.size() >= 6 && !(tmp.flags & 0x10))
+            {
+              // TODO: implement material swapping
+            }
             break;
           case 0x44445058U:             // "XPDD"
             if (f.size() >= 8 && (tmp.flags & 0x90) == 0x10)
@@ -1299,15 +1184,10 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
                 tmp.model.d.scaleZ =
                     std::min(std::max(decalScaleZ / scale, 0.0625f), 16.0f);
               }
-              if (*r2 == "SCOL" && !enableSCOL)
-              {
-                addSCOLObjects(*r2, tmp.modelTransform,
-                               r->formID, tmp.model.o.mswpFormID);
-              }
+              if (*r2 == "SCOL")
+                addSCOLObjects(*r2, tmp.modelTransform, r->formID);
               else if (BRANCH_LIKELY(o))
-              {
                 objectVisible = setScreenAreaUsed(tmp);
-              }
             }
             break;
         }
@@ -1315,25 +1195,17 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     }
     if (!objectVisible)
       continue;
-    if (BRANCH_UNLIKELY(tmp.flags & 0x14))
-    {
-      if (!(tmp.flags & 0x10))
-      {
-        if (waterRenderMode >= 0)
-          tmp.model.o.mswpFormID = 0U;
-        else
-          tmp.model.o.mswpFormID = getWaterMaterial(materials, esmFile, r2, 0U);
-      }
-    }
-    else if (tmp.model.o.mswpFormID && tmp.model.o.mswpFormID != o->mswpFormID)
-    {
-      tmp.model.o.mswpFormID =
-          materialSwaps.loadMaterialSwap(
-              ba2File, esmFile, tmp.model.o.mswpFormID);
-    }
-    else
+    if (BRANCH_LIKELY(!(tmp.flags & 0x10)))
     {
       tmp.model.o.mswpFormID = 0U;
+      if (BRANCH_UNLIKELY(tmp.flags & 0x04))
+      {
+        if (waterRenderMode < 0)
+        {
+          tmp.model.o.mswpFormID =
+              getWaterMaterial(waterMaterials, esmFile, r2, 0U);
+        }
+      }
     }
     objectList.push_back(tmp);
   }
@@ -1556,7 +1428,7 @@ bool Renderer::loadModel(const BaseObject& o, size_t threadNum)
     return false;
   nifFiles[n].clear();
   nifFiles[n].o = &o;
-  if (!o.modelPath || o.modelPath->empty())
+  if (o.modelPath.empty())
     return false;
   if (BRANCH_UNLIKELY(renderPass & 4) && !(o.flags & 4))
   {
@@ -1564,13 +1436,13 @@ bool Renderer::loadModel(const BaseObject& o, size_t threadNum)
       return false;
     if (!(effectMeshMode & 1))
     {
-      if (o.modelPath->starts_with("meshes/sky/"))
+      if (o.modelPath.starts_with("meshes/sky/"))
         return false;
-      if (o.modelPath->starts_with("meshes/effects/"))
+      if (o.modelPath.starts_with("meshes/effects/"))
       {
-        if (o.modelPath->compare(15, 8, "ambient/") == 0 ||
-            o.modelPath->ends_with("fog.nif") ||
-            o.modelPath->ends_with("cloud.nif"))
+        if (o.modelPath.compare(15, 8, "ambient/") == 0 ||
+            o.modelPath.ends_with("fog.nif") ||
+            o.modelPath.ends_with("cloud.nif"))
         {
           return false;
         }
@@ -1580,23 +1452,24 @@ bool Renderer::loadModel(const BaseObject& o, size_t threadNum)
   try
   {
     std::vector< unsigned char >& fileBuf = renderThreads[threadNum].fileBuf;
-    ba2File.extractFile(fileBuf, *(o.modelPath));
+    ba2File.extractFile(fileBuf, o.modelPath);
     unsigned char l = 0;
     if (!(o.flags & 0x0040))
       l = modelLOD;
     nifFiles[n].nifFile =
-        new NIFFile(fileBuf.data(), fileBuf.size(), ba2File, l);
+        new NIFFile(fileBuf.data(), fileBuf.size(), ba2File, &materials, l);
     nifFiles[n].nifFile->getMesh(nifFiles[n].meshData, 0U, 0U, true);
     size_t  meshCnt = nifFiles[n].meshData.size();
     for (size_t i = 0; i < meshCnt; i++)
     {
       const NIFFile::NIFTriShape& ts = nifFiles[n].meshData[i];
       // check hidden (0x8000) and alpha blending (0x1000) flags
-      if (((ts.m.flags >> 10) ^ renderPass) & 0x24U)
+      if (((ts.flags >> 10) ^ renderPass) & 0x24U)
       {
-        if ((ts.m.flags & BGSMFile::Flag_TSAlphaBlending) &&
-            (ts.m.texturePathMask | (o.flags & 0x0020)
-             | (ts.m.flags & BGSMFile::Flag_TSWater)))
+        const CE2Material::TextureSet *txtSet = findTextureSet(ts.m);
+        if ((ts.flags & CE2Material::Flag_AlphaBlending) &&
+            ((unsigned int) (txtSet && txtSet->texturePathMask)
+             | (o.flags & 0x0020) | (ts.flags & CE2Material::Flag_IsWater)))
         {
           nifFiles[n].usesAlphaBlending = true;
         }
@@ -1678,57 +1551,41 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
     return;
   std::uint16_t renderModeQuality =
       renderMode | renderQuality | ((p.flags >> 5) & 2);
-  std::uint16_t texturePathMaskBase = 0x0009;
-  if (renderModeQuality & 2)
-    texturePathMaskBase = 0x037B;
-  else if (renderQuality >= 1)
-    texturePathMaskBase = 0x000B;
-  std::map< unsigned int, BGSMFile >::const_iterator  i =
-      materials.find(p.model.d.b->formID);
-  if (i == materials.end())
+  if (p.model.d.b->modelPath.empty())
     return;
-  t.renderer->m = i->second;
+  const CE2Material *m = materials.findMaterial(p.model.d.b->modelPath);
+  const CE2Material::TextureSet *txtSet = findTextureSet(m);
+  if (!txtSet)
+    return;
+  t.renderer->m = m;
   const DDSTexture  *textures[10];
   unsigned int  textureMask = 0U;
-  if (p.model.d.b->gradientMapV)
-  {
-    t.renderer->m.s.gradientMapV =
-        float(int(p.model.d.b->gradientMapV) - 1) * (1.0f / 65534.0f);
-  }
-  unsigned int  texturePathMask = t.renderer->m.texturePathMask;
-  texturePathMask &= ((((unsigned int) t.renderer->m.flags & 0x80U) >> 5)
-                      | texturePathMaskBase);
-  if (!(texturePathMask & 0x0001U) ||
-      t.renderer->m.texturePaths[0].find("/temp_ground") != std::string::npos)
-  {
+  unsigned int  texturePathMask = txtSet->texturePathMask;
+  std::uint16_t texturePathMaskBase = 0x0005;
+  if (renderModeQuality & 2)
+    texturePathMaskBase = 0x003F;
+  else if (renderQuality >= 1)
+    texturePathMaskBase = 0x0007;
+  texturePathMask &=
+      (((unsigned int) t.renderer->flags & 0x80U) | texturePathMaskBase);
+  if (!texturePathMask)
     return;
-  }
   if (BRANCH_UNLIKELY(!enableTextures))
   {
-    if (t.renderer->m.alphaThresholdFloat > 0.0f || (texturePathMask & 0x0008U))
-    {
-      texturePathMask &= ~0x0008U;
-      textures[3] = &whiteTexture;
-      textureMask |= 0x0008U;
-    }
-    else
-    {
-      texturePathMask &= ~0x0001U;
-      textures[0] = &whiteTexture;
-      textureMask |= 0x0001U;
-    }
+    texturePathMask &= ~0x0001U;
+    textures[0] = &whiteTexture;
+    textureMask |= 0x0001U;
   }
-  for (unsigned int m = 0x00080200U; texturePathMask; m = m >> 1)
+  for (unsigned int j = 0x00080200U; texturePathMask; j = j >> 1)
   {
-    unsigned int  tmp = texturePathMask & m;
+    unsigned int  tmp = texturePathMask & j;
     if (!tmp)
       continue;
     int     k = int(std::bit_width(tmp)) - 1;
     bool    waitFlag = false;
     textures[k] = textureCache.loadTexture(
-                      ba2File, t.renderer->m.texturePaths[k], t.fileBuf,
-                      (!(m & 0x0018U) ? textureMip : 0),
-                      (m > 0x03FFU ? &waitFlag : (bool *) 0));
+                      ba2File, *(txtSet->texturePaths[k]), t.fileBuf,
+                      textureMip, (j > 0x03FFU ? &waitFlag : (bool *) 0));
     if (!waitFlag)
     {
       texturePathMask &= ~tmp;
@@ -1736,13 +1593,10 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
         textureMask |= tmp;
     }
   }
-  if (((textureMask ^ texturePathMaskBase) & 0x0010U) &&
-      t.renderer->m.s.envMapScale > 0.0f)
+  if (!defaultEnvMap.empty())
   {
-    textures[4] = textureCache.loadTexture(ba2File, defaultEnvMap,
-                                           t.fileBuf, 0);
-    if (textures[4])
-      textureMask |= 0x0010U;
+    t.renderer->setEnvironmentMap(textureCache.loadTexture(
+                                      ba2File, defaultEnvMap, t.fileBuf, 0));
   }
   t.renderer->setRenderMode(renderModeQuality);
   std::uint32_t decalColor = std::uint32_t(p.model.d.b->mswpFormID);
@@ -1774,7 +1628,7 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
     {
       const NIFFile::NIFTriShape& ts = nifFiles[n].meshData[j];
       // check hidden (0x8000) and alpha blending (0x1000) flags
-      if ((((ts.m.flags >> 10) ^ renderPass) & 0x24U) || !ts.triangleCnt)
+      if ((((ts.flags >> 10) ^ renderPass) & 0x24U) || !ts.triangleCnt)
         continue;
       NIFFile::NIFBounds  b;
       ts.calculateBounds(b, &vt);
@@ -1808,8 +1662,8 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
       if (!isVisible)
         continue;
       t.sortBuf.emplace(t.sortBuf.end(), j, b.zMin(),
-                        bool(ts.m.flags & BGSMFile::Flag_TSAlphaBlending));
-      if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSOrdered))
+                        bool(ts.flags & CE2Material::Flag_AlphaBlending));
+      if (BRANCH_UNLIKELY(ts.flags & NIFFile::NIFTriShape::Flag_TSOrdered))
         TriShapeSortObject::orderedNodeFix(t.sortBuf, nifFiles[n].meshData);
     }
     if (t.sortBuf.begin() == t.sortBuf.end())
@@ -1817,76 +1671,59 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
     std::sort(t.sortBuf.begin(), t.sortBuf.end());
     std::uint16_t renderModeQuality =
         renderMode | renderQuality | ((p.flags >> 5) & 2);
-    std::uint16_t texturePathMaskBase = 0x0009;
+    std::uint16_t texturePathMaskBase = 0x0005;
     if (renderModeQuality & 2)
-      texturePathMaskBase = 0x037B;
+      texturePathMaskBase = 0x003F;
     else if (renderQuality >= 1)
-      texturePathMaskBase = 0x000B;
+      texturePathMaskBase = 0x0007;
     for (size_t j = 0; j < t.sortBuf.size(); j++)
     {
       *(t.renderer) = nifFiles[n].meshData[size_t(t.sortBuf[j])];
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
-      if (BRANCH_UNLIKELY(t.renderer->m.flags & BGSMFile::Flag_TSWater))
+      if (BRANCH_UNLIKELY(t.renderer->flags & CE2Material::Flag_IsWater))
       {
         t.renderer->setRenderMode(3U | renderMode);
-        std::map< unsigned int, BGSMFile >::const_iterator  k =
-            materials.find(p.model.o.mswpFormID);
-        if (k == materials.end())
+        std::map< unsigned int, WaterProperties >::const_iterator k =
+            waterMaterials.find(p.model.o.mswpFormID);
+        if (k == waterMaterials.end())
           continue;
-        t.renderer->setMaterial(k->second);
-        t.renderer->m.w.envMapScale = waterReflectionLevel;
+        t.renderer->m = (CE2Material *) 0;
         textures[1] = textureCache.loadTexture(ba2File, defaultWaterTexture,
                                                t.fileBuf, 0);
         if (textures[1])
           textureMask |= 0x0002U;
-        textures[4] = textureCache.loadTexture(ba2File, defaultEnvMap,
-                                               t.fileBuf, 0);
-        if (textures[4])
-          textureMask |= 0x0010U;
+        if (!defaultEnvMap.empty())
+        {
+          t.renderer->setEnvironmentMap(textureCache.loadTexture(
+                                            ba2File, defaultEnvMap,
+                                            t.fileBuf, 0));
+        }
+        t.renderer->setWaterProperties(
+            k->second.deepColor, k->second.alphaDepth0, k->second.depthMult,
+            waterUVScale, 1.0f, 0.02032076f, waterReflectionLevel);
       }
       else
       {
-        if (p.flags2)
+        // TODO: implement material swapping
+        const CE2Material::TextureSet *txtSet = findTextureSet(t.renderer->m);
+        if (!txtSet)
+          continue;
+        unsigned int  texturePathMask = txtSet->texturePathMask;
+        texturePathMask &=
+            (((unsigned int) t.renderer->flags & 0x80U) | texturePathMaskBase);
+        if (!texturePathMask)
         {
-          t.renderer->m.s.gradientMapV =
-              float(int(p.flags2) - 1) * (1.0f / 65534.0f);
-        }
-        if (p.model.o.b->mswpFormID)
-          materialSwaps.materialSwap(*(t.renderer), p.model.o.b->mswpFormID);
-        if (p.model.o.mswpFormID)
-          materialSwaps.materialSwap(*(t.renderer), p.model.o.mswpFormID);
-        if (p.model.o.mswpFormID2)
-          materialSwaps.materialSwap(*(t.renderer), p.model.o.mswpFormID2);
-        unsigned int  texturePathMask = t.renderer->m.texturePathMask;
-        texturePathMask &= ((((unsigned int) t.renderer->m.flags & 0x80U) >> 5)
-                            | texturePathMaskBase);
-        if (!(texturePathMask & 0x0001U) ||
-            t.renderer->m.texturePaths[0].find("/temp_ground")
-            != std::string::npos)
-        {
-#if 0
-          if ((texturePathMask & 0x0001U) || !(p.flags & 0x0020))
+          if (!(p.flags & 0x0020))
             continue;
-#endif
           textures[0] = &whiteTexture;  // marker with vertex colors only
           textureMask |= 0x0001U;
         }
         if (BRANCH_UNLIKELY(!enableTextures))
         {
-          if (t.renderer->m.alphaThresholdFloat > 0.0f ||
-              (texturePathMask & 0x0008U))
-          {
-            texturePathMask &= ~0x0008U;
-            textures[3] = &whiteTexture;
-            textureMask |= 0x0008U;
-          }
-          else
-          {
-            texturePathMask &= ~0x0001U;
-            textures[0] = &whiteTexture;
-            textureMask |= 0x0001U;
-          }
+          texturePathMask &= ~0x0001U;
+          textures[0] = &whiteTexture;
+          textureMask |= 0x0001U;
         }
         for (unsigned int m = 0x00080200U; texturePathMask; m = m >> 1)
         {
@@ -1896,9 +1733,8 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
           int     k = int(std::bit_width(tmp)) - 1;
           bool    waitFlag = false;
           textures[k] = textureCache.loadTexture(
-                            ba2File, t.renderer->m.texturePaths[k], t.fileBuf,
-                            (!(m & 0x0018U) ? textureMip : 0),
-                            (m > 0x03FFU ? &waitFlag : (bool *) 0));
+                            ba2File, *(txtSet->texturePaths[k]), t.fileBuf,
+                            textureMip, (m > 0x03FFU ? &waitFlag : (bool *) 0));
           if (!waitFlag)
           {
             texturePathMask &= ~tmp;
@@ -1906,13 +1742,11 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
               textureMask |= tmp;
           }
         }
-        if (((textureMask ^ texturePathMaskBase) & 0x0010U) &&
-            t.renderer->m.s.envMapScale > 0.0f)
+        if (!defaultEnvMap.empty())
         {
-          textures[4] = textureCache.loadTexture(ba2File, defaultEnvMap,
-                                                 t.fileBuf, 0);
-          if (textures[4])
-            textureMask |= 0x0010U;
+          t.renderer->setEnvironmentMap(textureCache.loadTexture(
+                                            ba2File, defaultEnvMap,
+                                            t.fileBuf, 0));
         }
       }
       t.renderer->setRenderMode(renderModeQuality);
@@ -1929,22 +1763,16 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
         landTxtScale++;
         j = j << 1;
       }
-      unsigned int  ltexMask = 0x0001U;
-      if (renderQuality >= 1)
-      {
-        ltexMask = 0x0003U;
-        if (renderQuality >= 3 && esmFile.getESMVersion() >= 0x80U)
-          ltexMask = (esmFile.getESMVersion() < 0xC0U ? 0x0043U : 0x0303U);
-      }
+      unsigned int  ltexMask =
+          (renderQuality < 1 ? 0x81U : (renderQuality < 3 ? 0x83U : 0xBBU));
       t.terrainMesh->createMesh(
           *landData, landTxtScale,
           p.model.t.x0, p.model.t.y0, p.model.t.x1, p.model.t.y1,
           landTextures, landData->getTextureCount(), ltexMask,
           landTextureMip - float(int(landTextureMip)),
           landTxtRGBScale, landTxtDefColor);
-      t.renderer->setRenderMode(
-          (((ltexMask >> 1) | (ltexMask >> 5) | (ltexMask >> 8)) & 3U)
-          | renderMode);
+      t.renderer->setRenderMode((renderQuality - (renderQuality & 2))
+                                | renderMode);
       *(t.renderer) = *(t.terrainMesh);
       t.renderer->drawTriShape(
           p.modelTransform,
@@ -1978,24 +1806,27 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
     tmp.triangleCnt = 2;
     tmp.vertexData = vTmp;
     tmp.triangleData = tTmp;
-    std::map< unsigned int, BGSMFile >::const_iterator  j =
-        materials.find(p.model.t.waterFormID);
-    if (j == materials.end())
+    std::map< unsigned int, WaterProperties >::const_iterator j =
+        waterMaterials.find(p.model.t.waterFormID);
+    if (j == waterMaterials.end())
       return;
-    tmp.m = j->second;
-    tmp.m.w.envMapScale = waterReflectionLevel;
+    tmp.m = (CE2Material *) 0;
     t.renderer->setRenderMode(3U | renderMode);
     *(t.renderer) = tmp;
-    const DDSTexture  *textures[5];
+    const DDSTexture  *textures[2];
     unsigned int  textureMask = 0U;
     textures[1] = textureCache.loadTexture(ba2File, defaultWaterTexture,
                                            t.fileBuf, 0);
     if (textures[1])
       textureMask |= 0x0002U;
-    textures[4] = textureCache.loadTexture(ba2File, defaultEnvMap,
-                                           t.fileBuf, 0);
-    if (textures[4])
-      textureMask |= 0x0010U;
+    if (!defaultEnvMap.empty())
+    {
+      t.renderer->setEnvironmentMap(textureCache.loadTexture(
+                                        ba2File, defaultEnvMap, t.fileBuf, 0));
+    }
+    t.renderer->setWaterProperties(
+        j->second.deepColor, j->second.alphaDepth0, j->second.depthMult,
+        waterUVScale, 1.0f, 0.02032076f, waterReflectionLevel);
     t.renderer->drawTriShape(p.modelTransform, textures, textureMask);
   }
   else if ((p.flags & 0x10) && !(renderPass & 0x04))    // decal
@@ -2096,8 +1927,8 @@ void Renderer::threadFunction(Renderer *p, size_t threadNum)
   q.cv1.notify_all();
 }
 
-Renderer::Renderer(int imageWidth, int imageHeight,
-                   const BA2File& archiveFiles, ESMFile& masterFiles,
+Renderer::Renderer(int imageWidth, int imageHeight, const BA2File& archiveFiles,
+                   ESMFile& masterFiles, const char *materialDBPath,
                    std::uint32_t *bufRGBA, float *bufZ, int zMax)
   : outBufRGBA(bufRGBA),
     outBufZ(bufZ),
@@ -2127,7 +1958,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     enableAllObjects(false),
     enableTextures(true),
     renderQuality(0),
-    renderMode((unsigned char) ((masterFiles.getESMVersion() >> 4) & 0x0CU)),
+    renderMode(0U),
     debugMode(0),
     renderPass(0),
     ignoreOBND(false),
@@ -2137,6 +1968,7 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     objectListPos(0),
     modelIDBase(0xFFFFFFFFU),
     renderObjectQueue((RenderObjectQueue *) 0),
+    waterUVScale(0.032258f),
     waterReflectionLevel(1.0f),
     zRangeMax(zMax),
     effectMeshMode(0),
@@ -2144,7 +1976,8 @@ Renderer::Renderer(int imageWidth, int imageHeight,
     waterRenderMode(0),
     bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
     whiteTexture(0xFFFFFFFFU),
-    outBufN((std::uint32_t *) 0)
+    outBufN((std::uint32_t *) 0),
+    materials(ba2File, materialDBPath)
 {
   if (!renderMode)
     renderMode = 4;
@@ -2330,13 +2163,12 @@ void Renderer::setWaterColor(std::uint32_t n)
     n = 0xC0302010U;                    // default water color if not specified
   else
     n = bgraToRGBA(n);
-  getWaterMaterial(materials, esmFile, (ESMFile::ESMRecord *) 0, n, true);
+  getWaterMaterial(waterMaterials, esmFile, (ESMFile::ESMRecord *) 0, n, true);
 }
 
 void Renderer::setRenderParameters(
     int lightColor, int ambientColor, int envColor,
-    float lightLevel, float envLevel, float rgbScale,
-    float reflZScale, int waterUVScale)
+    float lightLevel, float envLevel, float rgbScale, float reflZScale)
 {
   if (renderThreads.size() < 1)
     return;
@@ -2364,7 +2196,6 @@ void Renderer::setRenderParameters(
     renderThreads[i].renderer->setEnvMapOffset(
         float(width) * -0.5f, float(height) * -0.5f,
         float(height) * reflZScale);
-    renderThreads[i].renderer->setWaterUVScale(1.0f / float(waterUVScale));
   }
 }
 
@@ -2376,14 +2207,13 @@ static int calculateLandTxtMip(long fileSize)
   return int(m >> 1);
 }
 
-void Renderer::loadTerrain(const char *btdFileName,
-                           unsigned int worldID, unsigned int defTxtID,
+void Renderer::loadTerrain(const char *btdFileName, unsigned int worldID,
                            int mipLevel, int xMin, int yMin, int xMax, int yMax)
 {
   if (!landData)
   {
-    landData = new LandscapeData(&esmFile, btdFileName, &ba2File, 0x0B, worldID,
-                                 defTxtID, mipLevel, xMin, yMin, xMax, yMax);
+    landData = new LandscapeData(&esmFile, btdFileName, &ba2File, &materials,
+                                 worldID, mipLevel, xMin, yMin, xMax, yMax);
     defaultWaterLevel = landData->getWaterLevel();
   }
   if (waterRenderMode < 0)
@@ -2391,7 +2221,7 @@ void Renderer::loadTerrain(const char *btdFileName,
     const ESMFile::ESMRecord  *r =
         esmFile.findRecord(landData->getWaterFormID());
     if (r && *r == "WATR")
-      getWaterMaterial(materials, esmFile, r, 0xC0302010U, true);
+      getWaterMaterial(waterMaterials, esmFile, r, 0xC0302010U, true);
   }
   size_t  textureCnt = landData->getTextureCount();
   if (!landTextures)
@@ -2400,29 +2230,37 @@ void Renderer::loadTerrain(const char *btdFileName,
   int     mipLevelD = std::min(textureMip + int(landTextureMip), 15);
   for (size_t i = 0; i < textureCnt; i++)
   {
-    if (!enableTextures)
+    const CE2Material *m = landData->getTextureMaterial(i);
+    const CE2Material::TextureSet *txtSet = findTextureSet(m);
+    long    fileSizeD = -1L;
+    for (unsigned int j = 0U; j < 8U; j++)
     {
-      landTextures[i][0] = &whiteTexture;
-    }
-    else
-    {
-      landTextures[i][0] = textureCache.loadTexture(
-                               ba2File, landData->getTextureDiffuse(i), fileBuf,
-                               mipLevelD);
-    }
-    if (renderQuality < 1)
-      continue;
-    long    fileSizeD = ba2File.getFileSize(landData->getTextureDiffuse(i));
-    for (size_t j = 1; j < 10; j++)
-    {
-      if (j >= 2 && !(renderQuality >= 3 && (j == 6 || j >= 8)))
+      landTextures[i][j] = (DDSTexture *) 0;
+      if (!((1U << j) & (renderQuality < 1 ?
+                         0x85U : (renderQuality < 3 ? 0x87U : 0xBFU))))
+      {
         continue;
-      const std::string&  fileName =
-          landData->getTextureMaterial(i).texturePaths[j];
-      long    fileSizeN = ba2File.getFileSize(fileName);
-      int     mipLevelN = mipLevelD + calculateLandTxtMip(fileSizeN)
-                          - calculateLandTxtMip(fileSizeD);
-      mipLevelN = (mipLevelN > 0 ? (mipLevelN < 15 ? mipLevelN : 15) : 0);
+      }
+      if (!(txtSet && (txtSet->texturePathMask & (1U << j))))
+        continue;
+      const std::string&  fileName = *(txtSet->texturePaths[j]);
+      int     mipLevelN = mipLevelD;
+      if (!j)
+      {
+        fileSizeD = ba2File.getFileSize(fileName);
+        if (!enableTextures)
+        {
+          landTextures[i][j] = &whiteTexture;
+          continue;
+        }
+      }
+      else if (fileSizeD > 0L)
+      {
+        long    fileSizeN = ba2File.getFileSize(fileName);
+        mipLevelN += (calculateLandTxtMip(fileSizeN)
+                      - calculateLandTxtMip(fileSizeD));
+        mipLevelN = (mipLevelN > 0 ? (mipLevelN < 15 ? mipLevelN : 15) : 0);
+      }
       landTextures[i][j] = textureCache.loadTexture(
                                ba2File, fileName, fileBuf, mipLevelN);
     }

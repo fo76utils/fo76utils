@@ -146,128 +146,6 @@ void Renderer_Base::TextureCache::clear()
   textureCache.clear();
 }
 
-unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
-    const BA2File& ba2File, ESMFile& esmFile, unsigned int formID)
-{
-  if (!formID)
-    return 0U;
-  {
-    std::map< unsigned int,
-              std::map< std::string, BGSMFile > >::const_iterator i =
-        materialSwaps.find(formID);
-    if (i != materialSwaps.end())
-      return (i->second.begin() != i->second.end() ? formID : 0U);
-  }
-  std::vector< unsigned char >  fileBuf;
-  std::string bnamPath;
-  std::string snamPath;
-  std::map< std::string, BGSMFile >&  v = materialSwaps[formID];
-  const ESMFile::ESMRecord  *r = esmFile.findRecord(formID);
-  if (!(r && *r == "MSWP"))
-    return 0U;
-  ESMFile::ESMField f(*r, esmFile);
-  while (f.next())
-  {
-    if (f == "BNAM")
-    {
-      f.readPath(bnamPath, std::string::npos, "materials/");
-      if (bnamPath.length() >= 5 &&
-          !(bnamPath[bnamPath.length() - 5] == '.' &&
-            bnamPath[bnamPath.length() - 4] == 'b' &&
-            bnamPath[bnamPath.length() - 1] == 'm'))
-      {
-        bnamPath += ".bgsm";
-      }
-    }
-    else if (f == "SNAM" && !bnamPath.empty())
-    {
-      f.readPath(snamPath, std::string::npos, "materials/");
-      if (!snamPath.empty())
-      {
-        if (snamPath.length() >= 5 &&
-            !(snamPath[snamPath.length() - 5] == '.' &&
-              snamPath[snamPath.length() - 4] == 'b' &&
-              snamPath[snamPath.length() - 1] == 'm'))
-        {
-          snamPath += ".bgsm";
-        }
-        float   gradientMapV = -1.0f;
-        if (f.dataRemaining >= 4U &&
-            FileBuffer::readUInt32Fast(f.data() + f.size()) == 0x4D414E43U)
-        {                               // "CNAM"
-          if (f.next() && f.size() >= 4)
-          {
-            gradientMapV = f.readFloat();
-            gradientMapV = std::min(std::max(gradientMapV, 0.0f), 1.0f);
-          }
-        }
-        static const char *bgsmNamePatterns[14] =
-        {
-          "*",            "",             "01",           "01decal",
-          "02",           "_2sided",      "_8bit",        "alpha",
-          "alpha_2sided", "_decal",       "decal",        "decal_8bit",
-          "noalpha",      "wet"
-        };
-        size_t  n1 = bnamPath.find('*');
-        size_t  n2 = std::string::npos;
-        if (n1 != std::string::npos)
-          n2 = snamPath.find('*');
-        for (size_t i = 1; i < (sizeof(bgsmNamePatterns) / sizeof(char *)); i++)
-        {
-          if (n1 != std::string::npos)
-          {
-            bnamPath.erase(n1, std::strlen(bgsmNamePatterns[i - 1]));
-            bnamPath.insert(n1, bgsmNamePatterns[i]);
-            if (n2 != std::string::npos)
-            {
-              snamPath.erase(n2, std::strlen(bgsmNamePatterns[i - 1]));
-              snamPath.insert(n2, bgsmNamePatterns[i]);
-            }
-            if (ba2File.getFileSize(bnamPath, true) < 0L)
-              continue;
-          }
-          try
-          {
-            BGSMFile& m = v[bnamPath];
-            ba2File.extractFile(fileBuf, snamPath);
-            FileBuffer  tmp(fileBuf.data(), fileBuf.size());
-            m.loadBGSMFile(tmp);
-            if (gradientMapV >= 0.0f)
-              m.s.gradientMapV = gradientMapV;
-            m.texturePaths.setMaterialPath(bnamPath);   // FIXME: or SNAM path?
-          }
-          catch (FO76UtilsError&)
-          {
-            v.erase(bnamPath);
-          }
-          if (n1 == std::string::npos)
-            break;
-        }
-      }
-      bnamPath.clear();
-    }
-  }
-  if (v.begin() == v.end())
-    return 0U;
-  return formID;
-}
-
-void Renderer_Base::MaterialSwaps::materialSwap(
-    Plot3D_TriShape& t, unsigned int formID) const
-{
-  if (BRANCH_UNLIKELY(!t.haveMaterialPath()))
-    return;
-  std::map< unsigned int,
-            std::map< std::string, BGSMFile > >::const_iterator i =
-      materialSwaps.find(formID);
-  if (i == materialSwaps.end())
-    return;
-  std::map< std::string, BGSMFile >::const_iterator j =
-      i->second.find(t.materialPath());
-  if (j != i->second.end())
-    t.setMaterial(j->second);
-}
-
 void Renderer_Base::TriShapeSortObject::orderedNodeFix(
     std::vector< TriShapeSortObject >& sortBuf,
     const std::vector< NIFFile::NIFTriShape >& meshData)
@@ -276,7 +154,7 @@ void Renderer_Base::TriShapeSortObject::orderedNodeFix(
     return;
   size_t  j = sortBuf.size() - 1;
   size_t  i0 = size_t(sortBuf[j]);
-  while (i0 > 0 && (meshData[i0].m.flags & BGSMFile::Flag_TSOrdered))
+  while (i0 > 0 && (meshData[i0].flags & NIFFile::NIFTriShape::Flag_TSOrdered))
     i0--;
   std::uint64_t zMin = sortBuf[j].n & ~0xFFFFFFFFULL;
   std::uint64_t zMax = zMin;
@@ -290,7 +168,7 @@ void Renderer_Base::TriShapeSortObject::orderedNodeFix(
   }
   while (++j < sortBuf.size())
   {
-    if (meshData[size_t(sortBuf[j])].m.flags & BGSMFile::Flag_TSAlphaBlending)
+    if (meshData[size_t(sortBuf[j])].flags & CE2Material::Flag_AlphaBlending)
       sortBuf[j].n = (sortBuf[j].n & 0xFFFFFFFFU) | zMax;
     else
       sortBuf[j].n = (sortBuf[j].n & 0xFFFFFFFFU) | zMin;
@@ -298,100 +176,91 @@ void Renderer_Base::TriShapeSortObject::orderedNodeFix(
 }
 
 unsigned int Renderer_Base::getWaterMaterial(
-    std::map< unsigned int, BGSMFile >& m,
+    std::map< unsigned int, WaterProperties >& m,
     ESMFile& esmFile, const ESMFile::ESMRecord *r,
     unsigned int defaultColor, bool storeAsDefault)
 {
-  std::uint32_t nifVersion = 155U;      // Fallout 76
-  if (esmFile.getESMVersion() < 0x80U)
-    nifVersion = 100U;                  // Skyrim or older
-  else if (esmFile.getESMVersion() < 0xC0U)
-    nifVersion = 130U;                  // Fallout 4
-  if (!r)
+  unsigned int  waterFormID = 0U;
+  if (r)
+  {
+    if (*r == "WATR")
+    {
+      waterFormID = r->formID;
+    }
+    else
+    {
+      ESMFile::ESMField f(esmFile, *r);
+      while (f.next())
+      {
+        if (((f == "WTFM" && *r == "ACTI") || (f == "XCWT" && *r == "CELL") ||
+             (f == "NAM3" && *r == "WRLD")) && f.size() >= 4)
+        {
+          waterFormID = f.readUInt32Fast();
+          break;
+        }
+      }
+    }
+  }
+  std::map< unsigned int, WaterProperties >::iterator i = m.find(waterFormID);
+  if (i != m.end() && !(storeAsDefault && !waterFormID))
   {
     if (storeAsDefault)
-    {
-      BGSMFile& tmp = m[0U];
-      tmp.nifVersion = nifVersion;
-      tmp.setWaterColor(std::uint32_t(defaultColor), 1.0f);
-    }
-    return 0U;
-  }
-  unsigned int  waterFormID = r->formID;
-  ESMFile::ESMField f(esmFile, *r);
-  while (f.next())
-  {
-    if (((f == "WNAM" && *r == "ACTI") || (f == "XCWT" && *r == "CELL") ||
-         (f == "NAM3" && *r == "WRLD")) && f.size() >= 4)
-    {
-      waterFormID = f.readUInt32Fast();
-    }
-    else if (f == "DNAM" && *r == "PWAT" && f.size() >= 8)  // Fallout 3 water
-    {
-      (void) f.readUInt32Fast();        // ignore flags
-      waterFormID = f.readUInt32Fast();
-    }
-  }
-  std::map< unsigned int, BGSMFile >::iterator  i = m.find(waterFormID);
-  if (i != m.end())
-  {
-    if (storeAsDefault && waterFormID)
       m[0U] = i->second;
     return waterFormID;
   }
-  BGSMFile  tmp;
-  tmp.nifVersion = nifVersion;
-  tmp.setWaterColor(std::uint32_t(defaultColor), 1.0f);
-  const ESMFile::ESMRecord  *r2 = esmFile.findRecord(waterFormID);
-  if (r2 && *r2 == "WATR")
+  WaterProperties tmp;
+  tmp.deepColor = std::uint32_t(defaultColor | 0xFF000000U);
+  tmp.normalScale = 1.0f;
+  tmp.reflectivity = 0.02032076f;
+  tmp.specularScale = 1.0f;
+  tmp.alphaDepth0 = FloatVector4(0.25f);
+  tmp.texturePath = "textures/water/wavesdefault_normal.dds";
+  bool    haveWaterParams = false;
+  if (waterFormID && esmFile.getESMVersion() > 0xFF)    // Starfield
   {
-    ESMFile::ESMField f2(*r2, esmFile);
-    while (f2.next())
+    const ESMFile::ESMRecord  *r2 = esmFile.findRecord(waterFormID);
+    if (r2 && *r2 == "WATR")
     {
-      if (!(f2 == (esmFile.getESMVersion() < 0x02 ? "DATA" : "DNAM")))
-        continue;
-      if (f2.size() < 64)
-        continue;
-      if (esmFile.getESMVersion() < 0xC0)
+      ESMFile::ESMField f(*r2, esmFile);
+      while (f.next())
       {
-        // Oblivion, Fallout 3/NV, Skyrim, Fallout 4
-        if (esmFile.getESMVersion() < 0x80)
-          f2.setPosition(esmFile.getESMVersion() < 0x02 ? 40 : 36);
-        // fog distance (far plane), or depth amount for Fallout 4
-        tmp.w.maxDepth = f2.readFloat();
-        tmp.w.shallowColor =
-            FloatVector4(f2.readUInt32Fast()) * (1.0f / 255.0f);
-        tmp.w.shallowColor[3] = 0.5f;
-        tmp.w.deepColor = FloatVector4(f2.readUInt32Fast()) * (1.0f / 255.0f);
-        tmp.w.deepColor[3] = 0.9375f;
-      }
-      else
-      {
-        // Fallout 76 or Starfield
-        tmp.w.maxDepth = f2.readFloat();
-        tmp.w.shallowColor = f2.readFloatVector4(); // opacity for each channel
-        tmp.w.shallowColor[3] = 0.5f;
-        f2.setPosition(f2.getPosition() - 4);
-        tmp.w.deepColor = f2.readFloatVector4();    // base color
-        if (esmFile.getESMVersion() > 0xFFU)
+        if (f == "DNAM" && f.size() >= 64)
         {
-          // Starfield water color, may be incorrect
-          tmp.w.deepColor = FloatVector4(f2.readUInt32()).srgbExpand();
+          float   d = std::min(std::max(f.readFloat(), 0.01f), 200.0f);
+          f.setPosition(f.getPosition() + 12);          // skip 3 unknown floats
+          FloatVector4  a(f.readFloatVector4());        // absorption
+          a.maxValues(FloatVector4(0.0f)).minValues(FloatVector4(100.0f));
+          tmp.deepColor = f.readUInt32Fast() | 0xFF000000U;
+          tmp.depthMult = a * (0.3321928f / d);
+          haveWaterParams = true;
         }
-        tmp.w.deepColor[3] = 0.9375f;
       }
-      tmp.w.maxDepth =
-          std::min(std::max(tmp.w.maxDepth, 1.0f / 512.0f), 127.0f);
-      tmp.w.shallowColor.maxValues(FloatVector4(0.0f));
-      tmp.w.shallowColor.minValues(FloatVector4(1.0f));
-      tmp.w.deepColor.maxValues(FloatVector4(0.0f));
-      tmp.w.deepColor.minValues(FloatVector4(1.0f));
-      m.insert(std::pair< unsigned int, BGSMFile >(waterFormID, tmp));
-      if (storeAsDefault)
-        m[0U] = tmp;
-      return waterFormID;
     }
   }
-  return 0U;
+  if (!haveWaterParams)
+  {
+    float   d = float(int((defaultColor >> 24) & 0xFFU));
+    d = d * d * (1.0f / 512.0f) + 128.0f - d;
+    FloatVector4  a(tmp.deepColor);
+    a.srgbExpand().maxValues(FloatVector4(0.000005f));
+    tmp.depthMult[0] = float(std::log2(a[0]));
+    tmp.depthMult[1] = float(std::log2(a[1]));
+    tmp.depthMult[2] = float(std::log2(a[2]));
+    tmp.depthMult[3] = 0.0f;
+    tmp.depthMult *= (-4.0f / d);
+  }
+  if (i == m.end())
+  {
+    i = m.insert(std::pair< unsigned int, WaterProperties >(
+                     waterFormID, tmp)).first;
+  }
+  if (storeAsDefault)
+  {
+    if (!waterFormID)
+      i->second = tmp;
+    else
+      m[0U] = tmp;
+  }
+  return waterFormID;
 }
 
