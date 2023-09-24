@@ -138,6 +138,7 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     maxBlenders = 5,
     maxLODMaterials = 3
   };
+  static const char *materialFlagNames[32];
   std::uint32_t flags;
   float   alphaThreshold;
   // 0 = "Lerp", 1 = "Additive", 2 = "Subtractive", 3 = "Multiplicative"

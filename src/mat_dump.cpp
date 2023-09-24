@@ -2,22 +2,47 @@
 #include "common.hpp"
 #include "material.hpp"
 
-static const size_t indentTabSize = 4;
+static const size_t indentTabSize = 2;
 
 static const char *objectTypeStrings[7] =
 {
   "", "MaterialFile", "Blender", "Layer", "Material", "TextureSet", "UVStream"
 };
 
-static const char *materialFlagNames[32] =
+const char * CE2Material::materialFlagNames[32] =
 {
-  "", "", "Is effect", "Is decal", "Two sided",
-  "Is vegetation", "", "Emissive", "", "",
-  "", "", "Alpha blending", "", "Is water",
-  "", "Alpha testing", "Is terrain", "", "",
-  "", "", "", "", "",
-  "", "", "", "", "",
-  "", ""
+  "Tile U",
+  "Tile V",
+  "Is effect",
+  "Is decal",
+  "Two sided",
+  "Is vegetation",
+  "Grayscale to alpha",
+  "Emissive",
+  "No Z buffer write",
+  "Falloff enabled",
+  "Effect lighting",
+  "Ordered with previous",
+  "Alpha blending",
+  "Has vertex colors",
+  "Is water",
+  "Hidden",
+  "Alpha testing",
+  "Is terrain",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  ""
 };
 
 static const char *opacityModeNames[4] =
