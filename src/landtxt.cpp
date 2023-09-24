@@ -102,8 +102,15 @@ FloatVector4 LandscapeTexture::renderPixelSF_I_NoNormals(
     std::uint32_t cTmp =
         p.landTextures[t][0]->getPixelN(txtX - txtY, txtX + txtY,
                                         int(p.mipLevel));
-    if (cTmp < ((aTmp * 0x24800000U + 0x00800000U) & 0xFF000000U))
-      continue;
+    if (aTmp && p.landTextures[t][2])
+    {
+      if ((p.landTextures[t][2]->getPixelN(txtX - txtY, txtX + txtY,
+                                           int(p.mipLevel)) & 0xFFU)
+          < ((0xFFDBB7926E492500ULL >> (aTmp << 3)) & 0xFFU))
+      {
+        continue;
+      }
+    }
     c = cTmp;
     break;
   }
@@ -136,8 +143,15 @@ FloatVector4 LandscapeTexture::renderPixelSF_I_NoPBR(
     std::uint32_t cTmp =
         p.landTextures[t][0]->getPixelN(txtX - txtY, txtX + txtY,
                                         int(p.mipLevel));
-    if (cTmp < ((aTmp * 0x24800000U + 0x00800000U) & 0xFF000000U))
-      continue;
+    if (aTmp && p.landTextures[t][2])
+    {
+      if ((p.landTextures[t][2]->getPixelN(txtX - txtY, txtX + txtY,
+                                           int(p.mipLevel)) & 0xFFU)
+          < ((0xFFDBB7926E492500ULL >> (aTmp << 3)) & 0xFFU))
+      {
+        continue;
+      }
+    }
     c = cTmp;
     n[0] = p.getNormal(t, txtX - txtY, txtX + txtY, int(p.mipLevel));
     break;
@@ -171,8 +185,15 @@ FloatVector4 LandscapeTexture::renderPixelSF_I(
     std::uint32_t cTmp =
         p.landTextures[t][0]->getPixelN(txtX - txtY, txtX + txtY,
                                         int(p.mipLevel));
-    if (cTmp < ((aTmp * 0x24800000U + 0x00800000U) & 0xFF000000U))
-      continue;
+    if (aTmp && p.landTextures[t][2])
+    {
+      if ((p.landTextures[t][2]->getPixelN(txtX - txtY, txtX + txtY,
+                                           int(p.mipLevel)) & 0xFFU)
+          < ((0xFFDBB7926E492500ULL >> (aTmp << 3)) & 0xFFU))
+      {
+        continue;
+      }
+    }
     c = cTmp;
     p.getPBRMapsI(n, t, txtX - txtY, txtX + txtY, int(p.mipLevel));
     break;
@@ -190,25 +211,32 @@ FloatVector4 LandscapeTexture::renderPixelSF_F(
   const unsigned char *p0 = p.txtSetData;
   p0 = p0 + (((size_t(y) >> p.txtSetMip) * (size_t(p.width) >> p.txtSetMip)
               + (size_t(x) >> p.txtSetMip)) << 4);
-  std::uint32_t a = FileBuffer::readUInt16Fast(p.ltexData16 + (offs << 1));
-  a = (a << 3) | 7U;
+  std::uint32_t a =
+      (std::uint32_t(std::int16_t(FileBuffer::readUInt16Fast(
+                                      p.ltexData16 + (offs << 1))))
+       & 0x0003FFFFU) | 0x001C0000U;
   FloatVector4  c(p.defaultColor);
-  p0 = p0 + 6;
-  for ( ; a; a = a << 3)
+  for ( ; a; a = a >> 3, p0++)
   {
-    p0--;
-    if (a < 0x8000U)
+    if (!(a & 7U))
       continue;
-    std::uint32_t aTmp = ~a & 0x00038000U;
-    a = a & 0x7FFFU;
+    std::uint32_t aTmp = (a & 7U) ^ 7U;
     unsigned char t = *p0;
     if (t >= p.landTextureCnt || !p.landTextures[t][0])
       continue;
     FloatVector4  cTmp(p.landTextures[t][0]->getPixelT_N(
                            float(txtX - txtY) * p.txtScale,
                            float(txtX + txtY) * p.txtScale, p.mipLevel));
-    if (cTmp[3] < (float(int(aTmp)) * (255.5f / float(0x00038000))))
-      continue;
+    if (aTmp && p.landTextures[t][2])
+    {
+      if (p.landTextures[t][2]->getPixelT_N(float(txtX - txtY) * p.txtScale,
+                                            float(txtX + txtY) * p.txtScale,
+                                            p.mipLevel)[0]
+          < (float(int(aTmp)) * (255.0f / 7.0f)))
+      {
+        continue;
+      }
+    }
     c = cTmp;
     p.getPBRMapsF(n, t, float(txtX - txtY) * p.txtScale,
                   float(txtX + txtY) * p.txtScale, p.mipLevel);
@@ -245,7 +273,7 @@ void LandscapeTexture::copyTextureSet(
   {
     for (size_t j = 0; j < 8; j++)
     {
-      if (landTxts[i][j] || !(0x003BU & (1U << (unsigned char) j)))
+      if (landTxts[i][j] || !(0x003FU & (1U << (unsigned char) j)))
         landTextures[i][j] = landTxts[i][j];
       else if (j == 1)
         landTextures[i][j] = &defaultLandTxt_N;

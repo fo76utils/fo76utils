@@ -31,6 +31,7 @@ static void loadTextures(
 {
   textures.clear();
   std::vector< std::string >  fileNames;
+  std::vector< std::string >  fileNames2;
   if (!landData)
   {
     FileBuffer  inFile(listFileName);
@@ -56,6 +57,7 @@ static void loadTextures(
         if (!s.empty())
         {
           fileNames.push_back(s);
+          fileNames2.emplace_back();
           s.clear();
         }
       }
@@ -70,20 +72,27 @@ static void loadTextures(
     for (size_t i = 0; i < landData->getTextureCount(); i++)
     {
       const CE2Material *m = landData->getTextureMaterial(i);
-      const std::string *s = (std::string *) 0;
+      const std::string *s0 = (std::string *) 0;
+      const std::string *s2 = (std::string *) 0;
       if (m && (m->layerMask & 1U))
       {
         const CE2Material::Layer  *l = m->layers[0];
-        if (l && l->material && l->material->textureSet &&
-            (l->material->textureSet->texturePathMask & 1U))
+        if (l && l->material && l->material->textureSet)
         {
-          s = l->material->textureSet->texturePaths[0];
+          if (l->material->textureSet->texturePathMask & 1U)
+            s0 = l->material->textureSet->texturePaths[0];
+          if (l->material->textureSet->texturePathMask & 4U)
+            s2 = l->material->textureSet->texturePaths[2];
         }
       }
-      if (!s)
+      if (!s0)
         fileNames.emplace_back();
       else
-        fileNames.push_back(*s);
+        fileNames.push_back(*s0);
+      if (!s2)
+        fileNames2.emplace_back();
+      else
+        fileNames2.push_back(*s2);
     }
   }
   if (fileNames.size() < 1)
@@ -92,32 +101,36 @@ static void loadTextures(
   std::vector< unsigned char >  tmpBuf;
   for (size_t i = 0; i < fileNames.size(); i++)
   {
-    if (fileNames[i].empty())
-      continue;
-    try
+    for (size_t j = 0; j <= 2; j = j + 2)
     {
-      if (verboseMode)
-      {
-        std::fprintf(stderr, "\rLoading texture %3d: %-58s",
-                     int(i), fileNames[i].c_str());
-      }
-      if (ba2File)
-      {
-        int     n = ba2File->extractTexture(tmpBuf, fileNames[i], mipOffset);
-        textures[i][0] = new DDSTexture(tmpBuf.data(), tmpBuf.size(), n);
-      }
-      else
-      {
-        textures[i][0] = new DDSTexture(fileNames[i].c_str(), mipOffset);
-      }
-    }
-    catch (...)
-    {
-      if (checkNameExtension(fileNames[i].c_str(), ".dds") && !(ba2File && i))
+      const std::string&  fileName = (j == 0 ? fileNames[i] : fileNames2[i]);
+      if (fileName.empty())
+        continue;
+      try
       {
         if (verboseMode)
-          std::fputc('\n', stderr);
-        throw;
+        {
+          std::fprintf(stderr, "\rLoading texture %3d: %-58s",
+                       int(i), fileName.c_str());
+        }
+        if (ba2File)
+        {
+          int     n = ba2File->extractTexture(tmpBuf, fileName, mipOffset);
+          textures[i][j] = new DDSTexture(tmpBuf.data(), tmpBuf.size(), n);
+        }
+        else
+        {
+          textures[i][j] = new DDSTexture(fileName.c_str(), mipOffset);
+        }
+      }
+      catch (...)
+      {
+        if (checkNameExtension(fileName.c_str(), ".dds") && !(ba2File && i))
+        {
+          if (verboseMode)
+            std::fputc('\n', stderr);
+          throw;
+        }
       }
     }
   }
