@@ -364,6 +364,66 @@ bool ESMFile::ESMField::next()
   return true;
 }
 
+ESMFile::CDBRecord::CDBRecord(ESMField& f)
+  : FileBuffer(f.data(), f.size(), 0),
+    stringTableSize(0U),
+    stringTable((char *) 0)
+{
+  if (BRANCH_LIKELY(f.size() >= 16))
+  {
+    dataRemaining = (unsigned int) (f.size() - 16);
+    type = FileBuffer::readUInt32Fast(f.data());
+    fileBuf = f.data() + 8;
+    fileBufSize = FileBuffer::readUInt32Fast(f.data() + 4);
+    if (type == 0x48544542U && fileBufSize == 8)        // "BETH"
+    {
+      if (BRANCH_LIKELY(FileBuffer::readUInt32Fast(f.data() + 8) == 4U))
+      {
+        recordsRemaining = FileBuffer::readUInt32Fast(f.data() + 12);
+        recordsRemaining -= (unsigned int) (recordsRemaining > 0U);
+        return;
+      }
+    }
+  }
+  fileBufSize = 0;
+  type = 0U;
+  recordsRemaining = 0U;
+  dataRemaining = 0U;
+}
+
+bool ESMFile::CDBRecord::next()
+{
+  fileBuf = fileBuf + fileBufSize;
+  fileBufSize = dataRemaining;
+  filePos = 0;
+  if (!recordsRemaining)
+    return false;
+  recordsRemaining--;
+  if (dataRemaining < 8U)
+    errorMessage("unexpected end of CDB data");
+  type = readUInt32Fast();
+  size_t  n = readUInt32Fast();
+  if (n > (dataRemaining - 8U))
+    errorMessage("unexpected end of CDB data");
+  dataRemaining = dataRemaining - (unsigned int) (n + 8);
+  fileBuf = fileBuf + 8;
+  fileBufSize = n;
+  filePos = 0;
+  if (BRANCH_UNLIKELY(type == 0x54525453U))     // "STRT"
+  {
+    for ( ; n > 0; n--)
+    {
+      if (!fileBuf[n - 1])
+      {
+        stringTableSize = (unsigned int) n;
+        stringTable = reinterpret_cast< const char * >(fileBuf);
+        break;
+      }
+    }
+  }
+  return true;
+}
+
 unsigned short ESMFile::getRecordTimestamp(unsigned int formID) const
 {
   const ESMRecord *r = findRecord(formID);

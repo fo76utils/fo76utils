@@ -43,6 +43,27 @@ class ESMFile
       return FileBuffer::checkType(type, s);
     }
   };
+  class CDBRecord : public FileBuffer
+  {
+   public:
+    unsigned int  type;
+    unsigned int  recordsRemaining;
+    unsigned int  dataRemaining;
+    unsigned int  stringTableSize;
+    const char    *stringTable;
+    CDBRecord(ESMField& f);
+    bool next();
+    inline bool operator==(const char *s) const
+    {
+      return FileBuffer::checkType(type, s);
+    }
+    inline const char *getStringFromTable(unsigned int offs) const
+    {
+      if (BRANCH_UNLIKELY(offs >= stringTableSize))
+        return "";
+      return (stringTable + offs);
+    }
+  };
   struct ESMVCInfo
   {
     unsigned int  year;
