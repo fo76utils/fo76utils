@@ -461,7 +461,7 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
   if (materials && !materialPath.empty())
   {
     material = materials->findMaterial(materialPath);
-    if (material->flags & CE2Material::Flag_IsEffect)
+    if (material && (material->flags & CE2Material::Flag_IsEffect))
       shaderType--;
   }
 }
