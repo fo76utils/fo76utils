@@ -620,7 +620,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     if (!(formatFlags & 0x40))          // DDPF_RGB
       errorMessage("unsupported texture file format");
     blockSize = buf.readUInt32();
-    if (blockSize != 16 && blockSize != 24 && blockSize != 32)
+    if ((blockSize - 8) & ~(size_t(24)))        // must be 8, 16, 24 or 32
       errorMessage("unsupported texture file format");
     blockSize = blockSize >> 3;
     isCompressed = false;
@@ -640,6 +640,8 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       decodeFunction = &decodeLine_BGRA;
     else if (rgMask == 0x0000FF00000000FFULL && !baMask)
       decodeFunction = &decodeLine_R8G8;
+    else if (rgMask == 0x00000000000000FFULL && !baMask)
+      decodeFunction = &decodeLine_R8;
     else
       errorMessage("unsupported texture file format");
   }
