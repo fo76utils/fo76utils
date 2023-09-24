@@ -536,7 +536,7 @@ bool Plot3D_TriShape::getDiffuseColor_C(
     const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
   FloatVector4  baseColor(p.mp.s.baseColor);
-  if (true)
+  if (false)
     baseColor *= z.vertexColor;         // FIXME: this can be incorrect
   float   a = 255.0f;
   if (p.textures[2])
@@ -548,10 +548,22 @@ bool Plot3D_TriShape::getDiffuseColor_C(
   if (BRANCH_UNLIKELY(a < p.mp.s.alphaThreshold))
     return false;
   FloatVector4  tmp(p.textures[0]->getPixelT_Inline(z.u(), z.v(), z.mipLevel));
-  if (BRANCH_LIKELY(!(p.flags & CE2Material::Flag_IsWater)))
-    tmp *= baseColor;
+  tmp *= baseColor;
   tmp.srgbExpand();
   tmp[3] = a;                   // alpha * 255
+  c = tmp;
+  return true;
+}
+
+bool Plot3D_TriShape::getDiffuseColor_Water(
+    const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
+{
+  FloatVector4  tmp(p.textures[0]->getPixelT(z.u(), z.v(), z.mipLevel));
+  tmp -= 127.5f;
+  tmp[2] = float(std::sqrt(std::max(16256.25f - tmp.dotProduct2(tmp), 0.0f)));
+  tmp += 127.5f;
+  tmp.srgbExpand();
+  tmp[3] = 255.0f;
   c = tmp;
   return true;
 }
@@ -1085,7 +1097,7 @@ Plot3D_TriShape::Plot3D_TriShape(
     viewTransformInvY(0.0f, 1.0f, 0.0f, 0.0f),
     viewTransformInvZ(0.0f, 0.0f, 1.0f, 0.0f),
     drawPixelFunction(&drawPixel_Water),
-    getDiffuseColorFunc(&getDiffuseColor_C),
+    getDiffuseColorFunc(&getDiffuseColor_Water),
     halfwayVector(1.0f, 0.0f, 0.0f, 0.0f),
     vDotL(-1.0f),
     vDotH(0.001f),
@@ -1181,14 +1193,8 @@ void Plot3D_TriShape::drawTriShape(
     const NIFFile::NIFVertexTransform& modelTransform,
     const DDSTexture * const *textureSet, unsigned int textureMask)
 {
-  if (BRANCH_UNLIKELY(!((textureMask & 1U)
-                        | (flags & CE2Material::Flag_IsWater))))
-  {
-    return;                     // not water and no diffuse texture
-  }
-  size_t  triangleCntRendered = transformVertexData(modelTransform);
-  if (!triangleCntRendered)
-    return;
+  if (BRANCH_UNLIKELY(!(textureMask | (flags & CE2Material::Flag_IsWater))))
+    return;                     // not water and no textures
   if (BRANCH_LIKELY(!(flags & (CE2Material::Flag_IsEffect
                                | CE2Material::Flag_IsWater))))
   {
@@ -1221,14 +1227,15 @@ void Plot3D_TriShape::drawTriShape(
   }
   else
   {
-    getDiffuseColorFunc = &getDiffuseColor_C;
+    getDiffuseColorFunc = &getDiffuseColor_Water;
     if (BRANCH_UNLIKELY(debugMode))
       drawPixelFunction = &drawPixel_Debug;
     else
       drawPixelFunction = &drawPixel_Water;
   }
   setMaterialProperties(textureSet, textureMask);
-  drawTriangles();
+  if (BRANCH_LIKELY(transformVertexData(modelTransform)))
+    drawTriangles();
 }
 
 FloatVector4 Plot3D_TriShape::cubeMapToAmbient(const DDSTexture *e) const
@@ -1336,8 +1343,8 @@ void Plot3D_TriShape::drawDecal(
     const DDSTexture * const *textureSet, unsigned int textureMask,
     const NIFFile::NIFBounds& b, std::uint32_t c)
 {
-  if (BRANCH_UNLIKELY(!(textureMask & 1U)))
-    return;                     // no diffuse texture
+  if (BRANCH_UNLIKELY(!textureMask))
+    return;                     // no textures
   if (BRANCH_UNLIKELY(flags & (CE2Material::Flag_IsEffect
                                | CE2Material::Flag_IsWater)))
   {

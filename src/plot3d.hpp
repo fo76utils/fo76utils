@@ -173,6 +173,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
       const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
   static bool getDiffuseColor_C(
       const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
+  static bool getDiffuseColor_Water(    // for debug mode only
+      const Plot3D_TriShape& p, FloatVector4& c, Fragment& z);
   inline bool getDiffuseColor(FloatVector4& c, Fragment& z) const
   {
     return getDiffuseColorFunc(*this, c, z);
