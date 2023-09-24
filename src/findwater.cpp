@@ -2,6 +2,7 @@
 #include "filebuf.hpp"
 #include "esmfile.hpp"
 #include "ba2file.hpp"
+#include "material.hpp"
 #include "nif_file.hpp"
 #include "plot3d.hpp"
 
@@ -147,8 +148,8 @@ static void createMeshFromOBND(std::vector< NIFFile::NIFTriShape >& meshData,
   meshData[0].triangleCnt = (unsigned int) obndTriangleBuf.size();
   meshData[0].vertexData = vertexData.data();
   meshData[0].triangleData = obndTriangleBuf.data();
-  meshData[0].m.flags = BGSMFile::Flag_TSWater | BGSMFile::Flag_TSAlphaBlending
-                        | BGSMFile::Flag_TwoSided;
+  meshData[0].flags = CE2Material::Flag_IsWater | CE2Material::Flag_TwoSided
+                      | CE2Material::Flag_AlphaBlending;
 }
 
 static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
@@ -229,7 +230,8 @@ static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
     {
       std::vector< unsigned char >  fileBuf;
       meshArchiveFile->extractFile(fileBuf, modelPath);
-      nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), *meshArchiveFile);
+      nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), *meshArchiveFile,
+                            (CE2MaterialDB *) 0);
       nifFile->getMesh(i->second);
       nifFiles.push_back(nifFile);
       return i->second;
