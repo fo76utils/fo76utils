@@ -74,9 +74,9 @@ Running any of the programs without arguments prints detailed usage information.
 
 #### Example 6
 
-    ./render Starfield/Data/Starfield.esm /tmp/newatlantis.dds 4096 4096 Starfield/Data -w 0x0001251B -textures 0 -cam 5 54.7356 180 135 -1238.59 -1164.737 1428.076 -ssaa 2
+    ./render Starfield/Data/Starfield.esm newatlantis.dds 4096 4096 Starfield/Data -w 0x0001251B -ltxtres 512 -light 1.0 45 90 -lcolor 1.5 -1 1.0 -1 -1 -rq 0x2F -cam 5 54.7356 180 135 -1238.59 -1164.737 1428.076 -ssaa 2
 
 #### Example 7
 
-    ./wrldview Starfield/Data/Starfield.esm 3200 1800 Starfield/Data -w 0x0001251B -textures 0 -minscale 1 -cam 2.828427 1 -1188.59 -1014.737 1428.076
+    ./wrldview Starfield/Data/Starfield.esm 3200 1800 Starfield/Data "" -w 0x0001251B -light 1.0 45 90 -lcolor 1.5 -1 1.0 -1 -1 -rq 0x2F -minscale 1 -cam 2.828427 1 -1188.59 -1014.737 1428.076
 

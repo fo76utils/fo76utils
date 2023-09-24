@@ -14,16 +14,16 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
 * **-f INT**: Select output format, 0: 24-bit RGB (default), 1: 32-bit A8R8G8B8, 2: 32-bit A2R10G10B10.
 * **-rq INT**: Set render quality and flags (0 to 2047, defaults to 0), using a sum of any of the following values:
-  * 1: Enable the use of pre-combined meshes (same as **-scol 1**).
   * 2: Render all supported object types other than decals, actors and markers (same as **-a**).
   * 0, 4, 8, or 12: Render quality from lowest to highest, 0 uses diffuse textures only on terrain and objects, 4 enables normal mapping, 8 also enables PBR on objects only, 12 enables PBR on terrain as well.
   * 16: Enable actors, this is only partly implemented and may not work correctly.
-  * 32: Enable the rendering of decals (TXST objects). This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
+  * 32: Enable the rendering of projected decals (PDCL objects). This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
   * 64: Enable marker objects.
   * 128: Disable built-in exclude patterns for effect meshes.
   * 256: Disable the use of effect materials.
   * 512: Disable the use of object bounds data (OBND) for the purpose of testing if an object is visible.
   * 1024: Disable reordering objects, ensures deterministic output at the cost of worse threading performance.
+* **-cdb FILENAME**: Set material database file name(s), can be a comma separated list of multiple CDB files (default: materials/materialsbeta.cdb).
 * **-watermask BOOL**: Render water mask, non-water surfaces are made transparent or black.
 
 Values in hexadecimal format (prefixed with 0x) are accepted by **-w** and **-rq**.
@@ -42,24 +42,22 @@ Compiling with **rgb10a2=1** is required to actually increase frame buffer preci
 
 ### Terrain options
 
-* **-btd FILENAME.BTD**: Read terrain data from Fallout 76 .btd file.
-* **-r X0 Y0 X1 Y1**: Terrain cell range, X0,Y0 = SW to X1,Y1 = NE. The default is to use all available terrain, limiting the range can be useful for Fallout 76 to reduce the load time and memory usage.
-* **-l INT**: Level of detail to use from BTD file (0 to 4), see [btddump](btddump.md). Fallout 76 defaults to 0, all other games use a fixed level of 2.
-* **-deftxt FORMID**: Form ID of default land texture. See the table in [SConstruct.maps](../SConstruct.maps) for game specific values.
+* **-btd FILENAME.BTD**: Read terrain data from Starfield .btd file.
+* **-r X0 Y0 X1 Y1**: Terrain cell range, X0,Y0 = SW to X1,Y1 = NE. The default is to use all available terrain, limiting the range can sometimes be useful to reduce the load time and memory usage.
+* **-l INT**: Level of detail to use from BTD file (0 to 4, default: 0), see [btddump](btddump.md).
 * **-defclr 0x00RRGGBB**: Default color for untextured terrain.
 * **-lmip FLOAT**: Additional mip level for land textures, defaults to 3.0.
 * **-lmult FLOAT**: Land texture RGB level scale.
-* **-ltxtres INT**: Land texture resolution per cell, must be power of two, and in the range 2<sup>(7-l)</sup> to 4096. For approximately correct scaling, use 16384 / 2<sup>(mip+lmip)</sup> for Fallout 4 and 76, and 8192 / 2<sup>(mip+lmip)</sup> for Skyrim.
+* **-ltxtres INT**: Land texture resolution per cell, must be power of two, and in the range 2<sup>(7-l)</sup> to 4096. For approximately correct scaling, use 16384 / 2<sup>(mip+lmip)</sup>.
 
 ### Model options
 
-* **-scol BOOL**: Enable the use of pre-combined meshes. This works around some problems related to material swaps, but is generally slower, and may have other issues.
-* **-a**: Render all supported object types, other than decals (TXST), actors and markers.
+* **-a**: Render all supported object types, other than decals (PDCL), actors and markers.
 * **-mlod INT**: Set level of detail for models, 0 (default and best) to 4.
 * **-vis BOOL**: Render only objects visible from distance.
 * **-ndis BOOL**: If zero, also render initially disabled objects.
 * **-hqm STRING**: Add high quality model path name pattern. Meshes that match the pattern are always rendered at the highest level of detail, with normal mapping and reflections enabled. Any non-empty string also implies setting **-rq** to at least 4 for all objects and terrain.
-* **-xm STRING**: Add excluded model path name pattern. **-xm meshes** disables all solid objects. Use **-xm babylon** to disable Nuclear Winter objects in Fallout 76.
+* **-xm STRING**: Add excluded model path name pattern. **-xm meshes** disables all solid objects.
 
 ### View options
 
@@ -77,19 +75,12 @@ For testing view and light settings, it is recommended to use faster low quality
 
 ### Water options
 
-* **-wtxt FILENAME.DDS**: Water normal map texture path in archives. Defaults to **textures/water/defaultwater_normal.dds**. Setting the path to an empty string disables normal mapping on water.
-* **-watercolor UINT32**: Water color (A7R8G8B8), 0 disables water, 0x7FFFFFFF (the default) uses values from the ESM file. The alpha channel determines the depth at which water reaches maximum opacity, maxDepth = (128 - a) \* (128 - a) / 2.
+* **-wtxt FILENAME.DDS**: Water normal map texture path in archives. Defaults to **textures/water/wavesdefault_normal.dds**. Setting the path to an empty string disables normal mapping on water.
+* **-watercolor UINT32**: Water color (A7R8G8B8), 0 disables water, 0x7FFFFFFF (the default) uses values from the ESM file. The alpha channel determines the depth at which water reaches maximum opacity, maxDepth = (128 - a) \* (128 - a) / 128.
 * **-wrefl FLOAT**: Water environment map scale, the default is 1.0.
-* **-wscale INT**: Water texture tile size, defaults to 2048.
+* **-wscale INT**: Water texture tile size in meters, defaults to 31.
 
 ### Examples
 
-    ./render Fallout76/Data/SeventySix.esm fo76_map_4k.dds 4096 4096 Fallout76/Data -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -rq 15 -ssaa 1 -xm swamptree -view 0.0070922 180 0 0 0 0 4096
-    ./render Fallout76/Data/SeventySix.esm fo76_map_8k.dds 8192 8192 Fallout76/Data -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -rq 15 -ssaa 1 -xm swamptree -view 0.0141844 180 0 0 0 0 8192
-    ./render Fallout76/Data/SeventySix.esm fo76_map_16k.dds 16384 16384 Fallout76/Data -r -71 -71 71 71 -light 1.7 70.5288 135 -lcolor 1 0xFFFCF0 0.875 -1 -1 -ltxtres 512 -rq 15 -ssaa 1 -xm swamptree -view 0.0283688 180 0 0 0 0 16384
-    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCNukaWorld.esm fo4_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -light 1.5 70.5288 135 -ltxtres 512 -view 0.03064 180 0 0 316.1 -680.1 16384 -rq 15 -ssaa 1
-    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCCoast.esm fo4fh_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -w 0x01000B0F -light 1.5 70.5288 135 -ltxtres 512 -view 0.05482 180 0 0 -444.1 -20.1 16384 -rq 15 -ssaa 1
-    ./render Fallout4/Data/Fallout4.esm,Fallout4/Data/DLCNukaWorld.esm fo4nw_map.dds 8192 8192 Fallout4/Data -deftxt 0x000AB07E -w 0x0100290F -light 1.5 70.5288 135 -ltxtres 512 -view 0.06857 180 0 0 444.1 520.1 16384 -rq 15 -ssaa 1
-    ./render Skyrim/Data/Skyrim.esm,Skyrim/Data/Dawnguard.esm tes5_map.dds 8192 6471 Skyrim/Data -deftxt 0x00000C16 -env textures/cubemaps/chrome_e.dds -light 2.6 70.5288 135 -ltxtres 256 -view 0.0168067 180 0 0 -173 274.5 8192 -rq 10 -ssaa 1
-    ./render Skyrim/Data/Skyrim.esm,Skyrim/Data/Dragonborn.esm tes5db_map.dds 8192 8192 Skyrim/Data -deftxt 0x00000C16 -w 0x02000800 -env textures/cubemaps/chrome_e.dds -light 2.6 70.5288 135 -ltxtres 256 -view 0.0714286 180 0 0 -3776.1 3584.1 8192 -rq 10 -ssaa 1
+    ./render Starfield/Data/Starfield.esm newatlantis.dds 4096 4096 Starfield/Data -w 0x0001251B -ltxtres 512 -light 1.0 45 90 -lcolor 1.5 -1 1.0 -1 -1 -rq 0x2F -cam 5 54.7356 180 135 -1238.59 -1164.737 1428.076 -ssaa 2
 

@@ -1,9 +1,10 @@
-    wrldview INFILE.ESM[,...] W H ARCHIVEPATH [OPTIONS...]
+    wrldview INFILE.ESM[,...] W H ARCHIVEPATH MATCDBPATH [OPTIONS...]
 
 Interactively render a world, cell, or object from ESM file(s), terrain data, and archives. See also [render](render.md) for additional details. W and H are the width and height of the window to be created. A window that would be larger than the display dimensions and has even width and height is automatically downsampled to half resolution.
 
 ### General options
 
+* **MATCDBPATH**: Material database file name(s), can be a comma separated list of multiple CDB files. Defaults to materials/materialsbeta.cdb if an empty string is specified.
 * **--help** or **-h**: Print usage.
 * **--list** or **--list-defaults**: Print defaults for all options, and exit. If used after other options, then the updated values are printed, including the light vector calculated from **-light**.
 * **--**: Remaining options are file names.
@@ -11,11 +12,10 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **-debug INT**: Set debug render mode (0: disabled, 1: reference form IDs as 0xRRGGBB, 2: depth \* 16 or 64, 3: normals, 4: diffuse texture only, 5: light only).
 * **-w FORMID**: Form ID of world, cell, or object to render. A table of game and DLC world form IDs can be found in [SConstruct.maps](../SConstruct.maps).
 * **-rq INT**: Set render quality and flags (0 to 2047, can be specified in hexadecimal format with 0x prefix, defaults to 0), using a sum of any of the following values:
-  * 1: Enable the use of pre-combined meshes (same as **-scol 1**).
   * 2: Render all supported object types other than decals, actors and markers (same as **-a**).
   * 0, 4, 8, or 12: Render quality from lowest to highest, 0 uses diffuse textures only on terrain and objects, 4 enables normal mapping, 8 also enables PBR on objects only, 12 enables PBR on terrain as well.
   * 16: Enable actors, this is only partly implemented and may not work correctly.
-  * 32: Enable the rendering of decals (TXST objects). This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
+  * 32: Enable the rendering of projected decals (PDCL objects). This requires an additional buffer for normals, increasing memory usage from 8 to 12 bytes per pixel.
   * 64: Enable marker objects.
   * 128: Disable built-in exclude patterns for effect meshes.
   * 256: Disable the use of effect materials.
@@ -34,10 +34,9 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 
 ### Terrain options
 
-* **-btd FILENAME.BTD**: Read terrain data from Fallout 76 .btd file.
-* **-r X0 Y0 X1 Y1**: Terrain cell range, X0,Y0 = SW to X1,Y1 = NE. The default is to use all available terrain, limiting the range can be useful for Fallout 76 to reduce the load time and memory usage.
-* **-l INT**: Level of detail to use from BTD file (0 to 4), see [btddump](btddump.md). Fallout 76 defaults to 0, all other games use a fixed level of 2.
-* **-deftxt FORMID**: Form ID of default land texture. See the table in [SConstruct.maps](../SConstruct.maps) for game specific values.
+* **-btd FILENAME.BTD**: Read terrain data from Starfield .btd file.
+* **-r X0 Y0 X1 Y1**: Terrain cell range, X0,Y0 = SW to X1,Y1 = NE. The default is to use all available terrain, limiting the range can sometimes be useful to reduce the load time and memory usage.
+* **-l INT**: Level of detail to use from BTD file (0 to 4, default: 0), see [btddump](btddump.md).
 * **-defclr 0x00RRGGBB**: Default color for untextured terrain.
 * **-lmult FLOAT**: Land texture RGB level scale.
 * **-ltxtres INT**: Maximum land texture resolution per cell, must be power of two, and in the range 2<sup>(7-l)</sup> to 4096.
@@ -48,7 +47,7 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 * **-vis BOOL**: Render only objects visible from distance.
 * **-ndis BOOL**: If zero, also render initially disabled objects.
 * **-minscale FLOAT**: Minimum view scale to render exterior objects at.
-* **-xm STRING**: Add excluded model path name pattern. **-xm meshes** disables all solid objects. Use **-xm babylon** to disable Nuclear Winter objects in Fallout 76.
+* **-xm STRING**: Add excluded model path name pattern. **-xm meshes** disables all solid objects.
 * **-xm_clear**: Clear any previously added excluded model path name patterns.
 
 ### View options
@@ -65,10 +64,10 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 
 ### Water options
 
-* **-wtxt FILENAME.DDS**: Water normal map texture path in archives. Defaults to **textures/water/defaultwater_normal.dds**. Setting the path to an empty string disables normal mapping on water.
-* **-watercolor UINT32**: Water color (A7R8G8B8), 0 disables water, 0x7FFFFFFF (the default) uses values from the ESM file. The alpha channel determines the depth at which water reaches maximum opacity, maxDepth = (128 - a) \* (128 - a) / 2.
+* **-wtxt FILENAME.DDS**: Water normal map texture path in archives. Defaults to **textures/water/wavesdefault_normal.dds**. Setting the path to an empty string disables normal mapping on water.
+* **-watercolor UINT32**: Water color (A7R8G8B8), 0 disables water, 0x7FFFFFFF (the default) uses values from the ESM file. The alpha channel determines the depth at which water reaches maximum opacity, maxDepth = (128 - a) \* (128 - a) / 128.
 * **-wrefl FLOAT**: Water environment map scale, the default is 1.0.
-* **-wscale INT**: Water texture tile size, defaults to 2048.
+* **-wscale INT**: Water texture tile size in meters, defaults to 31.
 
 ### Keyboard and mouse controls
 
@@ -98,5 +97,5 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 
 ### Example
 
-./wrldview Fallout76/Data/SeventySix.esm 2304 1296 Fallout76/Data -r -71 -71 71 71 -rq 10 -ltxtres 1024 -lcolor 1 -1 0.875 -1 -1 -light 1.6 70.5288 135 -cam 0.125 1 -29332.19 79373.61 115577.4
+    ./wrldview Starfield/Data/Starfield.esm 3200 1800 Starfield/Data "" -w 0x0001251B -light 1.0 45 90 -lcolor 1.5 -1 1.0 -1 -1 -rq 0x2F -minscale 1 -cam 2.828427 1 -1188.59 -1014.737 1428.076
 
