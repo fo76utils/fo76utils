@@ -39,7 +39,7 @@ libSources += ["src/btdfile.cpp", "src/ddstxt.cpp", "src/downsamp.cpp"]
 libSources += ["src/esmdbase.cpp", "src/nif_file.cpp", "src/meshfile.cpp"]
 libSources += ["src/material.cpp", "src/mat_dump.cpp", "src/markers.cpp"]
 libSources += ["src/landdata.cpp", "src/landtxt.cpp", "src/terrmesh.cpp"]
-# libSources += ["src/plot3d.cpp", "src/render.cpp", "src/rndrbase.cpp"]
+libSources += ["src/plot3d.cpp", "src/render.cpp", "src/rndrbase.cpp"]
 # detex source files
 libSources += ["src/bits.c", "src/bptc-tables.c", "src/decompress-bptc.c"]
 libSources += ["src/decompress-bptc-float.c"]
