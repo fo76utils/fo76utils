@@ -22,18 +22,18 @@ jobs:
         msystem: MINGW64
         update: true
         cache: true
-        install: 'base-devel mingw-w64-x86_64-toolchain msys/scons mingw64/mingw-w64-x86_64-SDL2 mingw64/mingw-w64-x86_64-python-matplotlib mingw64/mingw-w64-x86_64-swig'
+        install: 'base-devel mingw-w64-x86_64-toolchain msys/scons mingw64/mingw-w64-x86_64-SDL2 mingw64/mingw-w64-x86_64-python-matplotlib mingw64/mingw-w64-x86_64-swig msys/p7zip'
     
     - name: 'Build with Scons'
       shell: msys2 {0}
       run: |
-        scons -j 8
+        scons -j 8 rgb10a2=1 buildpkg=ce2utils-main-10bit ce2utils-main-10bit.7z
     
     - name: 'Upload Artifacts'
       uses: actions/upload-artifact@v2
       with:
         name: build-win
-        path: '**/*.exe'
+        path: '**/*.7z'
   
   
   build_linux:

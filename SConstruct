@@ -105,9 +105,9 @@ if "win" in sys.platform:
         pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
         pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
         pkgFiles += Split("doc ltex scripts src SConstruct SConstruct.maps")
-        pkgFiles += Split(".gitignore LICENSE README.md README.mman-win32")
-        pkgFiles += Split("README.detex mapicons.py tes5cell.txt")
+        pkgFiles += Split(".github .gitignore LICENSE README.detex README.md")
+        pkgFiles += Split("README.mman-win32 mapicons.py tes5cell.txt")
         package = env.Command(
-                      "../ce2utils-" + str(buildPackage) + ".7z", pkgFiles,
+                      "ce2utils-" + str(buildPackage) + ".7z", pkgFiles,
                       "7za a -m0=lzma -mx=9 -x!src/*.o $TARGET $SOURCES")
 
