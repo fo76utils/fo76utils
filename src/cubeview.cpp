@@ -248,9 +248,10 @@ static void renderCubeMap(const BA2File& ba2File,
         texture = new DDSTexture(fileBuf.data(), fileBuf.size());
         display.clearTextBuffer();
         cubeViewMode = texture->getIsCubeMap();
-        display.consolePrint("%s (%dx%d)\n",
+        display.consolePrint("%s (%dx%d, %s)\n",
                              texturePaths[fileNum].c_str(),
-                             texture->getWidth(), texture->getHeight());
+                             texture->getWidth(), texture->getHeight(),
+                             texture->getFormatName());
       }
       catch (std::exception& e)
       {
