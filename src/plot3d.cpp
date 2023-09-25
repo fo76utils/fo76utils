@@ -315,7 +315,11 @@ inline FloatVector4 Plot3D_TriShape::environmentMap(
                   + (viewTransformInvZ * reflectedView[2]));
   float   mipLevel = (1.0f - smoothness) * float(textureE->getMaxMipLevel());
   FloatVector4  e(textureE->cubeMap(v[0], v[1], -(v[2]), mipLevel));
-  return e.srgbExpand();
+  if (BRANCH_LIKELY(textureE->isSRGBTexture()))
+    e.srgbExpand();
+  else
+    e *= (1.0f / 255.0f);
+  return e;
 }
 
 inline FloatVector4 Plot3D_TriShape::specularGGX(
@@ -461,15 +465,30 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
   *(z.cPtr) = c.convertToRGBA32(true, true);
 }
 
+static inline void srgbExpandWithBaseColor(
+    FloatVector4& c, FloatVector4 baseColor, bool isSRGB)
+{
+  if (BRANCH_LIKELY(isSRGB))
+  {
+    c *= baseColor;
+    c.srgbExpand();
+  }
+  else
+  {
+    // srgbExpand() modified to convert from 1.0 to 1.0/255.0 range
+    baseColor *= (baseColor * float(0.13945550 / 15.9687194)
+                  + float(0.86054450 / 15.9687194));    // divide by sqrt(255.0)
+    c *= (baseColor * baseColor);
+  }
+}
+
 FloatVector4 Plot3D_TriShape::glowMap(const Fragment& z) const
 {
   FloatVector4  c(mp.s.emissiveColor);
-  c *= mp.s.emissiveColor[3];
   FloatVector4  tmp(textures[7]->getPixelT_Inline(
                         z.u(), z.v(), z.mipLevel + mipOffsets[6]));
-  tmp.srgbExpand();
-  c *= tmp;
-  return c;
+  srgbExpandWithBaseColor(tmp, c, textures[7]->isSRGBTexture());
+  return (tmp * c[3]);
 }
 
 bool Plot3D_TriShape::getDiffuseColor_Effect(
@@ -518,8 +537,7 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
   if (a < p.mp.e.alphaThreshold)
     return false;
   baseColor *= p.mp.e.baseColorScale;
-  tmp *= vColor;
-  tmp.srgbExpand();
+  srgbExpandWithBaseColor(tmp, vColor, p.textures[0]->isSRGBTexture());
   tmp *= baseColor;
   tmp[3] = a;                   // alpha * 255
   c = tmp;
@@ -548,8 +566,7 @@ bool Plot3D_TriShape::getDiffuseColor_C(
   if (BRANCH_UNLIKELY(a < p.mp.s.alphaThreshold))
     return false;
   FloatVector4  tmp(p.textures[0]->getPixelT_Inline(z.u(), z.v(), z.mipLevel));
-  tmp *= baseColor;
-  tmp.srgbExpand();
+  srgbExpandWithBaseColor(tmp, baseColor, p.textures[0]->isSRGBTexture());
   tmp[3] = a;                   // alpha * 255
   c = tmp;
   return true;
@@ -1019,7 +1036,7 @@ void Plot3D_TriShape::setMaterialProperties(
   if (BRANCH_LIKELY(textureMask & 0x0001U))             // color
     textures[0] = textureSet[0];
   else if (t)
-    textures[0] = new(defTxts) DDSTexture(t->textureReplacements[0]);
+    textures[0] = new(defTxts) DDSTexture(t->textureReplacements[0], true);
   else
     textures[0] = new(defTxts) DDSTexture(0xFFFFFFFFU);
   if (textureMask & 0x0004U)                            // opacity
@@ -1253,7 +1270,14 @@ FloatVector4 Plot3D_TriShape::cubeMapToAmbient(const DDSTexture *e) const
     for (int y = 0; y < txtH; y++)
     {
       for (int x = 0; x < txtW; x++, w++)
-        s += FloatVector4(e->getPixelN(x, y, mipLevel, i)).srgbExpand();
+      {
+        FloatVector4  tmp(e->getPixelN(x, y, mipLevel, i));
+        if (BRANCH_LIKELY(e->isSRGBTexture()))
+          tmp.srgbExpand();
+        else
+          tmp *= (1.0f / 255.0f);
+        s += tmp;
+      }
     }
   }
   if (w < 1)
