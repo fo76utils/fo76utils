@@ -14,6 +14,117 @@ extern "C" bool detexDecompressBlockBPTC(
     const std::uint8_t *bitstring, std::uint32_t mode_mask,
     std::uint32_t flags, std::uint8_t *pixel_buffer);           // BC7
 
+const DDSTexture::DXGIFormatInfo DDSTexture::dxgiFormatInfoTable[31] =
+{
+  {                             //  0: DXGI_FORMAT_UNKNOWN = 0x00
+    (size_t (*)(std::uint32_t *, const unsigned char *, unsigned int)) 0,
+    "UNKNOWN", false, false, 0, 0
+  },
+  {                             //  1: DXGI_FORMAT_R16G16B16A16_FLOAT = 0x0A
+    &decodeLine_RGBA64F, "R16G16B16A16_FLOAT", false, true, 4, 8
+  },
+  {                             //  2: DXGI_FORMAT_R8G8B8A8_UNORM = 0x1C
+    &decodeLine_RGBA, "R8G8B8A8_UNORM", false, false, 4, 4
+  },
+  {                             //  3: DXGI_FORMAT_R8G8B8A8_UNORM_SRGB = 0x1D
+    &decodeLine_RGBA, "R8G8B8A8_UNORM_SRGB", false, true, 4, 4
+  },
+  {                             //  4: DXGI_FORMAT_R8G8_UNORM = 0x31
+    &decodeLine_R8G8, "R8G8_UNORM", false, false, 2, 2
+  },
+  {                             //  5: DXGI_FORMAT_R8_UNORM = 0x3D
+    &decodeLine_R8, "R8_UNORM", false, false, 1, 1
+  },
+  {                             //  6: DXGI_FORMAT_R8_UINT = 0x3E
+    &decodeLine_R8, "R8_UINT", false, false, 1, 1
+  },
+  {                             //  7: DXGI_FORMAT_BC1_UNORM = 0x47
+    &decodeBlock_BC1, "BC1_UNORM", true, false, 4, 8
+  },
+  {                             //  8: DXGI_FORMAT_BC1_UNORM_SRGB = 0x48
+    &decodeBlock_BC1, "BC1_UNORM_SRGB", true, true, 4, 8
+  },
+  {                             //  9: DXGI_FORMAT_BC2_UNORM = 0x4A
+    &decodeBlock_BC2, "BC2_UNORM", true, false, 4, 16
+  },
+  {                             // 10: DXGI_FORMAT_BC2_UNORM_SRGB = 0x4B
+    &decodeBlock_BC2, "BC2_UNORM_SRGB", true, true, 4, 16
+  },
+  {                             // 11: DXGI_FORMAT_BC3_UNORM = 0x4D
+    &decodeBlock_BC3, "BC3_UNORM", true, false, 4, 16
+  },
+  {                             // 12: DXGI_FORMAT_BC3_UNORM_SRGB = 0x4E
+    &decodeBlock_BC3, "BC3_UNORM_SRGB", true, true, 4, 16
+  },
+  {                             // 13: DXGI_FORMAT_BC4_UNORM = 0x50
+    &decodeBlock_BC4, "BC4_UNORM", true, false, 1, 8
+  },
+  {                             // 14: DXGI_FORMAT_BC4_SNORM = 0x51
+    &decodeBlock_BC4S, "BC4_SNORM", true, false, 1, 8
+  },
+  {                             // 15: DXGI_FORMAT_BC5_UNORM = 0x53
+    &decodeBlock_BC5, "BC5_UNORM", true, false, 2, 16
+  },
+  {                             // 16: DXGI_FORMAT_BC5_SNORM = 0x54
+    &decodeBlock_BC5S, "BC5_SNORM", true, false, 2, 16
+  },
+  {                             // 17: DXGI_FORMAT_B8G8R8A8_UNORM = 0x57
+    &decodeLine_BGRA, "B8G8R8A8_UNORM", false, false, 4, 4
+  },
+  {                             // 18: DXGI_FORMAT_B8G8R8X8_UNORM = 0x58
+    &decodeLine_BGR32, "B8G8R8X8_UNORM", false, false, 3, 4
+  },
+  {                             // 19: DXGI_FORMAT_B8G8R8A8_UNORM_SRGB = 0x5B
+    &decodeLine_BGRA, "B8G8R8A8_UNORM_SRGB", false, true, 4, 4
+  },
+  {                             // 20: DXGI_FORMAT_B8G8R8X8_UNORM_SRGB = 0x5D
+    &decodeLine_BGR32, "B8G8R8X8_UNORM_SRGB", false, true, 3, 4
+  },
+  {                             // 21: DXGI_FORMAT_BC6H_UF16 = 0x5F
+    &decodeBlock_BC6U, "BC6H_UF16", true, true, 4, 16
+  },
+  {                             // 22: DXGI_FORMAT_BC6H_SF16 = 0x60
+    &decodeBlock_BC6S, "BC6H_SF16", true, false, 4, 16
+  },
+  {                             // 23: DXGI_FORMAT_BC7_UNORM = 0x62
+    &decodeBlock_BC7, "BC7_UNORM", true, false, 4, 16
+  },
+  {                             // 24: DXGI_FORMAT_BC7_UNORM_SRGB = 0x63
+    &decodeBlock_BC7, "BC7_UNORM_SRGB", true, true, 4, 16
+  },
+  // non-standard formats
+  {                             // 25: FORMAT_R8G8B8X8_UNORM = 0x7A
+    &decodeLine_RGB32, "R8G8B8X8_UNORM", false, false, 3, 4
+  },
+  {                             // 26: FORMAT_R8G8B8X8_UNORM_SRGB = 0x7B
+    &decodeLine_RGB32, "R8G8B8X8_UNORM_SRGB", false, true, 3, 4
+  },
+  {                             // 27: FORMAT_B8G8R8_UNORM = 0x7C
+    &decodeLine_BGR, "B8G8R8_UNORM", false, false, 3, 3
+  },
+  {                             // 28: FORMAT_B8G8R8_UNORM_SRGB = 0x7D
+    &decodeLine_BGR, "B8G8R8_UNORM_SRGB", false, true, 3, 3
+  },
+  {                             // 29: FORMAT_R8G8B8_UNORM = 0x7E
+    &decodeLine_RGB, "R8G8B8_UNORM", false, false, 3, 3
+  },
+  {                             // 30: FORMAT_R8G8B8_UNORM_SRGB = 0x7F
+    &decodeLine_RGB, "R8G8B8_UNORM_SRGB", false, true, 3, 3
+  }
+};
+
+const unsigned char DDSTexture::dxgiFormatMap[128] =
+{
+   0,  0,  0,  0,   0,  0,  0,  0,   0,  0,  1,  0,   0,  0,  0,  0,    // 0x00
+   0,  0,  0,  0,   0,  0,  0,  0,   0,  0,  0,  0,   2,  3,  0,  0,    // 0x10
+   0,  0,  0,  0,   0,  0,  0,  0,   0,  0,  0,  0,   0,  0,  0,  0,    // 0x20
+   0,  4,  0,  0,   0,  0,  0,  0,   0,  0,  0,  0,   0,  5,  6,  0,    // 0x30
+   0,  0,  0,  0,   0,  0,  0,  7,   8,  0,  9, 10,   0, 11, 12,  0,    // 0x40
+  13, 14,  0, 15,  16,  0,  0, 17,  18,  0,  0, 19,   0, 20,  0, 21,    // 0x50
+  22,  0, 23, 24,   0,  0,  0,  0,   0,  0,  0,  0,   0,  0,  0,  0,    // 0x60
+   0,  0,  0,  0,   0,  0,  0,  0,   0,  0, 25, 26,  27, 28, 29, 30     // 0x70
+};
+
 static inline std::uint64_t decodeBC3Alpha(std::uint64_t& a,
                                            const unsigned char *src,
                                            bool isSigned = false)
@@ -460,9 +571,10 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   if ((flags & 0x1006) != 0x1006)       // height, width, pixel format required
     errorMessage("unsupported texture file format");
   maxMipLevel = 0U;
-  haveAlpha = false;
-  isCubeMap = false;
-  textureCnt = 1;
+  isSRGB = false;
+  channelCnt = 0;
+  maxTextureNum = 0;
+  dxgiFormat = 0;
   yMaskMip0 = buf.readUInt32() - 1U;
   xMaskMip0 = buf.readUInt32() - 1U;
   // width and height must be power of two and in the range 1 to 32768
@@ -471,8 +583,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   {
     errorMessage("invalid or unsupported texture dimensions");
   }
-  (void) buf.readUInt32();              // dwPitchOrLinearSize
-  (void) buf.readUInt32();              // dwDepth
+  buf.setPosition(buf.getPosition() + 8);       // dwPitchOrLinearSize, dwDepth
   if (flags & 0x00020000)               // DDSD_MIPMAPCOUNT
   {
     int     mipLevelCnt = buf.readInt32();
@@ -484,10 +595,6 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   if (buf.readUInt32() != 0x20)         // size of DDS_PIXELFORMAT
     errorMessage("unsupported texture file format");
   unsigned int  dataOffs = 128;
-  size_t  blockSize = 8;
-  bool    isCompressed = true;
-  size_t  (*decodeFunction)(std::uint32_t *, const unsigned char *,
-                            unsigned int) = &decodeBlock_BC1;
   unsigned int  formatFlags = buf.readUInt32();
   unsigned int  fourCC = buf.readUInt32();
   if (formatFlags & 0x04)               // DDPF_FOURCC
@@ -497,117 +604,36 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       dataOffs = 148;
       buf.setPosition(0x80);
       unsigned int  tmp = buf.readUInt32();
-      switch (tmp)
-      {
-        case 0x00:                      // DXGI_FORMAT_UNKNOWN
-          buf.setPosition(0x58);
-          formatFlags &= ~0x04U;
-          break;
-        case 0x0A:                      // DXGI_FORMAT_R16G16B16A16_FLOAT
-          haveAlpha = true;
-          blockSize = 8;
-          isCompressed = false;
-          decodeFunction = &decodeLine_RGBA64F;
-          break;
-        case 0x1C:                      // DXGI_FORMAT_R8G8B8A8_UNORM
-        case 0x1D:                      // DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
-          haveAlpha = true;
-          blockSize = 4;
-          isCompressed = false;
-          decodeFunction = &decodeLine_RGBA;
-          break;
-        case 0x3D:                      // DXGI_FORMAT_R8_UNORM
-        case 0x3E:                      // DXGI_FORMAT_R8_UINT
-          blockSize = 1;
-          isCompressed = false;
-          decodeFunction = &decodeLine_R8;
-          break;
-        case 0x47:                      // DXGI_FORMAT_BC1_UNORM
-        case 0x48:                      // DXGI_FORMAT_BC1_UNORM_SRGB
-          break;
-        case 0x4A:                      // DXGI_FORMAT_BC2_UNORM
-        case 0x4B:                      // DXGI_FORMAT_BC2_UNORM_SRGB
-          haveAlpha = true;
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC2;
-          break;
-        case 0x4D:                      // DXGI_FORMAT_BC3_UNORM
-        case 0x4E:                      // DXGI_FORMAT_BC3_UNORM_SRGB
-          haveAlpha = true;
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC3;
-          break;
-        case 0x50:                      // DXGI_FORMAT_BC4_UNORM
-          decodeFunction = &decodeBlock_BC4;
-          break;
-        case 0x51:                      // DXGI_FORMAT_BC4_SNORM
-          decodeFunction = &decodeBlock_BC4S;
-          break;
-        case 0x53:                      // DXGI_FORMAT_BC5_UNORM
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC5;
-          break;
-        case 0x54:                      // DXGI_FORMAT_BC5_SNORM
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC5S;
-          break;
-        case 0x57:                      // DXGI_FORMAT_B8G8R8A8_UNORM
-          haveAlpha = true;
-          blockSize = 4;
-          isCompressed = false;
-          decodeFunction = &decodeLine_BGRA;
-          break;
-        case 0x5F:                      // DXGI_FORMAT_BC6H_UF16
-          haveAlpha = true;
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC6U;
-          break;
-        case 0x60:                      // DXGI_FORMAT_BC6H_SF16
-          haveAlpha = true;
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC6S;
-          break;
-        case 0x62:                      // DXGI_FORMAT_BC7_UNORM
-        case 0x63:                      // DXGI_FORMAT_BC7_UNORM_SRGB
-          haveAlpha = true;
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC7;
-          break;
-        default:
-          throw FO76UtilsError("unsupported DXGI_FORMAT: 0x%08X", tmp);
-      }
+      if (tmp && (tmp > 0x79U || !dxgiFormatMap[tmp]))
+        throw FO76UtilsError("unsupported DXGI_FORMAT: 0x%08X", tmp);
+      dxgiFormat = (unsigned char) tmp;
     }
     else
     {
       switch (fourCC)
       {
         case 0x53344342:                // "BC4S"
-          decodeFunction = &decodeBlock_BC4S;
+          dxgiFormat = 0x51;
           break;
         case 0x55344342:                // "BC4U"
-          decodeFunction = &decodeBlock_BC4;
+          dxgiFormat = 0x50;
           break;
         case 0x53354342:                // "BC5S"
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC5S;
+          dxgiFormat = 0x54;
           break;
         case 0x55354342:                // "BC5U"
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC5;
+          dxgiFormat = 0x53;
           break;
         case 0x31545844:                // "DXT1"
+          dxgiFormat = 0x48;
           break;
         case 0x32545844:                // "DXT2"
         case 0x33545844:                // "DXT3"
-          haveAlpha = true;
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC2;
+          dxgiFormat = 0x4B;
           break;
         case 0x34545844:                // "DXT4"
         case 0x35545844:                // "DXT5"
-          haveAlpha = true;
-          blockSize = 16;
-          decodeFunction = &decodeBlock_BC3;
+          dxgiFormat = 0x4E;
           break;
         default:
           throw FO76UtilsError("unsupported DDS fourCC: 0x%08X",
@@ -615,36 +641,41 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       }
     }
   }
-  if (!(formatFlags & 0x04))            // DDPF_FOURCC
+  if (!dxgiFormat)
   {
+    buf.setPosition(0x58);
     if (!(formatFlags & 0x40))          // DDPF_RGB
       errorMessage("unsupported texture file format");
-    blockSize = buf.readUInt32();
-    if ((blockSize - 8) & ~(size_t(24)))        // must be 8, 16, 24 or 32
+    unsigned int  bitsPerPixel = buf.readUInt32();
+    if ((bitsPerPixel - 8U) & ~24U)     // must be 8, 16, 24 or 32
       errorMessage("unsupported texture file format");
-    blockSize = blockSize >> 3;
-    isCompressed = false;
     unsigned long long  rgMask = buf.readUInt64();
     unsigned long long  baMask = buf.readUInt64();
-    if (blockSize < 4 || !(formatFlags & 0x03))
+    if (bitsPerPixel < 32U || !(formatFlags & 0x03))
       baMask = baMask & ~0xFF00000000000000ULL;
-    else
-      haveAlpha = true;
     if (rgMask == 0x0000FF00000000FFULL && baMask == 0x0000000000FF0000ULL)
-      decodeFunction = (blockSize < 4 ? &decodeLine_RGB : &decodeLine_RGB32);
+      dxgiFormat = (bitsPerPixel < 32U ? 0x7F : 0x7B);
     else if (rgMask == 0x0000FF0000FF0000ULL && baMask == 0x00000000000000FFULL)
-      decodeFunction = (blockSize < 4 ? &decodeLine_BGR : &decodeLine_BGR32);
+      dxgiFormat = (bitsPerPixel < 32U ? 0x7D : 0x5D);
     else if (rgMask == 0x0000FF00000000FFULL && baMask == 0xFF00000000FF0000ULL)
-      decodeFunction = &decodeLine_RGBA;
+      dxgiFormat = 0x1D;
     else if (rgMask == 0x0000FF0000FF0000ULL && baMask == 0xFF000000000000FFULL)
-      decodeFunction = &decodeLine_BGRA;
+      dxgiFormat = 0x5B;
     else if (rgMask == 0x0000FF00000000FFULL && !baMask)
-      decodeFunction = &decodeLine_R8G8;
+      dxgiFormat = 0x31;
     else if (rgMask == 0x00000000000000FFULL && !baMask)
-      decodeFunction = &decodeLine_R8;
+      dxgiFormat = 0x3D;
     else
       errorMessage("unsupported texture file format");
   }
+  const DXGIFormatInfo& dxgiFmtInfo =
+      dxgiFormatInfoTable[dxgiFormatMap[dxgiFormat]];
+  size_t  (*decodeFunction)(std::uint32_t *, const unsigned char *,
+                            unsigned int) = dxgiFmtInfo.decodeFunction;
+  bool    isCompressed = dxgiFmtInfo.isCompressed;
+  isSRGB = dxgiFmtInfo.isSRGB;
+  channelCnt = dxgiFmtInfo.channelCnt;
+  size_t  blockSize = dxgiFmtInfo.blockSize;
   size_t  sizeRequired = 0;
   if (!isCompressed)
   {
@@ -667,10 +698,9 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   if (buf.size() > (dataOffs + sizeRequired))
   {
     size_t  n = (buf.size() - dataOffs) / sizeRequired;
-    if (n > 255)
-      n = 255;
-    isCubeMap = (n == 6);
-    textureCnt = (unsigned short) n;
+    if (n > 256)
+      n = 256;
+    maxTextureNum = (unsigned char) (n - 1);
   }
   else if (buf.size() < (dataOffs + sizeRequired))
   {
@@ -705,14 +735,15 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     bufSize = bufSize + (size_t(xMask + 1U) * (yMask + 1U));
   }
   textureDataSize = std::uint32_t(bufSize);
+  size_t  totalDataSize =
+      bufSize * (size_t(maxTextureNum) + 1) * sizeof(std::uint32_t);
   std::uint32_t *textureDataBuf =
-      reinterpret_cast< std::uint32_t * >(
-          std::malloc(bufSize * size_t(textureCnt) * sizeof(std::uint32_t)));
+      reinterpret_cast< std::uint32_t * >(std::malloc(totalDataSize));
   if (!textureDataBuf)
     throw std::bad_alloc();
   for (unsigned int i = 0; i < 20; i++)
     textureData[i] = textureDataBuf + dataOffsets[i];
-  for (size_t i = 0; i < textureCnt; i++)
+  for (size_t i = 0; i <= maxTextureNum; i++)
   {
     loadTextureData(srcPtr + (i * sizeRequired), int(i),
                     isCompressed, decodeFunction);
@@ -723,11 +754,10 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     size_t  offs = dataOffsets[mipOffset];
     xMaskMip0 = xMaskMip0 >> (unsigned char) mipOffset;
     yMaskMip0 = yMaskMip0 >> (unsigned char) mipOffset;
-    size_t  newSize =
-        (bufSize * size_t(textureCnt) - offs) * sizeof(std::uint32_t);
-    std::memmove(textureData[0], textureData[mipOffset], newSize);
+    totalDataSize = totalDataSize - (offs * sizeof(std::uint32_t));
+    std::memmove(textureData[0], textureData[mipOffset], totalDataSize);
     textureDataBuf = reinterpret_cast< std::uint32_t * >(
-                         std::realloc(textureDataBuf, newSize));
+                         std::realloc(textureDataBuf, totalDataSize));
     if (BRANCH_UNLIKELY(!textureDataBuf))
       throw std::bad_alloc();
     for (int i = 0; i < 20; i++)
@@ -772,18 +802,30 @@ DDSTexture::DDSTexture(FileBuffer& buf, int mipOffset)
   loadTexture(buf, mipOffset);
 }
 
-DDSTexture::DDSTexture(std::uint32_t c)
+DDSTexture::DDSTexture(std::uint32_t c, bool srgbColor)
   : xMaskMip0(0U),
     yMaskMip0(0U),
     maxMipLevel(0U),
     textureDataSize(0U),
     textureColor(c),
-    haveAlpha(bool(~c & 0xFF000000U)),
-    isCubeMap(false),
-    textureCnt(1)
+    isSRGB(srgbColor),
+    channelCnt(4),
+    maxTextureNum(0),
+    dxgiFormat(0)
 {
+#if ENABLE_X86_64_AVX
+  std::uintptr_t  tmp1 =
+      std::uintptr_t(reinterpret_cast< unsigned char * >(&textureColor));
+  const YMM_UInt64  tmp2 = { tmp1, tmp1, tmp1, tmp1 };
+  for (size_t i = 0; i < (sizeof(textureData) / sizeof(std::uint32_t *));
+       i = i + 4)
+  {
+    __asm__ ("vmovdqu %t1, %t0" : "=m" (textureData[i]) : "x" (tmp2));
+  }
+#else
   for (size_t i = 0; i < (sizeof(textureData) / sizeof(std::uint32_t *)); i++)
     textureData[i] = &textureColor;
+#endif
 }
 
 DDSTexture::~DDSTexture()
@@ -955,25 +997,26 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
   float   xm = float(std::fabs(x));
   float   ym = float(std::fabs(y));
   float   zm = float(std::fabs(z));
-  size_t  n = textureDataSize;
+  size_t  n = 0;
   if (xm >= ym && xm >= zm)             // right (0), left (1)
   {
     float   tmp = 1.0f / xm;
     if (x < 0.0f)
+    {
       z = -z;
-    else
-      n = 0;
+      n = 1;
+    }
     x = z * tmp;
     y = y * tmp;
   }
   else if (ym >= xm && ym >= zm)        // front (2), back (3)
   {
     float   tmp = 1.0f / ym;
-    n = n << 1;
+    n = 2;
     if (y < 0.0f)
     {
       z = -z;
-      n += textureDataSize;
+      n = 3;
     }
     x = x * tmp;
     y = z * tmp;
@@ -981,16 +1024,16 @@ FloatVector4 DDSTexture::cubeMap(float x, float y, float z,
   else                                  // bottom (4), top (5)
   {
     float   tmp = 1.0f / zm;
-    n = n << 2;
+    n = 4;
     if (z >= 0.0f)
     {
       x = -x;
-      n += textureDataSize;
+      n = 5;
     }
     x = x * tmp;
     y = y * tmp;
   }
-  n = (BRANCH_LIKELY(isCubeMap) ? n : 0U);
+  n = std::min(n, size_t(maxTextureNum)) * textureDataSize;
   mipLevel = std::max(mipLevel, 0.0f);
   int     m0 = int(mipLevel);
   float   mf = mipLevel - float(m0);
