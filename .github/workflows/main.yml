@@ -27,7 +27,7 @@ jobs:
     - name: 'Build with Scons'
       shell: msys2 {0}
       run: |
-        scons -j 8 rgb10a2=1 buildpkg=ce2utils-main-10bit ce2utils-main-10bit.7z
+        scons -j 8 rgb10a2=1 buildpkg=main-10bit ce2utils-main-10bit.7z
     
     - name: 'Upload Artifacts'
       uses: actions/upload-artifact@v2
