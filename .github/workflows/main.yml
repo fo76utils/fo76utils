@@ -27,13 +27,20 @@ jobs:
     - name: 'Build with Scons'
       shell: msys2 {0}
       run: |
-        scons -j 8 rgb10a2=1 buildpkg=main-10bit ce2utils-main-10bit.7z
+        scons -j 8 avx=2 rgb10a2=1 buildpkg=main-10bit ce2utils-main-10bit.7z
+        scons -j 8 avx=2 buildpkg=main ce2utils-main.7z
+        scons -j 8 avx=1 buildpkg=main-noavx2 ce2utils-main-noavx2.7z
+        scons -j 8 avx=0 buildpkg=main-noavx ce2utils-main-noavx.7z
     
     - name: 'Upload Artifacts'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: build-win
-        path: '**/*.7z'
+        path: |
+          ce2utils-main-10bit.7z
+          ce2utils-main.7z
+          ce2utils-main-noavx2.7z
+          ce2utils-main-noavx.7z
   
   
   build_linux:
@@ -57,7 +64,7 @@ jobs:
         scons -j 8
       
     - name: 'Upload Artifacts'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: build-linux
         path: '*'
