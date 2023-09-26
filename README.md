@@ -19,11 +19,21 @@ Simple command line utilities for extracting data from Starfield game files.
 * [terrain](doc/terrain.md) - older and simpler program to render terrain and water only to an RGB image, using files created by btddump, or findwater. Includes 2D and isometric mode.
 * [wrldview](doc/wrldview.md) - interactive version of render.
 
-Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on Linux. Run "scons" to compile. mman.c and mman.h are from mman-win32 (https://github.com/alitrack/mman-win32). All source code is under the MIT license.
-
 Running any of the programs without arguments prints detailed usage information.
 
-### Building from source code on Windows
+### Installation from binary packages
+
+Windows and Linux binaries are automatically compiled on every update to the source code, using GitHub workflows. To download these as .zip archives, select the most recent successful "Build CE2Utils" workflow run on the GitHub [Actions](https://github.com/fo76utils/ce2utils/actions) page, then either "build-linux" or "build-win" under Artifacts. Note that downloading the files requires logging in to GitHub.
+
+#### Setting the game data path
+
+The environment variable **CE2UTILS\_DATAPATH** can be used to set the default input data path globally for all tools. If this environment variable is set, for example to "D:/SteamLibrary/steamapps/common/Starfield/Data", then the paths Starfield/Data and Starfield/Data/Starfield.esm can be replaced in all the example commands with "" and Starfield.esm, respectively.
+
+### Building from source code
+
+Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on Linux. Run "scons" to compile. mman.c and mman.h are from mman-win32 (https://github.com/alitrack/mman-win32). All source code is under the MIT license.
+
+#### Building on Windows with MSYS2
 
 * Download and run the MSYS2 installer from https://www.msys2.org/.
 * In the MSYS2 MSYS terminal, run these commands to install development packages:
@@ -44,8 +54,6 @@ Running any of the programs without arguments prints detailed usage information.
 * Optionally, for the makemap and icon extraction scripts only, download and install [ImageMagick](https://imagemagick.org/script/download.php#windows) and [SWFTools](http://www.swftools.org/download.html).
 
 #### Example 1
-
-**Note:** the environment variable **CE2UTILS\_DATAPATH** can be used to set the default input data path globally for all tools. If this environment variable is set, for example to "D:/SteamLibrary/steamapps/common/Starfield/Data", then the paths Starfield/Data and Starfield/Data/Starfield.esm can be replaced in all the following commands with "" and Starfield.esm, respectively.
 
     ./btddump terrain/newatlantis.btd newatlantis_hmap.dds 0 Starfield/Data
     ./btddump terrain/newatlantis.btd newatlantis_norm.dds 1 Starfield/Data
