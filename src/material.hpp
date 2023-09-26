@@ -144,6 +144,11 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   // 0 = "Lerp", 1 = "Additive", 2 = "Subtractive", 3 = "Multiplicative"
   unsigned char opacityMode1;
   unsigned char opacityMode2;
+  // 0 = "AlphaBlend", 1 = "Additive", 2 = "SourceSoftAdditive", 3 = "Multiply",
+  // 4 = "DestinationSoftAdditive", 5 = "DestinationInvertedSoftAdditive",
+  // 6 = "TakeSmaller", 7 = "None"
+  unsigned char effectBlendMode;
+  std::uint32_t effectFlags;
   std::uint32_t layerMask;
   const Layer   *layers[maxLayers];
   const Blender *blenders[maxBlenders];

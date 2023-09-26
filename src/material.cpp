@@ -179,6 +179,8 @@ void CE2MaterialDB::initializeObject(
         p->alphaThreshold = 1.0f / 3.0f;
         p->opacityMode1 = 0;            // "Lerp"
         p->opacityMode2 = 0;
+        p->effectBlendMode = 0;         // "AlphaBlend"
+        p->effectFlags = 0x00200000U;
         p->layerMask = 0U;
         for (size_t i = 0; i < CE2Material::maxLayers; i++)
           p->layers[i] = (CE2Material::Layer *) 0;
@@ -963,31 +965,45 @@ void CE2MaterialDB::readComponents(
         }
         break;
       case 0x0078:      // "BSMaterial::EmissiveSettingsComponent"
-        if (objectType == 1 && isDiff)
+        if (objectType == 1)
         {
           CE2Material *m = static_cast< CE2Material * >(o);
-          buf2.setPosition(buf2.getPosition() - 2);
-          std::uint32_t structID = 0U;
-          while ((buf2.getPosition() + 4ULL) <= buf2.size())
+          if (isDiff)
+            buf2.setPosition(buf2.getPosition() - 2);
+          unsigned char structDepth = 0;
+          for (size_t n = 0; n < 14 && buf2.getPosition() < buf2.size(); n++)
           {
-            unsigned int  n = buf2.readUInt16Fast();
-            if (n & 0x8000U)
+            if (isDiff)
             {
-              if (!structID)
+              if ((buf2.getPosition() + 4ULL) > buf2.size())
                 break;
-              structID = structID >> 8;
-              buf2.setPosition(buf2.getPosition() + 2);
-              continue;
+              n = buf2.readUInt16Fast();
+              if (n == 1 && structDepth < 2)
+              {
+                buf2.setPosition(buf2.getPosition() + size_t(structDepth << 1));
+                structDepth++;
+                continue;
+              }
+              if ((n & 0x8000) && structDepth > 0)
+              {
+                buf2.setPosition(buf2.getPosition() + 2);
+                structDepth--;
+                continue;
+              }
+              if (n > (structDepth == 0 ? 1U : (structDepth == 1 ? 9U : 3U)))
+                break;
+              if (structDepth > 0)
+                n = n + (structDepth == 2 ? 2U : (n < 1U ? 1U : 4U));
             }
-            n = n | (structID << 8);
 #if ENABLE_CDB_DEBUG
-            std::printf("  %02x: ", n);
+            std::printf("  %02d: ", int(n));
 #endif
             switch (n)
             {
-              case 0:                   // 0: emissive enabled, default: false
-              case 0x8104:              // 1:4: unknown boolean, default: false
-              case 0x8107:              // 1:7
+              case  0:                  // 0: emissive enabled, default: false
+              case  8:                  // 1:4: unknown boolean, default: false
+              case 11:                  // 1:7
+                if (buf2.getPosition() < buf2.size())
                 {
                   bool    tmp = bool(buf2.readUInt8Fast());
                   if (n == 0)
@@ -995,55 +1011,192 @@ void CE2MaterialDB::readComponents(
 #if ENABLE_CDB_DEBUG
                   std::printf("%d", int(tmp));
 #endif
+                  continue;
                 }
                 break;
-              case 0x8101:              // structures
-                buf2.setPosition(buf2.getPosition() + 2);
-              case 1:
-                structID = (structID << 8) | ((n & 0xFFU) | 0x80U);
-                break;
-              case 0x00818100:          // 1:1:0: red
-              case 0x00818101:          // 1:1:1: green
-              case 0x00818102:          // 1:1:2: blue
-              case 0x00818103:          // 1:1:3: emissive scale
-              case 0x8103:              // 1:3: unknown float, default: 0.0
-              case 0x8105:              // 1:5: unknown float, default: 432.0
-              case 0x8106:              // 1:6: unknown float, default: 0.0
-              case 0x8108:              // 1:8: unknown float, default: 9999.0
-              case 0x8109:              // 1:9: unknown float, default: 0.0
+              case  2:                  // 1:1:0: red
+              case  3:                  // 1:1:1: green
+              case  4:                  // 1:1:2: blue
+              case  5:                  // 1:1:3: emissive scale
+              case  7:                  // 1:3: unknown float, default: 0.0
+              case  9:                  // 1:5: unknown float, default: 432.0
+              case 10:                  // 1:6: unknown float, default: 0.0
+              case 12:                  // 1:8: unknown float, default: 9999.0
+              case 13:                  // 1:9: unknown float, default: 0.0
                 if ((buf2.getPosition() + 4ULL) <= buf2.size())
                 {
                   float   tmp = buf2.readFloat();
-                  n = n - 0x00818100U;
-                  if (!(n & ~3U))
-                    m->emissiveColor[n] = std::min(std::max(tmp, 0.0f), 1.0f);
+                  size_t  c = n - 2;
+                  if (!(c & ~3U))
+                    m->emissiveColor[c] = std::min(std::max(tmp, 0.0f), 1.0f);
 #if ENABLE_CDB_DEBUG
                   std::printf("%f", tmp);
 #endif
+                  continue;
                 }
                 break;
-              case 0x8100:              // unknown, default: "MATERIAL_LAYER_0"
-              case 0x8102:              // unknown, can be "None" or "Blender1"
+              case  1:                  // unknown, default: "MATERIAL_LAYER_0"
+              case  6:                  // unknown, can be "None" or "Blender1"
+                if ((buf2.getPosition() + 2ULL) <= buf2.size())
                 {
                   unsigned int  len = buf2.readUInt16Fast();
                   buf2.readString(stringBuf, len);
 #if ENABLE_CDB_DEBUG
                   std::printf("%s", stringBuf.c_str());
 #endif
+                  continue;
                 }
                 break;
-              default:                  // unrecognized data field
-                buf2.setPosition(buf2.size());
-                break;
             }
+            break;                      // end of data or unrecognized field
           }
         }
         break;
       case 0x007C:      // "BSMaterial::EffectSettingsComponent"
         if (objectType == 1)
         {
-          static_cast< CE2Material * >(
-              o)->setFlags(CE2Material::Flag_IsEffect, true);
+          CE2Material *m = static_cast< CE2Material * >(o);
+          m->setFlags(CE2Material::Flag_IsEffect
+                      | CE2Material::Flag_AlphaBlending, true);
+          if (isDiff)
+            buf2.setPosition(buf2.getPosition() - 2);
+          bool    readingStruct = false;
+          for (size_t n = 0; n < 36 && buf2.getPosition() < buf2.size(); n++)
+          {
+            if (isDiff)
+            {
+              if ((buf2.getPosition() + 4ULL) > buf2.size())
+                break;
+              n = buf2.readUInt16Fast();
+              if (readingStruct)
+              {
+                if (n & 0x8000)
+                {
+                  buf2.setPosition(buf2.getPosition() + 2);
+                  readingStruct = false;
+                  continue;
+                }
+                if (n > 3)
+                  break;
+                n = n + 28;
+              }
+              else
+              {
+                if (n > 32)
+                  break;
+                if (n == 28)
+                {
+                  buf2.setPosition(buf2.getPosition() + 2);
+                  readingStruct = true;
+                  continue;
+                }
+                if (n > 28)
+                  n = n + 3;
+              }
+            }
+#if ENABLE_CDB_DEBUG
+            std::printf("  %02d: ", int(n));
+#endif
+            switch (n)
+            {
+              case  0:          // unknown booleans, all default to false,
+              case  1:          // with the exception of field 21
+              case  6:
+              case  7:
+              case  9:
+              case 10:
+              case 12:
+              case 13:
+              case 14:
+              case 15:
+              case 16:
+              case 17:
+              case 21:
+              case 22:
+              case 24:
+              case 32:
+              case 33:
+              case 34:
+                if (buf2.getPosition() < buf2.size())
+                {
+                  unsigned int  flagBit = (unsigned int) n;
+                  flagBit = (flagBit < 32U ? flagBit : (flagBit - 3U));
+                  unsigned int  b = (unsigned int) bool(buf2.readUInt8Fast());
+                  m->effectFlags =
+                      (m->effectFlags & ~(1U << flagBit)) | (b << flagBit);
+#if ENABLE_CDB_DEBUG
+                  std::printf("%u", b);
+#endif
+                  continue;
+                }
+                break;
+              case  2:          // unknown floats, default = 0.0f unless
+              case  3:          // noted otherwise
+              case  4:
+              case  5:
+              case  8:          // default: 0.5f
+              case 11:          // default: 2.0f
+              case 18:          // default: 0.98f
+              case 19:
+              case 20:          // default: 1.0f
+              case 25:
+              case 26:          // default: 8.0f
+              case 27:
+              case 28:          // default: 1.0f
+              case 29:          // default: 1.0f
+              case 30:          // default: 1.0f
+              case 31:          // default: 1.0f
+                if ((buf2.getPosition() + 4ULL) <= buf2.size())
+                {
+                  float   tmp = buf2.readFloat();
+#if ENABLE_CDB_DEBUG
+                  std::printf("%f", tmp);
+#else
+                  (void) tmp;
+#endif
+                  continue;
+                }
+                break;
+              case 23:          // blend mode, defaults to "AlphaBlend"
+                if ((buf2.getPosition() + 2ULL) <= buf2.size())
+                {
+                  unsigned int  len = buf2.readUInt16Fast();
+                  buf2.readString(stringBuf, len);
+#if ENABLE_CDB_DEBUG
+                  std::printf("%s", stringBuf.c_str());
+#endif
+                  if (stringBuf == "Additive")
+                    m->effectBlendMode = 1;
+                  else if (stringBuf == "SourceSoftAdditive")
+                    m->effectBlendMode = 2;
+                  else if (stringBuf == "Multiply")
+                    m->effectBlendMode = 3;
+                  else if (stringBuf == "DestinationSoftAdditive")
+                    m->effectBlendMode = 4;
+                  else if (stringBuf == "DestinationInvertedSoftAdditive")
+                    m->effectBlendMode = 5;
+                  else if (stringBuf == "TakeSmaller")
+                    m->effectBlendMode = 6;
+                  else
+                    m->effectBlendMode = (stringBuf == "AlphaBlend" ? 0 : 7);
+                  continue;
+                }
+                break;
+              case 35:          // unknown, 0 (default), 2500, 3000 or 6500
+                if ((buf2.getPosition() + 2ULL) <= buf2.size())
+                {
+                  unsigned int  tmp = buf2.readUInt16Fast();
+#if ENABLE_CDB_DEBUG
+                  std::printf("%u", tmp);
+#else
+                  (void) tmp;
+#endif
+                  continue;
+                }
+                break;
+            }
+            break;                      // end of data or unrecognized field
+          }
         }
         break;
       case 0x007D:      // "BSMaterial::OpacityComponent"

@@ -60,6 +60,24 @@ static const char *colorModeNames[2] =
   "Multiply", "Lerp"
 };
 
+static const char *effectBlendModeNames[8] =
+{
+  "AlphaBlend", "Additive", "SourceSoftAdditive", "Multiply",
+  "DestinationSoftAdditive", "DestinationInvertedSoftAdditive", "TakeSmaller",
+  "None"
+};
+
+static const char *effectFlagNames[32] =
+{
+  "Flag00", "Flag01", "Flag02", "Flag03", "Flag04",
+  "Flag05", "Flag06", "Flag07", "Flag08", "Flag09",
+  "Flag10", "Flag11", "Flag12", "Flag13", "Flag14",
+  "Flag15", "Flag16", "Flag17", "Flag18", "Flag19",
+  "Flag20", "Flag21", "Flag22", "Flag23", "Flag24",
+  "Flag25", "Flag26", "Flag27", "Flag28", "Flag29",
+  "Flag30", "Flag31"
+};
+
 static
 #ifdef __GNUC__
 __attribute__ ((__format__ (__printf__, 3, 4)))
@@ -127,6 +145,26 @@ void CE2Material::printObjectInfo(
                    "Emissive color and scale: %f, %f, %f, %f\n",
                    emissiveColor[0], emissiveColor[1], emissiveColor[2],
                    emissiveColor[3]);
+  if (flags & Flag_IsEffect)
+  {
+    if (effectFlags)
+    {
+      buf.resize(buf.length() + indentCnt, ' ');
+      buf += "Effect flags:";
+      bool    firstFlag = true;
+      for (unsigned int i = 0U; i < 32U && effectFlags >= (1U << i); i++)
+      {
+        if (!(effectFlags & (1U << i)))
+          continue;
+        buf += (firstFlag ? "  " : ", ");
+        buf += effectFlagNames[i];
+        firstFlag = false;
+      }
+      buf += '\n';
+    }
+    printToStringBuf(buf, indentCnt, "Effect blend mode: %s\n",
+                     effectBlendModeNames[effectBlendMode & 7]);
+  }
   for (unsigned int i = 0U; i < maxLayers && layerMask >= (1U << i); i++)
   {
     if (!((layerMask & (1U << i)) && layers[i]))
