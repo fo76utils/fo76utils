@@ -353,6 +353,23 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
   }
 }
 
+static void printMTLTexture(std::FILE *f, const char *textureName,
+                            const CE2Material::TextureSet *txtSet, size_t n)
+{
+  if ((txtSet->texturePathMask & (1U << (unsigned int) n)) &&
+      !txtSet->texturePaths[n]->empty())
+  {
+    std::fprintf(f, "map_%s %s\n",
+                 textureName, txtSet->texturePaths[n]->c_str());
+  }
+  else if (n == 3 || n == 4)
+  {
+    FloatVector4  c(&(txtSet->textureReplacements[n]));
+    c /= 255.0f;
+    std::fprintf(f, "%s %.3f %.3f %.3f\n", textureName, c[0], c[1], c[2]);
+  }
+}
+
 static void printMTLData(std::FILE *f, const NIFFile& nifFile)
 {
   ObjFileMaterialNames  matNames;
@@ -383,6 +400,11 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     }
     std::fprintf(f, "newmtl %s\n", matName.c_str());
     std::fprintf(f, "Ka 1.000 1.000 1.000\n");
+    if (txtSet &&
+        !((txtSet->texturePathMask & 1U) && !txtSet->texturePaths[0]->empty()))
+    {
+      baseColor *= (FloatVector4(&(txtSet->textureReplacements[0])) / 255.0f);
+    }
     std::fprintf(f, "Kd %.3f %.3f %.3f\n",
                  baseColor[0], baseColor[1], baseColor[2]);
     std::fprintf(f, "Ks 1.000 1.000 1.000\n");
@@ -390,18 +412,12 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     std::fprintf(f, "Ns 32.0\n");
     if (txtSet)
     {
-      if (txtSet->texturePathMask & 0x0001U)
-        std::fprintf(f, "map_Kd %s\n", txtSet->texturePaths[0]->c_str());
-      if (txtSet->texturePathMask & 0x0002U)
-        std::fprintf(f, "map_Bump %s\n", txtSet->texturePaths[1]->c_str());
-      if (txtSet->texturePathMask & 0x0004U)
-        std::fprintf(f, "map_d %s\n", txtSet->texturePaths[2]->c_str());
-      if (txtSet->texturePathMask & 0x0008U)
-        std::fprintf(f, "map_Pr %s\n", txtSet->texturePaths[3]->c_str());
-      if (txtSet->texturePathMask & 0x0010U)
-        std::fprintf(f, "map_Pm %s\n", txtSet->texturePaths[4]->c_str());
-      if (txtSet->texturePathMask & 0x0080U)
-        std::fprintf(f, "map_Ke %s\n", txtSet->texturePaths[7]->c_str());
+      printMTLTexture(f, "Kd", txtSet, 0);
+      printMTLTexture(f, "Bump", txtSet, 1);
+      printMTLTexture(f, "d", txtSet, 2);
+      printMTLTexture(f, "Pr", txtSet, 3);
+      printMTLTexture(f, "Pm", txtSet, 4);
+      printMTLTexture(f, "Ke", txtSet, 7);
     }
     std::fprintf(f, "\n");
   }
