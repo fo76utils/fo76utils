@@ -1367,8 +1367,8 @@ void Plot3D_TriShape::drawDecal(
     const DDSTexture * const *textureSet, unsigned int textureMask,
     const NIFFile::NIFBounds& b, std::uint32_t c)
 {
-  if (BRANCH_UNLIKELY(!textureMask))
-    return;                     // no textures
+  if (BRANCH_UNLIKELY(!(textureMask & 1U)))
+    return;                     // no diffuse texture
   if (BRANCH_UNLIKELY(flags & (CE2Material::Flag_IsEffect
                                | CE2Material::Flag_IsWater)))
   {
