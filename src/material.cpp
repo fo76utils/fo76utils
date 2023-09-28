@@ -468,6 +468,40 @@ size_t CE2MaterialDB::readTables(
       }
       continue;
     }
+    if (chunkType == 0x53414C43U)               // "CLAS"
+    {
+      buf2.setPosition(buf2.getPosition() + 6);
+      while ((buf2.getPosition() + 12ULL) <= buf2.size())
+      {
+        unsigned int  unknown1 = buf2.readUInt16Fast();
+        const char    *fieldName = "???";
+        int     tmp = findString(buf2.readUInt32Fast());
+        if (tmp >= 0)
+          fieldName = stringTable[tmp];
+        const char    *fieldType = "???";
+        tmp = std::int32_t(buf2.readUInt32Fast());
+        char    tmpBuf[32];
+        std::sprintf(tmpBuf, "%d", tmp);
+        if (tmp == -240)
+          fieldType = "Bool";
+        else if (tmp == -239)
+          fieldType = "Float";
+        else if (tmp == -254)
+          fieldType = "String";
+        else if (tmp == -245)
+          fieldType = "Int16";
+        else if (tmp == -243)
+          fieldType = "Int32";
+        else if (tmp < 0)
+          fieldType = tmpBuf;
+        else if ((tmp = findString((unsigned int) tmp)) >= 0)
+          fieldType = stringTable[tmp];
+        unsigned int  unknown2 = buf2.readUInt16Fast();
+        std::printf("    0x%04X, %s, %s, 0x%04X\n",
+                    unknown1, fieldName, fieldType, unknown2);
+      }
+      continue;
+    }
 #endif
     if (chunkType != 0x5453494CU)               // "LIST"
       continue;
