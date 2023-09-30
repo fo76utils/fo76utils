@@ -11,27 +11,27 @@ static const char *objectTypeStrings[7] =
 
 const char * CE2Material::materialFlagNames[32] =
 {
-  "Tile U",
-  "Tile V",
+  "Has opacity",
+  "Alpha uses vertex color",
   "Is effect",
   "Is decal",
   "Two sided",
   "Is vegetation",
-  "Grayscale to alpha",
+  "Layered emissivity",
   "Emissive",
-  "No Z buffer write",
-  "Falloff enabled",
-  "Effect lighting",
+  "Is translucent",
+  "Alpha detail blend mask",
+  "Dithered transparency",
   "Ordered with previous",
   "Alpha blending",
   "Has vertex colors",
   "Is water",
   "Hidden",
-  "Alpha testing",
+  "Has opacity component",
+  "Opacity layer 2 active",
+  "Opacity layer 3 active",
   "Is terrain",
-  "",
-  "",
-  "",
+  "Is hair",
   "",
   "",
   "",
@@ -43,6 +43,16 @@ const char * CE2Material::materialFlagNames[32] =
   "",
   "",
   ""
+};
+
+static const char *colorChannelNames[4] =
+{
+  "Red", "Green", "Blue", "Alpha"
+};
+
+static const char *alphaBlendModeNames[4] =
+{
+  "Linear", "Additive", "PositionContrast", "None"
 };
 
 static const char *opacityModeNames[4] =
@@ -69,13 +79,22 @@ static const char *effectBlendModeNames[8] =
 
 static const char *effectFlagNames[32] =
 {
-  "Flag00", "Flag01", "Flag02", "Flag03", "Flag04",
-  "Flag05", "Flag06", "Flag07", "Flag08", "Flag09",
-  "Flag10", "Flag11", "Flag12", "Flag13", "Flag14",
-  "Flag15", "Flag16", "Flag17", "Flag18", "Flag19",
-  "Flag20", "Flag21", "Flag22", "Flag23", "Flag24",
-  "Flag25", "Flag26", "Flag27", "Flag28", "Flag29",
-  "Flag30", "Flag31"
+  "UseFallOff", "UseRGBFallOff",
+  "", "",
+  "", "",
+  "VertexColorBlend", "IsAlphaTested",
+  "", "NoHalfResOptimization",
+  "SoftEffect", "",
+  "EmissiveOnlyEffect", "EmissiveOnlyAutomaticallyApplied",
+  "ReceiveDirectionalShadows", "ReceiveNonDirectionalShadows",
+  "IsGlass", "Frosting",
+  "", "",
+  "", "ZTest",
+  "ZWrite", "",
+  "BackLightingEnable", "",
+  "", "",
+  "", "DepthMVFixup",
+  "DepthMVFixupEdgesOnly", "ForceRenderBeforeOIT"
 };
 
 static
@@ -136,25 +155,70 @@ void CE2Material::printObjectInfo(
     }
     buf += '\n';
   }
-  printToStringBuf(buf, indentCnt, "Alpha threshold: %f\n", alphaThreshold);
-  printToStringBuf(buf, indentCnt,
-                   "Opacity mode 1: %s\n", opacityModeNames[opacityMode1 & 3]);
-  printToStringBuf(buf, indentCnt,
-                   "Opacity mode 2: %s\n", opacityModeNames[opacityMode2 & 3]);
-  printToStringBuf(buf, indentCnt,
-                   "Emissive color and scale: %f, %f, %f, %f\n",
-                   emissiveColor[0], emissiveColor[1], emissiveColor[2],
-                   emissiveColor[3]);
-  if (flags & Flag_IsEffect)
+  if (flags & Flag_HasOpacity)
   {
-    if (effectFlags)
+    printToStringBuf(buf, indentCnt, "Alpha threshold: %f\n", alphaThreshold);
+    printToStringBuf(buf, indentCnt, "Alpha source layer: %d\n",
+                     int(alphaSourceLayer));
+    printToStringBuf(buf, indentCnt, "Alpha blend mode: %s\n",
+                     alphaBlendModeNames[alphaBlendMode & 3]);
+    if (flags & Flag_AlphaVertexColor)
+    {
+      printToStringBuf(buf, indentCnt, "Alpha vertex color channel: %s\n",
+                       colorChannelNames[alphaVertexColorChannel & 3]);
+    }
+    printToStringBuf(buf, indentCnt, "Alpha height blend threshold: %f\n",
+                     alphaHeightBlendThreshold);
+    printToStringBuf(buf, indentCnt, "Alpha height blend factor: %f\n",
+                     alphaHeightBlendFactor);
+    if (alphaBlendMode == 2)
+    {
+      printToStringBuf(buf, indentCnt, "Alpha position: %f\n", alphaPosition);
+      printToStringBuf(buf, indentCnt, "Alpha contrast: %f\n", alphaContrast);
+    }
+    if (alphaUVStream)
+    {
+      buf.resize(buf.length() + indentCnt, ' ');
+      buf += "Alpha UV stream:  ";
+      alphaUVStream->printObjectInfo(buf, indentCnt);
+    }
+  }
+  if (flags & Flag_HasOpacityComponent)
+  {
+    printToStringBuf(buf, indentCnt, "Opacity layer 1: %d\n",
+                     int(opacityLayer1));
+    if (flags & Flag_OpacityLayer2Active)
+    {
+      printToStringBuf(buf, indentCnt, "Opacity layer 2: %d\n",
+                       int(opacityLayer2));
+      printToStringBuf(buf, indentCnt, "Opacity blender 1: %d\n",
+                       int(opacityBlender1));
+      printToStringBuf(buf, indentCnt, "Opacity blender 1 mode: %s\n",
+                       opacityModeNames[opacityBlender1Mode & 3]);
+    }
+    if (flags & Flag_OpacityLayer3Active)
+    {
+      printToStringBuf(buf, indentCnt, "Opacity layer 3: %d\n",
+                       int(opacityLayer3));
+      printToStringBuf(buf, indentCnt, "Opacity blender 2: %d\n",
+                       int(opacityBlender2));
+      printToStringBuf(buf, indentCnt, "Opacity blender 2 mode: %s\n",
+                       opacityModeNames[opacityBlender2Mode & 3]);
+    }
+    printToStringBuf(buf, indentCnt, "Specular opacity override: %f\n",
+                     specularOpacityOverride);
+  }
+  if ((flags & Flag_IsEffect) && effectSettings)
+  {
+    if (effectSettings->flags)
     {
       buf.resize(buf.length() + indentCnt, ' ');
       buf += "Effect flags:";
       bool    firstFlag = true;
-      for (unsigned int i = 0U; i < 32U && effectFlags >= (1U << i); i++)
+      for (unsigned int i = 0U;
+           i < 32U && effectSettings->flags >= (1U << i); i++)
       {
-        if (!(effectFlags & (1U << i)))
+        if (!(effectSettings->flags & (1U << i)))
           continue;
         buf += (firstFlag ? "  " : ", ");
         buf += effectFlagNames[i];
@@ -163,7 +227,86 @@ void CE2Material::printObjectInfo(
       buf += '\n';
     }
     printToStringBuf(buf, indentCnt, "Effect blend mode: %s\n",
-                     effectBlendModeNames[effectBlendMode & 7]);
+                     effectBlendModeNames[effectSettings->blendMode & 7]);
+    if (effectSettings->flags
+        & (EffectFlag_UseFalloff | EffectFlag_UseRGBFalloff))
+    {
+      printToStringBuf(buf, indentCnt, "Falloff start, stop angle: %f, %f\n",
+                       effectSettings->falloffStartAngle,
+                       effectSettings->falloffStopAngle);
+      printToStringBuf(buf, indentCnt, "Falloff start, stop opacity: %f, %f\n",
+                       effectSettings->falloffStartOpacity,
+                       effectSettings->falloffStopOpacity);
+    }
+    printToStringBuf(buf, indentCnt, "Effect overall alpha: %f\n",
+                     effectSettings->materialAlpha);
+    if (effectSettings->flags & EffectFlag_IsAlphaTested)
+    {
+      printToStringBuf(buf, indentCnt, "Effect alpha threshold: %f\n",
+                       effectSettings->alphaThreshold);
+    }
+    printToStringBuf(buf, indentCnt, "Effect soft falloff depth: %f\n",
+                     effectSettings->softFalloffDepth);
+    if (effectSettings->flags & EffectFlag_Frosting)
+    {
+      printToStringBuf(buf, indentCnt,
+                       "Frosting unblurred background alpha blend: %f\n",
+                       effectSettings->frostingBgndBlend);
+      printToStringBuf(buf, indentCnt, "Frosting blur bias: %f\n",
+                       effectSettings->frostingBlurBias);
+    }
+    if (effectSettings->flags & EffectFlag_BacklightEnable)
+    {
+      printToStringBuf(buf, indentCnt, "Backlight scale: %f\n",
+                       effectSettings->backlightScale);
+      printToStringBuf(buf, indentCnt, "Backlight sharpness: %f\n",
+                       effectSettings->backlightSharpness);
+      printToStringBuf(buf, indentCnt, "Backlight transparency factor: %f\n",
+                       effectSettings->backlightTransparency);
+      printToStringBuf(buf, indentCnt,
+                       "Backlight tint color: %f, %f, %f, %f\n",
+                       effectSettings->backlightTintColor[0],
+                       effectSettings->backlightTintColor[1],
+                       effectSettings->backlightTintColor[2],
+                       effectSettings->backlightTintColor[3]);
+    }
+    printToStringBuf(buf, indentCnt, "Effect depth bias: %d\n",
+                     effectSettings->depthBias);
+  }
+  if ((flags & Flag_Glow) && emissiveSettings && emissiveSettings->isEnabled)
+  {
+    printToStringBuf(buf, indentCnt, "Emissive source layer: %d\n",
+                     int(emissiveSettings->sourceLayer));
+    printToStringBuf(buf, indentCnt, "Emissive tint: %f, %f, %f, %f\n",
+                     emissiveSettings->emissiveTint[0],
+                     emissiveSettings->emissiveTint[1],
+                     emissiveSettings->emissiveTint[2],
+                     emissiveSettings->emissiveTint[3]);
+    if (!emissiveSettings->maskSourceBlender)
+    {
+      printToStringBuf(buf, indentCnt, "Emissive mask source blender: None\n");
+    }
+    else
+    {
+      printToStringBuf(buf, indentCnt,
+                       "Emissive mask source blender: Blender%d\n",
+                       int(emissiveSettings->maskSourceBlender));
+    }
+    printToStringBuf(buf, indentCnt, "Adaptive emittance: %s\n",
+                     (!emissiveSettings->adaptiveEmittance ? "False" : "True"));
+    printToStringBuf(buf, indentCnt, "Enable adaptive limits: %s\n",
+                     (!emissiveSettings->enableAdaptiveLimits ?
+                      "False" : "True"));
+    printToStringBuf(buf, indentCnt, "Emissive clip threshold: %f\n",
+                     emissiveSettings->clipThreshold);
+    printToStringBuf(buf, indentCnt, "Luminous emittance: %f\n",
+                     emissiveSettings->luminousEmittance);
+    printToStringBuf(buf, indentCnt, "Emittance exposure offset: %f\n",
+                     emissiveSettings->exposureOffset);
+    printToStringBuf(buf, indentCnt, "Emittance minimum offset: %f\n",
+                     emissiveSettings->minOffset);
+    printToStringBuf(buf, indentCnt, "Emittance maximum offset: %f\n",
+                     emissiveSettings->maxOffset);
   }
   for (unsigned int i = 0U; i < maxLayers && layerMask >= (1U << i); i++)
   {
@@ -171,10 +314,11 @@ void CE2Material::printObjectInfo(
       continue;
     printToStringBuf(buf, indentCnt, "Layer %u:  ", i);
     layers[i]->printObjectInfo(buf, indentCnt);
-    if (i < maxBlenders && blenders[i])
+    unsigned int  j = i - 1U;
+    if (j < maxBlenders && blenders[j])
     {
-      printToStringBuf(buf, indentCnt, "Blender %u:  ", i);
-      blenders[i]->printObjectInfo(buf, indentCnt);
+      printToStringBuf(buf, indentCnt, "Blender %u:  ", j);
+      blenders[j]->printObjectInfo(buf, indentCnt);
     }
   }
   if (!isLODMaterial)
@@ -262,9 +406,18 @@ void CE2Material::TextureSet::printObjectInfo(
   printToStringBuf(buf, indentCnt, "Float param: %f\n", floatParam);
   for (unsigned int i = 0U; i < maxTexturePaths; i++)
   {
-    printToStringBuf(buf, indentCnt,
-                     "Texture %2u: replacement: 0x%08X, file: \"",
-                     i, (unsigned int) textureReplacements[i]);
+    if (!((texturePathMask | textureReplacementMask) & (1U << i)))
+      continue;
+    if (!(textureReplacementMask & (1U << i)))
+    {
+      printToStringBuf(buf, indentCnt, "Texture %2u: file: \"", i);
+    }
+    else
+    {
+      printToStringBuf(buf, indentCnt,
+                       "Texture %2u: replacement: 0x%08X, file: \"",
+                       i, (unsigned int) textureReplacements[i]);
+    }
     buf += *(texturePaths[i]);
     buf += "\"\n";
   }

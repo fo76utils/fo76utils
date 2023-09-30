@@ -73,6 +73,7 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     // texturePaths[10] = _mask.dds
     const std::string *texturePaths[maxTexturePaths];
     // texture replacements are colors in R8G8B8A8 format
+    std::uint32_t textureReplacementMask;
     std::uint32_t textureReplacements[maxTexturePaths];
     void printObjectInfo(std::string& buf, size_t indentCnt) const;
   };
@@ -122,15 +123,49 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   enum
   {
     // flag values can be combined (bitwise OR) with NIFFile::NIFTriShape::flags
+    Flag_HasOpacity = 0x00000001,
+    Flag_AlphaVertexColor = 0x00000002,
     Flag_IsEffect = 0x00000004,
     Flag_IsDecal = 0x00000008,
     Flag_TwoSided = 0x00000010,
     Flag_IsVegetation = 0x00000020,
+    Flag_LayeredEmissivity = 0x00000040,
     Flag_Glow = 0x00000080,
+    Flag_Emissive = 0x00000080,
+    Flag_Translucency = 0x00000100,
+    Flag_AlphaDetailBlendMask = 0x00000200,
+    Flag_DitheredTransparency = 0x00000400,
+    // Flag_TSOrdered = 0x00000800,
     Flag_AlphaBlending = 0x00001000,
+    // Flag_TSVertexColors = 0x00002000,
     Flag_IsWater = 0x00004000,
-    Flag_AlphaTesting = 0x00010000,
-    Flag_IsTerrain = 0x00020000
+    // Flag_TSHidden = 0x00008000,
+    Flag_HasOpacityComponent = 0x00010000,
+    Flag_OpacityLayer2Active = 0x00020000,
+    Flag_OpacityLayer3Active = 0x00040000,
+    Flag_IsTerrain = 0x00080000,
+    Flag_IsHair = 0x00100000
+  };
+  enum
+  {
+    EffectFlag_UseFalloff = 0x00000001,
+    EffectFlag_UseRGBFalloff = 0x00000002,
+    EffectFlag_VertexColorBlend = 0x00000040,
+    EffectFlag_IsAlphaTested = 0x00000080,
+    EffectFlag_NoHalfResOpt = 0x00000200,
+    EffectFlag_SoftEffect = 0x00000400,
+    EffectFlag_EmissiveOnly = 0x00001000,
+    EffectFlag_EmissiveOnlyAuto = 0x00002000,
+    EffectFlag_DirShadows = 0x00004000,
+    EffectFlag_NonDirShadows = 0x00008000,
+    EffectFlag_IsGlass = 0x00010000,
+    EffectFlag_Frosting = 0x00020000,
+    EffectFlag_ZTest = 0x00200000,
+    EffectFlag_ZWrite = 0x00400000,
+    EffectFlag_BacklightEnable = 0x01000000,
+    EffectFlag_MVFixup = 0x20000000,
+    EffectFlag_MVFixupEdgesOnly = 0x40000000,
+    EffectFlag_RenderBeforeOIT = 0x80000000U
   };
   enum
   {
@@ -138,22 +173,81 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     maxBlenders = 5,
     maxLODMaterials = 3
   };
+  struct EffectSettings
+  {
+    std::uint32_t flags;
+    // 0 = "AlphaBlend", 1 = "Additive", 2 = "SourceSoftAdditive",
+    // 3 = "Multiply", 4 = "DestinationSoftAdditive",
+    // 5 = "DestinationInvertedSoftAdditive", 6 = "TakeSmaller", 7 = "None"
+    unsigned char blendMode;
+    float   falloffStartAngle;
+    float   falloffStopAngle;
+    float   falloffStartOpacity;
+    float   falloffStopOpacity;
+    float   alphaThreshold;
+    float   softFalloffDepth;
+    float   frostingBgndBlend;
+    float   frostingBlurBias;
+    float   materialAlpha;
+    float   backlightScale;
+    float   backlightSharpness;
+    float   backlightTransparency;
+    FloatVector4  backlightTintColor;
+    int     depthBias;
+  };
+  struct EmissiveSettings
+  {
+    bool    isEnabled;
+    unsigned char sourceLayer;
+    unsigned char maskSourceBlender;    // 0: "None", 1: "Blender1"
+    bool    adaptiveEmittance;
+    bool    enableAdaptiveLimits;
+    float   clipThreshold;
+    float   luminousEmittance;
+    FloatVector4  emissiveTint;         // R, G, B, overall scale
+    float   exposureOffset;
+    float   maxOffset;
+    float   minOffset;
+  };
+  struct TranslucencySettings
+  {
+  };
+  struct DecalSettings
+  {
+  };
+  struct WaterSettings
+  {
+  };
   static const char *materialFlagNames[32];
   std::uint32_t flags;
-  float   alphaThreshold;
-  // 0 = "Lerp", 1 = "Additive", 2 = "Subtractive", 3 = "Multiplicative"
-  unsigned char opacityMode1;
-  unsigned char opacityMode2;
-  // 0 = "AlphaBlend", 1 = "Additive", 2 = "SourceSoftAdditive", 3 = "Multiply",
-  // 4 = "DestinationSoftAdditive", 5 = "DestinationInvertedSoftAdditive",
-  // 6 = "TakeSmaller", 7 = "None"
-  unsigned char effectBlendMode;
-  std::uint32_t effectFlags;
   std::uint32_t layerMask;
   const Layer   *layers[maxLayers];
+  float   alphaThreshold;
+  unsigned char alphaSourceLayer;
+  // 0 = "Linear" (default), 1 = "Additive", 2 = "PositionContrast", 3 = "None"
+  unsigned char alphaBlendMode;
+  unsigned char alphaVertexColorChannel;
+  float   alphaHeightBlendThreshold;
+  float   alphaHeightBlendFactor;
+  float   alphaPosition;
+  float   alphaContrast;
+  const UVStream  *alphaUVStream;               // can be NULL
+  unsigned char opacityLayer1;
+  unsigned char opacityLayer2;
+  unsigned char opacityBlender1;
+  // 0 = "Lerp", 1 = "Additive", 2 = "Subtractive", 3 = "Multiplicative"
+  unsigned char opacityBlender1Mode;
+  unsigned char opacityLayer3;
+  unsigned char opacityBlender2;
+  unsigned char opacityBlender2Mode;
+  float   specularOpacityOverride;
   const Blender *blenders[maxBlenders];
   const CE2Material *lodMaterials[maxLODMaterials];
-  FloatVector4  emissiveColor;          // R, G, B, overall scale
+  const EffectSettings  *effectSettings;        // valid if Flag_IsEffect is set
+  const EmissiveSettings  *emissiveSettings;    // valid if Flag_Glow is set
+  const TranslucencySettings  *translucencySettings;    // for Flag_Translucency
+  const DecalSettings   *decalSettings;         // valid if Flag_IsDecal is set
+  const WaterSettings   *waterSettings;         // valid if Flag_IsWater is set
   inline void setFlags(std::uint32_t m, bool n)
   {
     flags = (flags & ~m) | ((0U - std::uint32_t(n)) & m);
@@ -222,6 +316,137 @@ struct CE2Material : public CE2MaterialObject   // object type 1
 class CE2MaterialDB
 {
  protected:
+  struct ComponentInfo
+  {
+    typedef void (*ReadFunctionType)(ComponentInfo&, bool);
+    static const ReadFunctionType readFunctionTable[64];
+    CE2MaterialDB&  cdb;
+    const std::vector< CE2MaterialObject * >& objectTable;
+    FileBuffer    buf;
+    CE2MaterialObject *o;
+    unsigned int  componentIndex;
+    unsigned int  componentType;
+    std::string   stringBuf;
+    static void readLayeredEmissivityComponent(ComponentInfo& p, bool isDiff);
+    static void readAlphaBlenderSettings(ComponentInfo& p, bool isDiff);
+    static void readBSFloatCurve(ComponentInfo& p, bool isDiff);
+    static void readEmissiveSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readWaterFoamSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readFlipbookComponent(ComponentInfo& p, bool isDiff);
+    static void readPhysicsMaterialType(ComponentInfo& p, bool isDiff);
+    static void readTerrainTintSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readUVStreamID(ComponentInfo& p, bool isDiff);
+    static void readDecalSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readDirectory(ComponentInfo& p, bool isDiff);
+    static void readWaterSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readControl(ComponentInfo& p, bool isDiff);
+    static void readComponentProperty(ComponentInfo& p, bool isDiff);
+    static bool readXMFLOAT4(FloatVector4& v, ComponentInfo& p, bool isDiff);
+    static void readEffectSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readCTName(ComponentInfo& p, bool isDiff);
+    static void readGlobalLayerDataComponent(ComponentInfo& p, bool isDiff);
+    static void readOffset(ComponentInfo& p, bool isDiff);
+    static void readTextureAddressModeComponent(ComponentInfo& p, bool isDiff);
+    static void readFloatCurveController(ComponentInfo& p, bool isDiff);
+    static void readMaterialPropertyNode(ComponentInfo& p, bool isDiff);
+    static void readProjectedDecalSettings(ComponentInfo& p, bool isDiff);
+    static void readParamBool(ComponentInfo& p, bool isDiff);
+    static void readFloat3DCurveController(ComponentInfo& p, bool isDiff);
+    static bool readColorValue(FloatVector4& c, ComponentInfo& p, bool isDiff);
+    static void readColor(ComponentInfo& p, bool isDiff);
+    static bool readSourceTextureWithReplacement(
+        const std::string*& texturePath, std::uint32_t& textureReplacement,
+        bool& textureReplacementEnabled, ComponentInfo& p, bool isDiff);
+    static void readEdgeInfo(ComponentInfo& p, bool isDiff);
+    static void readFlowSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readDetailBlenderSettings(ComponentInfo& p, bool isDiff);
+    static void readLayerID(ComponentInfo& p, bool isDiff);
+    static void readMapping(ComponentInfo& p, bool isDiff);
+    static void readClassReference(ComponentInfo& p, bool isDiff);
+    static void readComponentInfo(ComponentInfo& p, bool isDiff);
+    static void readScale(ComponentInfo& p, bool isDiff);
+    static void readWaterGrimeSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readUVStreamParamBool(ComponentInfo& p, bool isDiff);
+    static void readComponentTypeInfo(ComponentInfo& p, bool isDiff);
+    static void readMultiplex(ComponentInfo& p, bool isDiff);
+    static void readOpacityComponent(ComponentInfo& p, bool isDiff);
+    static void readBlendParamFloat(ComponentInfo& p, bool isDiff);
+    static void readDBFileIndex(ComponentInfo& p, bool isDiff);
+    static void readColorRemapSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readEyeSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readFilePair(ComponentInfo& p, bool isDiff);
+    static void readFloat2DLerpController(ComponentInfo& p, bool isDiff);
+    static const CE2MaterialObject *readBSComponentDB2ID(
+        ComponentInfo& p, bool isDiff, unsigned char typeRequired = 0);
+    static void readTextureReplacement(ComponentInfo& p, bool isDiff);
+    static void readBlendModeComponent(ComponentInfo& p, bool isDiff);
+    static void readLayeredEdgeFalloffComponent(ComponentInfo& p, bool isDiff);
+    static void readVegetationSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readTextureResolutionSetting(ComponentInfo& p, bool isDiff);
+    static void readAddress(ComponentInfo& p, bool isDiff);
+    static void readDirectoryComponent(ComponentInfo& p, bool isDiff);
+    static void readMaterialUVStreamPropertyNode(ComponentInfo& p, bool isDiff);
+    static void readShaderRouteComponent(ComponentInfo& p, bool isDiff);
+    static void readFloatLerpController(ComponentInfo& p, bool isDiff);
+    static void readColorChannelTypeComponent(ComponentInfo& p, bool isDiff);
+    static void readAlphaSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readLevelOfDetailSettings(ComponentInfo& p, bool isDiff);
+    static void readTextureSetID(ComponentInfo& p, bool isDiff);
+    static void readFloat2DCurveController(ComponentInfo& p, bool isDiff);
+    static void readTextureFile(ComponentInfo& p, bool isDiff);
+    static void readTranslucencySettings(ComponentInfo& p, bool isDiff);
+    static void readMouthSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readDistortionComponent(ComponentInfo& p, bool isDiff);
+    static void readDetailBlenderSettingsComponent(ComponentInfo& p,
+                                                   bool isDiff);
+    static void readObjectInfo(ComponentInfo& p, bool isDiff);
+    static void readStarmapBodyEffectComponent(ComponentInfo& p, bool isDiff);
+    static void readMaterialParamFloat(ComponentInfo& p, bool isDiff);
+    static void readBSFloat2DCurve(ComponentInfo& p, bool isDiff);
+    static void readBSFloat3DCurve(ComponentInfo& p, bool isDiff);
+    static void readTranslucencySettingsComponent(ComponentInfo& p,
+                                                  bool isDiff);
+    static void readGlobalLayerNoiseSettings(ComponentInfo& p, bool isDiff);
+    static void readMaterialID(ComponentInfo& p, bool isDiff);
+    static bool readXMFLOAT2L(FloatVector4& v, ComponentInfo& p, bool isDiff);
+    static bool readXMFLOAT2H(FloatVector4& v, ComponentInfo& p, bool isDiff);
+    static void readTimerController(ComponentInfo& p, bool isDiff);
+    static void readControllers(ComponentInfo& p, bool isDiff);
+    static void readEmittanceSettings(ComponentInfo& p, bool isDiff);
+    static void readShaderModelComponent(ComponentInfo& p, bool isDiff);
+    static void readBSResourceID(ComponentInfo& p, bool isDiff);
+    static bool readXMFLOAT3(FloatVector4& v, ComponentInfo& p, bool isDiff);
+    static void readMaterialOverrideColorTypeComponent(ComponentInfo& p,
+                                                       bool isDiff);
+    static void readChannel(ComponentInfo& p, bool isDiff);
+    static void readColorCurveController(ComponentInfo& p, bool isDiff);
+    static void readCompiledDB(ComponentInfo& p, bool isDiff);
+    static void readHairSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readBSColorCurve(ComponentInfo& p, bool isDiff);
+    static void readControllerComponent(ComponentInfo& p, bool isDiff);
+    static void readMRTextureFile(ComponentInfo& p, bool isDiff);
+    static void readTextureSetKindComponent(ComponentInfo& p, bool isDiff);
+    static void readBlenderID(ComponentInfo& p, bool isDiff);
+    static void readCollisionComponent(ComponentInfo& p, bool isDiff);
+    static void readTerrainSettingsComponent(ComponentInfo& p, bool isDiff);
+    static void readLODMaterialID(ComponentInfo& p, bool isDiff);
+    ComponentInfo(CE2MaterialDB& p, const std::vector< CE2MaterialObject * >& t)
+      : cdb(p),
+        objectTable(t),
+        buf((unsigned char *) 0, 0, 0)
+    {
+    }
+    inline bool getFieldNumber(unsigned int& n, unsigned int nMax, bool isDiff);
+    inline bool readBool(bool& n);
+    inline bool readUInt16(std::uint16_t& n);
+    inline bool readUInt32(std::uint32_t& n);
+    inline bool readFloat(float& n);
+    inline bool readFloat0To1(float& n);
+    inline bool readString();
+    inline bool readAndStoreString(const std::string*& s, int type);
+    // t = sequence of strings with length prefix (e.g. "\005False\004True")
+    bool readEnum(unsigned char& n, const char *t);
+  };
   enum
   {
     objectNameHashMask = 0x0007FFFF,
@@ -249,6 +474,8 @@ class CE2MaterialDB
       const std::vector< CE2MaterialObject * >& t, unsigned int objectID) const;
   void initializeObject(CE2MaterialObject *o,
                         const std::vector< CE2MaterialObject * >& objectTable);
+  void *allocateSpace(size_t nBytes, const void *copySrc = (void *) 0,
+                      size_t alignBytes = 16);
   CE2MaterialObject *allocateObject(
       std::vector< CE2MaterialObject * >& objectTable,
       std::uint32_t objectID, std::uint32_t baseObjID);

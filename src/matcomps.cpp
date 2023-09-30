@@ -1,0 +1,2264 @@
+
+#include "common.hpp"
+#include "material.hpp"
+
+#include <bit>
+
+#ifndef ENABLE_CDB_DEBUG
+#  define ENABLE_CDB_DEBUG  0
+#endif
+
+inline bool CE2MaterialDB::ComponentInfo::getFieldNumber(
+    unsigned int& n, unsigned int nMax, bool isDiff)
+{
+  if (BRANCH_UNLIKELY(!isDiff))
+  {
+    n++;
+    return (n <= nMax);
+  }
+  if (BRANCH_UNLIKELY((buf.getPosition() + 2ULL) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+  n = buf.readUInt16Fast();
+  if (BRANCH_LIKELY(std::int16_t(n) <= std::int16_t(nMax)))
+    return (std::int16_t(n) >= 0);
+#if ENABLE_CDB_DEBUG
+  std::printf("Warning: unrecognized DIFF field number, skipping data\n");
+#endif
+  buf.setPosition(buf.size());
+  return false;
+}
+
+inline bool CE2MaterialDB::ComponentInfo::readBool(bool& n)
+{
+  if (BRANCH_LIKELY(buf.getPosition() < buf.size()))
+  {
+    n = bool(buf.readUInt8Fast());
+    return true;
+  }
+  return false;
+}
+
+inline bool CE2MaterialDB::ComponentInfo::readUInt16(std::uint16_t& n)
+{
+  if (BRANCH_UNLIKELY((buf.getPosition() + 2ULL) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+  n = buf.readUInt16Fast();
+  return true;
+}
+
+inline bool CE2MaterialDB::ComponentInfo::readUInt32(std::uint32_t& n)
+{
+  if (BRANCH_UNLIKELY((buf.getPosition() + 4ULL) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+  n = buf.readUInt32Fast();
+  return true;
+}
+
+inline bool CE2MaterialDB::ComponentInfo::readFloat(float& n)
+{
+  if (BRANCH_UNLIKELY((buf.getPosition() + 4ULL) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  std::uint32_t tmp = buf.readUInt32Fast();
+  if (!((tmp + 0x00800000U) & 0x7F000000U))
+    tmp = 0U;
+  n = std::bit_cast< float, std::uint32_t >(tmp);
+#else
+  n = buf.readFloat();
+#endif
+  return true;
+}
+
+inline bool CE2MaterialDB::ComponentInfo::readFloat0To1(float& n)
+{
+  if (BRANCH_UNLIKELY((buf.getPosition() + 4ULL) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+#if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+  std::uint32_t tmp = buf.readUInt32Fast();
+  if (!((tmp + 0x00800000U) & 0x7F000000U))
+    tmp = 0U;
+  n = std::bit_cast< float, std::uint32_t >(tmp);
+#else
+  n = buf.readFloat();
+#endif
+  n = std::min(std::max(n, 0.0f), 1.0f);
+  return true;
+}
+
+inline bool CE2MaterialDB::ComponentInfo::readString()
+{
+  if (BRANCH_UNLIKELY((buf.getPosition() + 2ULL) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+  unsigned int  len = buf.readUInt16Fast();
+  if (BRANCH_UNLIKELY((buf.getPosition() + std::uint64_t(len)) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+  buf.readString(stringBuf, len);
+  return true;
+}
+
+inline bool CE2MaterialDB::ComponentInfo::readAndStoreString(
+    const std::string*& s, int type)
+{
+  if (BRANCH_UNLIKELY((buf.getPosition() + 2ULL) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+  unsigned int  len = buf.readUInt16Fast();
+  if (BRANCH_UNLIKELY((buf.getPosition() + std::uint64_t(len)) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+  s = cdb.readStringParam(stringBuf, buf, len, type);
+  return true;
+}
+
+bool CE2MaterialDB::ComponentInfo::readEnum(unsigned char& n, const char *t)
+{
+  if (BRANCH_UNLIKELY((buf.getPosition() + 2ULL) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+  unsigned int  len = buf.readUInt16Fast();
+  if (BRANCH_UNLIKELY((buf.getPosition() + std::uint64_t(len)) > buf.size()))
+  {
+    buf.setPosition(buf.size());
+    return false;
+  }
+  const char  *s =
+      reinterpret_cast< const char * >(buf.data()) + buf.getPosition();
+  buf.setPosition(buf.getPosition() + len);
+  while (len > 0U && s[len - 1U] == '\0')
+    len--;
+  for (unsigned int i = 0U; *t; i++)
+  {
+    unsigned int  len2 = (unsigned char) *t;
+    const char  *s2 = t + 1;
+    t = s2 + len2;
+    if (len2 != len)
+      continue;
+    for (unsigned int j = 0U; len2 && s2[j] == s[j]; j++, len2--)
+      ;
+    if (!len2)
+    {
+      n = (unsigned char) i;
+      break;
+    }
+  }
+  return true;
+}
+
+static inline bool parseLayerNumber(unsigned char& n, const std::string& s)
+{
+  if (s.length() == 16 && s.starts_with("MATERIAL_LAYER_"))
+  {
+    unsigned char tmp = (unsigned char) (s[15] - '0');
+    if (tmp < CE2Material::maxLayers)
+    {
+      n = tmp;
+      return true;
+    }
+  }
+  return false;
+}
+
+static inline bool parseBlenderNumber(unsigned char& n, const std::string& s)
+{
+  if (s.length() == 13 && s.starts_with("BLEND_LAYER_"))
+  {
+    unsigned char tmp = (unsigned char) (s[12] - '0');
+    if (tmp < CE2Material::maxBlenders)
+    {
+      n = tmp;
+      return true;
+    }
+  }
+  return false;
+}
+
+// BSMaterial::LayeredEmissivityComponent
+//   Bool  Enabled
+//   String  FirstLayerIndex
+//   BSMaterial::Color  FirstLayerTint
+//   String  FirstLayerMaskIndex
+//   Bool  SecondLayerActive
+//   String  SecondLayerIndex
+//   BSMaterial::Color  SecondLayerTint
+//   String  SecondLayerMaskIndex
+//   String  FirstBlenderIndex
+//   String  FirstBlenderMode
+//   Bool  ThirdLayerActive
+//   String  ThirdLayerIndex
+//   BSMaterial::Color  ThirdLayerTint
+//   String  ThirdLayerMaskIndex
+//   String  SecondBlenderIndex
+//   String  SecondBlenderMode
+//   Float  EmissiveClipThreshold
+//   Bool  AdaptiveEmittance
+//   Float  LuminousEmittance
+//   Float  ExposureOffset
+//   Bool  EnableAdaptiveLimits
+//   Float  MaxOffsetEmittance
+//   Float  MinOffsetEmittance
+
+void CE2MaterialDB::ComponentInfo::readLayeredEmissivityComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::AlphaBlenderSettings
+//   String  Mode
+//   Bool  UseDetailBlendMask
+//   Bool  UseVertexColor
+//   String  VertexColorChannel
+//   BSMaterial::UVStreamID  OpacityUVStream
+//   Float  HeightBlendThreshold
+//   Float  HeightBlendFactor
+//   Float  Position
+//   Float  Contrast
+
+void CE2MaterialDB::ComponentInfo::readAlphaBlenderSettings(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material *m = (CE2Material *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+    m = static_cast< CE2Material * >(p.o);
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 8U, isDiff); )
+  {
+    if ((1U << n) & 0x00000006U)        // 1, 2: booleans
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!m)
+        continue;
+      if (n == 1U)
+        m->setFlags(CE2Material::Flag_AlphaDetailBlendMask, tmp);
+      else
+        m->setFlags(CE2Material::Flag_AlphaVertexColor, tmp);
+    }
+    else if ((1U << n) & 0x000001E0U)   // 5, 6, 7, 8: floats
+    {
+      float   tmp;
+      if (!p.readFloat0To1(tmp))
+        break;
+      if (!m)
+        continue;
+      if (n == 5U)
+        m->alphaHeightBlendThreshold = tmp;
+      else if (n == 6U)
+        m->alphaHeightBlendFactor = tmp;
+      else if (n == 7U)
+        m->alphaPosition = tmp;
+      else
+        m->alphaContrast = tmp;
+    }
+    else if (n == 0U)
+    {
+      unsigned char tmp = 0xFF;
+      if (!p.readEnum(tmp,
+                      "\006Linear\010Additive\020PositionContrast\004None"))
+      {
+        break;
+      }
+      if (m && tmp != 0xFF)
+        m->alphaBlendMode = tmp;
+    }
+    else if (n == 3U)
+    {
+      unsigned char tmp = 0xFF;
+      if (!p.readEnum(tmp, "\003Red\005Green\004Blue\005Alpha"))
+        break;
+      if (m && tmp != 0xFF)
+        m->alphaVertexColorChannel = tmp;
+    }
+    else                                // 4: UV stream ID
+    {
+      readUVStreamID(p, isDiff);
+    }
+  }
+}
+
+// BSFloatCurve
+//   -253  Controls
+//   Float  MaxInput
+//   Float  MinInput
+//   Float  InputDistance
+//   Float  MaxValue
+//   Float  MinValue
+//   Float  DefaultValue
+//   String  Type
+//   String  Edge
+//   Bool  IsSampleInterpolating
+
+void CE2MaterialDB::ComponentInfo::readBSFloatCurve(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::EmissiveSettingsComponent
+//   Bool  Enabled
+//   BSMaterial::EmittanceSettings  Settings
+
+void CE2MaterialDB::ComponentInfo::readEmissiveSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material *m = (CE2Material *) 0;
+  CE2Material::EmissiveSettings *sp = (CE2Material::EmissiveSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    sp = reinterpret_cast< CE2Material::EmissiveSettings * >(
+             p.cdb.allocateSpace(sizeof(CE2Material::EmissiveSettings),
+                                 m->emissiveSettings));
+    if (!m->emissiveSettings)
+    {
+      sp->isEnabled = false;
+      sp->sourceLayer = 0;
+      sp->maskSourceBlender = 0;        // "None"
+      sp->adaptiveEmittance = false;
+      sp->enableAdaptiveLimits = false;
+      sp->clipThreshold = 0.0f;
+      sp->luminousEmittance = 432.0f;
+      sp->emissiveTint = FloatVector4(1.0f);
+      sp->exposureOffset = 0.0f;
+      sp->maxOffset = 9999.0f;
+      sp->minOffset = 0.0f;
+    }
+    m->emissiveSettings = sp;
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 1U, isDiff); )
+  {
+    if (n == 0U)
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!m)
+        continue;
+      m->setFlags(CE2Material::Flag_Emissive, tmp);
+      sp->isEnabled = tmp;
+    }
+    else
+    {
+      readEmittanceSettings(p, isDiff);
+    }
+  }
+}
+
+// BSMaterial::WaterFoamSettingsComponent
+//   String  Mode
+//   Float  MaskDistanceFromShoreStart
+//   Float  MaskDistanceFromShoreEnd
+//   Float  MaskDistanceRampWidth
+//   Float  WaveShoreFadeInnerDistance
+//   Float  WaveShoreFadeOuterDistance
+//   Float  WaveSpawnFadeInDistance
+//   XMFLOAT4  MaskNoiseAmp
+//   XMFLOAT4  MaskNoiseFreq
+//   XMFLOAT4  MaskNoiseBias
+//   XMFLOAT4  MaskNoiseAnimSpeed
+//   Float  MaskNoiseGlobalScale
+//   Float  MaskWaveParallax
+//   Float  BlendMaskPosition
+//   Float  BlendMaskContrast
+//   Float  FoamTextureScrollSpeed
+//   Float  FoamTextureDistortion
+//   Float  WaveSpeed
+//   Float  WaveAmplitude
+//   Float  WaveScale
+//   Float  WaveDistortionAmount
+//   Float  WaveParallaxFalloffBias
+//   Float  WaveParallaxFalloffScale
+//   Float  WaveParallaxInnerStrength
+//   Float  WaveParallaxOuterStrength
+//   Bool  WaveFlipWaveDirection
+
+void CE2MaterialDB::ComponentInfo::readWaterFoamSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::FlipbookComponent
+//   Bool  IsAFlipbook
+//   Int32  Columns
+//   Int32  Rows
+//   Float  FPS
+//   Bool  Loops
+
+void CE2MaterialDB::ComponentInfo::readFlipbookComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::PhysicsMaterialType
+//   Int32  Value
+
+void CE2MaterialDB::ComponentInfo::readPhysicsMaterialType(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::TerrainTintSettingsComponent
+//   Bool  Enabled
+//   Float  TerrainBlendStrength
+//   Float  TerrainBlendGradientFactor
+
+void CE2MaterialDB::ComponentInfo::readTerrainTintSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::UVStreamID
+//   BSComponentDB2::ID  ID
+
+void CE2MaterialDB::ComponentInfo::readUVStreamID(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    const CE2Material::UVStream *uvStream =
+        static_cast< const CE2Material::UVStream * >(
+            readBSComponentDB2ID(p, isDiff, 6));
+    if (BRANCH_LIKELY(p.componentType == 0x006BU))
+    {                                   // "BSMaterial::UVStreamID"
+      if (p.o->type == 2)
+        static_cast< CE2Material::Blender * >(p.o)->uvStream = uvStream;
+      else if (p.o->type == 3)
+        static_cast< CE2Material::Layer * >(p.o)->uvStream = uvStream;
+    }
+    else if (p.componentType == 0x0075U)
+    {                                   // "BSMaterial::AlphaSettingsComponent"
+      if (p.o->type == 1)
+        static_cast< CE2Material * >(p.o)->alphaUVStream = uvStream;
+    }
+  }
+}
+
+// BSMaterial::DecalSettingsComponent
+//   Bool  IsDecal
+//   Float  MaterialOverallAlpha
+//   Int32  WriteMask
+//   Bool  IsPlanet
+//   Bool  IsProjected
+//   BSMaterial::ProjectedDecalSettings  ProjectedDecalSetting
+//   String  BlendMode
+//   Bool  AnimatedDecalIgnoresTAA
+
+void CE2MaterialDB::ComponentInfo::readDecalSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material *m = (CE2Material *) 0;
+  CE2Material::DecalSettings  *sp = (CE2Material::DecalSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    sp = reinterpret_cast< CE2Material::DecalSettings * >(
+             p.cdb.allocateSpace(sizeof(CE2Material::DecalSettings),
+                                 m->decalSettings));
+    if (!m->decalSettings)
+    {
+      m->setFlags(CE2Material::Flag_IsDecal, true);
+    }
+    m->decalSettings = sp;
+  }
+}
+
+// BSBind::Directory
+//   String  Name
+//   -252  Children
+//   -241  SourceDirectoryHash
+
+void CE2MaterialDB::ComponentInfo::readDirectory(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::WaterSettingsComponent
+//   Float  WaterEdgeFalloff
+//   Float  WaterWetnessMaxDepth
+//   Float  WaterEdgeNormalFalloff
+//   Float  WaterDepthBlur
+//   Float  WaterRefractionMagnitude
+//   Float  PhytoplanktonReflectanceColorR
+//   Float  PhytoplanktonReflectanceColorG
+//   Float  PhytoplanktonReflectanceColorB
+//   Float  SedimentReflectanceColorR
+//   Float  SedimentReflectanceColorG
+//   Float  SedimentReflectanceColorB
+//   Float  YellowMatterReflectanceColorR
+//   Float  YellowMatterReflectanceColorG
+//   Float  YellowMatterReflectanceColorB
+//   Float  MaxConcentrationPlankton
+//   Float  MaxConcentrationSediment
+//   Float  MaxConcentrationYellowMatter
+//   Float  ReflectanceR
+//   Float  ReflectanceG
+//   Float  ReflectanceB
+//   Bool  LowLOD
+//   Bool  PlacedWater
+
+void CE2MaterialDB::ComponentInfo::readWaterSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material *m = (CE2Material *) 0;
+  CE2Material::WaterSettings  *sp = (CE2Material::WaterSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    sp = reinterpret_cast< CE2Material::WaterSettings * >(
+             p.cdb.allocateSpace(sizeof(CE2Material::WaterSettings),
+                                 m->waterSettings));
+    if (!m->waterSettings)
+    {
+      m->setFlags(CE2Material::Flag_IsWater, true);
+    }
+    m->waterSettings = sp;
+  }
+}
+
+// BSFloatCurve::Control
+//   Float  Input
+//   Float  Value
+
+void CE2MaterialDB::ComponentInfo::readControl(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSBind::ComponentProperty
+//   String  Name
+//   BSComponentDB2::ID  Object
+//   ClassReference  ComponentType
+//   Int16  ComponentIndex
+//   String  PathStr
+
+void CE2MaterialDB::ComponentInfo::readComponentProperty(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// XMFLOAT4
+//   Float  x
+//   Float  y
+//   Float  z
+//   Float  w
+
+bool CE2MaterialDB::ComponentInfo::readXMFLOAT4(
+    FloatVector4& v, ComponentInfo& p, bool isDiff)
+{
+  bool    r = false;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 3U, isDiff); )
+  {
+    if (!p.readFloat(v[n]))
+      break;
+    r = true;
+  }
+  return r;
+}
+
+// BSMaterial::EffectSettingsComponent
+//   Bool  UseFallOff
+//   Bool  UseRGBFallOff
+//   Float  FalloffStartAngle
+//   Float  FalloffStopAngle
+//   Float  FalloffStartOpacity
+//   Float  FalloffStopOpacity
+//   Bool  VertexColorBlend
+//   Bool  IsAlphaTested
+//   Float  AlphaTestThreshold
+//   Bool  NoHalfResOptimization
+//   Bool  SoftEffect
+//   Float  SoftFalloffDepth
+//   Bool  EmissiveOnlyEffect
+//   Bool  EmissiveOnlyAutomaticallyApplied
+//   Bool  ReceiveDirectionalShadows
+//   Bool  ReceiveNonDirectionalShadows
+//   Bool  IsGlass
+//   Bool  Frosting
+//   Float  FrostingUnblurredBackgroundAlphaBlend
+//   Float  FrostingBlurBias
+//   Float  MaterialOverallAlpha
+//   Bool  ZTest
+//   Bool  ZWrite
+//   String  BlendingMode
+//   Bool  BackLightingEnable
+//   Float  BacklightingScale
+//   Float  BacklightingSharpness
+//   Float  BacklightingTransparencyFactor
+//   BSMaterial::Color  BackLightingTintColor
+//   Bool  DepthMVFixup
+//   Bool  DepthMVFixupEdgesOnly
+//   Bool  ForceRenderBeforeOIT
+//   Int16  DepthBiasInUlp
+
+void CE2MaterialDB::ComponentInfo::readEffectSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material *m = (CE2Material *) 0;
+  CE2Material::EffectSettings *sp = (CE2Material::EffectSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    sp = reinterpret_cast< CE2Material::EffectSettings * >(
+             p.cdb.allocateSpace(sizeof(CE2Material::EffectSettings),
+                                 m->effectSettings));
+    if (!m->effectSettings)
+    {
+      m->setFlags(CE2Material::Flag_IsEffect | CE2Material::Flag_AlphaBlending,
+                  true);
+      sp->flags = CE2Material::EffectFlag_ZTest;
+      sp->blendMode = 0;                // "AlphaBlend"
+      sp->falloffStartAngle = 0.0f;
+      sp->falloffStopAngle = 0.0f;
+      sp->falloffStartOpacity = 0.0f;
+      sp->falloffStopOpacity = 0.0f;
+      sp->alphaThreshold = 0.5f;
+      sp->softFalloffDepth = 2.0f;
+      sp->frostingBgndBlend = 0.98f;
+      sp->frostingBlurBias = 0.0f;
+      sp->materialAlpha = 1.0f;
+      sp->backlightScale = 0.0f;
+      sp->backlightSharpness = 8.0f;
+      sp->backlightTransparency = 0.0f;
+      sp->backlightTintColor = FloatVector4(1.0f);
+      sp->depthBias = 0;
+    }
+    m->effectSettings = sp;
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 32U, isDiff); )
+  {
+    if (BRANCH_UNLIKELY(n == 32U))
+    {
+      std::uint16_t tmp;
+      if (!p.readUInt16(tmp))
+        break;
+      if (sp)
+        sp->depthBias = tmp;
+    }
+    else if ((1U << n) & 0xE163F6C3U)   // boolean flags
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (sp)
+      {
+        if (!tmp)
+          sp->flags &= ~(1U << n);
+        else
+          sp->flags |= (1U << n);
+      }
+    }
+    else if ((1U << n) & 0x0E1C093CU)   // floats
+    {
+      float   tmp;
+      if (!p.readFloat(tmp))
+        break;
+      if (!sp)
+        continue;
+      switch (n)
+      {
+        case 2U:
+          sp->falloffStartAngle = tmp;
+          break;
+        case 3U:
+          sp->falloffStopAngle = tmp;
+          break;
+        case 4U:
+          sp->falloffStartOpacity = tmp;
+          break;
+        case 5U:
+          sp->falloffStopOpacity = tmp;
+          break;
+        case 8U:
+          sp->alphaThreshold = tmp;
+          break;
+        case 11U:
+          sp->softFalloffDepth = tmp;
+          break;
+        case 18U:
+          sp->frostingBgndBlend = tmp;
+          break;
+        case 19U:
+          sp->frostingBlurBias = tmp;
+          break;
+        case 20U:
+          sp->materialAlpha = tmp;
+          break;
+        case 25U:
+          sp->backlightScale = tmp;
+          break;
+        case 26U:
+          sp->backlightSharpness = tmp;
+          break;
+        case 27U:
+          sp->backlightTransparency = tmp;
+          break;
+      }
+    }
+    else if (n == 23U)
+    {
+      unsigned char tmp = 0xFF;
+      if (!p.readEnum(tmp, "\012AlphaBlend\010Additive\022SourceSoftAdditive"
+                           "\010Multiply\027DestinationSoftAdditive"
+                           "\037DestinationInvertedSoftAdditive\013TakeSmaller"
+                           "\004None"))
+      {
+        break;
+      }
+      if (sp && tmp != 0xFF)
+        sp->blendMode = tmp;
+    }
+    else
+    {
+      if (!sp)
+      {
+        FloatVector4  c(0.0f);
+        readColorValue(c, p, isDiff);
+      }
+      else
+      {
+        readColorValue(sp->backlightTintColor, p, isDiff);
+      }
+    }
+  }
+}
+
+// BSComponentDB::CTName
+//   String  Name
+
+void CE2MaterialDB::ComponentInfo::readCTName(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    if (!p.readAndStoreString(p.o->name, 0))
+      break;
+  }
+}
+
+// BSMaterial::GlobalLayerDataComponent
+//   Float  TexcoordScale_XY
+//   Float  TexcoordScale_YZ
+//   Float  TexcoordScale_XZ
+//   BSMaterial::Color  AlbedoTintColor
+//   Bool  UsesDirectionality
+//   XMFLOAT3  SourceDirection
+//   Float  DirectionalityIntensity
+//   Float  DirectionalityScale
+//   Float  DirectionalitySaturation
+//   Bool  BlendNormalsAdditively
+//   Float  BlendPosition
+//   Float  BlendContrast
+//   BSMaterial::GlobalLayerNoiseSettings  GlobalLayerNoiseData
+
+void CE2MaterialDB::ComponentInfo::readGlobalLayerDataComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::Offset
+//   XMFLOAT2  Value
+
+void CE2MaterialDB::ComponentInfo::readOffset(
+    ComponentInfo& p, bool isDiff)
+{
+  FloatVector4  tmp(0.0f);
+  FloatVector4  *c = &tmp;
+  if (BRANCH_LIKELY(p.o->type == 6 && p.componentType == 0x0094U))
+    c = &(static_cast< CE2Material::UVStream * >(p.o)->scaleAndOffset);
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+    readXMFLOAT2H(*c, p, isDiff);
+}
+
+// BSMaterial::TextureAddressModeComponent
+//   String  Value
+
+void CE2MaterialDB::ComponentInfo::readTextureAddressModeComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    unsigned char tmp = 0xFF;
+    if (!p.readEnum(tmp, "\004Wrap\005Clamp\006Mirror\006Border"))
+      break;
+    if (p.o->type == 6 && tmp != 0xFF)
+      static_cast< CE2Material::UVStream * >(p.o)->textureAddressMode = tmp;
+  }
+}
+
+// BSBind::FloatCurveController
+//   BSFloatCurve  Curve
+//   Bool  Loop
+
+void CE2MaterialDB::ComponentInfo::readFloatCurveController(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterialBinding::MaterialPropertyNode
+//   String  Name
+//   String  Binding
+//   Int16  LayerIndex
+
+void CE2MaterialDB::ComponentInfo::readMaterialPropertyNode(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::ProjectedDecalSettings
+//   Bool  UseParallaxOcclusionMapping
+//   BSMaterial::TextureFile  SurfaceHeightMap
+//   Float  ParallaxOcclusionScale
+//   Bool  ParallaxOcclusionShadows
+//   -247  MaxParralaxOcclusionSteps
+//   String  RenderLayer
+//   Bool  UseGBufferNormals
+
+void CE2MaterialDB::ComponentInfo::readProjectedDecalSettings(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::ParamBool
+//   Bool  Value
+
+void CE2MaterialDB::ComponentInfo::readParamBool(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    bool    tmp;
+    if (!p.readBool(tmp))
+      break;
+    unsigned int  i = p.componentIndex;
+    if (p.o->type == 2 && i < CE2Material::Blender::maxBoolParams)
+      static_cast< CE2Material::Blender * >(p.o)->boolParams[i] = tmp;
+  }
+}
+
+// BSBind::Float3DCurveController
+//   BSFloat3DCurve  Curve
+//   Bool  Loop
+//   String  Mask
+
+void CE2MaterialDB::ComponentInfo::readFloat3DCurveController(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+bool CE2MaterialDB::ComponentInfo::readColorValue(
+    FloatVector4& c, ComponentInfo& p, bool isDiff)
+{
+  bool    r = false;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+    r = r | readXMFLOAT4(c, p, isDiff);
+  if (r)
+    c.maxValues(FloatVector4(0.0f)).minValues(FloatVector4(1.0f));
+  return r;
+}
+
+// BSMaterial::Color
+//   XMFLOAT4  Value
+
+void CE2MaterialDB::ComponentInfo::readColor(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material::Material *m = (CE2Material::Material *) 0;
+  if (BRANCH_LIKELY(p.o->type == 4))
+    m = static_cast< CE2Material::Material * >(p.o);
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    if (!m)
+    {
+      FloatVector4  c(0.0f);
+      readXMFLOAT4(c, p, isDiff);
+    }
+    else if (readXMFLOAT4(m->color, p, isDiff))
+    {
+      m->color.maxValues(FloatVector4(0.0f)).minValues(FloatVector4(1.0f));
+    }
+  }
+}
+
+// BSMaterial::SourceTextureWithReplacement
+//   BSMaterial::MRTextureFile  Texture
+//   BSMaterial::TextureReplacement  Replacement
+
+bool CE2MaterialDB::ComponentInfo::readSourceTextureWithReplacement(
+    const std::string*& texturePath, std::uint32_t& textureReplacement,
+    bool& textureReplacementEnabled, ComponentInfo& p, bool isDiff)
+{
+  (void) texturePath;
+  (void) textureReplacement;
+  (void) textureReplacementEnabled;
+  (void) p;
+  (void) isDiff;
+  return false;
+}
+
+// BSComponentDB2::DBFileIndex::EdgeInfo
+//   BSComponentDB2::ID  SourceID
+//   BSComponentDB2::ID  TargetID
+//   Int16  Index
+//   Int16  Type
+
+void CE2MaterialDB::ComponentInfo::readEdgeInfo(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::FlowSettingsComponent
+//   BSMaterial::Offset  FlowUVOffset
+//   BSMaterial::Scale  FlowUVScale
+//   Float  FlowExtent
+//   BSMaterial::Channel  FlowSourceUVChannel
+//   Bool  FlowIsAnimated
+//   Float  FlowSpeed
+//   Bool  FlowMapAndTexturesAreFlipbooks
+//   BSMaterial::UVStreamID  TargetUVStream
+//   String  UVStreamTargetLayer
+//   String  UVStreamTargetBlender
+//   BSMaterial::TextureFile  FlowMap
+//   Bool  ApplyFlowOnANMR
+//   Bool  ApplyFlowOnOpacity
+//   Bool  ApplyFlowOnEmissivity
+
+void CE2MaterialDB::ComponentInfo::readFlowSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::DetailBlenderSettings
+//   Bool  IsDetailBlendMaskSupported
+//   BSMaterial::SourceTextureWithReplacement  DetailBlendMask
+//   BSMaterial::UVStreamID  DetailBlendMaskUVStream
+
+void CE2MaterialDB::ComponentInfo::readDetailBlenderSettings(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::LayerID
+//   BSComponentDB2::ID  ID
+
+void CE2MaterialDB::ComponentInfo::readLayerID(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    const CE2MaterialObject *o = readBSComponentDB2ID(p, isDiff, 3);
+    if (p.o->type == 1 && p.componentIndex < CE2Material::maxLayers)
+    {
+      CE2Material *m = static_cast< CE2Material * >(p.o);
+      m->layers[p.componentIndex] =
+          static_cast< const CE2Material::Layer * >(o);
+      if (!o)
+        m->layerMask &= ~(1U << p.componentIndex);
+      else
+        m->layerMask |= (1U << p.componentIndex);
+    }
+  }
+}
+
+// BSBind::Controllers::Mapping
+//   BSBind::Address  Address
+//   -251  Controller
+
+void CE2MaterialDB::ComponentInfo::readMapping(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// ClassReference
+
+void CE2MaterialDB::ComponentInfo::readClassReference(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSComponentDB2::DBFileIndex::ComponentInfo
+//   BSComponentDB2::ID  ObjectID
+//   Int16  Index
+//   Int16  Type
+
+void CE2MaterialDB::ComponentInfo::readComponentInfo(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::Scale
+//   XMFLOAT2  Value
+
+void CE2MaterialDB::ComponentInfo::readScale(
+    ComponentInfo& p, bool isDiff)
+{
+  FloatVector4  tmp(0.0f);
+  FloatVector4  *c = &tmp;
+  if (BRANCH_LIKELY(p.o->type == 6 && p.componentType == 0x0093U))
+    c = &(static_cast< CE2Material::UVStream * >(p.o)->scaleAndOffset);
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+    readXMFLOAT2L(*c, p, isDiff);
+}
+
+// BSMaterial::WaterGrimeSettingsComponent
+//   String  Mode
+//   Float  MaskDistanceFromShoreStart
+//   Float  MaskDistanceFromShoreEnd
+//   Float  MaskDistanceRampWidth
+//   XMFLOAT4  MaskNoiseAmp
+//   XMFLOAT4  MaskNoiseFreq
+//   XMFLOAT4  MaskNoiseBias
+//   XMFLOAT4  MaskNoiseAnimSpeed
+//   Float  MaskNoiseGlobalScale
+//   Float  MaskWaveParallax
+//   Float  BlendMaskPosition
+//   Float  BlendMaskContrast
+//   Float  NormalOverride
+
+void CE2MaterialDB::ComponentInfo::readWaterGrimeSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::UVStreamParamBool
+//   Bool  Value
+
+void CE2MaterialDB::ComponentInfo::readUVStreamParamBool(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSComponentDB2::DBFileIndex::ComponentTypeInfo
+//   ClassReference  Class
+//   Int16  Version
+//   Bool  IsEmpty
+
+void CE2MaterialDB::ComponentInfo::readComponentTypeInfo(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSBind::Multiplex
+//   String  Name
+//   -252  Nodes
+
+void CE2MaterialDB::ComponentInfo::readMultiplex(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::OpacityComponent
+//   String  FirstLayerIndex
+//   Bool  SecondLayerActive
+//   String  SecondLayerIndex
+//   String  FirstBlenderIndex
+//   String  FirstBlenderMode
+//   Bool  ThirdLayerActive
+//   String  ThirdLayerIndex
+//   String  SecondBlenderIndex
+//   String  SecondBlenderMode
+//   Float  SpecularOpacityOverride
+
+void CE2MaterialDB::ComponentInfo::readOpacityComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material *m = (CE2Material *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+    m = static_cast< CE2Material * >(p.o);
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 9U, isDiff); )
+  {
+    if ((1U << n) & 0x00000022U)        // booleans
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!m)
+        continue;
+      if (n == 1U)
+        m->setFlags(CE2Material::Flag_OpacityLayer2Active, tmp);
+      else
+        m->setFlags(CE2Material::Flag_OpacityLayer3Active, tmp);
+    }
+    else if ((1U << n) & 0x000000CDU)   // layer and blender index strings
+    {
+      if (!p.readString())
+        break;
+      unsigned char tmp = 0xFF;
+      if ((1U << n) & 0x00000045U)
+        parseLayerNumber(tmp, p.stringBuf);
+      else
+        parseBlenderNumber(tmp, p.stringBuf);
+      if (!(m && tmp != 0xFF))
+        continue;
+      switch (n)
+      {
+        case 0U:
+          m->opacityLayer1 = tmp;
+          break;
+        case 2U:
+          m->opacityLayer2 = tmp;
+          break;
+        case 3U:
+          m->opacityBlender1 = tmp;
+          break;
+        case 6U:
+          m->opacityLayer3 = tmp;
+          break;
+        case 7U:
+          m->opacityBlender2 = tmp;
+          break;
+      }
+    }
+    else if ((1U << n) & 0x00000110U)   // blender modes
+    {
+      unsigned char tmp = 0xFF;
+      if (!p.readEnum(tmp,
+                      "\004Lerp\010Additive\013Subtractive\016Multiplicative"))
+      {
+        break;
+      }
+      if (!(m && tmp != 0xFF))
+        continue;
+      if (n == 4U)
+        m->opacityBlender1Mode = tmp;
+      else
+        m->opacityBlender2Mode = tmp;
+    }
+    else
+    {
+      float   tmp;
+      if (!p.readFloat(tmp))
+        break;
+      if (m)
+        m->specularOpacityOverride = tmp;
+    }
+  }
+}
+
+// BSMaterial::BlendParamFloat
+//   Float  Value
+
+void CE2MaterialDB::ComponentInfo::readBlendParamFloat(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSComponentDB2::DBFileIndex
+//   -252  ComponentTypes
+//   -253  Objects
+//   -253  Components
+//   -253  Edges
+//   Bool  Optimized
+
+void CE2MaterialDB::ComponentInfo::readDBFileIndex(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::ColorRemapSettingsComponent
+//   Bool  RemapAlbedo
+//   Bool  RemapOpacity
+//   Bool  RemapEmissive
+//   BSMaterial::SourceTextureWithReplacement  AlbedoPaletteTex
+//   BSMaterial::Color  AlbedoTint
+//   BSMaterial::SourceTextureWithReplacement  AlphaPaletteTex
+//   Float  AlphaTint
+//   BSMaterial::SourceTextureWithReplacement  EmissivePaletteTex
+//   BSMaterial::Color  EmissiveTint
+
+void CE2MaterialDB::ComponentInfo::readColorRemapSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::EyeSettingsComponent
+//   Bool  Enabled
+//   Float  ScleraEyeRoughness
+//   Float  CorneaEyeRoughness
+//   Float  ScleraSpecularity
+//   Float  IrisSpecularity
+//   Float  CorneaSpecularity
+//   Float  IrisDepthPosition
+//   Float  IrisTotalDepth
+//   Float  DepthScale
+//   Float  IrisDepthTransitionRatio
+//   Float  IrisUVSize
+//   Float  LightingWrap
+//   Float  LightingPower
+
+void CE2MaterialDB::ComponentInfo::readEyeSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::Internal::CompiledDB::FilePair
+//   BSResource::ID  First
+//   BSResource::ID  Second
+
+void CE2MaterialDB::ComponentInfo::readFilePair(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSBind::Float2DLerpController
+//   Float  Duration
+//   Bool  Loop
+//   XMFLOAT2  Start
+//   XMFLOAT2  End
+//   String  Easing
+//   String  Mask
+
+void CE2MaterialDB::ComponentInfo::readFloat2DLerpController(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSComponentDB2::ID
+//   Int32  Value
+
+const CE2MaterialObject * CE2MaterialDB::ComponentInfo::readBSComponentDB2ID(
+    ComponentInfo& p, bool isDiff, unsigned char typeRequired)
+{
+  const CE2MaterialObject *o = (CE2MaterialObject *) 0;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    std::uint32_t objectID;
+    if (!p.readUInt32(objectID))
+      break;
+    if (!(objectID && objectID < p.objectTable.size() &&
+          p.objectTable[objectID]))
+    {
+#if ENABLE_CDB_DEBUG
+      if (objectID)
+      {
+        std::printf("Warning: invalid object ID 0x%08X in material database\n",
+                    (unsigned int) objectID);
+      }
+#endif
+    }
+    else
+    {
+      o = p.objectTable[objectID];
+      if (BRANCH_LIKELY(typeRequired))
+      {
+        if (BRANCH_UNLIKELY((o->type ^ typeRequired) & 0xFF))
+        {
+#if ENABLE_CDB_DEBUG
+          std::printf("Warning: linked object 0x%08X is of type %d, "
+                      "expected %d\n",
+                      (unsigned int) objectID,
+                      int(o->type & 0xFF), int(typeRequired));
+#endif
+          o = (CE2MaterialObject *) 0;
+        }
+      }
+    }
+  }
+  return o;
+}
+
+// BSMaterial::TextureReplacement
+//   Bool  Enabled
+//   BSMaterial::Color  Color
+
+void CE2MaterialDB::ComponentInfo::readTextureReplacement(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material::Blender  *blender = (CE2Material::Blender *) 0;
+  CE2Material::TextureSet *txtSet = (CE2Material::TextureSet *) 0;
+  if (BRANCH_LIKELY(p.o->type == 5 &&
+                    p.componentIndex
+                    < CE2Material::TextureSet::maxTexturePaths))
+  {
+    txtSet = static_cast< CE2Material::TextureSet * >(p.o);
+  }
+  else if (p.o->type == 2)
+  {
+    blender = static_cast< CE2Material::Blender * >(p.o);
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 1U, isDiff); )
+  {
+    if (n == 0U)
+    {
+      bool    isEnabled;
+      if (!p.readBool(isEnabled))
+        break;
+      if (txtSet)
+      {
+        if (!isEnabled)
+          txtSet->textureReplacementMask &= ~(1U << p.componentIndex);
+        else
+          txtSet->textureReplacementMask |= (1U << p.componentIndex);
+      }
+    }
+    else
+    {
+      FloatVector4  c(0.0f);
+      if (txtSet)
+        c = FloatVector4(&(txtSet->textureReplacements[p.componentIndex]));
+      else if (blender)
+        c = FloatVector4(&(blender->textureReplacement));
+      c *= (1.0f / 255.0f);
+      readColorValue(c, p, isDiff);
+      c *= 255.0f;
+      if (txtSet)
+        txtSet->textureReplacements[p.componentIndex] = std::uint32_t(c);
+      else if (blender)
+        blender->textureReplacement = std::uint32_t(c);
+    }
+  }
+}
+
+// BSMaterial::BlendModeComponent
+//   String  Value
+
+void CE2MaterialDB::ComponentInfo::readBlendModeComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::LayeredEdgeFalloffComponent
+//   -253  FalloffStartAngles
+//   -253  FalloffStopAngles
+//   -253  FalloffStartOpacities
+//   -253  FalloffStopOpacities
+//   -247  ActiveLayersMask
+//   Bool  UseRGBFallOff
+
+void CE2MaterialDB::ComponentInfo::readLayeredEdgeFalloffComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::VegetationSettingsComponent
+//   Bool  Enabled
+//   Float  LeafFrequency
+//   Float  LeafAmplitude
+//   Float  BranchFlexibility
+//   Float  TrunkFlexibility
+//   Float  DEPRECATEDTerrainBlendStrength
+//   Float  DEPRECATEDTerrainBlendGradientFactor
+
+void CE2MaterialDB::ComponentInfo::readVegetationSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::TextureResolutionSetting
+//   String  ResolutionHint
+
+void CE2MaterialDB::ComponentInfo::readTextureResolutionSetting(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSBind::Address
+//   -253  Path
+
+void CE2MaterialDB::ComponentInfo::readAddress(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSBind::DirectoryComponent
+//   -251  upDir
+
+void CE2MaterialDB::ComponentInfo::readDirectoryComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterialBinding::MaterialUVStreamPropertyNode
+//   String  Name
+//   BSMaterial::UVStreamID  StreamID
+//   String  BindingType
+
+void CE2MaterialDB::ComponentInfo::readMaterialUVStreamPropertyNode(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::ShaderRouteComponent
+//   String  Route
+
+void CE2MaterialDB::ComponentInfo::readShaderRouteComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSBind::FloatLerpController
+//   Float  Duration
+//   Bool  Loop
+//   Float  Start
+//   Float  End
+//   String  Easing
+
+void CE2MaterialDB::ComponentInfo::readFloatLerpController(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::ColorChannelTypeComponent
+//   String  Value
+
+void CE2MaterialDB::ComponentInfo::readColorChannelTypeComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::AlphaSettingsComponent
+//   Bool  HasOpacity
+//   Float  AlphaTestThreshold
+//   String  OpacitySourceLayer
+//   BSMaterial::AlphaBlenderSettings  Blender
+//   Bool  UseDitheredTransparency
+
+void CE2MaterialDB::ComponentInfo::readAlphaSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material *m = (CE2Material *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+    m = static_cast< CE2Material * >(p.o);
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 4U, isDiff); )
+  {
+    if ((1U << n) & 0x00000011U)        // 0, 4: booleans
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!m)
+        continue;
+      if (!n)
+        m->setFlags(CE2Material::Flag_HasOpacity, tmp);
+      else
+        m->setFlags(CE2Material::Flag_DitheredTransparency, tmp);
+    }
+    else if (n == 1U)
+    {
+      float   tmp;
+      if (!p.readFloat0To1(tmp))
+        break;
+      if (m)
+        m->alphaThreshold = tmp;
+    }
+    else if (n == 2U)
+    {
+      if (!p.readString())
+        break;
+      if (m)
+        parseLayerNumber(m->alphaSourceLayer, p.stringBuf);
+    }
+    else
+    {
+      readAlphaBlenderSettings(p, isDiff);
+    }
+  }
+}
+
+// BSMaterial::LevelOfDetailSettings
+//   -247  NumLODMaterials
+//   String  MostSignificantLayer
+//   String  SecondMostSignificantLayer
+//   String  MediumLODRootMaterial
+//   String  LowLODRootMaterial
+//   String  VeryLowLODRootMaterial
+//   Float  Bias
+
+void CE2MaterialDB::ComponentInfo::readLevelOfDetailSettings(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::TextureSetID
+//   BSComponentDB2::ID  ID
+
+void CE2MaterialDB::ComponentInfo::readTextureSetID(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    const CE2MaterialObject *o = readBSComponentDB2ID(p, isDiff, 5);
+    if (p.o->type == 4)
+    {
+      static_cast< CE2Material::Material * >(p.o)->textureSet =
+          static_cast< const CE2Material::TextureSet * >(o);
+    }
+  }
+}
+
+// BSBind::Float2DCurveController
+//   BSFloat2DCurve  Curve
+//   Bool  Loop
+//   String  Mask
+
+void CE2MaterialDB::ComponentInfo::readFloat2DCurveController(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::TextureFile
+//   String  FileName
+
+void CE2MaterialDB::ComponentInfo::readTextureFile(
+    ComponentInfo& p, bool isDiff)
+{
+  readMRTextureFile(p, isDiff);
+}
+
+// BSMaterial::TranslucencySettings
+//   Bool  Thin
+//   Bool  FlipBackFaceNormalsInViewSpace
+//   Bool  UseSSS
+//   Float  SSSWidth
+//   Float  SSSStrength
+//   Float  TransmissiveScale
+//   Float  TransmittanceWidth
+//   Float  SpecLobe0RoughnessScale
+//   Float  SpecLobe1RoughnessScale
+//   String  TransmittanceSourceLayer
+
+void CE2MaterialDB::ComponentInfo::readTranslucencySettings(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::MouthSettingsComponent
+//   Bool  Enabled
+//   Bool  IsTeeth
+//   String  AOVertexColorChannel
+
+void CE2MaterialDB::ComponentInfo::readMouthSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::DistortionComponent
+//   Bool  Enabled
+//   Float  Strength
+//   Bool  UseVertexAlpha
+//   Bool  NormalAffectsStrength
+//   Bool  CameraDistanceFade
+//   Float  NearFadeValue
+//   Float  FarFadeValue
+//   String  OpacitySourceLayer
+//   Float  BlurStrength
+
+void CE2MaterialDB::ComponentInfo::readDistortionComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::DetailBlenderSettingsComponent
+//   BSMaterial::DetailBlenderSettings  DetailBlenderSettings
+
+void CE2MaterialDB::ComponentInfo::readDetailBlenderSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSComponentDB2::DBFileIndex::ObjectInfo
+//   BSResource::ID  PersistentID
+//   BSComponentDB2::ID  DBID
+//   BSComponentDB2::ID  Parent
+//   Bool  HasData
+
+void CE2MaterialDB::ComponentInfo::readObjectInfo(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::StarmapBodyEffectComponent
+//   Bool  Enabled
+//   String  Type
+
+void CE2MaterialDB::ComponentInfo::readStarmapBodyEffectComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::MaterialParamFloat
+//   Float  Value
+
+void CE2MaterialDB::ComponentInfo::readMaterialParamFloat(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    float   tmp;
+    if (!p.readFloat0To1(tmp))
+      break;
+    unsigned int  i = p.componentIndex;
+    if (p.o->type == 2 && i < CE2Material::Blender::maxFloatParams)
+      static_cast< CE2Material::Blender * >(p.o)->floatParams[i] = tmp;
+    else if (p.o->type == 5)
+      static_cast< CE2Material::TextureSet * >(p.o)->floatParam = tmp;
+  }
+}
+
+// BSFloat2DCurve
+//   BSFloatCurve  XCurve
+//   BSFloatCurve  YCurve
+
+void CE2MaterialDB::ComponentInfo::readBSFloat2DCurve(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSFloat3DCurve
+//   BSFloatCurve  XCurve
+//   BSFloatCurve  YCurve
+//   BSFloatCurve  ZCurve
+
+void CE2MaterialDB::ComponentInfo::readBSFloat3DCurve(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::TranslucencySettingsComponent
+//   Bool  Enabled
+//   BSMaterial::TranslucencySettings  Settings
+
+void CE2MaterialDB::ComponentInfo::readTranslucencySettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material *m = (CE2Material *) 0;
+  CE2Material::TranslucencySettings *sp =
+      (CE2Material::TranslucencySettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    sp = reinterpret_cast< CE2Material::TranslucencySettings * >(
+             p.cdb.allocateSpace(sizeof(CE2Material::TranslucencySettings),
+                                 m->translucencySettings));
+    if (!m->translucencySettings)
+    {
+      m->setFlags(CE2Material::Flag_Translucency, true);
+    }
+    m->translucencySettings = sp;
+  }
+}
+
+// BSMaterial::GlobalLayerNoiseSettings
+//   Float  MaterialMaskIntensityScale
+//   Bool  UseNoiseMaskTexture
+//   BSMaterial::SourceTextureWithReplacement  NoiseMaskTexture
+//   XMFLOAT4  TexcoordScaleAndBias
+//   Float  WorldspaceScaleFactor
+//   Float  HurstExponent
+//   Float  BaseFrequency
+//   Float  FrequencyMultiplier
+//   Float  MaskIntensityMin
+//   Float  MaskIntensityMax
+
+void CE2MaterialDB::ComponentInfo::readGlobalLayerNoiseSettings(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::MaterialID
+//   BSComponentDB2::ID  ID
+
+void CE2MaterialDB::ComponentInfo::readMaterialID(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    const CE2MaterialObject *o = readBSComponentDB2ID(p, isDiff, 4);
+    if (p.o->type == 3)
+    {
+      static_cast< CE2Material::Layer * >(p.o)->material =
+          static_cast< const CE2Material::Material * >(o);
+    }
+  }
+}
+
+// XMFLOAT2
+//   Float  x
+//   Float  y
+
+bool CE2MaterialDB::ComponentInfo::readXMFLOAT2L(
+    FloatVector4& v, ComponentInfo& p, bool isDiff)
+{
+  bool    r = false;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 1U, isDiff); )
+  {
+    if (!p.readFloat(v[n]))
+      break;
+    r = true;
+  }
+  return r;
+}
+
+bool CE2MaterialDB::ComponentInfo::readXMFLOAT2H(
+    FloatVector4& v, ComponentInfo& p, bool isDiff)
+{
+  bool    r = false;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 1U, isDiff); )
+  {
+    if (!p.readFloat(v[n + 2U]))
+      break;
+    r = true;
+  }
+  return r;
+}
+
+// BSBind::TimerController
+
+void CE2MaterialDB::ComponentInfo::readTimerController(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSBind::Controllers
+//   -253  MappingsA
+//   Bool  UseRandomOffset
+
+void CE2MaterialDB::ComponentInfo::readControllers(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::EmittanceSettings
+//   String  EmissiveSourceLayer
+//   BSMaterial::Color  EmissiveTint
+//   String  EmissiveMaskSourceBlender
+//   Float  EmissiveClipThreshold
+//   Bool  AdaptiveEmittance
+//   Float  LuminousEmittance
+//   Float  ExposureOffset
+//   Bool  EnableAdaptiveLimits
+//   Float  MaxOffsetEmittance
+//   Float  MinOffsetEmittance
+
+void CE2MaterialDB::ComponentInfo::readEmittanceSettings(
+    ComponentInfo& p, bool isDiff)
+{
+  CE2Material::EmissiveSettings *sp = (CE2Material::EmissiveSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    CE2Material *m = static_cast< CE2Material * >(p.o);
+    sp = const_cast< CE2Material::EmissiveSettings * >(m->emissiveSettings);
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 9U, isDiff); )
+  {
+    if ((1U << n) & 0x00000368U)        // 3, 5, 6, 8, 9: floats
+    {
+      float   tmp;
+      if (!p.readFloat(tmp))
+        break;
+      if (!sp)
+        continue;
+      if (n == 3U)
+        sp->clipThreshold = tmp;
+      else if (n == 5U)
+        sp->luminousEmittance = tmp;
+      else if (n == 6U)
+        sp->exposureOffset = tmp;
+      else if (n == 8U)
+        sp->maxOffset = tmp;
+      else
+        sp->minOffset = tmp;
+    }
+    else if ((1U << n) & 0x00000090U)   // 4, 7: booleans
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!sp)
+        continue;
+      if (n == 4U)
+        sp->adaptiveEmittance = tmp;
+      else
+        sp->enableAdaptiveLimits = tmp;
+    }
+    else if (n == 0U)
+    {
+      if (!p.readString())
+        break;
+      if (sp)
+        parseLayerNumber(sp->sourceLayer, p.stringBuf);
+    }
+    else if (n == 1U)
+    {
+      if (!sp)
+      {
+        FloatVector4  c(0.0f);
+        readColorValue(c, p, isDiff);
+      }
+      else
+      {
+        readColorValue(sp->emissiveTint, p, isDiff);
+      }
+    }
+    else
+    {
+      unsigned char tmp = 0xFF;
+      if (!p.readEnum(tmp, "\004None\010Blender1\010Blender2\010Blender3"))
+        break;
+      if (sp && tmp != 0xFF)
+        sp->maskSourceBlender = tmp;
+    }
+  }
+}
+
+// BSMaterial::ShaderModelComponent
+//   String  FileName
+
+void CE2MaterialDB::ComponentInfo::readShaderModelComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSResource::ID
+//   Int32  Dir
+//   Int32  File
+//   Int32  Ext
+
+void CE2MaterialDB::ComponentInfo::readBSResourceID(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// XMFLOAT3
+//   Float  x
+//   Float  y
+//   Float  z
+
+bool CE2MaterialDB::ComponentInfo::readXMFLOAT3(
+    FloatVector4& v, ComponentInfo& p, bool isDiff)
+{
+  bool    r = false;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 2U, isDiff); )
+  {
+    if (!p.readFloat(v[n]))
+      break;
+    r = true;
+  }
+  return r;
+}
+
+// BSMaterial::MaterialOverrideColorTypeComponent
+//   String  Value
+
+void CE2MaterialDB::ComponentInfo::readMaterialOverrideColorTypeComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    unsigned char tmp = 0xFF;
+    if (!p.readEnum(tmp, "\010Multiply\004Lerp"))
+      break;
+    if (p.o->type == 4 && tmp != 0xFF)
+      static_cast< CE2Material::Material * >(p.o)->colorMode = tmp;
+  }
+}
+
+// BSMaterial::Channel
+//   String  Value
+
+void CE2MaterialDB::ComponentInfo::readChannel(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSBind::ColorCurveController
+//   BSColorCurve  Curve
+//   Bool  Loop
+//   String  Mask
+
+void CE2MaterialDB::ComponentInfo::readColorCurveController(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::Internal::CompiledDB
+//   String  BuildVersion
+//   -252  HashMap
+//   -253  Collisions
+//   -253  Circular
+
+void CE2MaterialDB::ComponentInfo::readCompiledDB(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::HairSettingsComponent
+//   Bool  Enabled
+//   Bool  IsSpikyHair
+//   Float  SpecScale
+//   Float  SpecularTransmissionScale
+//   Float  DirectTransmissionScale
+//   Float  DiffuseTransmissionScale
+//   Float  Roughness
+//   Float  ContactShadowSoftening
+//   Float  BackscatterStrength
+//   Float  BackscatterWrap
+//   Float  VariationStrength
+//   Float  IndirectSpecularScale
+//   Float  IndirectSpecularTransmissionScale
+//   Float  IndirectSpecRoughness
+//   Float  AlphaDistance
+//   Float  MipBase
+//   Float  AlphaBias
+//   Float  EdgeMaskContrast
+//   Float  EdgeMaskMin
+//   Float  EdgeMaskDistanceMin
+//   Float  EdgeMaskDistanceMax
+//   Float  MaxDepthOffset
+//   Float  DitherScale
+//   Float  DitherDistanceMin
+//   Float  DitherDistanceMax
+//   XMFLOAT3  Tangent
+//   Float  TangentBend
+//   String  DepthOffsetMaskVertexColorChannel
+//   String  AOVertexColorChannel
+
+void CE2MaterialDB::ComponentInfo::readHairSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) isDiff;
+  CE2Material *m = (CE2Material *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    m->setFlags(CE2Material::Flag_IsHair, true);
+  }
+}
+
+// BSColorCurve
+//   BSFloatCurve  RedChannel
+//   BSFloatCurve  GreenChannel
+//   BSFloatCurve  BlueChannel
+//   BSFloatCurve  AlphaChannel
+
+void CE2MaterialDB::ComponentInfo::readBSColorCurve(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSBind::ControllerComponent
+//   -251  upControllers
+
+void CE2MaterialDB::ComponentInfo::readControllerComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::MRTextureFile
+//   String  FileName
+
+void CE2MaterialDB::ComponentInfo::readMRTextureFile(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    const std::string *txtPath;
+    if (!p.readAndStoreString(txtPath, 1))
+      break;
+    unsigned int  i = p.componentIndex;
+    if (BRANCH_LIKELY(p.o->type == 5 &&
+                      i < CE2Material::TextureSet::maxTexturePaths))
+    {
+      CE2Material::TextureSet *txtSet =
+          static_cast< CE2Material::TextureSet * >(p.o);
+      txtSet->texturePaths[i] = txtPath;
+      if (txtPath->empty())
+        txtSet->texturePathMask &= ~(1U << i);
+      else
+        txtSet->texturePathMask |= (1U << i);
+    }
+    else if (p.o->type == 2)
+    {
+      static_cast< CE2Material::Blender * >(p.o)->texturePath = txtPath;
+    }
+  }
+}
+
+// BSMaterial::TextureSetKindComponent
+//   String  Value
+
+void CE2MaterialDB::ComponentInfo::readTextureSetKindComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::BlenderID
+//   BSComponentDB2::ID  ID
+
+void CE2MaterialDB::ComponentInfo::readBlenderID(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    const CE2MaterialObject *o = readBSComponentDB2ID(p, isDiff, 2);
+    if (p.o->type == 1 && p.componentIndex < CE2Material::maxBlenders)
+    {
+      static_cast< CE2Material * >(p.o)->blenders[p.componentIndex] =
+          static_cast< const CE2Material::Blender * >(o);
+    }
+  }
+}
+
+// BSMaterial::CollisionComponent
+//   BSMaterial::PhysicsMaterialType  MaterialTypeOverride
+
+void CE2MaterialDB::ComponentInfo::readCollisionComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) p;
+  (void) isDiff;
+}
+
+// BSMaterial::TerrainSettingsComponent
+//   Bool  Enabled
+//   String  TextureMappingType
+//   Float  RotationAngle
+//   Float  BlendSoftness
+//   Float  TilingDistance
+//   Float  MaxDisplacement
+//   Float  DisplacementMidpoint
+
+void CE2MaterialDB::ComponentInfo::readTerrainSettingsComponent(
+    ComponentInfo& p, bool isDiff)
+{
+  (void) isDiff;
+  CE2Material *m = (CE2Material *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    m->setFlags(CE2Material::Flag_IsTerrain, true);
+  }
+}
+
+// BSMaterial::LODMaterialID
+//   BSComponentDB2::ID  ID
+
+void CE2MaterialDB::ComponentInfo::readLODMaterialID(
+    ComponentInfo& p, bool isDiff)
+{
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    const CE2MaterialObject *o = readBSComponentDB2ID(p, isDiff, 1);
+    if (p.o->type == 1 && p.componentIndex < CE2Material::maxLODMaterials)
+    {
+      static_cast< CE2Material * >(p.o)->lodMaterials[p.componentIndex] =
+          static_cast< const CE2Material * >(o);
+    }
+  }
+}
+
+const CE2MaterialDB::ComponentInfo::ReadFunctionType
+    CE2MaterialDB::ComponentInfo::readFunctionTable[64] =
+{
+  (ReadFunctionType) 0,
+  &readCTName,
+  &readDirectoryComponent,
+  &readControllerComponent,
+  (ReadFunctionType) 0,
+  (ReadFunctionType) 0,
+  (ReadFunctionType) 0,
+  &readBlenderID,
+  &readLayerID,
+  &readMaterialID,
+  &readTextureSetID,
+  &readUVStreamID,
+  &readLODMaterialID,
+  &readTextureResolutionSetting,
+  &readTextureReplacement,
+  &readMaterialOverrideColorTypeComponent,
+  &readFlipbookComponent,
+  &readBlendModeComponent,
+  &readColorChannelTypeComponent,
+  &readShaderRouteComponent,
+  &readDetailBlenderSettingsComponent,
+  &readAlphaSettingsComponent,
+  &readDecalSettingsComponent,
+  &readCollisionComponent,
+  &readEmissiveSettingsComponent,
+  &readTranslucencySettingsComponent,
+  &readShaderModelComponent,
+  &readFlowSettingsComponent,
+  &readEffectSettingsComponent,
+  &readOpacityComponent,
+  &readLayeredEmissivityComponent,
+  &readHairSettingsComponent,
+  &readMouthSettingsComponent,
+  &readWaterSettingsComponent,
+  &readWaterFoamSettingsComponent,
+  &readWaterGrimeSettingsComponent,
+  &readColorRemapSettingsComponent,
+  &readStarmapBodyEffectComponent,
+  &readTerrainSettingsComponent,
+  &readEyeSettingsComponent,
+  &readDistortionComponent,
+  &readVegetationSettingsComponent,
+  &readTerrainTintSettingsComponent,
+  (ReadFunctionType) 0,
+  &readGlobalLayerDataComponent,
+  (ReadFunctionType) 0,
+  &readLevelOfDetailSettings,
+  &readLayeredEdgeFalloffComponent,
+  &readTextureSetKindComponent,
+  &readColor,
+  (ReadFunctionType) 0,
+  &readScale,
+  &readOffset,
+  &readChannel,
+  &readTextureFile,
+  &readMRTextureFile,
+  &readMaterialParamFloat,
+  &readBlendParamFloat,
+  &readParamBool,
+  (ReadFunctionType) 0,
+  &readTextureAddressModeComponent,
+  &readUVStreamParamBool,
+  (ReadFunctionType) 0,
+  (ReadFunctionType) 0
+};
+
