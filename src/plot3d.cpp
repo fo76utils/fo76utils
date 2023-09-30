@@ -993,7 +993,7 @@ void Plot3D_TriShape::setMaterialProperties(
   }
   // set defaults
   mp.s.alphaThreshold =
-      (!(flags & CE2Material::Flag_AlphaTesting) ? -1.0f : 127.5f);
+      (!(flags & CE2Material::Flag_HasOpacity) ? -1.0f : 127.5f);
   mp.s.alphaBlendMode =
       (!(flags & CE2Material::Flag_AlphaBlending) ? 0U : 0x00EDU);
   mp.s.uvScaleAndOffset = FloatVector4(1.0f, 1.0f, 0.0f, 0.0f);
@@ -1009,9 +1009,10 @@ void Plot3D_TriShape::setMaterialProperties(
   if (BRANCH_LIKELY(m))
   {
     // set properties from material objects
-    if (flags & CE2Material::Flag_AlphaTesting)
+    if (flags & CE2Material::Flag_HasOpacity)
       mp.s.alphaThreshold = m->alphaThreshold * 255.0f;
-    mp.s.emissiveColor = m->emissiveColor;
+    if (m->emissiveSettings)
+      mp.s.emissiveColor = m->emissiveSettings->emissiveTint;
     const CE2Material::Layer  *l = (CE2Material::Layer *) 0;
     for (unsigned int i = 0U; i < CE2Material::maxLayers; i++)
     {
