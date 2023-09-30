@@ -2,6 +2,8 @@
 #include "common.hpp"
 #include "filebuf.hpp"
 
+#include <bit>
+
 #if defined(_WIN32) || defined(_WIN64)
 #  include <windows.h>
 #  include <io.h>
@@ -81,7 +83,7 @@ float FileBuffer::readFloat()
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   if (!((tmp + 0x00800000U) & 0x7F000000U))
     return 0.0f;
-  return *(reinterpret_cast< const float * >(fileBuf + (filePos - 4)));
+  return std::bit_cast< float, std::uint32_t >(tmp);
 #else
   int     e = int((tmp >> 23) & 0xFF);
   if (e == 0x00 || e == 0xFF)
