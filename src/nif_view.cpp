@@ -106,7 +106,7 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
         if (txtSet)
         {
           texturePathMask =
-              (!(ts.flags & CE2Material::Flag_Glow) ? 0x003FU : 0x00BFU)
+              (!(ts.flags & CE2Material::Flag_Glow) ? 0x013FU : 0x01BFU)
               & txtSet->texturePathMask;
         }
         for (size_t j = 0; texturePathMask; j++, texturePathMask >>= 1)
@@ -117,11 +117,6 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
             if (textures[j])
               textureMask |= (1U << (unsigned char) j);
           }
-        }
-        if (!(textureMask & 0x0001U))
-        {
-          textures[0] = &(p->defaultTexture);
-          textureMask |= 0x0001U;
         }
         if (!p->defaultEnvMap.empty())
           ts.setEnvironmentMap(p->loadTexture(p->defaultEnvMap, n));
@@ -252,12 +247,32 @@ void NIF_View::loadModel(const std::string& fileName, int l)
   }
   if (fileName.empty())
     return;
+  bool    isMaterialFile =
+      (fileName.starts_with("materials/") && fileName.ends_with(".mat"));
   std::vector< unsigned char >& fileBuf = threadFileBuffers[0];
-  ba2File.extractFile(fileBuf, fileName);
+  if (isMaterialFile)
+  {
+    ba2File.extractFile(fileBuf,
+                        std::string("meshes/test/materialcalibration/"
+                                    "materialcalibrationobject.nif"));
+  }
+  else
+  {
+    ba2File.extractFile(fileBuf, fileName);
+  }
   nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), ba2File, &materials, l);
   try
   {
     nifFile->getMesh(meshData);
+    if (isMaterialFile)
+    {
+      const CE2Material *m = materials.findMaterial(fileName);
+      if (m)
+      {
+        for (size_t i = 0; i < meshData.size(); i++)
+          meshData[i].setMaterial(m);
+      }
+    }
   }
   catch (...)
   {
@@ -635,6 +650,35 @@ static bool viewModelInfo(SDLDisplay& display, const NIFFile& nifFile)
   return display.viewTextBuffer();
 }
 
+static bool viewMaterialInfo(
+    SDLDisplay& display, const CE2MaterialDB& materials,
+    const std::string& fileName)
+{
+  display.clearTextBuffer();
+  display.consolePrint("Material path: \"%s\"\n", fileName.c_str());
+  const CE2Material *m = materials.findMaterial(fileName);
+  if (!m)
+  {
+    display.consolePrint("Not found in database\n");
+  }
+  else
+  {
+    std::string tmpBuf("MaterialFile ");
+    m->printObjectInfo(tmpBuf, 0, false);
+    std::string lineBuf;
+    for (size_t j = 0; j < tmpBuf.length(); )
+    {
+      size_t  n = tmpBuf.find('\n', j);
+      if (n == std::string::npos)
+        n = tmpBuf.length();
+      lineBuf.assign(tmpBuf, j, n - j);
+      j = n + 1;
+      display.consolePrint("%s\n", lineBuf.c_str());
+    }
+  }
+  return display.viewTextBuffer();
+}
+
 static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228m0\033[m "
     "to \033[4m\033[38;5;228m5\033[m                "
@@ -728,6 +772,15 @@ bool NIF_View::viewModels(SDLDisplay& display,
     float   lightRotationX = 0.0f;
     int     fileNum = 0;
     int     d = 4;              // scale of adjusting parameters
+    if (nifFileNames.size() > 10)
+    {
+      int     n = display.browseFile(nifFileNames, "Select file", fileNum,
+                                     0x0B080F04FFFFULL);
+      if (n >= 0 && size_t(n) < nifFileNames.size())
+        fileNum = n;
+      else if (n < -1)
+        quitFlag = 2;
+    }
 
     size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
     std::vector< float >  outBufZ(imageDataSize);
@@ -773,7 +826,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
             if (eventFlags & 8)
             {
               int     n = display.browseFile(
-                              nifFileNames, "Select NIF file", fileNum,
+                              nifFileNames, "Select file", fileNum,
                               0x0B080F04FFFFULL);
               if (n >= 0 && size_t(n) < nifFileNames.size() && n != fileNum)
               {
@@ -787,8 +840,17 @@ bool NIF_View::viewModels(SDLDisplay& display,
             }
             else if ((eventFlags & 4) && nifFile)
             {
-              if (!viewModelInfo(display, *nifFile))
+              const std::string&  fileName = nifFileNames[fileNum];
+              if (fileName.starts_with("materials/") &&
+                  fileName.ends_with(".mat"))
+              {
+                if (!viewMaterialInfo(display, materials, fileName))
+                  quitFlag = 2;
+              }
+              else if (!viewModelInfo(display, *nifFile))
+              {
                 quitFlag = 2;
+              }
               display.clearTextBuffer();
             }
             eventFlags = 0;
