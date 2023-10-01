@@ -3,19 +3,7 @@
 #include "ba2file.hpp"
 #include "material.hpp"
 #include "sdlvideo.hpp"
-
-#ifdef HAVE_SDL2
-static void viewMaterials(
-    const BA2File& ba2File, const CE2MaterialDB& materials,
-    int displayWidth, int displayHeight, const std::vector< std::string >& args)
-{
-  (void) ba2File;
-  (void) materials;
-  (void) displayWidth;
-  (void) displayHeight;
-  (void) args;
-}
-#endif
+#include "nif_view.hpp"
 
 static const char *usageString =
     "Usage: mat_info [OPTIONS...] ARCHIVEPATH [FILE1.MAT [FILE2.MAT...]]\n"
@@ -34,6 +22,9 @@ int main(int argc, char **argv)
 {
   const char  *outFileName = (char *) 0;
   std::FILE *outFile = (std::FILE *) 0;
+#ifdef HAVE_SDL2
+  NIF_View  *renderer = (NIF_View *) 0;
+#endif
   bool    consoleFlag = true;
   try
   {
@@ -136,17 +127,23 @@ int main(int argc, char **argv)
     const char  *fileNameFilter = ".cdb";
 #ifdef HAVE_SDL2
     if (displayWidth && displayHeight)
-      fileNameFilter = ".cdb\t.dds";
+      fileNameFilter = ".cdb\t.dds\t.mesh\t.nif";
 #endif
     BA2File ba2File(args[0].c_str(), fileNameFilter);
-    CE2MaterialDB materials(ba2File, cdbFileName);
 #ifdef HAVE_SDL2
-    if (displayWidth && displayHeight)
+    if (displayWidth && displayHeight && args.size() > 1)
     {
-      viewMaterials(ba2File, materials, displayWidth, displayHeight, args);
+      args.erase(args.begin(), args.begin() + 1);
+      std::sort(args.begin(), args.end());
+      renderer = new NIF_View(ba2File, (ESMFile *) 0, cdbFileName);
+      SDLDisplay  display(displayWidth, displayHeight, "mat_info", 4U, 48);
+      display.setDefaultTextColor(0x00, 0xC0);
+      renderer->viewModels(display, args, 0);
+      delete renderer;
       return 0;
     }
 #endif
+    CE2MaterialDB materials(ba2File, cdbFileName);
     consoleFlag = false;
     SDLDisplay::enableConsole();
     if (outFileName)
@@ -181,11 +178,15 @@ int main(int argc, char **argv)
       SDLDisplay::enableConsole();
     if (outFileName && outFile)
       std::fclose(outFile);
+    if (renderer)
+      delete renderer;
     std::fprintf(stderr, "mat_info: %s\n", e.what());
     return 1;
   }
   if (outFileName && outFile)
     std::fclose(outFile);
+  if (renderer)
+    delete renderer;
   return 0;
 }
 
