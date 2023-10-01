@@ -309,9 +309,9 @@ void BA2File::loadFile(FileBuffer& buf, size_t archiveFile,
   {
     fileName2.erase(0, n + 1);
   }
-  while (std::strncmp(fileName2.c_str(), "./", 2) == 0)
+  while (fileName2.starts_with("./"))
     fileName2.erase(0, 2);
-  while (std::strncmp(fileName2.c_str(), "../", 3) == 0)
+  while (fileName2.starts_with("../"))
     fileName2.erase(0, 3);
   if (fileName2.empty())
     return;

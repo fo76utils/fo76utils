@@ -207,15 +207,12 @@ static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
       isWater = true;
     }
   }
-  if (modelPath.length() < 8 ||
-      std::strncmp(modelPath.c_str(), "meshes/", 7) != 0)
-  {
+  if (modelPath.length() < 8 || !modelPath.starts_with("meshes/"))
     modelPath.insert(0, "meshes/");
-  }
   if (meshArchiveFile && modelPath.length() >= 18 &&
-      (std::strncmp(modelPath.c_str(), "meshes/water/", 13) == 0 ||
+      (modelPath.starts_with("meshes/water/") ||
        modelPath.find("/fxwaterfall") != std::string::npos) &&
-      std::strcmp(modelPath.c_str() + (modelPath.length() - 4), ".nif") == 0)
+      modelPath.ends_with(".nif"))
   {
     isWater = true;
   }

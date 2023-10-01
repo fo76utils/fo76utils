@@ -1456,8 +1456,8 @@ int SDLDisplay::browseList(
                 itemSelected--;
               }
               while (itemSelected > 0 &&
-                     std::strncmp(v[itemSelected].c_str(),
-                                  v[itemSelected + 1].c_str(), n + 1) == 0);
+                     v[itemSelected].compare(
+                         0, n + 1, v[itemSelected + 1]) == 0);
               redrawFlag = true;
             }
           }
@@ -1474,8 +1474,7 @@ int SDLDisplay::browseList(
               }
               while (itemSelected < maxItemNum &&
                      v[itemSelected].rfind('/') == n &&
-                     std::strncmp(v[itemSelected].c_str(),
-                                  v[itemSelected - 1].c_str(), n) == 0);
+                     v[itemSelected].compare(0, n, v[itemSelected - 1]) == 0);
               redrawFlag = true;
             }
           }

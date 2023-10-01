@@ -245,15 +245,8 @@ void FileBuffer::readPath(std::string& s, size_t n,
     if (p == std::string::npos)
       s.insert(0, prefix);
   }
-  if (suffix && suffix[0] != '\0')
-  {
-    size_t  suffixLen = std::strlen(suffix);
-    if (s.length() < suffixLen ||
-        std::strcmp(s.c_str() + (s.length() - suffixLen), suffix) != 0)
-    {
-      s += suffix;
-    }
-  }
+  if (suffix && suffix[0] != '\0' && !s.ends_with(suffix))
+    s += suffix;
 }
 
 unsigned char FileBuffer::readUInt8(size_t offs) const

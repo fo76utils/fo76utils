@@ -981,7 +981,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
 #if 0
       if (!isWater)
       {
-        if (std::strncmp(stringBuf.c_str(), "meshes/water/", 13) == 0 ||
+        if (stringBuf.starts_with("meshes/water/") ||
             stringBuf.find("/fxwaterfall") != std::string::npos)
         {
           isWater = true;

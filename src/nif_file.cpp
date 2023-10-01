@@ -440,7 +440,7 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
     {
       // set material path
       size_t  i;
-      if (std::strncmp(f.stringTable[n].c_str(), "materials/", 10) == 0)
+      if (f.stringTable[n].starts_with("materials/"))
         f.stringBuf = f.stringTable[n];
       else if ((i = f.stringTable[n].find("/materials/")) != std::string::npos)
         f.stringBuf.assign(f.stringTable[n], i + 1);
