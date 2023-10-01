@@ -66,8 +66,9 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   int     height;
   const DDSTexture  *textures[9];
   const DDSTexture  *textureE;          // environment map
-  float   mipOffsets[8];                // mipOffsets[N] is for textures[N + 1]
-  DDSTexture    *defaultTextures;
+  float   mipOffsets[9];
+  std::uint16_t textureWidth;
+  std::uint16_t textureHeight;
   unsigned int  renderMode;
   unsigned int  debugMode;
   FloatVector4  lightVector;
@@ -131,6 +132,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     }
   };
   MaterialParams  mp;
+  DDSTexture    *defaultTextures;
   static FloatVector4 colorToSRGB(FloatVector4 c);
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform);
   inline bool glowEnabled() const
