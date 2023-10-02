@@ -412,55 +412,35 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
   float   nDotL = z.normal.dotProduct3(p.lightVector);
   float   nDotV = float(std::fabs(z.normal[2]));
   FloatVector4  reflectedView(p.calculateReflection(z));
-  FloatVector4  e(p.environmentMap(reflectedView, smoothness));
   // geometry function
   float   kEnv = roughness * roughness * 0.5f;
   FloatVector4  g((ao * nDotV) / (nDotV + kEnv - (nDotV * kEnv)));
   g *= p.envColor;
-  e *= g;
   float   a = c[3];
-#if 0
-  if (p.flags & CE2Material::Flag_EffectLighting)
-#else
-  if (false)
-#endif
-  {
-    c += ((c * ((p.lightColor * 0.5f) + (p.ambientLight * g)) - c)
-          * p.mp.e.lightingInfluence);
-  }
-  else
+  if (!(p.m->effectSettings->flags & (CE2Material::EffectFlag_EmissiveOnlyAuto
+                                      | CE2Material::EffectFlag_EmissiveOnly)))
   {
     c *= ((p.lightColor * std::max(nDotL, 0.0f)) + (p.ambientLight * g));
   }
-  if (!p.textures[3])
+  FloatVector4  e(p.environmentMap(reflectedView, smoothness) * g);
+  float   m = 0.0f;             // metalness
+  if (p.textures[4])
+    m = p.textures[4]->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsets[4])[0];
+  c.clearV3();
+  FloatVector4  f0(FloatVector4(0.04f) + (c * (m * (0.96f / 255.0f))));
+  c *= ((255.0f - m) * (1.0f / 255.0f));
+  c[3] = a;
+  // Fresnel (coefficients are optimized for glass) with roughness
+  float   f =
+      FloatVector4::polynomial3(&(fresnelRoughTable[0]) + (s_i << 2), nDotV);
+  c += ((e - c) * (f0 + ((FloatVector4(1.0f) - f0) * (f * f))));
+  if (BRANCH_LIKELY(nDotL > 0.0f))
   {
-    c += e;
-    if (p.alphaBlendingEnabled())
-      c = p.alphaBlend(c, a, z);
+    c += (p.specularGGX(reflectedView, roughness, nDotL, nDotV,
+                        fresnelPoly3N_Glass, f0) * p.lightColor);
   }
-  else
-  {
-    // enable PBR mode if roughness texture is present
-    if (BRANCH_LIKELY(p.alphaBlendingEnabled()))
-      c = p.alphaBlend(c, a, z);
-    float   m = 0.0f;           // metalness
-    if (p.textures[4])
-      m = p.textures[4]->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsets[4])[0];
-    a = c[3];
-    c.clearV3();
-    FloatVector4  f0(FloatVector4(0.04f) + (c * (m * (0.96f / 255.0f))));
-    c *= ((255.0f - m) * (1.0f / 255.0f));
-    c[3] = a;
-    // Fresnel (coefficients are optimized for glass) with roughness
-    float   f =
-        FloatVector4::polynomial3(&(fresnelRoughTable[0]) + (s_i << 2), nDotV);
-    c += ((e - c) * (f0 + ((FloatVector4(1.0f) - f0) * (f * f))));
-    if (BRANCH_LIKELY(nDotL > 0.0f))
-    {
-      c += (p.specularGGX(reflectedView, roughness, nDotL, nDotV,
-                          fresnelPoly3N_Glass, f0) * p.lightColor);
-    }
-  }
+  if (BRANCH_LIKELY(p.alphaBlendingEnabled()))
+    c = p.alphaBlend(c, a, z);
   c = (c * p.lightColor[3]).srgbCompress();
   *(z.cPtr) = c.convertToRGBA32(true, true);
 }
@@ -515,11 +495,8 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
     a = p.textures[2]->getPixelT(z.u(), z.v(), z.mipLevel + p.mipOffsets[2])[0];
   a *= baseColor[3];
   float   f = 1.0f;
-#if 0
-  if (p.flags & CE2Material::Flag_FalloffEnabled)
-#else
-  if (false)
-#endif
+  if (p.m->effectSettings->flags & (CE2Material::EffectFlag_UseFalloff
+                                    | CE2Material::EffectFlag_UseRGBFalloff))
   {
     float   d = p.mp.e.falloffParams[1] - p.mp.e.falloffParams[0];
     if (BRANCH_UNLIKELY(!((d * d) >= (1.0f / float(0x10000000)))))
@@ -530,14 +507,16 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
     {
       float   nDotV = float(std::fabs(z.normal[2]));
       f = (nDotV - p.mp.e.falloffParams[0]) / d;
-      f = std::max(std::min(f, 1.0f), 0.0f);
+      f = std::min(std::max(f, 0.0f), 1.0f);
     }
     f = (p.mp.e.falloffParams[2] * (1.0f - f)) + (p.mp.e.falloffParams[3] * f);
+    f = std::min(std::max(f, 0.0f), 1.0f);
+    if (p.m->effectSettings->flags & CE2Material::EffectFlag_UseRGBFalloff)
+      baseColor *= f;
   }
   a = a * vColor[3] * f;
   if (a < p.mp.e.alphaThreshold)
     return false;
-  baseColor *= p.mp.e.baseColorScale;
   srgbExpandWithBaseColor(tmp, vColor, p.textures[0]->isSRGBTexture());
   tmp *= baseColor;
   tmp[3] = a;                   // alpha * 255
@@ -954,6 +933,11 @@ void Plot3D_TriShape::drawTriangles()
   }
 }
 
+static const std::uint32_t  alphaBlendModeTable[8] =
+{
+  0x00EDU, 0x000DU, 0x000DU, 0x0029U, 0x00EDU, 0x00EDU, 0x00EDU, 0x0002U
+};
+
 static const std::uint32_t  defaultTextureColors[9] =
 {
   0xFFFFFFFFU, 0xFFFF8080U, 0xFFFFFFFFU, 0xFFBDBDBDU, 0xFF000000U,
@@ -994,8 +978,8 @@ void Plot3D_TriShape::setMaterialProperties(
   mp.s.emissiveColor = FloatVector4(1.0f);
   if (flags & CE2Material::Flag_IsEffect)
   {
-    mp.e.baseColorScale = 1.0f;
-    mp.e.lightingInfluence = 1.0f;
+    mp.e.unused1 = 0.0f;
+    mp.e.unused2 = 0.0f;
     mp.e.falloffParams = FloatVector4(1.0f);
   }
   const CE2Material::TextureSet *t = (CE2Material::TextureSet *) 0;
@@ -1004,17 +988,9 @@ void Plot3D_TriShape::setMaterialProperties(
     // set properties from material objects
     if (flags & CE2Material::Flag_HasOpacity)
       mp.s.alphaThreshold = m->alphaThreshold * 255.0f;
-    if (m->emissiveSettings)
-      mp.s.emissiveColor = m->emissiveSettings->emissiveTint;
-    const CE2Material::Layer  *l = (CE2Material::Layer *) 0;
-    for (unsigned int i = 0U; i < CE2Material::maxLayers; i++)
-    {
-      if (BRANCH_LIKELY(m->layerMask & (1U << i)))
-      {
-        l = m->layers[i];
-        break;
-      }
-    }
+    unsigned int  i = (unsigned int) std::countr_zero(m->layerMask);
+    i = std::min(i, (unsigned int) (CE2Material::maxLayers - 1));
+    const CE2Material::Layer  *l = m->layers[i];
     if (BRANCH_LIKELY(l))
     {
       if (l->material)
@@ -1025,6 +1001,41 @@ void Plot3D_TriShape::setMaterialProperties(
       if (l->uvStream)
         mp.s.uvScaleAndOffset = l->uvStream->scaleAndOffset;
     }
+    if (BRANCH_UNLIKELY(m->flags & CE2Material::Flag_IsEffect))
+    {
+      mp.e.alphaBlendMode =
+          alphaBlendModeTable[m->effectSettings->blendMode & 7];
+      if (m->effectSettings->flags & (CE2Material::EffectFlag_EmissiveOnlyAuto
+                                      | CE2Material::EffectFlag_EmissiveOnly))
+      {
+        mp.e.alphaBlendMode = 0x0001U;
+      }
+      if (!(m->effectSettings->flags & CE2Material::EffectFlag_IsAlphaTested))
+        mp.e.alphaThreshold = -1.0f;
+      else
+        mp.e.alphaThreshold = m->effectSettings->alphaThreshold * 255.0f;
+      mp.e.baseColor[3] = m->effectSettings->materialAlpha;
+      mp.e.falloffParams[0] = m->effectSettings->falloffStartAngle;
+      mp.e.falloffParams[1] = m->effectSettings->falloffStopAngle;
+      mp.e.falloffParams[2] = m->effectSettings->falloffStartOpacity;
+      mp.e.falloffParams[3] = m->effectSettings->falloffStopOpacity;
+      mp.e.falloffParams *=
+          FloatVector4(0.0174532925f, 0.0174532925f, 1.0f, 1.0f);
+      mp.e.falloffParams[0] = float(std::cos(mp.e.falloffParams[0]));
+      mp.e.falloffParams[1] = float(std::cos(mp.e.falloffParams[1]));
+    }
+    if (BRANCH_UNLIKELY(m->flags & CE2Material::Flag_Glow))
+      mp.s.emissiveColor = m->emissiveSettings->emissiveTint;
+    if (BRANCH_UNLIKELY(m->flags & CE2Material::Flag_IsDecal))
+    {
+      if (m->flags & CE2Material::Flag_HasOpacity)
+      {
+        flags = flags | CE2Material::Flag_AlphaBlending;
+        mp.s.alphaBlendMode =
+            alphaBlendModeTable[m->decalSettings->blendMode & 7];
+      }
+      mp.s.baseColor[3] = m->decalSettings->decalAlpha;
+    }
   }
   DDSTexture  *defTxts = defaultTextures;
   unsigned int  txtEnableMask =
@@ -1032,7 +1043,7 @@ void Plot3D_TriShape::setMaterialProperties(
       | (flags & (CE2Material::Flag_Glow | CE2Material::Flag_Translucency));
   if (BRANCH_UNLIKELY(!(renderMode & 2U) || debugMode))
     txtEnableMask &= (!((renderMode & 3U) || debugMode) ? 0x0085U : 0x0087U);
-  txtEnableMask = txtEnableMask & (textureMask | ~0x0004U);
+  txtEnableMask = txtEnableMask & ((flags << 2) | ~0x0004U);
   unsigned int  maxTextureArea = 1U;
   int     maxTextureWidth = 1;
   int     maxTextureHeight = 1;
@@ -1072,7 +1083,8 @@ void Plot3D_TriShape::setMaterialProperties(
     }
     else if (t && ((1U << i) & t->textureReplacementMask))
     {
-      textures[i] = new(defTxts + i) DDSTexture(t->textureReplacements[i], !i);
+      textures[i] = new(defTxts + i) DDSTexture(t->textureReplacements[i],
+                                                bool((1U << i) & 0x0081U));
     }
     else
     {

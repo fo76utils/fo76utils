@@ -107,8 +107,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     {
       float   alphaThreshold;
       std::uint32_t alphaBlendMode;
-      float   baseColorScale;
-      float   lightingInfluence;
+      float   unused1;
+      float   unused2;
       FloatVector4  uvScaleAndOffset;
       FloatVector4  baseColor;
       FloatVector4  emissiveColor;
