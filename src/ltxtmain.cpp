@@ -8,6 +8,7 @@
 #include "landtxt.hpp"
 #include "downsamp.hpp"
 
+#include <bit>
 #include <thread>
 
 static bool checkNameExtension(const char *fileName, const char *suffix)
@@ -74,9 +75,10 @@ static void loadTextures(
       const CE2Material *m = landData->getTextureMaterial(i);
       const std::string *s0 = (std::string *) 0;
       const std::string *s2 = (std::string *) 0;
-      if (m && (m->layerMask & 1U))
+      if (m && m->layerMask)
       {
-        const CE2Material::Layer  *l = m->layers[0];
+        const CE2Material::Layer  *l =
+            m->layers[std::countr_zero(m->layerMask)];
         if (l && l->material && l->material->textureSet)
         {
           if (l->material->textureSet->texturePathMask & 1U)

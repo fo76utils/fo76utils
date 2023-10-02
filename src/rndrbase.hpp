@@ -11,6 +11,7 @@
 #include "nif_file.hpp"
 #include "plot3d.hpp"
 
+#include <bit>
 #include <thread>
 #include <mutex>
 
@@ -120,15 +121,11 @@ struct Renderer_Base
   {
     if (BRANCH_LIKELY(m))
     {
-      for (unsigned int i = 0U; i < CE2Material::maxLayers; i++)
-      {
-        if (BRANCH_LIKELY(m->layerMask & (1U << i)))
-        {
-          const CE2Material::Layer  *layer = m->layers[i];
-          if (layer && layer->material)
-            return layer->material->textureSet;
-        }
-      }
+      unsigned int  i = (unsigned int) std::countr_zero(m->layerMask);
+      i = std::min(i, (unsigned int) (CE2Material::maxLayers - 1));
+      const CE2Material::Layer  *layer = m->layers[i];
+      if (BRANCH_LIKELY(layer && layer->material))
+        return layer->material->textureSet;
     }
     return (CE2Material::TextureSet *) 0;
   }
