@@ -493,9 +493,79 @@ void CE2MaterialDB::ComponentInfo::readDecalSettingsComponent(
                                  m->decalSettings));
     if (!m->decalSettings)
     {
-      m->setFlags(CE2Material::Flag_IsDecal, true);
+      sp->isDecal = false;
+      sp->isPlanet = false;
+      sp->blendMode = 0;                // "None"
+      sp->animatedDecalIgnoresTAA = false;
+      sp->decalAlpha = 1.0f;
+      sp->writeMask = 0x0737U;
+      sp->isProjected = false;
+      sp->useParallaxMapping = false;
+      sp->parallaxOcclusionShadows = false;
+      sp->maxParallaxSteps = 72;
+      sp->surfaceHeightMap = p.cdb.stringBuffers.front().data();
+      sp->parallaxOcclusionScale = 1.0f;
+      sp->renderLayer = 0;              // "Top"
+      sp->useGBufferNormals = true;
     }
     m->decalSettings = sp;
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 7U, isDiff); )
+  {
+    if ((1U << n) & 0x00000099U)        // 0, 3, 4, 7: booleans
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!m)
+        continue;
+      switch (n)
+      {
+        case 0U:
+          m->setFlags(CE2Material::Flag_IsDecal, tmp);
+          if (tmp)
+            m->setFlags(CE2Material::Flag_AlphaBlending, true);
+          sp->isDecal = tmp;
+          break;
+        case 3U:
+          sp->isPlanet = tmp;
+          break;
+        case 4U:
+          sp->isProjected = tmp;
+          break;
+        case 7U:
+          sp->animatedDecalIgnoresTAA = tmp;
+          break;
+      }
+    }
+    else if (n == 1U)
+    {
+      float   tmp;
+      if (!p.readFloat(tmp))
+        break;
+      if (sp)
+        sp->decalAlpha = tmp;
+    }
+    else if (n == 2U)
+    {
+      std::uint32_t tmp;
+      if (!p.readUInt32(tmp))
+        break;
+      if (sp)
+        sp->writeMask = tmp;
+    }
+    else if (n == 5U)
+    {
+      readProjectedDecalSettings(p, isDiff);
+    }
+    else
+    {
+      unsigned char tmp = 0xFF;
+      if (!p.readEnum(tmp, "\004None\010Additive"))
+        break;
+      if (sp && tmp != 0xFF)
+        sp->blendMode = tmp;
+    }
   }
 }
 
@@ -858,15 +928,64 @@ void CE2MaterialDB::ComponentInfo::readMaterialPropertyNode(
 //   BSMaterial::TextureFile  SurfaceHeightMap
 //   Float  ParallaxOcclusionScale
 //   Bool  ParallaxOcclusionShadows
-//   -247  MaxParralaxOcclusionSteps
+//   Int8  MaxParralaxOcclusionSteps
 //   String  RenderLayer
 //   Bool  UseGBufferNormals
 
 void CE2MaterialDB::ComponentInfo::readProjectedDecalSettings(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  CE2Material::DecalSettings  *sp = (CE2Material::DecalSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    CE2Material *m = static_cast< CE2Material * >(p.o);
+    sp = const_cast< CE2Material::DecalSettings * >(m->decalSettings);
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 6U, isDiff); )
+  {
+    if ((1U << n) & 0x00000049U)        // 0, 3, 6: booleans
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!sp)
+        continue;
+      if (n == 0U)
+        sp->useParallaxMapping = tmp;
+      else if (n == 3U)
+        sp->parallaxOcclusionShadows = tmp;
+      else
+        sp->useGBufferNormals = tmp;
+    }
+    else if (n == 1U)
+    {
+      readTextureFile(p, isDiff);
+    }
+    else if (n == 2U)
+    {
+      float   tmp;
+      if (!p.readFloat(tmp))
+        break;
+      if (sp)
+        sp->parallaxOcclusionScale = tmp;
+    }
+    else if (n == 4U)
+    {
+      if (BRANCH_UNLIKELY(p.buf.getPosition() >= p.buf.size()))
+        break;
+      unsigned char tmp = p.buf.readUInt8Fast();
+      if (sp)
+        sp->maxParallaxSteps = tmp;
+    }
+    else
+    {
+      unsigned char tmp = 0xFF;
+      if (!p.readEnum(tmp, "\003Top\006Middle"))
+        break;
+      if (sp && tmp != 0xFF)
+        sp->renderLayer = tmp;
+    }
+  }
 }
 
 // BSMaterial::ParamBool
@@ -1136,7 +1255,10 @@ void CE2MaterialDB::ComponentInfo::readOpacityComponent(
 {
   CE2Material *m = (CE2Material *) 0;
   if (BRANCH_LIKELY(p.o->type == 1))
+  {
     m = static_cast< CE2Material * >(p.o);
+    m->setFlags(CE2Material::Flag_HasOpacityComponent, true);
+  }
   for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 9U, isDiff); )
   {
     if ((1U << n) & 0x00000022U)        // booleans
@@ -1408,7 +1530,7 @@ void CE2MaterialDB::ComponentInfo::readBlendModeComponent(
 //   -253  FalloffStopAngles
 //   -253  FalloffStartOpacities
 //   -253  FalloffStopOpacities
-//   -247  ActiveLayersMask
+//   Int8  ActiveLayersMask
 //   Bool  UseRGBFallOff
 
 void CE2MaterialDB::ComponentInfo::readLayeredEdgeFalloffComponent(
@@ -1560,7 +1682,7 @@ void CE2MaterialDB::ComponentInfo::readAlphaSettingsComponent(
 }
 
 // BSMaterial::LevelOfDetailSettings
-//   -247  NumLODMaterials
+//   Int8  NumLODMaterials
 //   String  MostSignificantLayer
 //   String  SecondMostSignificantLayer
 //   String  MediumLODRootMaterial
@@ -1610,7 +1732,27 @@ void CE2MaterialDB::ComponentInfo::readFloat2DCurveController(
 void CE2MaterialDB::ComponentInfo::readTextureFile(
     ComponentInfo& p, bool isDiff)
 {
-  readMRTextureFile(p, isDiff);
+  if (BRANCH_LIKELY(p.componentType == 0x0096U))
+  {                                     // "BSMaterial::TextureFile"
+    readMRTextureFile(p, isDiff);
+    return;
+  }
+  if (p.componentType != 0x0076U)       // "BSMaterial::DecalSettingsComponent"
+    return;
+  CE2Material::DecalSettings  *sp = (CE2Material::DecalSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    CE2Material *m = static_cast< CE2Material * >(p.o);
+    sp = const_cast< CE2Material::DecalSettings * >(m->decalSettings);
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    const std::string *tmp;
+    if (!p.readAndStoreString(tmp, 1))
+      break;
+    if (sp)
+      sp->surfaceHeightMap = tmp;
+  }
 }
 
 // BSMaterial::TranslucencySettings

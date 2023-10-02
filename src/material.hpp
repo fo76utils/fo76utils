@@ -214,6 +214,23 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   };
   struct DecalSettings
   {
+    bool    isDecal;
+    bool    isPlanet;
+    // 0 = "None" (default), 1 = "Additive"
+    unsigned char blendMode;
+    bool    animatedDecalIgnoresTAA;
+    float   decalAlpha;
+    std::uint32_t writeMask;
+    bool    isProjected;
+    // projected decal settings
+    bool    useParallaxMapping;
+    bool    parallaxOcclusionShadows;
+    unsigned char maxParallaxSteps;
+    const std::string *surfaceHeightMap;
+    float   parallaxOcclusionScale;
+    // 0 = "Top" (default), 1 = "Middle"
+    unsigned char renderLayer;
+    bool    useGBufferNormals;
   };
   struct WaterSettings
   {

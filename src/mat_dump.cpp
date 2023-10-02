@@ -97,6 +97,16 @@ static const char *effectFlagNames[32] =
   "DepthMVFixupEdgesOnly", "ForceRenderBeforeOIT"
 };
 
+static const char *decalBlendModeNames[2] =
+{
+  "None", "Additive"
+};
+
+static const char *decalRenderLayerNames[2] =
+{
+  "Top", "Middle"
+};
+
 static
 #ifdef __GNUC__
 __attribute__ ((__format__ (__printf__, 3, 4)))
@@ -307,6 +317,44 @@ void CE2Material::printObjectInfo(
                      emissiveSettings->minOffset);
     printToStringBuf(buf, indentCnt, "Emittance maximum offset: %f\n",
                      emissiveSettings->maxOffset);
+  }
+  if ((flags & Flag_IsDecal) && decalSettings && decalSettings->isDecal)
+  {
+    printToStringBuf(buf, indentCnt, "Decal: is planet: %s\n",
+                     (!decalSettings->isPlanet ? "False" : "True"));
+    printToStringBuf(buf, indentCnt, "Decal blend mode: %s\n",
+                     decalBlendModeNames[decalSettings->blendMode & 1]);
+    printToStringBuf(buf, indentCnt, "Animated decal ignores TAA: %s\n",
+                     (!decalSettings->animatedDecalIgnoresTAA ?
+                      "False" : "True"));
+    printToStringBuf(buf, indentCnt, "Decal overall alpha: %f\n",
+                     decalSettings->decalAlpha);
+    printToStringBuf(buf, indentCnt, "Decal write mask: 0x%08X\n",
+                     (unsigned int) decalSettings->writeMask);
+    if (decalSettings->isProjected)
+    {
+      printToStringBuf(buf, indentCnt,
+                       "Projected decal uses parallax mapping: %s\n",
+                       (!decalSettings->useParallaxMapping ? "False" : "True"));
+      printToStringBuf(buf, indentCnt,
+                       "Projected decal parallax mapping shadows: %s\n",
+                       (!decalSettings->parallaxOcclusionShadows ?
+                        "False" : "True"));
+      printToStringBuf(buf, indentCnt,
+                       "Projected decal parallax mapping maximum steps: %d\n",
+                       int(decalSettings->maxParallaxSteps));
+      printToStringBuf(buf, indentCnt,
+                       "Projected decal height map file: \"%s\"\n",
+                       decalSettings->surfaceHeightMap->c_str());
+      printToStringBuf(buf, indentCnt,
+                       "Projected decal parallax mapping scale: %f\n",
+                       decalSettings->parallaxOcclusionScale);
+      printToStringBuf(buf, indentCnt, "Projected decal render layer: %s\n",
+                       decalRenderLayerNames[decalSettings->renderLayer & 1]);
+      printToStringBuf(buf, indentCnt,
+                       "Projected decal uses G buffer normals: %s\n",
+                       (!decalSettings->useGBufferNormals ? "False" : "True"));
+    }
   }
   for (unsigned int i = 0U; i < maxLayers && layerMask >= (1U << i); i++)
   {

@@ -169,7 +169,7 @@ void CE2MaterialDB::initializeObject(
     return;
   }
   // initialize with defaults
-  const std::string *emptyString = stringBuffers[0].data();
+  const std::string *emptyString = stringBuffers.front().data();
   switch (o->type)
   {
     case 1:
@@ -325,7 +325,7 @@ CE2MaterialObject * CE2MaterialDB::allocateObject(
   o->type = type | std::int32_t(~baseObjID << 8);
   o->e = 0U;
   o->h = 0U;
-  o->name = stringBuffers[0].data();
+  o->name = stringBuffers.front().data();
   o->parent = (CE2MaterialObject *) 0;
   if (BRANCH_UNLIKELY(!baseObjID))
     initializeObject(o, objectTable);
@@ -345,7 +345,7 @@ const std::string * CE2MaterialDB::readStringParam(
       break;
   }
   if (stringBuf.empty())
-    return stringBuffers[0].data();
+    return stringBuffers.front().data();
   std::uint64_t h = 0xFFFFFFFFU;
   const char  *p = stringBuf.c_str();
   const char  *endp = stringBuf.c_str() + stringBuf.length();
