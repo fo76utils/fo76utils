@@ -1557,7 +1557,7 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   const CE2Material::TextureSet *txtSet = findTextureSet(m);
   if (!txtSet)
     return;
-  t.renderer->m = m;
+  t.renderer->setMaterial(m);
   const DDSTexture  *textures[10];
   unsigned int  textureMask = 0U;
   unsigned int  texturePathMask = txtSet->texturePathMask;
