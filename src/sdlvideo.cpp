@@ -554,14 +554,61 @@ void SDLDisplay::clearSurface(std::uint32_t c)
 #else
     p = screenBuf.data();
 #endif
-  if (c == ((c & 0xFFU) * 0x01010101U))
+  if (!(c && c <= 0x07FFFFFFU))
   {
-    std::memset(p, int(c & 0xFFU), n * sizeof(std::uint32_t));
+#if ENABLE_X86_64_AVX
+    const YMM_UInt32  tmp = { c, c, c, c, c, c, c, c };
+    for ( ; BRANCH_LIKELY(n >= 16); n = n - 16, p = p + 16)
+    {
+      __asm__ ("vmovdqu %t1, %t0" : "=m" (p[0]) : "x" (tmp));
+      __asm__ ("vmovdqu %t1, %t0" : "=m" (p[8]) : "x" (tmp));
+    }
+    for ( ; n > 0; n--, p++)
+      *p = c;
+#else
+    if (c == ((c & 0xFFU) * 0x01010101U))
+    {
+      std::memset(p, int(c & 0xFFU), n * sizeof(std::uint32_t));
+    }
+    else
+    {
+      for (size_t i = 0; i < n; i++)
+        p[i] = c;
+    }
+#endif
   }
   else
   {
-    for (size_t i = 0; i < n; i++)
-      p[i] = c;
+    std::uint32_t c0, c1;
+#if USE_PIXELFMT_RGB10A2
+    c0 = ((c & 0x000FU) << 26) | ((c & 0x00F0U) << 12) | ((c & 0x0F00U) >> 2)
+         | 0xC0000000U;
+    c1 = ((c & 0x00F000U) << 14) | (c & 0x0F0000U) | ((c & 0xF00000U) >> 14)
+         | 0xC0000000U;
+#else
+    c0 = ((c & 0x000FU) << 4) | ((c & 0x00F0U) << 8) | ((c & 0x0F00U) << 12)
+         | 0xFF000000U;
+    c1 = ((c & 0x00F000U) >> 8) | ((c & 0x0F0000U) >> 4) | (c & 0xF00000U)
+         | 0xFF000000U;
+#endif
+    unsigned int  gridSize = 8U << (c >> 24);
+#if ENABLE_X86_64_AVX
+    const YMM_UInt32  tmp0 = { c0, c0, c0, c0, c0, c0, c0, c0 };
+    const YMM_UInt32  tmp1 = { c1, c1, c1, c1, c1, c1, c1, c1 };
+#endif
+    for (unsigned int yc = 0U; yc < (unsigned int) imageHeight; yc++)
+    {
+      unsigned int  xc = 0U;
+#if ENABLE_X86_64_AVX
+      for ( ; (xc + 8U) <= (unsigned int) imageWidth; xc = xc + 8U, p = p + 8)
+      {
+        __asm__ ("vmovdqu %t1, %t0"
+                 : "=m" (*p) : "x" (!((xc ^ yc) & gridSize) ? tmp0 : tmp1));
+      }
+#endif
+      for ( ; xc < (unsigned int) imageWidth; xc++, p++)
+        *p = (!((xc ^ yc) & gridSize) ? c0 : c1);
+    }
   }
 #ifdef HAVE_SDL2
   if (!usingImageBuf)

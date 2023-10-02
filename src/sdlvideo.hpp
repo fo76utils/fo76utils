@@ -270,6 +270,13 @@ class SDLDisplay
   static void enableConsole();
   void setEnableDownsample(bool isEnabled);
   void blitSurface();
+  // c = 0:
+  //     fill with transparent black color
+  // c > 0x07FFFFFF:
+  //     fill with solid color (R8G8B8A8 or RGB10A2 format)
+  // c = color0 | (color1 << 12) | (size << 24):
+  //     fill with checkerboard pattern (colors in R4G4B4 format, size is
+  //     in the range 0 to 7 for 8 to 1024 pixels on a logarithmic scale)
   void clearSurface(std::uint32_t c = 0U);
   void copyFromDrawSurface(std::vector< std::uint32_t >& buf);
   void copyToDrawSurface(const std::vector< std::uint32_t >& buf);
