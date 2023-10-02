@@ -4,6 +4,9 @@
 #include "downsamp.hpp"
 
 #include <algorithm>
+#ifdef HAVE_SDL2
+#  include <SDL2/SDL.h>
+#endif
 
 #include "viewrtbl.cpp"
 
@@ -82,7 +85,20 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
     for (size_t i = 0; i < sortBuf.size(); i++)
     {
       Plot3D_TriShape&  ts = *(p->renderers[n]);
-      ts = p->meshData[size_t(sortBuf[i])];
+      {
+        size_t  j = size_t(sortBuf[i]);
+        ts = p->meshData[j];
+        if (BRANCH_UNLIKELY(p->debugMode == 1))
+        {
+          std::uint32_t c = std::uint32_t(j + 1);
+          c = ((c & 1U) << 23) | ((c & 2U) << 14) | ((c & 4U) << 5)
+              | ((c & 8U) << 19) | ((c & 16U) << 10) | ((c & 32U) << 1)
+              | ((c & 64U) << 15) | ((c & 128U) << 6) | ((c & 256U) >> 3)
+              | ((c & 512U) << 11) | ((c & 1024U) << 2) | ((c & 2048U) >> 7);
+          c = c ^ 0xFFFFFFFFU;
+          ts.setDebugMode(1, c);
+        }
+      }
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
       if (BRANCH_UNLIKELY(ts.flags & CE2Material::Flag_IsWater))
@@ -481,11 +497,26 @@ static void updateValueLogScale(float& s, int d, float minVal, float maxVal,
   s = float(std::exp2(float(tmp + d) * 0.0625f));
   s = (s > minVal ? (s < maxVal ? s : maxVal) : minVal);
   if (!msg)
-    msg = "";
+    return;
   char    buf[64];
   std::snprintf(buf, 64, "%s: %7.4f\n", msg, s);
   buf[63] = '\0';
   messageBuf = buf;
+}
+
+static void printViewScale(SDLDisplay& display, float viewScale,
+                           const NIFFile::NIFVertexTransform& vt)
+{
+  float   z = (vt.rotateXX * vt.rotateXX) + (vt.rotateYX * vt.rotateYX);
+  z = std::max(z, (vt.rotateXY * vt.rotateXY) + (vt.rotateYY * vt.rotateYY));
+  z = std::max(z, (vt.rotateXZ * vt.rotateXZ) + (vt.rotateYZ * vt.rotateYZ));
+  z = float(std::sqrt(std::max(z, 0.25f)));
+  float   vtScale = vt.scale * z / float(int(display.getIsDownsampled()) + 1);
+  char    buf[256];
+  std::snprintf(buf, 256, "View scale: %7.4f (1 meter = %7.2f pixels)\n",
+                viewScale, vtScale);
+  buf[255] = '\0';
+  display.printString(buf);
 }
 
 static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName,
@@ -679,6 +710,66 @@ static bool viewMaterialInfo(
   return display.viewTextBuffer();
 }
 
+static void printGeometryBlockInfo(
+    SDLDisplay& display, int x, int y,
+    const NIFFile *nifFile, const std::vector< NIFFile::NIFTriShape >& meshData)
+{
+  std::uint32_t c =
+      display.lockDrawSurface()[size_t(y) * size_t(display.getWidth())
+                                + size_t(x)];
+  display.unlockDrawSurface();
+#if USE_PIXELFMT_RGB10A2
+  c = ((c >> 2) & 0xFFU) | ((c >> 4) & 0xFF00U) | ((c >> 6) & 0xFF0000U);
+#else
+  c = ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU) | (c & 0xFF00U);
+#endif
+  c = c ^ 0xFFFFFFFFU;
+  c = ((c >> 23) & 0x0001U) | ((c >> 14) & 0x0002U) | ((c >> 5) & 0x0004U)
+      | ((c >> 19) & 0x0008U) | ((c >> 10) & 0x0010U) | ((c >> 1) & 0x0020U)
+      | ((c >> 15) & 0x0040U) | ((c >> 6) & 0x0080U) | ((c << 3) & 0x0100U)
+      | ((c >> 11) & 0x0200U) | ((c >> 2) & 0x0400U) | ((c << 7) & 0x0800U)
+      | ((c >> 7) & 0x1000U) | ((c << 2) & 0x2000U) | ((c << 11) & 0x4000U);
+  if (!c || c > meshData.size() || !nifFile)
+    return;
+  c--;
+  std::string tmpBuf;
+  const std::string *blkName = nifFile->getString(meshData[c].ts->nameID);
+  if (blkName)
+  {
+    tmpBuf += "BSGeometry: \"";
+    tmpBuf += *blkName;
+    tmpBuf += "\"\n";
+  }
+  if (!meshData[c].ts->meshFileName.empty())
+  {
+    tmpBuf += "Mesh file: \"";
+    tmpBuf += meshData[c].ts->meshFileName;
+    tmpBuf += "\"\n";
+  }
+  if (meshData[c].ts->shaderProperty >= 0)
+  {
+    const NIFFile::NIFBlkBSLightingShaderProperty *lspBlock =
+        nifFile->getLightingShaderProperty(
+            size_t(meshData[c].ts->shaderProperty));
+    if (lspBlock)
+    {
+      blkName = nifFile->getString(lspBlock->nameID);
+      if (blkName)
+      {
+        tmpBuf += "Material path: \"";
+        tmpBuf += *blkName;
+        tmpBuf += "\"\n";
+      }
+    }
+  }
+  if (!tmpBuf.empty())
+  {
+    display.printString(tmpBuf.c_str());
+    display.drawText(0, -1, display.getTextRows(), 0.75f, 1.0f);
+    (void) SDL_SetClipboardText(tmpBuf.c_str());
+  }
+}
+
 static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228m0\033[m "
     "to \033[4m\033[38;5;228m5\033[m                "
@@ -733,6 +824,8 @@ static const char *keyboardUsageString =
     "Enable downsampling (slow).                                     \n"
     "  \033[4m\033[38;5;228mPage Down\033[m             "
     "Disable downsampling.                                           \n"
+    "  \033[4m\033[38;5;228mB\033[m                     "
+    "Toggle black/checkerboard background.                           \n"
     "  \033[4m\033[38;5;228mSpace\033[m, "
     "\033[4m\033[38;5;228mBackspace\033[m      "
     "Load next or previous file matching the pattern.                \n"
@@ -747,6 +840,12 @@ static const char *keyboardUsageString =
     "Print current settings and file name.                           \n"
     "  \033[4m\033[38;5;228mV\033[m                     "
     "View detailed model information.                                \n"
+    "  \033[4m\033[38;5;228mMouse L button\033[m        "
+    "In debug mode 1 only: print the geometry block, mesh and        \n"
+    "                        "
+    "material path of the selected shape based on the color of the   \n"
+    "                        "
+    "pixel, and also copy it to the clipboard.                       \n"
     "  \033[4m\033[38;5;228mH\033[m                     "
     "Show help screen.                                               \n"
     "  \033[4m\033[38;5;228mC\033[m                     "
@@ -764,6 +863,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
   std::vector< SDLDisplay::SDLEvent > eventBuf;
   std::string messageBuf;
   unsigned char quitFlag = 0;   // 1 = Esc key pressed, 2 = window closed
+  bool    checkerboardBgnd = true;
   try
   {
     int     imageWidth = display.getWidth();
@@ -811,7 +911,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
             display.printString(viewRotationMessages[viewRotation]);
             viewRotation = -1;
           }
-          display.clearSurface();
+          display.clearSurface(!checkerboardBgnd ? 0U : 0x02666333U);
           for (size_t i = 0; i < imageDataSize; i++)
             outBufZ[i] = 16777216.0f;
           std::uint32_t *outBufRGBA = display.lockDrawSurface();
@@ -863,7 +963,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
 
         while (!(redrawFlags || nextFileFlag || quitFlag))
         {
-          display.pollEvents(eventBuf);
+          display.pollEvents(eventBuf, -1000, false, true);
           for (size_t i = 0; i < eventBuf.size(); i++)
           {
             int     t = eventBuf[i].type();
@@ -879,6 +979,18 @@ bool NIF_View::viewModels(SDLDisplay& display,
             if (!(t == SDLDisplay::SDLEventKeyRepeat ||
                   t == SDLDisplay::SDLEventKeyDown))
             {
+              if (t == SDLDisplay::SDLEventMButtonDown)
+              {
+                int     x = std::min(std::max(d1, 0), imageWidth - 1);
+                int     y = eventBuf[i].data2();
+                y = std::min(std::max(y, 0), imageHeight - 1);
+                if (debugMode == 1 &&
+                    eventBuf[i].data3() == 1 && eventBuf[i].data4() == 1)
+                {
+                  printGeometryBlockInfo(display, x, y, nifFile, meshData);
+                  redrawFlags = redrawFlags | 1;
+                }
+              }
               continue;
             }
             redrawFlags = 2;
@@ -890,9 +1002,9 @@ bool NIF_View::viewModels(SDLDisplay& display,
               case '3':
               case '4':
               case '5':
-                debugMode = int(d1 != '1' ? (d1 - '0') : 0);
+                debugMode = int(d1 - '0');
                 messageBuf += "Debug mode set to ";
-                messageBuf += char(debugMode | 0x30);
+                messageBuf += char(d1);
                 messageBuf += '\n';
                 break;
               case '-':
@@ -1041,6 +1153,9 @@ bool NIF_View::viewModels(SDLDisplay& display,
                 else
                   messageBuf += "Downsampling disabled\n";
                 break;
+              case 'b':
+                checkerboardBgnd = !checkerboardBgnd;
+                break;
               case SDLDisplay::SDLKeySymBackspace:
                 fileNum = (fileNum > 0 ? fileNum : int(nifFileNames.size()));
                 fileNum--;
@@ -1071,9 +1186,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
                 display.printString(messageBuf.c_str());
                 updateLightColor(lightColor, 0, 0, 0, messageBuf);
                 display.printString(messageBuf.c_str());
-                updateValueLogScale(viewScale, 0, 0.0625f, 16.0f, messageBuf,
-                                    "View scale");
-                display.printString(messageBuf.c_str());
+                printViewScale(display, viewScale, viewTransform);
                 updateValueLogScale(reflZScale, 0, 0.5f, 4.0f, messageBuf,
                                     "Reflection f scale");
                 if (d == 1)
