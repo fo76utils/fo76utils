@@ -54,9 +54,6 @@ static void renderTextureThread(
     {
       float   u = float(xc) * uScale + uOffset;
       float   v = float(yc) * vScale + vOffset;
-      FloatVector4  c0(0.0f);
-      if (enableAlpha)
-        c0 = (!((xc ^ yc) & 32) ? FloatVector4(64.0f) : FloatVector4(128.0f));
       if (u > -0.000001f && u < 1.000001f && v > -0.000001f && v < 1.000001f)
       {
         FloatVector4  c(texture->getPixelTC(u, v, mipLevel));
@@ -73,12 +70,13 @@ static void renderTextureThread(
           c *= (1.0f / 255.0f);
           c.srgbCompress();
         }
-        if (!enableAlpha)
-          c0 = c;
-        else
-          c0 += ((c - c0) * (a * (1.0f / 255.0f)));
+        if (enableAlpha)
+        {
+          FloatVector4  c0(FloatVector4::convertRGBA32(outBuf[xc]));
+          c = c0 + ((c - c0) * (a * (1.0f / 255.0f)));
+        }
+        outBuf[xc] = c.convertToRGBA32(false, true);
       }
-      outBuf[xc] = c0.convertToRGBA32(false, true);
     }
     outBuf = outBuf + w;
   }
@@ -261,6 +259,7 @@ static void renderCubeMap(const BA2File& ba2File,
     }
     if (texture)
     {
+      display.clearSurface(cubeViewMode || !enableAlpha ? 0U : 0x02888444U);
       NIFFile::NIFVertexTransform viewTransform(
           1.0f, viewRotationX + mouseViewOffsX, viewRotationY,
           viewRotationZ + mouseViewOffsZ, 0.0f, 0.0f, 0.0f);
