@@ -1770,8 +1770,67 @@ void CE2MaterialDB::ComponentInfo::readTextureFile(
 void CE2MaterialDB::ComponentInfo::readTranslucencySettings(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  CE2Material::TranslucencySettings *sp =
+      (CE2Material::TranslucencySettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    CE2Material *m = static_cast< CE2Material * >(p.o);
+    sp = const_cast< CE2Material::TranslucencySettings * >(
+             m->translucencySettings);
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 9U, isDiff); )
+  {
+    if (n <= 2U)                        // 0, 1, 2: booleans
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!sp)
+        continue;
+      if (n == 0U)
+        sp->isThin = tmp;
+      else if (n == 1U)
+        sp->flipBackFaceNormalsInVS = tmp;
+      else
+        sp->useSSS = tmp;
+    }
+    else if (n <= 8U)                   // 3, 4, 5, 6, 7, 8: floats
+    {
+      float   tmp;
+      if (!p.readFloat(tmp))
+        break;
+      if (!sp)
+        continue;
+      switch (n)
+      {
+        case 3U:
+          sp->sssWidth = tmp;
+          break;
+        case 4U:
+          sp->sssStrength = tmp;
+          break;
+        case 5U:
+          sp->transmissiveScale = tmp;
+          break;
+        case 6U:
+          sp->transmittanceWidth = tmp;
+          break;
+        case 7U:
+          sp->specLobe0RoughnessScale = tmp;
+          break;
+        case 8U:
+          sp->specLobe1RoughnessScale = tmp;
+          break;
+      }
+    }
+    else
+    {
+      if (!p.readString())
+        break;
+      if (sp)
+        parseLayerNumber(sp->sourceLayer, p.stringBuf);
+    }
+  }
 }
 
 // BSMaterial::MouthSettingsComponent
@@ -1898,9 +1957,37 @@ void CE2MaterialDB::ComponentInfo::readTranslucencySettingsComponent(
                                  m->translucencySettings));
     if (!m->translucencySettings)
     {
-      m->setFlags(CE2Material::Flag_Translucency, true);
+      sp->isEnabled = false;
+      sp->isThin = false;
+      sp->flipBackFaceNormalsInVS = false;
+      sp->useSSS = false;
+      sp->sssWidth = 0.2f;
+      sp->sssStrength = 0.2f;
+      sp->transmissiveScale = 1.0f;
+      sp->transmittanceWidth = 0.03f;
+      sp->specLobe0RoughnessScale = 0.55f;
+      sp->specLobe1RoughnessScale = 1.2f;
+      sp->sourceLayer = 0;              // "MATERIAL_LAYER_0"
     }
     m->translucencySettings = sp;
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 1U, isDiff); )
+  {
+    if (n == 0U)
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (m)
+      {
+        m->setFlags(CE2Material::Flag_Translucency, tmp);
+        sp->isEnabled = tmp;
+      }
+    }
+    else
+    {
+      readTranslucencySettings(p, isDiff);
+    }
   }
 }
 

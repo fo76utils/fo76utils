@@ -318,6 +318,37 @@ void CE2Material::printObjectInfo(
     printToStringBuf(buf, indentCnt, "Emittance maximum offset: %f\n",
                      emissiveSettings->maxOffset);
   }
+  if ((flags & Flag_Translucency) && translucencySettings &&
+      translucencySettings->isEnabled)
+  {
+    printToStringBuf(buf, indentCnt, "Translucency: is thin: %s\n",
+                     (!translucencySettings->isThin ? "False" : "True"));
+    printToStringBuf(buf, indentCnt,
+                     "Translucency: flip back face normals in view space: %s\n",
+                     (!translucencySettings->flipBackFaceNormalsInVS ?
+                      "False" : "True"));
+    if (translucencySettings->useSSS)
+    {
+      printToStringBuf(buf, indentCnt,
+                       "Translucency: subsurface scattering width: %f\n",
+                       translucencySettings->sssWidth);
+      printToStringBuf(buf, indentCnt,
+                       "Translucency: subsurface scattering strength: %f\n",
+                       translucencySettings->sssStrength);
+    }
+    printToStringBuf(buf, indentCnt, "Translucency: transmissive scale: %f\n",
+                     translucencySettings->transmissiveScale);
+    printToStringBuf(buf, indentCnt, "Translucency: transmittance width: %f\n",
+                     translucencySettings->transmittanceWidth);
+    printToStringBuf(buf, indentCnt,
+                     "Translucency: spec lobe 0 roughness scale: %f\n",
+                     translucencySettings->specLobe0RoughnessScale);
+    printToStringBuf(buf, indentCnt,
+                     "Translucency: spec lobe 1 roughness scale: %f\n",
+                     translucencySettings->specLobe1RoughnessScale);
+    printToStringBuf(buf, indentCnt, "Translucency source layer: %d\n",
+                     int(translucencySettings->sourceLayer));
+  }
   if ((flags & Flag_IsDecal) && decalSettings && decalSettings->isDecal)
   {
     printToStringBuf(buf, indentCnt, "Decal: is planet: %s\n",

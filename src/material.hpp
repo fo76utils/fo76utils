@@ -211,6 +211,17 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   };
   struct TranslucencySettings
   {
+    bool    isEnabled;
+    bool    isThin;
+    bool    flipBackFaceNormalsInVS;
+    bool    useSSS;
+    float   sssWidth;
+    float   sssStrength;
+    float   transmissiveScale;
+    float   transmittanceWidth;
+    float   specLobe0RoughnessScale;
+    float   specLobe1RoughnessScale;
+    unsigned char sourceLayer;          // default: 0 ("MATERIAL_LAYER_0")
   };
   struct DecalSettings
   {

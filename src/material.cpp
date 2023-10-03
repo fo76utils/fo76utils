@@ -393,6 +393,16 @@ const std::string * CE2MaterialDB::readStringParam(
   return &(stringBuffers.back().back());
 }
 
+#if ENABLE_CDB_DEBUG
+static const char *predefinedCDBStrings[16] =
+{
+  "String",       "",             "",             "",           // -254 to -251
+  "",             "",             "",             "Int8",       // -250 to -247
+  "",             "Int16",        "",             "Int32",      // -246 to -243
+  "",             "",             "Bool",         "Float"       // -242 to -239
+};
+#endif
+
 size_t CE2MaterialDB::readTables(
     const unsigned char*& componentInfoPtr,
     std::vector< CE2MaterialObject * >& objectTable, FileBuffer& buf)
@@ -495,16 +505,8 @@ size_t CE2MaterialDB::readTables(
         tmp = std::int32_t(buf2.readUInt32Fast());
         char    tmpBuf[32];
         std::sprintf(tmpBuf, "%d", tmp);
-        if (tmp == -240)
-          fieldType = "Bool";
-        else if (tmp == -239)
-          fieldType = "Float";
-        else if (tmp == -254)
-          fieldType = "String";
-        else if (tmp == -245)
-          fieldType = "Int16";
-        else if (tmp == -243)
-          fieldType = "Int32";
+        if (tmp >= -254 && tmp <= -239)
+          fieldType = predefinedCDBStrings[tmp + 254];
         else if (tmp < 0)
           fieldType = tmpBuf;
         else if ((tmp = findString((unsigned int) tmp)) >= 0)
