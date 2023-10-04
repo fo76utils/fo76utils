@@ -147,7 +147,7 @@ void SDLDisplay::drawTextThreadFunc(SDLDisplay *p, int y0Src, int y0Dst,
 {
   std::uint32_t *imageBufPtr;
   if (p->usingImageBuf)
-    imageBufPtr = p->imageBuf.data();
+    imageBufPtr = reinterpret_cast< std::uint32_t * >(p->imageBuf.data());
   else
 #ifdef HAVE_SDL2
     imageBufPtr = reinterpret_cast< std::uint32_t * >(p->sdlScreen->pixels);
@@ -259,6 +259,16 @@ inline void SDLDisplay::printCharacter(std::uint32_t c)
   printXPos++;
 }
 
+inline void SDLDisplay::resizeImageBuffer(int w, int h)
+{
+  size_t  imageDataSize = size_t(w) * size_t(h);
+#if ENABLE_X86_64_AVX
+  size_t  alignMask = 7;
+  imageDataSize = ((imageDataSize + alignMask) & ~alignMask) >> 3;
+#endif
+  imageBuf.resize(imageDataSize);
+}
+
 SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
                        unsigned int flags, int textRows, int textColumns)
 {
@@ -284,11 +294,11 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
       displayWidth = m.w;
       displayHeight = m.h;
     }
-    isDownsampled = ((w > displayWidth || h > displayHeight) && !((w | h) & 1));
-    if (!(flags & 4U))
-      isDownsampled = false;
-    if (isDownsampled)
+    downsampleLevel = 0;
+    while ((w > displayWidth || h > displayHeight) && !((w | h) & 1) &&
+           (flags & 4U) && downsampleLevel < 2)
     {
+      downsampleLevel++;
       w = w >> 1;
       h = h >> 1;
     }
@@ -296,8 +306,8 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
       errorMessage("invalid window dimensions");
     if (!(w == displayWidth && h == displayHeight))
       isFullScreen = false;
-    imageWidth = w << int(isDownsampled);
-    imageHeight = h << int(isDownsampled);
+    imageWidth = w << downsampleLevel;
+    imageHeight = h << downsampleLevel;
     Uint32  windowFlags = 0U;
     if (isFullScreen)
       windowFlags = windowFlags | SDL_WINDOW_FULLSCREEN;
@@ -336,26 +346,24 @@ SDLDisplay::SDLDisplay(int w, int h, const char *windowTitle,
       errorMessage("error setting SDL video mode");
     SDL_SetSurfaceBlendMode(sdlScreen, SDL_BLENDMODE_NONE);
     surfaceLockCnt = 0;
-    usingImageBuf = (isDownsampled || int(sdlScreen->pitch >> 2) != imageWidth);
+    usingImageBuf =
+        (downsampleLevel > 0 || int(sdlScreen->pitch >> 2) != imageWidth);
 #else
     std::fprintf(stderr, "Warning: video display support "
                          "is not available without SDL 2\n");
-    isDownsampled = bool(flags & 4U);
-    if (isDownsampled)
-    {
-      w = w >> 1;
-      h = h >> 1;
-    }
+    downsampleLevel = (unsigned char) ((flags >> 2) & 1U);
+    w = w >> downsampleLevel;
+    h = h >> downsampleLevel;
     if (w < 8 || w > 32768 || h < 8 || h > 32768)
       errorMessage("invalid image dimensions");
-    imageWidth = w << int(isDownsampled);
-    imageHeight = h << int(isDownsampled);
+    imageWidth = w << downsampleLevel;
+    imageHeight = h << downsampleLevel;
     screenBuf.resize(size_t(w) * size_t(h), 0U);
-    usingImageBuf = isDownsampled;
+    usingImageBuf = bool(downsampleLevel);
 #endif
     textInputEnabled = false;
     if (usingImageBuf)
-      imageBuf.resize(size_t(imageWidth) * size_t(imageHeight), 0U);
+      resizeImageBuffer(imageWidth, imageHeight);
     fontData.resize(1024 * 1024);
     ZLibDecompressor::decompressData(
         fontData.data(), 131072,
@@ -470,30 +478,33 @@ void SDLDisplay::enableConsole()
 #endif
 }
 
-void SDLDisplay::setEnableDownsample(bool isEnabled)
+void SDLDisplay::setDownsampleLevel(int n)
 {
-  if (isEnabled == isDownsampled)
+  unsigned char d = (unsigned char) std::min(std::max(n, 0), 2);
+  if (d == downsampleLevel)
     return;
-  if (isEnabled)
+  if (d > downsampleLevel)
   {
-    imageBuf.resize(size_t(imageWidth << 1) * size_t(imageHeight << 1), 0U);
-    imageWidth = imageWidth << 1;
-    imageHeight = imageHeight << 1;
+    unsigned char tmp = d - downsampleLevel;
+    resizeImageBuffer(imageWidth << tmp, imageHeight << tmp);
+    imageWidth = imageWidth << tmp;
+    imageHeight = imageHeight << tmp;
     usingImageBuf = true;
   }
   else
   {
-    imageWidth = imageWidth >> 1;
-    imageHeight = imageHeight >> 1;
+    imageWidth = imageWidth >> (downsampleLevel - d);
+    imageHeight = imageHeight >> (downsampleLevel - d);
+    if (!d)
 #ifdef HAVE_SDL2
-    usingImageBuf = (int(sdlScreen->pitch >> 2) != imageWidth);
-    if (usingImageBuf)
-      imageBuf.resize(size_t(imageWidth) * size_t(imageHeight));
+      usingImageBuf = (int(sdlScreen->pitch >> 2) != imageWidth);
 #else
-    usingImageBuf = false;
+      usingImageBuf = false;
 #endif
+    if (usingImageBuf)
+      resizeImageBuffer(imageWidth, imageHeight);
   }
-  isDownsampled = isEnabled;
+  downsampleLevel = d;
   textXScale = float(imageWidth) / float(textWidth);
   textYScale = float(imageHeight) / float(textHeight);
   fontWidthD2 = float(imageWidth * 13) / float(textWidth * 20);
@@ -506,7 +517,8 @@ void SDLDisplay::blitSurface()
 {
   if (usingImageBuf)
   {
-    const std::uint32_t *s = imageBuf.data();
+    const std::uint32_t *s =
+        reinterpret_cast< const std::uint32_t * >(imageBuf.data());
     std::uint32_t *p;
     int     w = imageWidth;
     int     pitch;
@@ -516,16 +528,20 @@ void SDLDisplay::blitSurface()
     pitch = int(sdlScreen->pitch >> 2);
 #else
     p = screenBuf.data();
-    pitch = w >> int(isDownsampled);
+    pitch = w >> downsampleLevel;
 #endif
-    if (isDownsampled)
+    switch (downsampleLevel)
     {
-      downsample2xFilter(p, s, w, imageHeight, pitch);
-    }
-    else
-    {
-      for (int y = 0; y < imageHeight; y++, p = p + pitch, s = s + w)
-        std::memcpy(p, s, size_t(w) * sizeof(std::uint32_t));
+      case 1:
+        downsample2xFilter(p, s, w, imageHeight, pitch);
+        break;
+      case 2:
+        downsample4xFilter(p, s, w, imageHeight, pitch);
+        break;
+      default:
+        for (int y = 0; y < imageHeight; y++, p = p + pitch, s = s + w)
+          std::memcpy(p, s, size_t(w) * sizeof(std::uint32_t));
+        break;
     }
 #ifdef HAVE_SDL2
     SDL_UnlockSurface(sdlScreen);
@@ -547,37 +563,18 @@ void SDLDisplay::clearSurface(std::uint32_t c)
 #endif
   std::uint32_t *p;
   if (usingImageBuf)
-    p = imageBuf.data();
+    p = reinterpret_cast< std::uint32_t * >(imageBuf.data());
   else
 #ifdef HAVE_SDL2
     p = reinterpret_cast< std::uint32_t * >(sdlScreen->pixels);
 #else
     p = screenBuf.data();
 #endif
-  if (!(c && c <= 0x07FFFFFFU))
+  if (!(c && c <= 0x0FFFFFFFU))
   {
-#if ENABLE_X86_64_AVX
-    const YMM_UInt32  tmp = { c, c, c, c, c, c, c, c };
-    for ( ; BRANCH_LIKELY(n >= 16); n = n - 16, p = p + 16)
-    {
-      __asm__ ("vmovdqu %t1, %t0" : "=m" (p[0]) : "x" (tmp));
-      __asm__ ("vmovdqu %t1, %t0" : "=m" (p[8]) : "x" (tmp));
-    }
-    for ( ; n > 0; n--, p++)
-      *p = c;
-#else
-    if (c == ((c & 0xFFU) * 0x01010101U))
-    {
-      std::memset(p, int(c & 0xFFU), n * sizeof(std::uint32_t));
-    }
-    else
-    {
-      for (size_t i = 0; i < n; i++)
-        p[i] = c;
-    }
-#endif
+    memsetUInt32(p, c, n);
   }
-  else
+  else if (!(c & 0x08000000U))
   {
     std::uint32_t c0, c1;
 #if USE_PIXELFMT_RGB10A2
@@ -608,6 +605,32 @@ void SDLDisplay::clearSurface(std::uint32_t c)
 #endif
       for ( ; xc < (unsigned int) imageWidth; xc++, p++)
         *p = (!((xc ^ yc) & gridSize) ? c0 : c1);
+    }
+  }
+  else
+  {
+    FloatVector4  c0_f(float(int(c & 0000000007U)),
+                       float(int((c & 0000000070U) >> 3)),
+                       float(int((c & 0000000700U) >> 6)), 7.0f);
+    FloatVector4  c1_f(float(int((c & 0000007000U) >> 9)),
+                       float(int((c & 0000070000U) >> 12)),
+                       float(int((c & 0000700000U) >> 15)), 7.0f);
+    FloatVector4  c2_f(float(int((c & 0007000000U) >> 18)),
+                       float(int((c & 0070000000U) >> 21)),
+                       float(int((c & 0700000000U) >> 24)), 7.0f);
+    c0_f *= (240.0f / 7.0f);
+    c1_f *= (240.0f / 7.0f);
+    c2_f *= (240.0f / 7.0f);
+    for (int yc = 0; yc < imageHeight; yc++)
+    {
+      float   f = float(yc) * 2.0f / float(imageHeight - 1);
+      FloatVector4  c_f(c1_f);
+      if (f < 1.0f)
+        c_f = (c2_f * (1.0f - f)) + (c1_f * f);
+      else if (f > 1.0f)
+        c_f = (c1_f * (2.0f - f)) + (c0_f * (f - 1.0f));
+      memsetUInt32(p, c_f.convertToRGBA32(false, true), size_t(imageWidth));
+      p = p + imageWidth;
     }
   }
 #ifdef HAVE_SDL2
@@ -735,10 +758,10 @@ void SDLDisplay::pollEvents(std::vector< SDLEvent >& buf, int waitTime,
         if (!pollMouseEvents)
           continue;
         t = SDLEventMouseMotion;
-        d1 = int(event.motion.x) << int(isDownsampled);
-        d2 = int(event.motion.y) << int(isDownsampled);
-        d3 = int(event.motion.xrel) << int(isDownsampled);
-        d4 = int(event.motion.yrel) << int(isDownsampled);
+        d1 = int(event.motion.x) << downsampleLevel;
+        d2 = int(event.motion.y) << downsampleLevel;
+        d3 = int(event.motion.xrel) << downsampleLevel;
+        d4 = int(event.motion.yrel) << downsampleLevel;
         break;
       case SDL_MOUSEBUTTONDOWN:
       case SDL_MOUSEBUTTONUP:
@@ -748,8 +771,8 @@ void SDLDisplay::pollEvents(std::vector< SDLEvent >& buf, int waitTime,
           t = SDLEventMButtonUp;
         else
           t = SDLEventMButtonDown;
-        d1 = int(event.button.x) << int(isDownsampled);
-        d2 = int(event.button.y) << int(isDownsampled);
+        d1 = int(event.button.x) << downsampleLevel;
+        d2 = int(event.button.y) << downsampleLevel;
         d3 = int(event.button.button);
         d4 = int(event.button.clicks);
         break;

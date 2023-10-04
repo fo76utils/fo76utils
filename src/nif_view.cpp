@@ -511,7 +511,7 @@ static void printViewScale(SDLDisplay& display, float viewScale,
   z = std::max(z, (vt.rotateXY * vt.rotateXY) + (vt.rotateYY * vt.rotateYY));
   z = std::max(z, (vt.rotateXZ * vt.rotateXZ) + (vt.rotateYZ * vt.rotateYZ));
   z = float(std::sqrt(std::max(z, 0.25f)));
-  float   vtScale = vt.scale * z / float(int(display.getIsDownsampled()) + 1);
+  float   vtScale = vt.scale * z / float(1 << display.getDownsampleLevel());
   char    buf[256];
   std::snprintf(buf, 256, "View scale: %7.4f (1 meter = %7.2f pixels)\n",
                 viewScale, vtScale);
@@ -543,8 +543,8 @@ static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName,
     std::sprintf(buf, "_%02u%02u%02u.dds", h, m, s);
     fileName += buf;
   }
-  int     w = display.getWidth() >> int(display.getIsDownsampled());
-  int     h = display.getHeight() >> int(display.getIsDownsampled());
+  int     w = display.getWidth() >> display.getDownsampleLevel();
+  int     h = display.getHeight() >> display.getDownsampleLevel();
   if (!renderer)
   {
     display.blitSurface();
@@ -825,7 +825,7 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mPage Down\033[m             "
     "Disable downsampling.                                           \n"
     "  \033[4m\033[38;5;228mB\033[m                     "
-    "Toggle black/checkerboard background.                           \n"
+    "Cycle background type (black/checkerboard/gradient).            \n"
     "  \033[4m\033[38;5;228mSpace\033[m, "
     "\033[4m\033[38;5;228mBackspace\033[m      "
     "Load next or previous file matching the pattern.                \n"
@@ -854,6 +854,11 @@ static const char *keyboardUsageString =
     "Quit viewer.                                                    \n";
 #endif
 
+static const char *downsampModeNames[4] =
+{
+  "disabled", "enabled (4x SSAA)", "enabled (16x SSAA)", ""
+};
+
 bool NIF_View::viewModels(SDLDisplay& display,
                           const std::vector< std::string >& nifFileNames, int l)
 {
@@ -863,7 +868,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
   std::vector< SDLDisplay::SDLEvent > eventBuf;
   std::string messageBuf;
   unsigned char quitFlag = 0;   // 1 = Esc key pressed, 2 = window closed
-  bool    checkerboardBgnd = true;
+  unsigned char backgroundType = 1;
   try
   {
     int     imageWidth = display.getWidth();
@@ -911,9 +916,10 @@ bool NIF_View::viewModels(SDLDisplay& display,
             display.printString(viewRotationMessages[viewRotation]);
             viewRotation = -1;
           }
-          display.clearSurface(!checkerboardBgnd ? 0U : 0x02666333U);
-          for (size_t i = 0; i < imageDataSize; i++)
-            outBufZ[i] = 16777216.0f;
+          display.clearSurface(backgroundType == 0 ?
+                               0U : (backgroundType == 1 ?
+                                     0x02666333U : 01333111222U));
+          memsetFloat(outBufZ.data(), 16777216.0f, imageDataSize);
           std::uint32_t *outBufRGBA = display.lockDrawSurface();
           renderModel(outBufRGBA, outBufZ.data(), imageWidth, imageHeight);
           display.unlockDrawSurface();
@@ -1137,24 +1143,25 @@ bool NIF_View::viewModels(SDLDisplay& display,
                 break;
               case SDLDisplay::SDLKeySymPageUp:
               case SDLDisplay::SDLKeySymPageDown:
-                if ((d1 == SDLDisplay::SDLKeySymPageUp)
-                    == display.getIsDownsampled())
                 {
-                  redrawFlags = 0;
-                  continue;
+                  int     prvLevel = display.getDownsampleLevel();
+                  display.setDownsampleLevel(
+                      prvLevel + (d1 == SDLDisplay::SDLKeySymPageUp ? 1 : -1));
+                  if (display.getDownsampleLevel() == (unsigned char) prvLevel)
+                  {
+                    redrawFlags = 0;
+                    continue;
+                  }
                 }
-                display.setEnableDownsample(d1 == SDLDisplay::SDLKeySymPageUp);
                 imageWidth = display.getWidth();
                 imageHeight = display.getHeight();
                 imageDataSize = size_t(imageWidth) * size_t(imageHeight);
                 outBufZ.resize(imageDataSize);
-                if (display.getIsDownsampled())
-                  messageBuf += "Downsampling enabled\n";
-                else
-                  messageBuf += "Downsampling disabled\n";
+                printToString(messageBuf, "Downsampling %s\n",
+                              downsampModeNames[display.getDownsampleLevel()]);
                 break;
               case 'b':
-                checkerboardBgnd = !checkerboardBgnd;
+                backgroundType = (unsigned char) ((backgroundType + 1) % 3);
                 break;
               case SDLDisplay::SDLKeySymBackspace:
                 fileNum = (fileNum > 0 ? fileNum : int(nifFileNames.size()));
@@ -1193,10 +1200,8 @@ bool NIF_View::viewModels(SDLDisplay& display,
                   messageBuf += "Step size: 2.8125\302\260, exp2(1/16)\n";
                 else
                   messageBuf += "Step size: 11.25\302\260, exp2(1/4)\n";
-                if (display.getIsDownsampled())
-                  messageBuf += "Downsampling enabled\n";
-                else
-                  messageBuf += "Downsampling disabled\n";
+                printToString(messageBuf, "Downsampling %s\n",
+                              downsampModeNames[display.getDownsampleLevel()]);
                 messageBuf += "Default environment map: ";
                 messageBuf += defaultEnvMap;
                 messageBuf += "\nFile name:\n  \033[44m\033[37m\033[1m";

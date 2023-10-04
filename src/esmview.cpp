@@ -141,7 +141,7 @@ ESMView::ESMView(
 #endif
 {
 #ifdef HAVE_SDL2
-  setEnableDownsample(enableDownsampling);
+  setDownsampleLevel(int(enableDownsampling));
   setDefaultTextColor(bgColor, fgColor);
 #else
   (void) w;

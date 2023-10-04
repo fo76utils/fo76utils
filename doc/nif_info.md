@@ -40,7 +40,7 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **Caps Lock**: Toggle fine adjustment of view and lighting parameters.
 * **Page Up**: Enable downsampling (slow).
 * **Page Down**: Disable downsampling.
-* **B**: Toggle black/checkerboard background.
+* **B**: Cycle background type (black/checkerboard/gradient).
 * **Space**, **Backspace**: Load next or previous file matching the pattern.
 * **F9**: Select file from list. Use the mouse or the arrow keys to navigate the file list, left clicking selects an item, double or right clicking opens it.
 * **F12** or **Print Screen**: Save screenshot.

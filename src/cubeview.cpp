@@ -140,8 +140,8 @@ static void saveScreenshot(SDLDisplay& display, const std::string& ddsFileName,
     }
     else
     {
-      int     w = display.getWidth() >> int(display.getIsDownsampled());
-      int     h = display.getHeight() >> int(display.getIsDownsampled());
+      int     w = display.getWidth() >> display.getDownsampleLevel();
+      int     h = display.getHeight() >> display.getDownsampleLevel();
       display.blitSurface();
       const std::uint32_t *p = display.lockScreenSurface();
       DDSOutputFile f(fileName.c_str(), w, h, DDSInputFile::pixelFormatRGB24);
@@ -259,7 +259,8 @@ static void renderCubeMap(const BA2File& ba2File,
     }
     if (texture)
     {
-      display.clearSurface(cubeViewMode || !enableAlpha ? 0U : 0x02888444U);
+      if (!cubeViewMode)
+        display.clearSurface(!enableAlpha ? 0U : 0x02888444U);
       NIFFile::NIFVertexTransform viewTransform(
           1.0f, viewRotationX + mouseViewOffsX, viewRotationY,
           viewRotationZ + mouseViewOffsZ, 0.0f, 0.0f, 0.0f);
