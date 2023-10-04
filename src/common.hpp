@@ -263,5 +263,26 @@ long parseInteger(const char *s, int base = 0, const char *errMsg = (char *) 0,
 double parseFloat(const char *s, const char *errMsg = (char *) 0,
                   double minVal = -1.0e38, double maxVal = 1.0e38);
 
+inline std::uint64_t timerFunctionRDTSC()
+{
+#if defined(__GNUC__) && (defined(__x86_64__) || defined(__x86_64))
+  std::uint32_t tmp1, tmp2;
+  __asm__ __volatile__ ("lfence\n\t"
+                        "rdtsc" : "=a" (tmp1), "=d" (tmp2));
+  return ((std::uint64_t(tmp2) << 32) | tmp1);
+#else
+  return 0UL;
+#endif
+}
+
+void memsetUInt32(std::uint32_t *p, std::uint32_t c, size_t n);
+void memsetUInt64(std::uint64_t *p, std::uint64_t c, size_t n);
+void memsetFloat(float *p, float c, size_t n);
+
+#ifdef __GNUC__
+__attribute__ ((__format__ (__printf__, 2, 3)))
+#endif
+void printToString(std::string& s, const char *fmt, ...);
+
 #endif
 

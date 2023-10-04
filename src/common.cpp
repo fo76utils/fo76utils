@@ -116,3 +116,120 @@ double parseFloat(const char *s, const char *errMsg,
   return tmp;
 }
 
+#if ENABLE_X86_64_AVX
+template< typename T > static inline void memset_YMM(T *p, T c, size_t n)
+{
+  unsigned char *q = reinterpret_cast< unsigned char * >(p);
+  unsigned char *endPtr = q + (n * sizeof(T));
+  for ( ; reinterpret_cast< std::uintptr_t >(q) & 31U; q = q + sizeof(T))
+  {
+    if (BRANCH_UNLIKELY(q >= endPtr))
+      return;
+    *(reinterpret_cast< T * >(q)) = c;
+  }
+  T   tmp __attribute__ ((__vector_size__ (32)));
+#  if ENABLE_X86_64_AVX2
+  tmp[0] = c;
+  if (sizeof(T) == 8)
+    __asm__ ("vpbroadcastq %x0, %t0" : "+x" (tmp));
+  else
+    __asm__ ("vpbroadcastd %x0, %t0" : "+x" (tmp));
+#  else
+  for (size_t i = 0; i < (size_t(32) / sizeof(T)); i++)
+    tmp[i] = c;
+#  endif
+  n = size_t(endPtr - q) & 63;
+  unsigned char *r = endPtr - n;
+  for ( ; BRANCH_LIKELY(q < r); q = q + 64)
+  {
+    __asm__ ("vmovdqa %t1, %0" : "=m" (q[0]) : "x" (tmp));
+    __asm__ ("vmovdqa %t1, %0" : "=m" (q[32]) : "x" (tmp));
+  }
+  if (n & 32)
+  {
+    __asm__ ("vmovdqa %t1, %0" : "=m" (*q) : "x" (tmp));
+    q = q + 32;
+  }
+  if (n & 16)
+  {
+    __asm__ ("vmovdqa %x1, %0" : "=m" (*q) : "x" (tmp));
+    q = q + 16;
+  }
+  if (n & 8)
+  {
+    __asm__ ("vmovq %x1, %0" : "=m" (*q) : "x" (tmp));
+    q = q + 8;
+  }
+  if (sizeof(T) < 8 && (n & 4))
+    __asm__ ("vmovd %x1, %0" : "=m" (*q) : "x" (tmp));
+}
+#endif
+
+void memsetUInt32(std::uint32_t *p, std::uint32_t c, size_t n)
+{
+#if ENABLE_X86_64_AVX
+  memset_YMM< std::uint32_t >(p, c, n);
+#else
+  if (c == ((c & 0xFFU) * 0x01010101U))
+  {
+    std::memset(p, int(c & 0xFFU), n * sizeof(std::uint32_t));
+  }
+  else
+  {
+    for (size_t i = 0; i < n; i++)
+      p[i] = c;
+  }
+#endif
+}
+
+void memsetUInt64(std::uint64_t *p, std::uint64_t c, size_t n)
+{
+#if ENABLE_X86_64_AVX
+  memset_YMM< std::uint64_t >(p, c, n);
+#else
+  if (c == ((c & 0xFFU) * 0x0101010101010101ULL))
+  {
+    std::memset(p, int(c & 0xFFU), n * sizeof(std::uint64_t));
+  }
+  else
+  {
+    for (size_t i = 0; i < n; i++)
+      p[i] = c;
+  }
+#endif
+}
+
+void memsetFloat(float *p, float c, size_t n)
+{
+#if ENABLE_X86_64_AVX
+  memset_YMM< float >(p, c, n);
+#else
+  for (size_t i = 0; i < n; i++)
+    p[i] = c;
+#endif
+}
+
+#ifdef __GNUC__
+__attribute__ ((__format__ (__printf__, 2, 3)))
+#endif
+void printToString(std::string& s, const char *fmt, ...)
+{
+  char    tmpBuf[2048];
+  std::va_list  ap;
+  va_start(ap, fmt);
+  int     n = std::vsnprintf(tmpBuf, 2048, fmt, ap);
+  va_end(ap);
+  if (BRANCH_LIKELY(n <= 2047))
+  {
+    tmpBuf[2047] = '\0';
+    s += tmpBuf;
+    return;
+  }
+  size_t  n0 = s.length();
+  s.resize(n0 + size_t(n));
+  va_start(ap, fmt);
+  (void) std::vsnprintf(&(s[n0]), size_t(n) + 1, fmt, ap);
+  va_end(ap);
+  s[n0 + size_t(n)] = '\0';
+}
+
