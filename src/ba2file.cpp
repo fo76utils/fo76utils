@@ -440,7 +440,8 @@ void BA2File::loadArchiveFile(const char *fileName)
     if (stat(fileName, &st) != 0)
 #endif
     {
-      errorMessage("error opening archive file or directory");
+      throw FO76UtilsError("error opening archive file or directory '%s'",
+                           fileName);
     }
 #if defined(_WIN32) || defined(_WIN64)
     if ((st.st_mode & _S_IFMT) == _S_IFDIR)
