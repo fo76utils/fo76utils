@@ -47,7 +47,7 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **F11**: Save high quality screenshot (double resolution and downsample).
 * **P**: Print current settings and file name.
 * **V**: View detailed model information. The text can be scrolled with Page Up/Page Down or with the mouse wheel, Ctrl-A copies the entire buffer to the clipboard, C returns to model view mode.
-* **Mouse L button**: In debug mode 1 only: print the geometry block, mesh and material path of the selected shape based on the color of the pixel, and also copy it to the clipboard.
+* **Mouse buttons**: In debug mode 1 only: print the geometry block, mesh and material path of the selected shape based on the color of the pixel, and also copy it to the clipboard. The left button prints basic information only, while the middle and right buttons print verbose information (in text view mode) about the geometry and material, respectively.
 * **H**: Show help screen.
 * **C**: Clear messages.
 * **Esc**: Quit program.

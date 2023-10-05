@@ -17,7 +17,7 @@ static const char *cubeMapPaths[32] =
   "textures/cubemaps/bleakfallscube_e.dds",                     // Skyrim
   "textures/shared/cubemaps/mipblur_defaultoutside1.dds",       // Fallout 4
   "textures/shared/cubemaps/mipblur_defaultoutside1.dds",       // Fallout 76
-  "textures/cubemaps/cell_spacecube.dds",                       // Starfield
+  "textures/cubemaps/cell_cityplazacube.dds",                   // Starfield
   "textures/cubemaps/wrtemple_e.dds",
   "textures/shared/cubemaps/outsideoldtownreflectcube_e.dds",
   "textures/shared/cubemaps/outsideoldtownreflectcube_e.dds",
@@ -29,7 +29,7 @@ static const char *cubeMapPaths[32] =
   "textures/cubemaps/chrome_e.dds",
   "textures/shared/cubemaps/metalchrome01cube_e.dds",
   "textures/shared/cubemaps/metalchrome01cube_e.dds",
-  "textures/cubemaps/cell_shipinteriorcube.dds",
+  "textures/cubemaps/cell_testvideocube.dds",
   "textures/cubemaps/cavegreencube_e.dds",
   "textures/shared/cubemaps/outsideday01.dds",
   "textures/shared/cubemaps/outsideday01.dds",
@@ -37,7 +37,7 @@ static const char *cubeMapPaths[32] =
   "textures/cubemaps/mghallcube_e.dds",
   "textures/shared/cubemaps/cgplayerhousecube.dds",
   "textures/shared/cubemaps/chrome_e.dds",
-  "textures/cubemaps/cell_hitechhallcube.dds",
+  "textures/cubemaps/cell_spacecube.dds",
   "textures/cubemaps/caveicecubemap_e.dds",
   "textures/shared/cubemaps/inssynthproductionpoolcube.dds",
   "textures/shared/cubemaps/vault111cryocube.dds",
@@ -45,7 +45,7 @@ static const char *cubeMapPaths[32] =
   "textures/cubemaps/minecube_e.dds",
   "textures/shared/cubemaps/memorydencube.dds",
   "textures/shared/cubemaps/mipblur_defaultoutside_pitt.dds",
-  "textures/cubemaps/lgt_cubemap_research_002.dds"
+  "textures/cubemaps/cell_vecteraoutpostcube.dds"
 };
 
 void NIF_View::threadFunction(NIF_View *p, size_t n)
@@ -710,8 +710,8 @@ static bool viewMaterialInfo(
   return display.viewTextBuffer();
 }
 
-static void printGeometryBlockInfo(
-    SDLDisplay& display, int x, int y,
+static bool printGeometryBlockInfo(
+    SDLDisplay& display, int x, int y, int mouseButton,
     const NIFFile *nifFile, const std::vector< NIFFile::NIFTriShape >& meshData)
 {
   std::uint32_t c =
@@ -730,44 +730,97 @@ static void printGeometryBlockInfo(
       | ((c >> 11) & 0x0200U) | ((c >> 2) & 0x0400U) | ((c << 7) & 0x0800U)
       | ((c >> 7) & 0x1000U) | ((c << 2) & 0x2000U) | ((c << 11) & 0x4000U);
   if (!c || c > meshData.size() || !nifFile)
-    return;
+    return false;
   c--;
   std::string tmpBuf;
   const std::string *blkName = nifFile->getString(meshData[c].ts->nameID);
-  if (blkName)
+  if (blkName && !blkName->empty())
+    printToString(tmpBuf, "BSGeometry: \"%s\"\n", blkName->c_str());
+  const NIFFile::NIFBlkBSTriShape *ts = meshData[c].ts;
+  if (ts)
   {
-    tmpBuf += "BSGeometry: \"";
-    tmpBuf += *blkName;
-    tmpBuf += "\"\n";
-  }
-  if (!meshData[c].ts->meshFileName.empty())
-  {
-    tmpBuf += "Mesh file: \"";
-    tmpBuf += meshData[c].ts->meshFileName;
-    tmpBuf += "\"\n";
-  }
-  if (meshData[c].ts->shaderProperty >= 0)
-  {
-    const NIFFile::NIFBlkBSLightingShaderProperty *lspBlock =
-        nifFile->getLightingShaderProperty(
-            size_t(meshData[c].ts->shaderProperty));
-    if (lspBlock)
+    if (!ts->meshFileName.empty())
+      printToString(tmpBuf, "Mesh file: \"%s\"\n", ts->meshFileName.c_str());
+    if (ts->shaderProperty >= 0)
     {
-      blkName = nifFile->getString(lspBlock->nameID);
-      if (blkName)
+      const NIFFile::NIFBlkBSLightingShaderProperty *lspBlock =
+          nifFile->getLightingShaderProperty(size_t(ts->shaderProperty));
+      if (lspBlock)
       {
-        tmpBuf += "Material path: \"";
-        tmpBuf += *blkName;
-        tmpBuf += "\"\n";
+        const std::string *matName = nifFile->getString(lspBlock->nameID);
+        if (matName && !matName->empty())
+          printToString(tmpBuf, "Material path: \"%s\"\n", matName->c_str());
+      }
+    }
+    if (mouseButton == 2)
+    {
+      if (ts->controller >= 0)
+        printToString(tmpBuf, "Controller: %3d\n", ts->controller);
+      printToString(tmpBuf, "Flags: 0x%08X\n", ts->flags);
+      if (ts->collisionObject >= 0)
+        printToString(tmpBuf, "Collision object: %3d\n", ts->collisionObject);
+      FloatVector4  boundCenter(ts->boundCenterX, ts->boundCenterY,
+                                ts->boundCenterZ, ts->boundRadius);
+      boundCenter = ts->vertexTransform.transformXYZ(boundCenter);
+      printToString(tmpBuf, "Bounding sphere center: %f, %f, %f, radius: %f\n",
+                    boundCenter[0], boundCenter[1], boundCenter[2],
+                    ts->boundRadius * ts->vertexTransform.scale);
+      if (ts->skinID >= 0)
+        printToString(tmpBuf, "Skin: %3d\n", ts->skinID);
+      if (ts->shaderProperty >= 0)
+        printToString(tmpBuf, "Shader property: %3d\n", ts->shaderProperty);
+      if (ts->alphaProperty >= 0)
+        printToString(tmpBuf, "Alpha property: %3d\n", ts->alphaProperty);
+      printToString(tmpBuf, "Vertex count: %lu\n",
+                    (unsigned long) ts->vertexData.size());
+      printToString(tmpBuf, "Triangle count: %lu\n",
+                    (unsigned long) ts->triangleData.size());
+      printToString(tmpBuf, "Vertex data:\n");
+      for (size_t i = 0; i < ts->vertexData.size(); i++)
+      {
+        NIFFile::NIFVertex  v(ts->vertexData[i]);
+        FloatVector4  t(v.getTangent());
+        FloatVector4  b(v.getBitangent());
+        FloatVector4  n(v.getNormal());
+        float   w = v.xyz[3];
+        v.xyz = ts->vertexTransform.transformXYZ(v.xyz);
+        t = ts->vertexTransform.rotateXYZ(t);
+        b = ts->vertexTransform.rotateXYZ(b);
+        n = ts->vertexTransform.rotateXYZ(n);
+        printToString(tmpBuf,
+                      "  %5d: XYZW: %f, %f, %f, %f  UV: %f, %f  UV2: %f, %f\n",
+                      int(i), v.xyz[0], v.xyz[1], v.xyz[2], w,
+                      v.texCoord[0], v.texCoord[1],
+                      v.texCoord[2], v.texCoord[3]);
+        printToString(tmpBuf,
+                      "         VC: 0x%08X  T: %6.3f, %6.3f, %6.3f  "
+                      "B: %6.3f, %6.3f, %6.3f  N: %6.3f, %6.3f, %6.3f\n",
+                      (unsigned int) v.vertexColor, t[0], t[1], t[2],
+                      b[0], b[1], b[2], n[0], n[1], n[2]);
+      }
+      printToString(tmpBuf, "Triangle data:\n");
+      for (size_t i = 0; i < ts->triangleData.size(); i++)
+      {
+        printToString(tmpBuf, "  %6d: %5d, %5d, %5d\n",
+                      int(i), int(ts->triangleData[i].v0),
+                      int(ts->triangleData[i].v1), int(ts->triangleData[i].v2));
       }
     }
   }
+  if (mouseButton == 3 && meshData[c].m)
+  {
+    tmpBuf += "MaterialFile ";
+    meshData[c].m->printObjectInfo(tmpBuf, 0, false);
+  }
   if (!tmpBuf.empty())
   {
+    if (mouseButton == 2 || mouseButton == 3)
+      display.clearTextBuffer();
     display.printString(tmpBuf.c_str());
-    display.drawText(0, -1, display.getTextRows(), 0.75f, 1.0f);
     (void) SDL_SetClipboardText(tmpBuf.c_str());
+    return true;
   }
+  return false;
 }
 
 static const char *keyboardUsageString =
@@ -840,7 +893,7 @@ static const char *keyboardUsageString =
     "Print current settings and file name.                           \n"
     "  \033[4m\033[38;5;228mV\033[m                     "
     "View detailed model information.                                \n"
-    "  \033[4m\033[38;5;228mMouse L button\033[m        "
+    "  \033[4m\033[38;5;228mMouse buttons\033[m         "
     "In debug mode 1 only: print the geometry block, mesh and        \n"
     "                        "
     "material path of the selected shape based on the color of the   \n"
@@ -897,6 +950,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
 
       bool    nextFileFlag = false;
       // 1: screenshot, 2: high quality screenshot, 4: view info, 8: browse file
+      // 16: view text buffer
       unsigned char eventFlags = 0;
       unsigned char redrawFlags = 3;    // bit 0: blit only, bit 1: render
       while (!(nextFileFlag || quitFlag))
@@ -959,6 +1013,12 @@ bool NIF_View::viewModels(SDLDisplay& display,
               }
               display.clearTextBuffer();
             }
+            else if (eventFlags & 16)
+            {
+              if (!display.viewTextBuffer())
+                quitFlag = 2;
+              display.clearTextBuffer();
+            }
             eventFlags = 0;
           }
           display.drawText(0, -1, display.getTextRows(), 0.75f, 1.0f);
@@ -990,11 +1050,14 @@ bool NIF_View::viewModels(SDLDisplay& display,
                 int     x = std::min(std::max(d1, 0), imageWidth - 1);
                 int     y = eventBuf[i].data2();
                 y = std::min(std::max(y, 0), imageHeight - 1);
-                if (debugMode == 1 &&
-                    eventBuf[i].data3() == 1 && eventBuf[i].data4() == 1)
+                int     mouseButton = eventBuf[i].data3();
+                if (debugMode == 1 && eventBuf[i].data4() >= 1 &&
+                    printGeometryBlockInfo(display, x, y, mouseButton,
+                                           nifFile, meshData))
                 {
-                  printGeometryBlockInfo(display, x, y, nifFile, meshData);
-                  redrawFlags = redrawFlags | 1;
+                  if (mouseButton == 2 || mouseButton == 3)
+                    eventFlags = eventFlags | 16;
+                  redrawFlags = redrawFlags | 2;
                 }
               }
               continue;
