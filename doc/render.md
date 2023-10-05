@@ -38,7 +38,7 @@ Compiling with **rgb10a2=1** is required to actually increase frame buffer preci
 * **-tc INT** or **-txtcache INT**: Texture cache size in megabytes.
 * **-mc INT**: Model cache size, the number of models to load at the same time (1 to 64, defaults to 16).
 * **-mip INT**: Base mip level for all textures other than cube maps and the water texture. Defaults to 2.
-* **-env FILENAME.DDS**: Default environment map texture path in archives. Defaults to **textures/cubemaps/cell_spacecube.dds**. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures, and [cubeview](cubeview.md) to preview them.
+* **-env FILENAME.DDS**: Default environment map texture path in archives. Defaults to **textures/cubemaps/cell_cityplazacube.dds**. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures, and [cubeview](cubeview.md) to preview them.
 
 ### Terrain options
 

@@ -328,7 +328,7 @@ WorldSpaceViewer::WorldSpaceViewer(
     reflZScale(2.0f),
     waterUVScale(31),
     objectsMinScale(3.0f),
-    defaultEnvMap("textures/cubemaps/cell_spacecube.dds"),
+    defaultEnvMap("textures/cubemaps/cell_cityplazacube.dds"),
     waterTexture("textures/water/wavesdefault_normal.dds"),
     ba2File(archivePath),
     esmFile(esmFiles),

@@ -117,7 +117,7 @@ int main(int argc, char **argv)
     int     outputFormat = 0;
     unsigned short  renderQuality = 0;
     bool    waterMaskMode = false;
-    const char  *defaultEnvMap = "textures/cubemaps/cell_spacecube.dds";
+    const char  *defaultEnvMap = "textures/cubemaps/cell_cityplazacube.dds";
     const char  *waterTexture = "textures/water/wavesdefault_normal.dds";
     const char  *materialDBPath = (char *) 0;
     std::vector< const char * > hdModelNamePatterns;
