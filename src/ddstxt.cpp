@@ -317,8 +317,11 @@ size_t DDSTexture::decodeBlock_BC6U(
     std::uint64_t b = FileBuffer::readUInt64Fast(&(tmp[i << 3]));
     FloatVector4  c(FloatVector4::convertFloat16(b));
     c.maxValues(FloatVector4(0.0f));
+    float   a = c[3] * 255.0f;
     c = c / (c + 4.0f);
-    dst[(i >> 2) * w + (i & 3)] = std::uint32_t(c.srgbCompress());
+    c.srgbCompress();
+    c[3] = a;
+    dst[(i >> 2) * w + (i & 3)] = std::uint32_t(c);
   }
   return 16;
 }
@@ -462,8 +465,11 @@ size_t DDSTexture::decodeLine_RGBA64F(
     std::uint64_t b = FileBuffer::readUInt64Fast(src);
     FloatVector4  c(FloatVector4::convertFloat16(b));
     c.maxValues(FloatVector4(0.0f));
-    c = c / (c + 4.0f);
-    *dst = std::uint32_t(c.srgbCompress());
+    float   a = c[3] * 255.0f;
+    c *= (float(int(*dst)) * (1.0f / 16777216.0f));
+    c.srgbCompress();
+    c[3] = a;
+    *dst = std::uint32_t(c);
   }
   return (size_t(w) << 3);
 }
@@ -474,7 +480,7 @@ void DDSTexture::loadTextureData(
                              const unsigned char *, unsigned int))
 {
   size_t  dataOffs = size_t(n) * size_t(textureDataSize);
-  for (int i = 0; i < 20; i++)
+  for (int i = 0; i < 19; i++)
   {
     std::uint32_t *p = textureData[i] + dataOffs;
     unsigned int  w = (xMaskMip0 >> (unsigned char) i) + 1U;
@@ -718,11 +724,11 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
     xMaskMip0 = xMaskMip0 >> 1;
     yMaskMip0 = yMaskMip0 >> 1;
   }
-  size_t  dataOffsets[20];
+  size_t  dataOffsets[19];
   size_t  bufSize = 0;
   unsigned int  xMask = (xMaskMip0 << 1) | 1U;
   unsigned int  yMask = (yMaskMip0 << 1) | 1U;
-  for (unsigned int i = 0; i < 20; i++)
+  for (unsigned int i = 0; i < 19; i++)
   {
     if (!(xMask | yMask))
     {
@@ -741,8 +747,29 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
       reinterpret_cast< std::uint32_t * >(std::malloc(totalDataSize));
   if (!textureDataBuf)
     throw std::bad_alloc();
-  for (unsigned int i = 0; i < 20; i++)
+  for (unsigned int i = 0; i < 19; i++)
     textureData[i] = textureDataBuf + dataOffsets[i];
+  if (BRANCH_UNLIKELY(dxgiFormat == 0x0A))
+  {                                     // DXGI_FORMAT_R16G16B16A16_FLOAT
+    std::uint32_t scale = 16777216U;
+    if (maxTextureNum == 5)
+    {
+      // normalize FP16 format cube maps
+      size_t  srcDataSize = sizeRequired * 6;
+      FloatVector4  avgLevel(0.0f);
+      for (size_t i = 0; i < srcDataSize; i = i + 8)
+      {
+        FloatVector4  tmp(FloatVector4::convertFloat16(
+                              FileBuffer::readUInt64Fast(srcPtr + i), true));
+        avgLevel += (tmp * tmp);
+      }
+      avgLevel /= float(int(srcDataSize >> 3));
+      float   tmp = float(std::sqrt(avgLevel[0] + avgLevel[1] + avgLevel[2]));
+      tmp = 16777216.0f / std::min(std::max(tmp * 0.8660254f, 1.0f), 65536.0f);
+      scale = std::uint32_t(roundFloat(tmp));
+    }
+    memsetUInt32(textureDataBuf, scale, totalDataSize / sizeof(std::uint32_t));
+  }
   for (size_t i = 0; i <= maxTextureNum; i++)
   {
     loadTextureData(srcPtr + (i * sizeRequired), int(i),
@@ -750,7 +777,7 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
   }
   if (mipOffset > 0 && dataOffsets[1])
   {
-    mipOffset = (mipOffset < 19 ? mipOffset : 19);
+    mipOffset = (mipOffset < 18 ? mipOffset : 18);
     size_t  offs = dataOffsets[mipOffset];
     xMaskMip0 = xMaskMip0 >> (unsigned char) mipOffset;
     yMaskMip0 = yMaskMip0 >> (unsigned char) mipOffset;
@@ -760,9 +787,9 @@ void DDSTexture::loadTexture(FileBuffer& buf, int mipOffset)
                          std::realloc(textureDataBuf, totalDataSize));
     if (BRANCH_UNLIKELY(!textureDataBuf))
       throw std::bad_alloc();
-    for (int i = 0; i < 20; i++)
+    for (int i = 0; i < 19; i++)
     {
-      int     j = ((i + mipOffset) < 19 ? (i + mipOffset) : 19);
+      int     j = ((i + mipOffset) < 18 ? (i + mipOffset) : 18);
       textureData[i] = textureDataBuf + (dataOffsets[j] - offs);
     }
   }
@@ -817,11 +844,13 @@ DDSTexture::DDSTexture(std::uint32_t c, bool srgbColor)
   std::uintptr_t  tmp1 =
       std::uintptr_t(reinterpret_cast< unsigned char * >(&textureColor));
   const YMM_UInt64  tmp2 = { tmp1, tmp1, tmp1, tmp1 };
-  for (size_t i = 0; i < (sizeof(textureData) / sizeof(std::uint32_t *));
-       i = i + 4)
-  {
-    __asm__ ("vmovdqu %t1, %t0" : "=m" (textureData[i]) : "x" (tmp2));
-  }
+  // sizeof(textureData) == sizeof(std::uint32_t *) * 19
+  __asm__ ("vmovdqu %t1, %0" : "=m" (textureData[0]) : "x" (tmp2));
+  __asm__ ("vmovdqu %t1, %0" : "=m" (textureData[4]) : "x" (tmp2));
+  __asm__ ("vmovdqu %t1, %0" : "=m" (textureData[8]) : "x" (tmp2));
+  __asm__ ("vmovdqu %t1, %0" : "=m" (textureData[12]) : "x" (tmp2));
+  __asm__ ("vmovdqu %x1, %0" : "=m" (textureData[16]) : "x" (tmp2));
+  __asm__ ("vmovq %x1, %0" : "=m" (textureData[18]) : "x" (tmp2));
 #else
   for (size_t i = 0; i < (sizeof(textureData) / sizeof(std::uint32_t *)); i++)
     textureData[i] = &textureColor;

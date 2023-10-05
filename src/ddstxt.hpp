@@ -30,7 +30,7 @@ class DDSTexture
   unsigned char channelCnt;
   unsigned char maxTextureNum;
   unsigned char dxgiFormat;             // 0 if constructed from a color
-  std::uint32_t *textureData[20];
+  std::uint32_t *textureData[19];
   static size_t decodeBlock_BC1(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC2(
@@ -91,7 +91,7 @@ class DDSTexture
   DDSTexture(FileBuffer& buf, int mipOffset = 0);
   // create 1x1 texture of color c without allocating memory
   DDSTexture(std::uint32_t c, bool srgbColor = false);
-  virtual ~DDSTexture();
+  ~DDSTexture();
   inline int getWidth() const
   {
     return int(xMaskMip0 + 1U);
