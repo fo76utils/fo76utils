@@ -207,7 +207,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
     debugMode(0)
 {
   threadCnt = int(std::thread::hardware_concurrency());
-  threadCnt = (threadCnt > 1 ? (threadCnt < 8 ? threadCnt : 8) : 1);
+  threadCnt = (threadCnt > 1 ? (threadCnt < 16 ? threadCnt : 16) : 1);
   renderers.resize(size_t(threadCnt), (Plot3D_TriShape *) 0);
   threadErrMsg.resize(size_t(threadCnt));
   viewOffsetY.resize(size_t(threadCnt + 1), 0);
