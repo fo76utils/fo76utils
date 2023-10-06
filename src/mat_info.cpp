@@ -76,10 +76,10 @@ int main(int argc, char **argv)
         if (n != std::string::npos)
         {
           displayHeight = int(parseInteger(tmp.c_str() + (n + 1), 10,
-                                           "invalid image height", 8, 16384));
+                                           "invalid image height", 16, 16384));
           tmp.resize(n);
           displayWidth = int(parseInteger(tmp.c_str(), 10,
-                                          "invalid image width", 8, 16384));
+                                          "invalid image width", 16, 16384));
         }
         else if (!tmp.empty())
         {
