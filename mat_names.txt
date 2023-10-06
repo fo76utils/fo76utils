@@ -307,6 +307,7 @@ materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_01_legs.mat
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_01_torso.mat
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/barrel.mat
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/cover.mat
+materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/decal.mat
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/frame.mat
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/front_receiver.mat
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/grip01.mat
@@ -319,6 +320,7 @@ materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/modela_
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/modela_brute_legs.mat
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/modela_brute_torso.mat
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/modela_combat_01_arms.mat
+materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/modela_combat_01_legs.mat
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/modela_industrial_01_arms.mat
 materials/actors/modela/modela_crimsonfleet_01/modela_crimsonfleet_brute/tank.mat
 materials/actors/modela/modela_farmer_01/modela_farmer_01_arm.mat
@@ -364,8 +366,6 @@ materials/actors/modela/modela_police_01/modela_police_01_legs.mat
 materials/actors/modela/modela_police_01/modela_police_01_shields.mat
 materials/actors/modela/modela_police_01/modela_police_01_torso.mat
 materials/actors/models/ashtapaws.mat
-materials/actors/models/bigbadsob/bigbadsob1.mat
-materials/actors/models/bigbadsob/bigbadsob2.mat
 materials/actors/models/models_combat_01/decals.mat
 materials/actors/models/models_combat_01/models_combat_01_accessories.mat
 materials/actors/models/models_combat_01/models_combat_01_arms.mat
@@ -843,7 +843,6 @@ materials/architecture/city/cydonia/cydoniaindintmetaltrimorange01.mat
 materials/architecture/city/cydonia/cydoniapaintedmetalscratchedrusty01blue02.mat
 materials/architecture/city/neon/basematerials/neon_metalrust01.mat
 materials/architecture/city/neon/glassneonshield01.mat
-materials/architecture/city/neon/gloworange01.mat
 materials/architecture/city/neon/indextrubberfloor01.mat
 materials/architecture/city/neon/industrialexteriorneongrey01.mat
 materials/architecture/city/neon/insulatedpipes_yellow_01.mat
@@ -1045,11 +1044,6 @@ materials/architecture/city/newatlantis/lodge/nalodgewoodveneer01tint03.mat
 materials/architecture/city/newatlantis/lodge/nalodgewoodveneer1_ext.mat
 materials/architecture/city/newatlantis/mast/lifelike_model_terrormorpha_01.mat
 materials/architecture/city/newatlantis/mast/lifelike_model_terrormorpha_02.mat
-materials/architecture/city/newatlantis/mast/na_vanguardorientationmural01_bg.mat
-materials/architecture/city/newatlantis/mast/na_vanguardorientationmural01_fg.mat
-materials/architecture/city/newatlantis/mast/na_vanguardorientationmural01_mg.mat
-materials/architecture/city/newatlantis/mast/na_vanguardorientationmural04_bg.mat
-materials/architecture/city/newatlantis/mast/na_vanguardorientationmural04_fg.mat
 materials/architecture/city/newatlantis/mast/namastexteriorceiling01.mat
 materials/architecture/city/newatlantis/mast/uc_orientationmural_battleofnira01.mat
 materials/architecture/city/newatlantis/mast/uc_orientationmural_battleofnira01on.mat
@@ -1254,7 +1248,6 @@ materials/architecture/city/newatlantis/nametaldetailtilepanels03.mat
 materials/architecture/city/newatlantis/nametalgoldpattern01.mat
 materials/architecture/city/newatlantis/nametalgoldpattern01b.mat
 materials/architecture/city/newatlantis/nametalgrid01.mat
-materials/architecture/city/newatlantis/nametalpainted04.mat
 materials/architecture/city/newatlantis/nametalpaintedpattern01.mat
 materials/architecture/city/newatlantis/nametalpaintedpattern01_darkgrey01.mat
 materials/architecture/city/newatlantis/nametalpanels01.mat
@@ -1829,7 +1822,6 @@ materials/architecture/landmarks/earth/shanghaitower/shanghaitower_blueglass.mat
 materials/architecture/landmarks/earth/shanghaitower/shanghaitower_greenglass.mat
 materials/architecture/landmarks/earth/shanghaitower/shanghatoweri_blueglassbrokenalpha.mat
 materials/architecture/landmarks/earth/shanghaitower/shanghatoweri_greenglassbrokenalpha.mat
-materials/architecture/landmarks/earth/shanghaitower/shanghatoweri_steelframealpha.mat
 materials/architecture/landmarks/earth/theshard/theshard_cables.mat
 materials/architecture/landmarks/earth/theshard/theshard_concretebroken.mat
 materials/architecture/landmarks/earth/theshard/theshard_concretechunks.mat
@@ -2320,7 +2312,6 @@ materials/architecture/starborn/starborntempleextstone02.mat
 materials/architecture/starborn/starborntempleintdoorway01.mat
 materials/architecture/starborn/starborntemplepillarstone02.mat
 materials/architecture/starborn/starborntemplepolishedstone01.mat
-materials/architecture/starborn/starborntemplerings01.mat
 materials/architecture/starborn/starborntempletrim01.mat
 materials/architecture/structuralkit/structkit_concrete_grey01.mat
 materials/architecture/structuralkit/structkit_concrete_grey02.mat
@@ -2378,6 +2369,7 @@ materials/architecture/utilitykit/utl_indintmetaltrim_orange03.mat
 materials/architecture/utilitykit/utl_indintmetaltrimgrey01.mat
 materials/architecture/utilitykit/utl_indintmetaltrimgrey02.mat
 materials/architecture/utilitykit/utl_indintmetaltrimgrey03.mat
+materials/caveslabswalllgshort02_volcanic.mat
 materials/cinimatics/digipic/digipic_base.mat
 materials/cinimatics/digipic/digipic_decal.mat
 materials/cinimatics/freestarrangebadge/freestarrangerbadge.mat
@@ -3707,11 +3699,25 @@ materials/common/landscape/bark/barkgnarled01.mat
 materials/common/landscape/dirt/placeholder.mat
 materials/common/landscape/gravel/gravelgenericrounded01.mat
 materials/common/landscape/leaves/leafdebrispile01.mat
+materials/common/landscape/leaves/placeholder.mat
 materials/common/landscape/mulch/mulchwoodbrown01.mat
+materials/common/landscape/rock/placeholder.mat
+materials/common/landscape/rock/rockcracked01.mat
+materials/common/landscape/rock/rockfractured01.mat
 materials/common/landscape/rock/rockgranitesmoothcracked01.mat
+materials/common/landscape/rock/rocklayeredflat01.mat
 materials/common/landscape/rock/rocklayeredsmooth01.mat
 materials/common/landscape/rock/rocksharp01.mat
+materials/common/landscape/rock/rocksharp02.mat
+materials/common/landscape/snow/placeholder.mat
+materials/common/landscape/snow/snowcliff01.mat
+materials/common/landscape/snow/snowcrunchy01.mat
+materials/common/landscape/snow/snowlayered01.mat
 materials/common/landscape/snow/snowlumpy01.mat
+materials/common/landscape/snow/snowmounds01.mat
+materials/common/landscape/snow/snowripples01.mat
+materials/common/landscape/snow/snowrough01.mat
+materials/common/landscape/snow/snowsmooth01.mat
 materials/common/landscape/sulfur/sulfurroughbroken01.mat
 materials/common/landscape/water/waterpuddle01.mat
 materials/common/leather/leatherworn01.mat
@@ -3765,7 +3771,6 @@ materials/common/metal/metalgoldworn01.mat
 materials/common/metal/metaliron01.mat
 materials/common/metal/metalironcast01.mat
 materials/common/metal/metalironcast02.mat
-materials/common/metal/metalpaintedscuffed01.mat
 materials/common/metal/metalpanelsbolted01.mat
 materials/common/metal/metalpanelsbolted02.mat
 materials/common/metal/metalpanelsbolted03.mat
@@ -3848,6 +3853,7 @@ materials/common/skin/human/skinhumangeneric01.mat
 materials/common/starborn/adastrarougha.mat
 materials/common/starborn/sb_shipsglasscleancockpit01.mat
 materials/common/starborn/sb_shipsglasscleancockpit02.mat
+materials/common/starborn/starbornshipclean01.mat
 materials/common/stone/stonebrickruggedext02.mat
 materials/common/stone/stonebrickwall01.mat
 materials/common/stone/stonebrickwall04.mat
@@ -4699,7 +4705,6 @@ materials/effects/emissives/attentionglow/attention_lightglow_color03.mat
 materials/effects/emissives/brightwhite01_opaque.mat
 materials/effects/emissives/flatblack01_opaque.mat
 materials/effects/emissives/flatwhite01_opaque.mat
-materials/effects/emissives/geneicglowopaque/geneicglowopaque01_base.mat
 materials/effects/emissives/genericglow01_base.mat
 materials/effects/emissives/genericglow01_blue.mat
 materials/effects/emissives/genericglow01_externalemittance01.mat
@@ -4740,9 +4745,7 @@ materials/effects/emissives/timeglow01_soft.mat
 materials/effects/emissives/whitefill01_soft.mat
 materials/effects/emissives/whiteglow01_soft.mat
 materials/effects/emissives/whiteglow01_soft_lowcontrast.mat
-materials/effects/emissives/whiteglow02_soft.mat
 materials/effects/environmental/lava_puddle_01.mat
-materials/effects/environmental/lava_puddle_test_01.mat
 materials/effects/environmental/waterfall_01.mat
 materials/effects/environmental/waterfall_led.mat
 materials/effects/environmental/waterfall_outside.mat
@@ -5013,6 +5016,7 @@ materials/effects/weapons/lasersightred.mat
 materials/effects/weapons/muzzleflash_fireburst_2x2.mat
 materials/effects/weapons/muzzleflash_shotgun_b_2x2.mat
 materials/effects/weapons/neuralenergywave.mat
+materials/effects/weapons/novablaststun.mat
 materials/effects/weapons/particlefusebeamglow.mat
 materials/effects/weapons/particlefusebeamscrolloverlay.mat
 materials/effects/weapons/particlefusedistortion01.mat
@@ -5515,6 +5519,7 @@ materials/items/fooddrink_set/fooddrink_set_sushiroll01_plastic01.mat
 materials/items/fooddrink_set/fooddrink_set_turkey01.mat
 materials/items/fooddrink_set/plasticplainsmooth01_base01.mat
 materials/items/fooddrink_set/plasticplainsmooth01_blue01.mat
+materials/items/fooddrink_set/plasticplaintextured03_base01.mat
 materials/items/fooddrink_set/plasticplaintextured03_yellow01.mat
 materials/items/fooddrink_singleitems/all_crafted_consumables/alienjerky.mat
 materials/items/fooddrink_singleitems/all_crafted_consumables/alienjerkypackage.mat
@@ -5839,7 +5844,6 @@ materials/items/fooddrink_singleitems/xenofresh_paella/xenofresh_paella.mat
 materials/items/fooddrink_singleitems/xenofresh_ramen/xenofresh_ramen.mat
 materials/items/fooddrink_singleitems/xenoyaki/xenoyaki_food.mat
 materials/items/foodpackets/emptytray/foodpackets_emptytray01.mat
-materials/items/foodpackets/emptytray/foodpackets_emptytray01decal.mat
 materials/items/legendarycatalyst/legendarycatalyst.mat
 materials/items/legendarycatalyst/legendarycatalyst_glow02.mat
 materials/items/lodge/book_theheavens.mat
@@ -5875,7 +5879,6 @@ materials/items/magazines/magazineenhanceyourlife04.mat
 materials/items/magazines/magazineenhanceyourlife05.mat
 materials/items/magazines/magazinegrunt01.mat
 materials/items/magazines/magazineminingmonthly01.mat
-materials/items/magazines/magazinepeakperformance.mat
 materials/items/magazines/magazinescriptureofthegreatserpent01.mat
 materials/items/magazines/magazineshipschematics01.mat
 materials/items/magazines/magazinethenewatlantia01.mat
@@ -5908,8 +5911,6 @@ materials/items/magazines/trackersalliance/trackersalliance05.mat
 materials/items/medstimplastic01_base.mat
 materials/items/medstimplastic02.mat
 materials/items/olivebranch_seed/city_na_z_olivebranch_seed.mat
-materials/items/resourcecontainers/resourcecontainergas01.mat
-materials/items/resourcecontainers/resourcecontainerliquid01.mat
 materials/items/tripplegripdumbell/triplegripdumbel_base.mat
 materials/items/tripplegripdumbell/triplegripdumbell_decals.mat
 materials/items/tripplegripdumbell/triplegripdumbell_details.mat
@@ -5945,11 +5946,10 @@ materials/landscape/caves/carved/cavecarvedsulfurstained01_wet.mat
 materials/landscape/caves/carved/cavecarvedsulfurstained01_wet_norocktint.mat
 materials/landscape/caves/carved/cavecarvedvolcanic01.mat
 materials/landscape/caves/cavedirtmud01.mat
-materials/landscape/caves/cavedirtmudrocks01.mat
 materials/landscape/caves/cavedirtrivuletsslabs01.mat
 materials/landscape/caves/cavedirtrough01_decal.mat
 materials/landscape/caves/cavegranitecracked01.mat
-materials/landscape/caves/cavesharpsulfurstained01.mat
+materials/landscape/caves/caveminemudrubble01.mat
 materials/landscape/caves/clutter/caveclutterdirtmounds01.mat
 materials/landscape/caves/clutter/caveclutterdirtmounds01_ice01.mat
 materials/landscape/caves/clutter/caveclutterdirtmounds01_snow01.mat
@@ -6004,7 +6004,6 @@ materials/landscape/caves/clutter/caverockssharpsm01_sharp01.mat
 materials/landscape/caves/clutter/caverockssharpsm01_slabs01.mat
 materials/landscape/caves/clutter/caverockssharpsm01_snow01.mat
 materials/landscape/caves/clutter/caverockssharpsm01_volcanic01.mat
-materials/landscape/caves/clutter/caverubblepilerocks01.mat
 materials/landscape/caves/crystal/cavecrystals01.mat
 materials/landscape/caves/decals/decal_cavedirtcrackedsulfur01.mat
 materials/landscape/caves/decals/decal_cavesulfursplotch01.mat
@@ -6794,15 +6793,12 @@ materials/landscape/flora/bases/trapspikespitterblue.mat
 materials/landscape/flora/bloodstone/bloodstonehorizontal01.mat
 materials/landscape/flora/bloodstone/bloodstoneinventory01.mat
 materials/landscape/flora/bloodstone/bloodstonevertical01.mat
-materials/landscape/flora/florabases/bogrhizome/bogrhizome01.mat
 materials/landscape/flora/ingredients/floraingredientstalk01.mat
 materials/landscape/flora/ingredients/floralingredientflower01.mat
 materials/landscape/flora/ingredients/floralingredientleaf01.mat
 materials/landscape/flora/ingredients/floralingredientroot01.mat
 materials/landscape/flora/ingredients/floralingredientsap01.mat
 materials/landscape/flora/ingredients/floralingredientseed01.mat
-materials/landscape/flora/leaves/broadjaggedgreenleaf.mat
-materials/landscape/flora/leaves/wispypurplefeatherleaf.mat
 materials/landscape/flora/pods/floraakilawheatcrop01.mat
 materials/landscape/flora/pods/florabrollycap.mat
 materials/landscape/flora/pods/floramaizecobs01.mat
@@ -6981,17 +6977,23 @@ materials/landscape/grass/xophile/grassxophile01.mat
 materials/landscape/grass/xophile/lichenstalkgrass01.mat
 materials/landscape/ground/dirt/dirtforestpacked01.mat
 materials/landscape/ground/dirt/dirtgravel01.mat
+materials/landscape/ground/dirt/dirtmuddebris01.mat
 materials/landscape/ground/dirt/dirtmudfootprints01.mat
+materials/landscape/ground/dirt/dirtmudpacked01_brown.mat
 materials/landscape/ground/dirt/dirtmudrough01.mat
 materials/landscape/ground/dirt/dirtmudrough02.mat
+materials/landscape/ground/dirt/dirtmudrough02_darkbrown.mat
 materials/landscape/ground/dirt/dirtpacked01.mat
 materials/landscape/ground/dirt/dirtpacked02.mat
 materials/landscape/ground/dirt/dirtpacked05.mat
+materials/landscape/ground/dirt/dirtpacked07_redrocks.mat
 materials/landscape/ground/dirt/dirtpacked08_grey.mat
+materials/landscape/ground/dirt/dirtpacked08_red.mat
 materials/landscape/ground/grass/grassdeadwet01.mat
 materials/landscape/ground/grass/grassdeadwet02.mat
 materials/landscape/ground/grass/grasslawnsod01.mat
 materials/landscape/ground/ice/icesmooth01.mat
+materials/landscape/ground/ice/icesmooth01_white.mat
 materials/landscape/ground/leaves/leavestropical01.mat
 materials/landscape/ground/moss/mossclumpy01.mat
 materials/landscape/ground/moss/mossforest01.mat
@@ -6999,6 +7001,7 @@ materials/landscape/ground/moss/mossforest02.mat
 materials/landscape/ground/moss/mossforest03.mat
 materials/landscape/ground/rock/rockcave01.mat
 materials/landscape/ground/rock/rockgranitebroken.mat
+materials/landscape/ground/rock/rockredburied03.mat
 materials/landscape/ground/sand/sandfine01.mat
 materials/landscape/ground/sand/sandpacked04_mars.mat
 materials/landscape/ground/sand/sandpacked05_tan.mat
@@ -8166,6 +8169,7 @@ materials/landscape/trees/treeacacia01/treeacacialeavesforest01blue.mat
 materials/landscape/trees/treeacacia01/treeacaciasaplingleaves01.mat
 materials/landscape/trees/treeacacia01/treeacaciasaplingleaves01blue.mat
 materials/landscape/trees/treeacacia01/treeacaciasaplingleaves01red.mat
+materials/landscape/trees/treeacacia01/treecherryfield01white.mat
 materials/landscape/trees/treealder/treealderbark01.mat
 materials/landscape/trees/treealder/treealderbranches01.mat
 materials/landscape/trees/treealder/treealderbranchesblue01.mat
@@ -9191,7 +9195,6 @@ materials/landscape/xophile/whortlepods/exoticswhortlepods01_yellow.mat
 materials/landscape/xophile/whortlepods/exoticswhortlepodsbark01.mat
 materials/layered/layeredmaterials/houdiniplanets/houdiniplanet_akila.mat
 materials/layered/layeredmaterials/houdiniplanets/houdiniplanet_codos.mat
-materials/layered/layeredmaterials/houdiniplanets/houdiniplanet_decaltest.mat
 materials/layered/layeredmaterials/houdiniplanets/houdiniplanet_hardpoint.mat
 materials/layered/layeredmaterials/houdiniplanets/houdiniplanet_oceanic2.mat
 materials/layered/layeredmaterials/houdiniplanets/houdiniplanet_oceanic2_atmosphere.mat
@@ -16591,6 +16594,7 @@ materials/lod/generated/landscape/trees/treecherry/treecherryseedling01_lod_0.ma
 materials/lod/generated/landscape/trees/treecherry/treecherryseedling01_lod_1.mat
 materials/lod/generated/landscape/trees/treecherry/treecherryseedling01_lod_2.mat
 materials/lod/generated/landscape/trees/treecherry/treecherryseedling01_lod_3.mat
+materials/lod/generated/landscape/trees/treecypress/caveslabswallmdbent01_crystal01_red02.mat
 materials/lod/generated/landscape/trees/treecypress/treecityballcypress01_lod_0.mat
 materials/lod/generated/landscape/trees/treecypress/treecityballcypress01_lod_1.mat
 materials/lod/generated/landscape/trees/treecypress/treecityballcypress01_lod_2.mat
@@ -18391,6 +18395,7 @@ materials/outpost/outpostpowerlinks01.mat
 materials/outpost/outpostpowerlinks02.mat
 materials/planets/stars/sun_flare_glow.mat
 materials/planets/stars/sun_flare_strip_02.mat
+materials/scanbooster03_decals01.mat
 materials/setdressing/advertisements/adjeminsonmercantile02.mat
 materials/setdressing/advertisements/adoishi01.mat
 materials/setdressing/advertisements/adtrident01.mat
@@ -18900,7 +18905,6 @@ materials/setdressing/billboards/neonsignsonly/billboard_neon_signs_05.mat
 materials/setdressing/billboards/neonsignsonly/billboard_neon_signs_06.mat
 materials/setdressing/billboards/neonsignsonly/displayscreen_billboard_neon_signs_02.mat
 materials/setdressing/billboards/neonsignsonly/displayscreen_billboard_neon_signs_03.mat
-materials/setdressing/billboards/newatlantis/newatlantis_sign_large01.mat
 materials/setdressing/bioaudiosensordevice/bioaudiosensordevice.mat
 materials/setdressing/bioaudiosensordevice/bioaudiosensordevice_decal.mat
 materials/setdressing/bioaudiosensordevice/bioaudiosensordevice_decalopaque.mat
@@ -19116,7 +19120,6 @@ materials/setdressing/city_cy_runaway01_redharvestreserve/city_cy_runaway01_redh
 materials/setdressing/city_cy_runaway01_redharvestreserve/city_cy_runaway01_redharvestreserve_logo.mat
 materials/setdressing/city_cy_runaway01_redharvestreserve/city_cy_runaway01_redharvestreserve_wax.mat
 materials/setdressing/city_cy_runaway01_whiskey/city_cy_runaway01_whiskey_logo.mat
-materials/setdressing/clothes/clothing_pile_small_01.mat
 materials/setdressing/coathanger/coathanger_metalaluminium01.mat
 materials/setdressing/coathanger/coathanger_plasticplaintextured01_black.mat
 materials/setdressing/coathanger/formalshirtslacks01_sleeves.mat
@@ -19125,6 +19128,7 @@ materials/setdressing/coathanger/materialswaps/formalshirtslacks01_sleeves_tint0
 materials/setdressing/coathanger/materialswaps/formalshirtslacks01_sleeves_tint02.mat
 materials/setdressing/coathanger/materialswaps/formalshirtslacks01_upper_tint01.mat
 materials/setdressing/coathanger/materialswaps/formalshirtslacks01_upper_tint02.mat
+materials/setdressing/coathanger/outfit_colonist_croppedvest_01_sleeves.mat
 materials/setdressing/coffeemaker/coffeemaker01.mat
 materials/setdressing/coffeemaker/coffeemaker_decal_01.mat
 materials/setdressing/coffeetogo/coffeetogocups.mat
@@ -19170,7 +19174,6 @@ materials/setdressing/common_materialswaps/glass/glassdirtytransparent01_swap_bl
 materials/setdressing/common_materialswaps/glass/glassdirtytransparent01_swap_black01_opaque.mat
 materials/setdressing/common_materialswaps/glass/glassdirtytransparent01_swap_blue01.mat
 materials/setdressing/common_materialswaps/glass/glassdirtytransparent01_swap_blue02.mat
-materials/setdressing/common_materialswaps/glass/glassdirtytransparent01_swap_green01.mat
 materials/setdressing/common_materialswaps/glass/resource_liquid_immunostimulant01.mat
 materials/setdressing/common_materialswaps/glass/resource_liquid_neurologic01.mat
 materials/setdressing/common_materialswaps/glass/resource_liquid_sedative01.mat
@@ -19592,6 +19595,7 @@ materials/setdressing/containers/plasticwornscratched02_tan02.mat
 materials/setdressing/containers/plasticwornscratched02_yellow01.mat
 materials/setdressing/containers/plasticwornscratched02_yellow02.mat
 materials/setdressing/containers/plasticwornscratched02_yellow03.mat
+materials/setdressing/containers/rubbertexturedcracks02_base01.mat
 materials/setdressing/containers/scienceliquidsstorage/scienceliquidsstorage01.mat
 materials/setdressing/containers/scienceliquidsstorage/scienceliquidsstorage_decal_01.mat
 materials/setdressing/containers/scienceliquidsstorage/scienceliquidsstorage_decal_01_normalonly.mat
@@ -19848,7 +19852,6 @@ materials/setdressing/desktopitems/desktop_pencilcase_plastic_orange.mat
 materials/setdressing/desktopitems/desktop_pencilcase_plastic_purple.mat
 materials/setdressing/desktopitems/desktop_planetglobe_metal_black.mat
 materials/setdressing/desktopitems/desktop_planetglobe_planet_alchiba ii.mat
-materials/setdressing/desktopitems/desktop_planetglobe_planet_cassiopeia.mat
 materials/setdressing/desktopitems/desktop_planetglobe_planet_cassiopeia01.mat
 materials/setdressing/desktopitems/desktop_sanddisk_glass.mat
 materials/setdressing/desktopitems/desktop_sanddisk_sand_decal02.mat
@@ -20566,9 +20569,11 @@ materials/setdressing/greebles/paintscratched2layer_red01.mat
 materials/setdressing/greebles/paintscratched2layer_yellow01.mat
 materials/setdressing/greebles/plasticplainsmooth04_base01.mat
 materials/setdressing/greebles/plasticplainsmooth04_black01.mat
+materials/setdressing/greebles/plasticplainsmooth04_blue01.mat
 materials/setdressing/greebles/plasticplainsmooth04_red01.mat
 materials/setdressing/greebles/plasticplaintextured03_base01.mat
 materials/setdressing/greebles/plasticplaintextured03_black01.mat
+materials/setdressing/greebles/plasticwornscratched02_base01.mat
 materials/setdressing/greebles/rubbertexturedcracks02_base01.mat
 materials/setdressing/grinder/grinder01_baseext.mat
 materials/setdressing/grinder/grinder01_baseint.mat
@@ -20602,9 +20607,7 @@ materials/setdressing/harvesters/liquidharvesterdecals02.mat
 materials/setdressing/harvesters/liquidharvesterdirt01.mat
 materials/setdressing/harvesters/liquidharvesterdirt02.mat
 materials/setdressing/harvesters/liquidharvesterlabels01.mat
-materials/setdressing/harvesters/paintred01.mat
 materials/setdressing/harvesters/paintred02.mat
-materials/setdressing/harvesters/plasticteal01.mat
 materials/setdressing/harvesters/plasticyellow01.mat
 materials/setdressing/harvesters/pvc_black01.mat
 materials/setdressing/harvesters/pvc_blue01.mat
@@ -21127,6 +21130,7 @@ materials/setdressing/luggybot/plasticplainsmooth02_green01.mat
 materials/setdressing/luggybot/plasticplainsmooth02_lightblue01.mat
 materials/setdressing/luggybot/plasticplainsmooth02_lightblue02.mat
 materials/setdressing/luggybot/plasticplainsmooth02_red01.mat
+materials/setdressing/luggybot/plasticwornscratched02_base01.mat
 materials/setdressing/luggybot/plasticwornscratchedmatte2layer01_red01.mat
 materials/setdressing/luggybot/plasticwornscratchedmatte2layer_black01.mat
 materials/setdressing/lunokhod_rover/lunokhod_rover_base.mat
@@ -21273,7 +21277,6 @@ materials/setdressing/mech/metalpaintedcomponents01.mat
 materials/setdressing/mech/metalpaintedcomponents01_blue.mat
 materials/setdressing/mech/metalpaintedcomponents01_orange.mat
 materials/setdressing/mech/rubberhoses.mat
-materials/setdressing/mechs/painted metal.mat
 materials/setdressing/medical/medicalgencart02/medicalgencart02_drawers_plastic_darkgray.mat
 materials/setdressing/medical/medicalgencart02/medicalgencart02_drawers_plastic_green.mat
 materials/setdressing/medical/medicalgencart02/medicalgencart02_metal_beige.mat
@@ -22169,7 +22172,6 @@ materials/setdressing/plasticplainsmooth01_white.mat
 materials/setdressing/plasticplainsmooth03_black.mat
 materials/setdressing/plasticplaintextured01_black.mat
 materials/setdressing/plasticplaintextured03_black.mat
-materials/setdressing/plastinplainsmooth01_black.mat
 materials/setdressing/playerhouse/metalgeometricpattern08_base.mat
 materials/setdressing/playerhouse/metalvoronoi03_base.mat
 materials/setdressing/playerhouse/plasticabstractpattern02_base.mat
@@ -22200,6 +22202,8 @@ materials/setdressing/portablelightfixture/portablelightfixture_decal.mat
 materials/setdressing/portablelightfixture/portablelightfixture_details.mat
 materials/setdressing/portablelightfixture/portablelightfixture_glass.mat
 materials/setdressing/portablelightfixture/portablelightfixture_plastic.mat
+materials/setdressing/portablestovetop/plasticplainsmooth02_base01.mat
+materials/setdressing/portablestovetop/plasticplaintextured03_base01.mat
 materials/setdressing/portablestovetop/plasticplaintextured03_black01.mat
 materials/setdressing/portablestovetop/plsticplainsmooth02_blue01.mat
 materials/setdressing/portablestovetop/portablestovetop_decal01.mat
@@ -22991,6 +22995,7 @@ materials/setdressing/taugourmet/taugourmet_signage_decallabelsletters04_green01
 materials/setdressing/taugourmet/taugourmet_signage_decallabelsletters04_yellow01.mat
 materials/setdressing/taurosrobot/arm.mat
 materials/setdressing/taurosrobot/claw.mat
+materials/setdressing/taurosrobot/head.mat
 materials/setdressing/taurosrobot/head_grey.mat
 materials/setdressing/taurosrobot/legarmor_grey.mat
 materials/setdressing/taurosrobot/legbase_grey.mat
@@ -23278,8 +23283,16 @@ materials/ships/_shared/glow/shipglowwhite01.mat
 materials/ships/_shared/metal/shipmetalaluminum02.mat
 materials/ships/_shared/metal/shipmetalaluminumworn02.mat
 materials/ships/_shared/metal/shipmetalbrassbrushed01.mat
+materials/ships/_shared/metal/shipmetalcopperworn01.mat
+materials/ships/_shared/metal/shipmetalpanelstreated01.mat
+materials/ships/_shared/metal/shipmetalsteelscuffed01.mat
 materials/ships/_shared/rubber/shipweatheredrubber01.mat
 materials/ships/_shared/textile/shiptextileinsulatedfoil01.mat
+materials/ships/_shared/textile/shiptextileinsulatedpadding01.mat
+materials/ships/_shared/textile/shiptextileinsulatedpadding02.mat
+materials/ships/_shared/textile/shiptextileinsulatedtiles01.mat
+materials/ships/_shared/textile/shiptextilewovenwrinkled01.mat
+materials/ships/_shared/textile/shiptextilewovenwrinkled02.mat
 materials/ships/deepcore/deepcoremetalbase01brown.mat
 materials/ships/deepcore/deepcoremetalbase01darkgray.mat
 materials/ships/deepcore/deepcoremetalbase01gray.mat
@@ -23416,6 +23429,7 @@ materials/ships/hopetech/hopetechset07.mat
 materials/ships/hopetech/hopetechset08.mat
 materials/ships/hopetech/hopetechsetemissive01.mat
 materials/ships/hopetech/hopetechyellowpaintedmetal01.mat
+materials/ships/hopetech/shipsdecal40.mat
 materials/ships/industrial/paintmetalscratched01_black01.mat
 materials/ships/industrial/shpind_breach_glow01.mat
 materials/ships/industrial/shpind_cot02.mat
@@ -23638,6 +23652,7 @@ materials/ships/interior/shipglowtintable.mat
 materials/ships/interior/shipglowwhite.mat
 materials/ships/interior/shipgravdisplay.mat
 materials/ships/interior/shiphardware.mat
+materials/ships/interior/shipintdisplays.mat
 materials/ships/interior/shiplifdisplay.mat
 materials/ships/interior/shippilotmeters.mat
 materials/ships/interior/shippilotmeters2.mat
@@ -23754,6 +23769,7 @@ materials/ships/pirate/ship_pirateinterior_wallpanels01.mat
 materials/ships/pirate/ship_pirateinterior_wallpanels02.mat
 materials/ships/reladyne/reladynemetalbase01darkbrown.mat
 materials/ships/shipcommon/decaldirtscratches01vcolor.mat
+materials/ships/shipcommon/glasscleanopaquedark01.mat
 materials/ships/shipcommon/glasstwowaymirrorgold01.mat
 materials/ships/shipcommon/primary/shipdecaltrimtextileinsulatedpadding01_primary.mat
 materials/ships/shipcommon/primary/shipkitdarkgreypaintedmetal01_primary.mat
@@ -24472,6 +24488,11 @@ materials/ships/starborn/starbornshipint08.mat
 materials/ships/starborn/starbornshipintfabric02.mat
 materials/ships/starborn/starbornshipintfabricpanel01.mat
 materials/ships/starborn/starbornshipintglow01.mat
+materials/ships/stroud/glasscleancockpit01.mat
+materials/ships/stroud/glasscleanopaquedark01.mat
+materials/ships/stroud/glassopaquesolartiles01.mat
+materials/ships/stroud/hopetechmetalsteelpainted01lightbrown01.mat
+materials/ships/stroud/metalsteel01.mat
 materials/ships/stroud/rubberbare02.mat
 materials/ships/stroud/stroudint_glowyellow01.mat
 materials/ships/stroud/stroudint_paintedmetalpanel01_gold01.mat
@@ -24542,11 +24563,11 @@ materials/ships/weapons/shipsdevastatordecal16.mat
 materials/ships/weapons/shipsdevastatormetalgray.mat
 materials/ships/weapons/shipsdisrupterdirtdecal01.mat
 materials/ships/weapons/shipsdisrupterdirtdecal02.mat
-materials/ships/weapons/shipsdisrupterdirtdecal03.mat
 materials/ships/weapons/shipsdisruptermetalblack.mat
 materials/ships/weapons/shipsdisruptermetalwhite.mat
 materials/ships/weapons/shipsdragondecal16.mat
 materials/ships/weapons/shipsdragondecal25.mat
+materials/smcommitmentbox01.mat
 materials/space/testspacehazard01_base.mat
 materials/starstations/decallabelletters01_nonormal_darkgray.mat
 materials/starstations/decallabelsletters01_nonormal.mat
@@ -24647,6 +24668,7 @@ materials/starstations/paintedmetalplain01_white03v1.mat
 materials/starstations/paintedmetalplain01_yellow01.mat
 materials/starstations/paintedmetalplain01_yellow02.mat
 materials/starstations/plugshowcase_glowmedium01.mat
+materials/starstations/solarpanel01.mat
 materials/starstations/stationlargepipefabric.mat
 materials/starstations/stationlargepipefabrictrim.mat
 materials/starstations/stngreebles01.mat
@@ -24675,7 +24697,6 @@ materials/terrain/default005flow.mat
 materials/terrain/default006base.mat
 materials/terrain/dirtcracked01.mat
 materials/terrain/dirtcracked01_sulfur.mat
-materials/terrain/dirtcracked02.mat
 materials/terrain/dirtcracked03.mat
 materials/terrain/dirtcracked03_ochre.mat
 materials/terrain/dirtfootprints01.mat
@@ -24758,7 +24779,6 @@ materials/terrain/dirtpacked10_brown.mat
 materials/terrain/dirtpacked10_mars.mat
 materials/terrain/dirtpacked10_red.mat
 materials/terrain/dirtpacked10_volcanic.mat
-materials/terrain/dirtpackedgravel01.mat
 materials/terrain/dirtsulfursplotchy01.mat
 materials/terrain/dirttallus01.mat
 materials/terrain/dirttropical01.mat
@@ -24807,7 +24827,6 @@ materials/terrain/grassweeds02_red.mat
 materials/terrain/grassweeds02_red_glow.mat
 materials/terrain/gravelasphaltroad01.mat
 materials/terrain/graveldecorative01.mat
-materials/terrain/gravellava01.mat
 materials/terrain/gravelroad01.mat
 materials/terrain/gravelroughsmall01.mat
 materials/terrain/gravelroughsmall01_purple.mat
@@ -24836,6 +24855,7 @@ materials/terrain/looserockssharp01_brown.mat
 materials/terrain/looserockssharp01_forest.mat
 materials/terrain/looserockssharp01_pale.mat
 materials/terrain/looserockssharp01_red.mat
+materials/terrain/mossclumpy01.mat
 materials/terrain/mossclumpy01_blue.mat
 materials/terrain/mossclumpy01_red.mat
 materials/terrain/mossclumpy01_yellow.mat
@@ -24867,15 +24887,6 @@ materials/terrain/rockfractured02_gray.mat
 materials/terrain/rockfractured02_purple.mat
 materials/terrain/rockfractured02_tan.mat
 materials/terrain/rockfractured03.mat
-materials/terrain/rocklavarough01.mat
-materials/terrain/rocklavasmooth01.mat
-materials/terrain/rocklavasmooth02.mat
-materials/terrain/rocklavasmooth03.mat
-materials/terrain/rocklayered01.mat
-materials/terrain/rocklayered02.mat
-materials/terrain/rocklayered03.mat
-materials/terrain/rocklayered04.mat
-materials/terrain/rocklayered05.mat
 materials/terrain/rocklayered06.mat
 materials/terrain/rocklayered06_black.mat
 materials/terrain/rocklayered06_blue.mat
@@ -24928,7 +24939,6 @@ materials/terrain/rockrough01.mat
 materials/terrain/rockrough01_brown.mat
 materials/terrain/rockrough01_gray.mat
 materials/terrain/rockrough01_pale.mat
-materials/terrain/rocksedcracked01.mat
 materials/terrain/rocksharp01.mat
 materials/terrain/rocksharp01_black.mat
 materials/terrain/rocksharp01_brown.mat
@@ -24952,9 +24962,6 @@ materials/terrain/sandfine01_purple.mat
 materials/terrain/sandfine01_red.mat
 materials/terrain/sandfine01_tan.mat
 materials/terrain/sandfineshells01.mat
-materials/terrain/sandlava01.mat
-materials/terrain/sandpacked01.mat
-materials/terrain/sandpacked02.mat
 materials/terrain/sandpacked03.mat
 materials/terrain/sandpacked03_black.mat
 materials/terrain/sandpacked03_gray.mat
@@ -25021,8 +25028,8 @@ materials/terrain/snowmounds01.mat
 materials/terrain/snowripples01.mat
 materials/terrain/snowrough01.mat
 materials/terrain/snowsmooth01.mat
+materials/terrain/sulfurroughbroken01.mat
 materials/terrain/trash01.mat
-materials/terrain/volcaniccrackedsandy01.mat
 materials/terrain/volcanicfolded01.mat
 materials/terrain/volcanicfolded02.mat
 materials/terrain/volcanicgravel01.mat
@@ -25100,6 +25107,7 @@ materials/test/gi/testgiextalbedogrey.mat
 materials/test/gi/testgisphereblue01.mat
 materials/test/gi/testgispheregreen01.mat
 materials/test/gi/testgispherered01.mat
+materials/test/glasscleantransparenttinted01.mat
 materials/test/lookdevscenea/chrome.mat
 materials/test/lookdevscenea/floormeshmat.mat
 materials/test/lookdevscenea/lambert.mat
@@ -25123,7 +25131,6 @@ materials/test/test_new_decal03_glow.mat
 materials/test/test_new_decal03a.mat
 materials/test/test_transmissive01_2s.mat
 materials/test/test_transmissive01_standard2s.mat
-materials/test/testcharacterblender1.mat
 materials/test/testcubemapreflection01.mat
 materials/test/testmateriallod/test_standard4layer01_lod.mat
 materials/test/testmetalgold.mat
@@ -25131,7 +25138,7 @@ materials/test/testnormalmapsplittorture2l.mat
 materials/test/testnormalmaptorture2l.mat
 materials/test/testnormalmaptortureskin.mat
 materials/test/testtextureload/testtextureload_1layer_01.mat
-materials/test/transparencymattest/transparencytestmat_default.mat
+materials/treepalmcoconutleaves01blue.mat
 materials/water/watercalm.mat
 materials/water/watercalmfoam.mat
 materials/water/watercalmgrime.mat
@@ -25311,7 +25318,6 @@ materials/weapons/drumbeat/drumbeat_stock.mat
 materials/weapons/drumbeat/drumbeat_stockshort.mat
 materials/weapons/drumbeat/drumbeat_suppressor.mat
 materials/weapons/drumbeat/reticle_drumbeat_1.mat
-materials/weapons/envoy/envoy.mat
 materials/weapons/equinox/equinox_amp.mat
 materials/weapons/equinox/equinox_barrel.mat
 materials/weapons/equinox/equinox_battery.mat
@@ -25354,9 +25360,6 @@ materials/weapons/hardtarget/hardtarget_scope2.mat
 materials/weapons/hardtarget/hardtarget_scopedecals.mat
 materials/weapons/hardtarget/hardtarget_suppressor.mat
 materials/weapons/hardtarget/hardtarget_tacticalgrip.mat
-materials/weapons/heater/heater_decals.mat
-materials/weapons/heater/heater_receiver.mat
-materials/weapons/heater/heater_side.mat
 materials/weapons/impactgrenade/impactgrenade.mat
 materials/weapons/incendiarygrenade/incendiarygrenade.mat
 materials/weapons/incendiarygrenade/particlegrenade.mat
@@ -25451,6 +25454,7 @@ materials/weapons/lasercutter/lasercutter_worn/lasercutterworn_decals.mat
 materials/weapons/lasercutter/weaponui/lasercutter_batteryindicator.mat
 materials/weapons/lasercutter/weaponui/lasercutter_batteryindicator3.mat
 materials/weapons/lasercutter/weaponui/lasercutter_laserradiationwarning.mat
+materials/weapons/lasercutter/weaponui/lasercutter_screen.mat
 materials/weapons/lasercutter/weaponui/lasercutter_targetindicator.mat
 materials/weapons/lasercutter/weaponui/lasercutter_targetindicator3.mat
 materials/weapons/laserrifle/laserrifle_ammogauge.mat
@@ -25458,7 +25462,18 @@ materials/weapons/laserrifle/laserrifle_ammogauge_glow.mat
 materials/weapons/lawgiver/lawgiver_barrel.mat
 materials/weapons/lawgiver/lawgiver_recticleglass.mat
 materials/weapons/loredo/lawgiver/compendator.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/barrel.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/compensator.mat
 materials/weapons/loredo/lawgiver/freerangersrifle/grip.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/lasersight.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/longbarrel.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/muzzlebreak.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/rail.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/receiver.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/reconscope.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/reflexsight.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/shortscope.mat
+materials/weapons/loredo/lawgiver/freerangersrifle/supressor.mat
 materials/weapons/loredo/lawgiver/lawgiver_decals.mat
 materials/weapons/loredo/lawgiver/lawgiver_grip.mat
 materials/weapons/loredo/lawgiver/lawgiver_receiver.mat
@@ -25482,7 +25497,6 @@ materials/weapons/m1919/m1919_scope_red_dot.mat
 materials/weapons/m1919/m1919_scope_zoom.mat
 materials/weapons/m1919/m1919_slide_custom.mat
 materials/weapons/m1919/m1919_slide_standard.mat
-materials/weapons/maelstrom/6.5mmct.mat
 materials/weapons/maelstrom/65mmctlong_ammo.mat
 materials/weapons/maelstrom/ammocounter/maelstrom_ammocounter_ones.mat
 materials/weapons/maelstrom/ammocounter/maelstrom_ammocounter_tens.mat
@@ -25500,7 +25514,6 @@ materials/weapons/maelstrom/maelstrom_reflex_sight_glass.mat
 materials/weapons/maelstrom/maelstrom_reflexsight.mat
 materials/weapons/maelstrom/maelstrom_scope.mat
 materials/weapons/maelstrom/maelstrom_scopeknobs.mat
-materials/weapons/maelstrom/maelstrom_stock_standard.mat
 materials/weapons/maelstrom/maelstrom_stockstandard.mat
 materials/weapons/maelstrom/maelstrom_stocktactical.mat
 materials/weapons/maelstrom/maelstrom_suppressor.mat
@@ -25601,11 +25614,6 @@ materials/weapons/novalight/novalight_reticle.mat
 materials/weapons/novalight/novalight_slide.mat
 materials/weapons/orionrifle/ammocounter/orion_ammocounter_ones.mat
 materials/weapons/orionrifle/ammocounter/orion_ammocounter_tens.mat
-materials/weapons/orionrifle/orion_barrel.mat
-materials/weapons/orionrifle/orion_carryhandle.mat
-materials/weapons/orionrifle/orion_decals.mat
-materials/weapons/orionrifle/orion_grip.mat
-materials/weapons/orionrifle/orion_receiver.mat
 materials/weapons/orionrifle/orionrifle_barrel.mat
 materials/weapons/orionrifle/orionrifle_barrel_long.mat
 materials/weapons/orionrifle/orionrifle_carryhandle.mat
@@ -25758,7 +25766,6 @@ materials/weapons/sidestar/muzzlebreak.mat
 materials/weapons/sidestar/sidestar_grip_mods.mat
 materials/weapons/sidestar/sidestar_magazine.mat
 materials/weapons/sidestar/sidestar_magazine_drum.mat
-materials/weapons/sidestar/sidestar_magazine_large.mat
 materials/weapons/sidestar/sidestar_magazine_mods.mat
 materials/weapons/sidestar/sidestar_mod_laser.mat
 materials/weapons/sidestar/sidestar_mod_laserrecon.mat
@@ -25807,7 +25814,6 @@ materials/weapons/stinger_pistol/eon_reflexsight.mat
 materials/weapons/stinger_pistol/eon_reflexsight_reticle.mat
 materials/weapons/stinger_pistol/eon_suppressor.mat
 materials/weapons/stinger_pistol/eon_tritium.mat
-materials/weapons/teslapylonprojectile/teslapylonprojectile.mat
 materials/weapons/teslapylonprojectile/teslarocket_projectile.mat
 materials/weapons/tombstone/compensator.mat
 materials/weapons/tombstone/ironsight.mat
@@ -25828,7 +25834,6 @@ materials/weapons/urbaneagle/urbaneagle_barrel.mat
 materials/weapons/urbaneagle/urbaneagle_grips.mat
 materials/weapons/urbaneagle/urbaneagle_magazine.mat
 materials/weapons/urbaneagle/urbaneagle_magazine_mods.mat
-materials/weapons/urbaneagle/urbaneagle_magazine_tactical.mat
 materials/weapons/urbaneagle/urbaneagle_muzzles.mat
 materials/weapons/urbaneagle/urbaneagle_scope_short.mat
 materials/weapons/wakizashi/wakizashi.mat
