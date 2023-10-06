@@ -1024,8 +1024,20 @@ void Plot3D_TriShape::setMaterialProperties(
       mp.e.falloffParams[0] = float(std::cos(mp.e.falloffParams[0]));
       mp.e.falloffParams[1] = float(std::cos(mp.e.falloffParams[1]));
     }
-    if (BRANCH_UNLIKELY(m->flags & CE2Material::Flag_Glow))
-      mp.s.emissiveColor = m->emissiveSettings->emissiveTint;
+    if (BRANCH_UNLIKELY(m->flags & (CE2Material::Flag_Glow
+                                    | CE2Material::Flag_LayeredEmissivity)))
+    {
+      if (BRANCH_LIKELY(m->flags & CE2Material::Flag_Glow))
+      {
+        mp.s.emissiveColor = m->emissiveSettings->emissiveTint;
+      }
+      else
+      {
+        mp.s.emissiveColor =
+            FloatVector4(&(m->layeredEmissiveSettings->layer1Tint))
+            * (1.0f / 255.0f);
+      }
+    }
     if (BRANCH_UNLIKELY(m->flags & CE2Material::Flag_IsDecal))
     {
       if (m->flags & CE2Material::Flag_HasOpacity)
@@ -1040,7 +1052,8 @@ void Plot3D_TriShape::setMaterialProperties(
   DDSTexture  *defTxts = defaultTextures;
   unsigned int  txtEnableMask =
       0x003FU
-      | (flags & (CE2Material::Flag_Glow | CE2Material::Flag_Translucency));
+      | (flags & (CE2Material::Flag_Glow | CE2Material::Flag_Translucency))
+      | ((flags & CE2Material::Flag_LayeredEmissivity) << 1);
   if (BRANCH_UNLIKELY(!(renderMode & 2U) || debugMode))
     txtEnableMask &= (!((renderMode & 3U) || debugMode) ? 0x0085U : 0x0087U);
   txtEnableMask = txtEnableMask & ((flags << 2) | ~0x0004U);

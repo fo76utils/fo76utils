@@ -11,38 +11,112 @@ static const char *objectTypeStrings[7] =
 
 const char * CE2Material::materialFlagNames[32] =
 {
-  "Has opacity",
-  "Alpha uses vertex color",
-  "Is effect",
-  "Is decal",
-  "Two sided",
-  "Is vegetation",
-  "Layered emissivity",
-  "Emissive",
-  "Is translucent",
-  "Alpha detail blend mask",
-  "Dithered transparency",
-  "Ordered with previous",
-  "Alpha blending",
-  "Has vertex colors",
-  "Is water",
-  "Hidden",
-  "Has opacity component",
-  "Opacity layer 2 active",
-  "Opacity layer 3 active",
-  "Is terrain",
-  "Is hair",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  ""
+  "Has opacity",                        //  0 (0x00000001)
+  "Alpha uses vertex color",            //  1 (0x00000002)
+  "Is effect",                          //  2 (0x00000004)
+  "Is decal",                           //  3 (0x00000008)
+  "Two sided",                          //  4 (0x00000010)
+  "Is vegetation",                      //  5 (0x00000020)
+  "Layered emissivity",                 //  6 (0x00000040)
+  "Emissive",                           //  7 (0x00000080)
+  "Is translucent",                     //  8 (0x00000100)
+  "Alpha detail blend mask",            //  9 (0x00000200)
+  "Dithered transparency",              // 10 (0x00000400)
+  "Ordered with previous",              // 11 (0x00000800)
+  "Alpha blending",                     // 12 (0x00001000)
+  "Has vertex colors",                  // 13 (0x00002000)
+  "Is water",                           // 14 (0x00004000)
+  "Hidden",                             // 15 (0x00008000)
+  "Has opacity component",              // 16 (0x00010000)
+  "Opacity layer 2 active",             // 17 (0x00020000)
+  "Opacity layer 3 active",             // 18 (0x00040000)
+  "Is terrain",                         // 19 (0x00080000)
+  "Is hair",                            // 20 (0x00100000)
+  "",                                   // 21 (0x00200000)
+  "",                                   // 22 (0x00400000)
+  "",                                   // 23 (0x00800000)
+  "",                                   // 24 (0x01000000)
+  "",                                   // 25 (0x02000000)
+  "",                                   // 26 (0x04000000)
+  "",                                   // 27 (0x08000000)
+  "",                                   // 28 (0x10000000)
+  "",                                   // 29 (0x20000000)
+  "",                                   // 30 (0x40000000)
+  ""                                    // 31 (0x80000000)
+};
+
+const char * CE2Material::shaderModelNames[64] =
+{
+  "1LayerEffect",                       //  0
+  "1LayerEffectEmissive",               //  1
+  "1LayerEffectEmissiveOnly",           //  2
+  "1LayerEffectEmissiveOnlyRemap",      //  3
+  "1LayerEffectEmissiveRemap",          //  4
+  "1LayerEffectGlass",                  //  5
+  "1LayerEffectGlassNoFrost",           //  6
+  "1LayerEffectRemap",                  //  7
+  "1LayerEyebrow",                      //  8
+  "1LayerMouth",                        //  9
+  "1LayerPlanetDecal",                  // 10
+  "1LayerStandard",                     // 11
+  "1LayerStandardDecal",                // 12
+  "1LayerStandardDecalEmissive",        // 13
+  "2LayerEffect",                       // 14
+  "2LayerEffectEmissive",               // 15
+  "2LayerEffectEmissiveOnly",           // 16
+  "2LayerEffectEmissiveOnlyRemap",      // 17
+  "2LayerEffectEmissiveRemap",          // 18
+  "2LayerEffectRemap",                  // 19
+  "2LayerPlanetDecal",                  // 20
+  "2LayerStandard",                     // 21
+  "2LayerStandardEmissive",             // 22
+  "3LayerEffect",                       // 23
+  "3LayerEffectEmissive",               // 24
+  "3LayerEffectEmissiveOnly",           // 25
+  "3LayerPlanetDecal",                  // 26
+  "3LayerStandard",                     // 27
+  "3LayerStandardEmissive",             // 28
+  "4LayerPlanetDecal",                  // 29
+  "4LayerStandard",                     // 30
+  "BaseMaterial",                       // 31
+  "BodySkin1Layer",                     // 32
+  "BodySkin2Layer",                     // 33
+  "Character2Layer",                    // 34
+  "Character3Layer",                    // 35
+  "Character4Layer",                    // 36
+  "CloudCard",                          // 37
+  "ColorEmissive",                      // 38
+  "Debug",                              // 39
+  "Experimental",                       // 40
+  "Eye1Layer",                          // 41
+  "EyeWetness1Layer",                   // 42
+  "GlobalLayer",                        // 43
+  "Hair1Layer",                         // 44
+  "Invisible",                          // 45
+  "Occlusion",                          // 46
+  "PlanetaryRing",                      // 47
+  "Skin5Layer",                         // 48
+  "StarmapBodyEffect",                  // 49
+  "Terrain1Layer",                      // 50
+  "TerrainEmissive1Layer",              // 51
+  "TranslucentThin1Layer",              // 52
+  "TranslucentTwoSided1Layer",          // 53
+  "TwoSided1Layer",                     // 54
+  "Unknown",                            // 55
+  "VegetationEmissive1Layer",           // 56
+  "VegetationEmissive2Layer",           // 57
+  "VegetationStandard1Layer",           // 58
+  "VegetationStandard2Layer",           // 59
+  "VegetationTranslucent1Layer",        // 60
+  "VegetationTranslucent2Layer",        // 61
+  "Water",                              // 62
+  "Water1Layer"                         // 63
+};
+
+static const char *shaderRouteNames[8] =
+{
+  "Deferred", "Effect", "PlanetaryRing", "PrecomputedScattering",
+  "Water", "Unknown", "Unknown", "Unknown"
 };
 
 static const char *colorChannelNames[4] =
@@ -55,7 +129,7 @@ static const char *alphaBlendModeNames[4] =
   "Linear", "Additive", "PositionContrast", "None"
 };
 
-static const char *opacityModeNames[4] =
+static const char *blenderModeNames[4] =
 {
   "Lerp", "Additive", "Subtractive", "Multiplicative"
 };
@@ -105,6 +179,11 @@ static const char *decalBlendModeNames[2] =
 static const char *decalRenderLayerNames[2] =
 {
   "Top", "Middle"
+};
+
+static const char *maskSourceBlenderNames[4] =
+{
+  "None", "Blender1", "Blender2", "Blender3"
 };
 
 static
@@ -165,6 +244,12 @@ void CE2Material::printObjectInfo(
     }
     buf += '\n';
   }
+  if (shaderModel != 31 || shaderRoute != 0)
+  {
+    printToStringBuf(buf, indentCnt, "Shader model: %s, route: %s\n",
+                     shaderModelNames[shaderModel & 63],
+                     shaderRouteNames[shaderRoute & 7]);
+  }
   if (flags & Flag_HasOpacity)
   {
     printToStringBuf(buf, indentCnt, "Alpha threshold: %f\n", alphaThreshold);
@@ -204,7 +289,7 @@ void CE2Material::printObjectInfo(
       printToStringBuf(buf, indentCnt, "Opacity blender 1: %d\n",
                        int(opacityBlender1));
       printToStringBuf(buf, indentCnt, "Opacity blender 1 mode: %s\n",
-                       opacityModeNames[opacityBlender1Mode & 3]);
+                       blenderModeNames[opacityBlender1Mode & 3]);
     }
     if (flags & Flag_OpacityLayer3Active)
     {
@@ -213,7 +298,7 @@ void CE2Material::printObjectInfo(
       printToStringBuf(buf, indentCnt, "Opacity blender 2: %d\n",
                        int(opacityBlender2));
       printToStringBuf(buf, indentCnt, "Opacity blender 2 mode: %s\n",
-                       opacityModeNames[opacityBlender2Mode & 3]);
+                       blenderModeNames[opacityBlender2Mode & 3]);
     }
     printToStringBuf(buf, indentCnt, "Specular opacity override: %f\n",
                      specularOpacityOverride);
@@ -292,16 +377,9 @@ void CE2Material::printObjectInfo(
                      emissiveSettings->emissiveTint[1],
                      emissiveSettings->emissiveTint[2],
                      emissiveSettings->emissiveTint[3]);
-    if (!emissiveSettings->maskSourceBlender)
-    {
-      printToStringBuf(buf, indentCnt, "Emissive mask source blender: None\n");
-    }
-    else
-    {
-      printToStringBuf(buf, indentCnt,
-                       "Emissive mask source blender: Blender%d\n",
-                       int(emissiveSettings->maskSourceBlender));
-    }
+    printToStringBuf(buf, indentCnt, "Emissive mask source blender: %s\n",
+                     maskSourceBlenderNames[
+                         emissiveSettings->maskSourceBlender & 3]);
     printToStringBuf(buf, indentCnt, "Adaptive emittance: %s\n",
                      (!emissiveSettings->adaptiveEmittance ? "False" : "True"));
     printToStringBuf(buf, indentCnt, "Enable adaptive limits: %s\n",
@@ -317,6 +395,77 @@ void CE2Material::printObjectInfo(
                      emissiveSettings->minOffset);
     printToStringBuf(buf, indentCnt, "Emittance maximum offset: %f\n",
                      emissiveSettings->maxOffset);
+  }
+  if ((flags & Flag_LayeredEmissivity) && layeredEmissiveSettings &&
+      layeredEmissiveSettings->isEnabled)
+  {
+    printToStringBuf(buf, indentCnt, "Layered emissivity layer 1 index: %d\n",
+                     int(layeredEmissiveSettings->layer1Index));
+    FloatVector4  c(&(layeredEmissiveSettings->layer1Tint));
+    c *= (1.0f / 255.0f);
+    printToStringBuf(buf, indentCnt,
+                     "Layered emissivity layer 1 tint: %f, %f, %f, %f\n",
+                     c[0], c[1], c[2], c[3]);
+    printToStringBuf(buf, indentCnt, "Layered emissivity layer 1 mask: %s\n",
+                     maskSourceBlenderNames[
+                         layeredEmissiveSettings->layer1MaskIndex & 3]);
+    if (layeredEmissiveSettings->layer2Active)
+    {
+      printToStringBuf(buf, indentCnt, "Layered emissivity layer 2 index: %d\n",
+                       int(layeredEmissiveSettings->layer2Index));
+      c = FloatVector4(&(layeredEmissiveSettings->layer2Tint));
+      c *= (1.0f / 255.0f);
+      printToStringBuf(buf, indentCnt,
+                       "Layered emissivity layer 2 tint: %f, %f, %f, %f\n",
+                       c[0], c[1], c[2], c[3]);
+      printToStringBuf(buf, indentCnt, "Layered emissivity layer 2 mask: %s\n",
+                       maskSourceBlenderNames[
+                           layeredEmissiveSettings->layer2MaskIndex & 3]);
+      printToStringBuf(buf, indentCnt,
+                       "Layered emissivity blender 1 index: %d\n",
+                       int(layeredEmissiveSettings->blender1Index));
+      printToStringBuf(buf, indentCnt,
+                       "Layered emissivity blender 1 mode: %s\n",
+                       blenderModeNames[
+                           layeredEmissiveSettings->blender1Mode & 3]);
+    }
+    if (layeredEmissiveSettings->layer3Active)
+    {
+      printToStringBuf(buf, indentCnt, "Layered emissivity layer 3 index: %d\n",
+                       int(layeredEmissiveSettings->layer3Index));
+      c = FloatVector4(&(layeredEmissiveSettings->layer3Tint));
+      c *= (1.0f / 255.0f);
+      printToStringBuf(buf, indentCnt,
+                       "Layered emissivity layer 3 tint: %f, %f, %f, %f\n",
+                       c[0], c[1], c[2], c[3]);
+      printToStringBuf(buf, indentCnt, "Layered emissivity layer 3 mask: %s\n",
+                       maskSourceBlenderNames[
+                           layeredEmissiveSettings->layer3MaskIndex & 3]);
+      printToStringBuf(buf, indentCnt,
+                       "Layered emissivity blender 2 index: %d\n",
+                       int(layeredEmissiveSettings->blender2Index));
+      printToStringBuf(buf, indentCnt,
+                       "Layered emissivity blender 2 mode: %s\n",
+                       blenderModeNames[
+                           layeredEmissiveSettings->blender2Mode & 3]);
+    }
+    printToStringBuf(buf, indentCnt, "Layered emissivity: adaptive: %s\n",
+                     (!layeredEmissiveSettings->adaptiveEmittance ?
+                      "False" : "True"));
+    printToStringBuf(buf, indentCnt,
+                     "Layered emissivity: adaptive limits: %s\n",
+                     (!layeredEmissiveSettings->enableAdaptiveLimits ?
+                      "False" : "True"));
+    printToStringBuf(buf, indentCnt, "Layered emissive clip threshold: %f\n",
+                     layeredEmissiveSettings->clipThreshold);
+    printToStringBuf(buf, indentCnt, "Layered luminous emittance: %f\n",
+                     layeredEmissiveSettings->luminousEmittance);
+    printToStringBuf(buf, indentCnt, "Layered emittance exposure offset: %f\n",
+                     layeredEmissiveSettings->exposureOffset);
+    printToStringBuf(buf, indentCnt, "Layered emittance minimum offset: %f\n",
+                     layeredEmissiveSettings->minOffset);
+    printToStringBuf(buf, indentCnt, "Layered emittance maximum offset: %f\n",
+                     layeredEmissiveSettings->maxOffset);
   }
   if ((flags & Flag_Translucency) && translucencySettings &&
       translucencySettings->isEnabled)
@@ -386,6 +535,25 @@ void CE2Material::printObjectInfo(
                        "Projected decal uses G buffer normals: %s\n",
                        (!decalSettings->useGBufferNormals ? "False" : "True"));
     }
+  }
+  if ((flags & Flag_IsVegetation) && vegetationSettings &&
+      vegetationSettings->isEnabled)
+  {
+    printToStringBuf(buf, indentCnt, "Vegetation leaf frequency: %f\n",
+                     vegetationSettings->leafFrequency);
+    printToStringBuf(buf, indentCnt, "Vegetation leaf amplitude: %f\n",
+                     vegetationSettings->leafAmplitude);
+    printToStringBuf(buf, indentCnt, "Vegetation branch flexibility: %f\n",
+                     vegetationSettings->branchFlexibility);
+    printToStringBuf(buf, indentCnt, "Vegetation trunk flexibility: %f\n",
+                     vegetationSettings->trunkFlexibility);
+    printToStringBuf(buf, indentCnt,
+                     "Vegetation terrain blend strength (deprecated): %f\n",
+                     vegetationSettings->terrainBlendStrength);
+    printToStringBuf(buf, indentCnt,
+                     "Vegetation terrain blend gradient factor "
+                     "(deprecated): %f\n",
+                     vegetationSettings->terrainBlendGradientFactor);
   }
   for (unsigned int i = 0U; i < maxLayers && layerMask >= (1U << i); i++)
   {

@@ -227,8 +227,171 @@ static inline bool parseBlenderNumber(unsigned char& n, const std::string& s)
 void CE2MaterialDB::ComponentInfo::readLayeredEmissivityComponent(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  CE2Material *m = (CE2Material *) 0;
+  CE2Material::LayeredEmissiveSettings  *sp =
+      (CE2Material::LayeredEmissiveSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    sp = reinterpret_cast< CE2Material::LayeredEmissiveSettings * >(
+             p.cdb.allocateSpace(sizeof(CE2Material::LayeredEmissiveSettings),
+                                 m->layeredEmissiveSettings));
+    if (!m->layeredEmissiveSettings)
+    {
+      sp->isEnabled = false;
+      sp->layer1Index = 0;              // "MATERIAL_LAYER_0"
+      sp->layer1MaskIndex = 0;          // "None"
+      sp->layer2Active = false;
+      sp->layer2Index = 1;              // "MATERIAL_LAYER_1"
+      sp->layer2MaskIndex = 0;
+      sp->blender1Index = 0;            // "BLEND_LAYER_0"
+      sp->blender1Mode = 0;             // "Lerp"
+      sp->layer3Active = false;
+      sp->layer3Index = 2;              // "MATERIAL_LAYER_2"
+      sp->layer3MaskIndex = 0;
+      sp->blender2Index = 1;            // "BLEND_LAYER_1"
+      sp->blender2Mode = 0;
+      sp->adaptiveEmittance = false;
+      sp->enableAdaptiveLimits = false;
+      sp->layer1Tint = 0xFFFFFFFFU;
+      sp->layer2Tint = 0xFFFFFFFFU;
+      sp->layer3Tint = 0xFFFFFFFFU;
+      sp->clipThreshold = 0.0f;
+      sp->luminousEmittance = 100.0f;
+      sp->exposureOffset = 0.0f;
+      sp->maxOffset = 1.0f;
+      sp->minOffset = 0.0f;
+    }
+    m->layeredEmissiveSettings = sp;
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 22U, isDiff); )
+  {
+    if ((1U << n) & 0x00120411U)        // 0, 4, 10, 17, 20: booleans
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!m)
+        continue;
+      switch (n)
+      {
+        case 0U:
+          m->setFlags(CE2Material::Flag_LayeredEmissivity, tmp);
+          sp->isEnabled = tmp;
+          break;
+        case 4U:
+          sp->layer2Active = tmp;
+          break;
+        case 10U:
+          sp->layer3Active = tmp;
+          break;
+        case 17U:
+          sp->adaptiveEmittance = tmp;
+          break;
+        case 20U:
+          sp->enableAdaptiveLimits = tmp;
+          break;
+      }
+    }
+    else if ((1U << n) & 0x006D0000U)   // 16, 18, 19, 21, 22: floats
+    {
+      float   tmp;
+      if (!p.readFloat(tmp))
+        break;
+      if (!sp)
+        continue;
+      switch (n)
+      {
+        case 16U:
+          sp->clipThreshold = tmp;
+          break;
+        case 18U:
+          sp->luminousEmittance = tmp;
+          break;
+        case 19U:
+          sp->exposureOffset = tmp;
+          break;
+        case 21U:
+          sp->maxOffset = tmp;
+          break;
+        case 22U:
+          sp->minOffset = tmp;
+          break;
+      }
+    }
+    else if ((1U << n) & 0x00001044U)   // 2, 6, 12: colors
+    {
+      if (!sp)
+      {
+        FloatVector4  tmp(0.0f);
+        readColorValue(tmp, p, isDiff);
+      }
+      else
+      {
+        if (n == 2U)
+          readColorValue(sp->layer1Tint, p, isDiff);
+        else if (n == 6U)
+          readColorValue(sp->layer2Tint, p, isDiff);
+        else
+          readColorValue(sp->layer3Tint, p, isDiff);
+      }
+    }
+    else if ((1U << n) & 0x00000822U)   // 1, 5, 11: layer numbers
+    {
+      if (!p.readString())
+        break;
+      unsigned char tmp = 0;
+      if (!(sp && parseLayerNumber(tmp, p.stringBuf)))
+        continue;
+      if (n == 1U)
+        sp->layer1Index = tmp;
+      else if (n == 5U)
+        sp->layer2Index = tmp;
+      else
+        sp->layer3Index = tmp;
+    }
+    else if ((1U << n) & 0x00002088U)   // 3, 7, 13: mask numbers
+    {
+      unsigned char tmp = 0xFF;
+      if (!p.readEnum(tmp, "\004None\010Blender1\010Blender2\010Blender3"))
+        break;
+      if (!(sp && tmp != 0xFF))
+        continue;
+      if (n == 3U)
+        sp->layer1MaskIndex = tmp;
+      else if (n == 7U)
+        sp->layer2MaskIndex = tmp;
+      else
+        sp->layer3MaskIndex = tmp;
+    }
+    else if ((1U << n) & 0x00004100U)   // 8, 14: blender numbers
+    {
+      if (!p.readString())
+        break;
+      unsigned char tmp = 0;
+      if (!(sp && parseBlenderNumber(tmp, p.stringBuf)))
+        continue;
+      if (n == 8U)
+        sp->blender1Index = tmp;
+      else
+        sp->blender2Index = tmp;
+    }
+    else                                // 9, 15: blender modes
+    {
+      unsigned char tmp = 0xFF;
+      if (!p.readEnum(tmp,
+                      "\004Lerp\010Additive\013Subtractive\016Multiplicative"))
+      {
+        break;
+      }
+      if (!(sp && tmp != 0xFF))
+        continue;
+      if (n == 9U)
+        sp->blender1Mode = tmp;
+      else
+        sp->blender2Mode = tmp;
+    }
+  }
 }
 
 // BSMaterial::AlphaBlenderSettings
@@ -608,19 +771,11 @@ void CE2MaterialDB::ComponentInfo::readDirectory(
 void CE2MaterialDB::ComponentInfo::readWaterSettingsComponent(
     ComponentInfo& p, bool isDiff)
 {
-  CE2Material *m = (CE2Material *) 0;
-  CE2Material::WaterSettings  *sp = (CE2Material::WaterSettings *) 0;
   if (BRANCH_LIKELY(p.o->type == 1))
   {
-    m = static_cast< CE2Material * >(p.o);
-    sp = reinterpret_cast< CE2Material::WaterSettings * >(
-             p.cdb.allocateSpace(sizeof(CE2Material::WaterSettings),
-                                 m->waterSettings));
-    if (!m->waterSettings)
-    {
-      m->setFlags(CE2Material::Flag_IsWater, true);
-    }
-    m->waterSettings = sp;
+    CE2Material *m = static_cast< CE2Material * >(p.o);
+    m->setFlags(CE2Material::Flag_IsWater | CE2Material::Flag_AlphaBlending,
+                true);
   }
 }
 
@@ -1023,8 +1178,21 @@ bool CE2MaterialDB::ComponentInfo::readColorValue(
   bool    r = false;
   for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
     r = r | readXMFLOAT4(c, p, isDiff);
-  if (r)
+  if (BRANCH_LIKELY(r))
     c.maxValues(FloatVector4(0.0f)).minValues(FloatVector4(1.0f));
+  return r;
+}
+
+bool CE2MaterialDB::ComponentInfo::readColorValue(
+    std::uint32_t& c, ComponentInfo& p, bool isDiff)
+{
+  FloatVector4  tmp(&c);
+  tmp *= (1.0f / 255.0f);
+  bool    r = false;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+    r = r | readXMFLOAT4(tmp, p, isDiff);
+  if (BRANCH_LIKELY(r))
+    c = std::uint32_t(tmp * 255.0f);
   return r;
 }
 
@@ -1496,22 +1664,15 @@ void CE2MaterialDB::ComponentInfo::readTextureReplacement(
         else
           txtSet->textureReplacementMask |= (1U << p.componentIndex);
       }
+      continue;
     }
+    FloatVector4  c(0.0f);
+    if (txtSet)
+      readColorValue(txtSet->textureReplacements[p.componentIndex], p, isDiff);
+    else if (blender)
+      readColorValue(blender->textureReplacement, p, isDiff);
     else
-    {
-      FloatVector4  c(0.0f);
-      if (txtSet)
-        c = FloatVector4(&(txtSet->textureReplacements[p.componentIndex]));
-      else if (blender)
-        c = FloatVector4(&(blender->textureReplacement));
-      c *= (1.0f / 255.0f);
       readColorValue(c, p, isDiff);
-      c *= 255.0f;
-      if (txtSet)
-        txtSet->textureReplacements[p.componentIndex] = std::uint32_t(c);
-      else if (blender)
-        blender->textureReplacement = std::uint32_t(c);
-    }
   }
 }
 
@@ -1552,8 +1713,68 @@ void CE2MaterialDB::ComponentInfo::readLayeredEdgeFalloffComponent(
 void CE2MaterialDB::ComponentInfo::readVegetationSettingsComponent(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  CE2Material *m = (CE2Material *) 0;
+  CE2Material::VegetationSettings *sp = (CE2Material::VegetationSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    sp = reinterpret_cast< CE2Material::VegetationSettings * >(
+             p.cdb.allocateSpace(sizeof(CE2Material::VegetationSettings),
+                                 m->vegetationSettings));
+    if (!m->vegetationSettings)
+    {
+      sp->isEnabled = false;
+      sp->leafFrequency = 0.0f;
+      sp->leafAmplitude = 0.0f;
+      sp->branchFlexibility = 0.0f;
+      sp->trunkFlexibility = 0.0f;
+      sp->terrainBlendStrength = 0.0f;
+      sp->terrainBlendGradientFactor = 0.0f;
+    }
+    m->vegetationSettings = sp;
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 6U, isDiff); )
+  {
+    if (n == 0U)
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!m)
+        continue;
+      m->setFlags(CE2Material::Flag_IsVegetation, tmp);
+      sp->isEnabled = tmp;
+    }
+    else
+    {
+      float   tmp;
+      if (!p.readFloat(tmp))
+        break;
+      if (!sp)
+        continue;
+      switch (n)
+      {
+        case 1U:
+          sp->leafFrequency = tmp;
+          break;
+        case 2U:
+          sp->leafAmplitude = tmp;
+          break;
+        case 3U:
+          sp->branchFlexibility = tmp;
+          break;
+        case 4U:
+          sp->trunkFlexibility = tmp;
+          break;
+        case 5U:
+          sp->terrainBlendStrength = tmp;
+          break;
+        case 6U:
+          sp->terrainBlendGradientFactor = tmp;
+          break;
+      }
+    }
+  }
 }
 
 // BSMaterial::TextureResolutionSetting
@@ -1604,8 +1825,17 @@ void CE2MaterialDB::ComponentInfo::readMaterialUVStreamPropertyNode(
 void CE2MaterialDB::ComponentInfo::readShaderRouteComponent(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    unsigned char tmp = 7;
+    if (!p.readEnum(tmp, "\010Deferred\006Effect\015PlanetaryRing"
+                         "\025PrecomputedScattering\005Water"))
+    {
+      break;
+    }
+    if (p.o->type == 1)
+      static_cast< CE2Material * >(p.o)->shaderRoute = tmp;
+  }
 }
 
 // BSBind::FloatLerpController
@@ -2166,8 +2396,30 @@ void CE2MaterialDB::ComponentInfo::readEmittanceSettings(
 void CE2MaterialDB::ComponentInfo::readShaderModelComponent(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    if (!p.readString())
+      break;
+    if (p.o->type != 1)
+      continue;
+    CE2Material *m = static_cast< CE2Material * >(p.o);
+    size_t  n0 = 0;
+    size_t  n2 = sizeof(CE2Material::shaderModelNames) / sizeof(char *);
+    while ((n2 - n0) >= 2)
+    {
+      size_t  n1 = (n0 + n2) >> 1;
+      if (p.stringBuf.compare(CE2Material::shaderModelNames[n1]) < 0)
+        n2 = n1;
+      else
+        n0 = n1;
+    }
+    unsigned char tmp = 55;             // "Unknown"
+    if (p.stringBuf == CE2Material::shaderModelNames[n0])
+      tmp = (unsigned char) n0;
+    m->shaderModel = tmp;
+    m->setFlags(CE2Material::Flag_TwoSided,
+                bool((1ULL << tmp) & 0xF060000000000000ULL));
+  }
 }
 
 // BSResource::ID

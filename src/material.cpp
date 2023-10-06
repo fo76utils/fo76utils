@@ -180,6 +180,7 @@ void CE2MaterialDB::initializeObject(
         for (size_t i = 0; i < CE2Material::maxLayers; i++)
           p->layers[i] = (CE2Material::Layer *) 0;
         p->alphaThreshold = 1.0f / 3.0f;
+        p->shaderModel = 31;            // "BaseMaterial"
         p->alphaSourceLayer = 0;        // "MATERIAL_LAYER_0"
         p->alphaBlendMode = 0;          // "Linear"
         p->alphaVertexColorChannel = 0; // "Red"
@@ -188,6 +189,7 @@ void CE2MaterialDB::initializeObject(
         p->alphaPosition = 0.5f;
         p->alphaContrast = 0.0f;
         p->alphaUVStream = (CE2Material::UVStream *) 0;
+        p->shaderRoute = 0;             // "Deferred"
         p->opacityLayer1 = 0;           // "MATERIAL_LAYER_0"
         p->opacityLayer2 = 1;           // "MATERIAL_LAYER_1"
         p->opacityBlender1 = 0;         // "BLEND_LAYER_0"
@@ -202,9 +204,10 @@ void CE2MaterialDB::initializeObject(
           p->lodMaterials[i] = (CE2Material *) 0;
         p->effectSettings = (CE2Material::EffectSettings *) 0;
         p->emissiveSettings = (CE2Material::EmissiveSettings *) 0;
+        p->layeredEmissiveSettings = (CE2Material::LayeredEmissiveSettings *) 0;
         p->translucencySettings = (CE2Material::TranslucencySettings *) 0;
         p->decalSettings = (CE2Material::DecalSettings *) 0;
-        p->waterSettings = (CE2Material::WaterSettings *) 0;
+        p->vegetationSettings = (CE2Material::VegetationSettings *) 0;
       }
       break;
     case 2:

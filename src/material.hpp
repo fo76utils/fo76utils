@@ -209,6 +209,33 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     float   maxOffset;
     float   minOffset;
   };
+  struct LayeredEmissiveSettings
+  {
+    bool    isEnabled;
+    unsigned char layer1Index;          // "MATERIAL_LAYER_n"
+    unsigned char layer1MaskIndex;      // 0: "None", 1: "Blender1"
+    bool    layer2Active;
+    unsigned char layer2Index;
+    unsigned char layer2MaskIndex;
+    unsigned char blender1Index;        // "BLEND_LAYER_n"
+    // 0 = "Lerp", 1 = "Additive", 2 = "Subtractive", 3 = "Multiplicative"
+    unsigned char blender1Mode;
+    bool    layer3Active;
+    unsigned char layer3Index;
+    unsigned char layer3MaskIndex;
+    unsigned char blender2Index;
+    unsigned char blender2Mode;
+    bool    adaptiveEmittance;
+    bool    enableAdaptiveLimits;
+    std::uint32_t layer1Tint;           // R, G, B, overall scale
+    std::uint32_t layer2Tint;
+    std::uint32_t layer3Tint;
+    float   clipThreshold;
+    float   luminousEmittance;
+    float   exposureOffset;
+    float   maxOffset;
+    float   minOffset;
+  };
   struct TranslucencySettings
   {
     bool    isEnabled;
@@ -243,14 +270,24 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     unsigned char renderLayer;
     bool    useGBufferNormals;
   };
-  struct WaterSettings
+  struct VegetationSettings
   {
+    bool    isEnabled;
+    float   leafFrequency;
+    float   leafAmplitude;
+    float   branchFlexibility;
+    float   trunkFlexibility;
+    float   terrainBlendStrength;       // the last two variables are deprecated
+    float   terrainBlendGradientFactor;
   };
   static const char *materialFlagNames[32];
+  static const char *shaderModelNames[64];
   std::uint32_t flags;
   std::uint32_t layerMask;
   const Layer   *layers[maxLayers];
   float   alphaThreshold;
+  // index to shaderModelNames defined in mat_dump.cpp, default: "BaseMaterial"
+  unsigned char shaderModel;
   unsigned char alphaSourceLayer;
   // 0 = "Linear" (default), 1 = "Additive", 2 = "PositionContrast", 3 = "None"
   unsigned char alphaBlendMode;
@@ -260,6 +297,9 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   float   alphaPosition;
   float   alphaContrast;
   const UVStream  *alphaUVStream;               // can be NULL
+  // 0 = "Deferred" (default), 1 = "Effect", 2 = "PlanetaryRing",
+  // 3 = "PrecomputedScattering", 4 = "Water"
+  unsigned char shaderRoute;
   unsigned char opacityLayer1;
   unsigned char opacityLayer2;
   unsigned char opacityBlender1;
@@ -271,11 +311,13 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   float   specularOpacityOverride;
   const Blender *blenders[maxBlenders];
   const CE2Material *lodMaterials[maxLODMaterials];
-  const EffectSettings  *effectSettings;        // valid if Flag_IsEffect is set
-  const EmissiveSettings  *emissiveSettings;    // valid if Flag_Glow is set
-  const TranslucencySettings  *translucencySettings;    // for Flag_Translucency
-  const DecalSettings   *decalSettings;         // valid if Flag_IsDecal is set
-  const WaterSettings   *waterSettings;         // valid if Flag_IsWater is set
+  // the following pointers are valid if the corresponding bit in flags is set
+  const EffectSettings  *effectSettings;
+  const EmissiveSettings  *emissiveSettings;
+  const LayeredEmissiveSettings *layeredEmissiveSettings;
+  const TranslucencySettings  *translucencySettings;
+  const DecalSettings   *decalSettings;
+  const VegetationSettings  *vegetationSettings;
   inline void setFlags(std::uint32_t m, bool n)
   {
     flags = (flags & ~m) | ((0U - std::uint32_t(n)) & m);
@@ -381,6 +423,7 @@ class CE2MaterialDB
     static void readParamBool(ComponentInfo& p, bool isDiff);
     static void readFloat3DCurveController(ComponentInfo& p, bool isDiff);
     static bool readColorValue(FloatVector4& c, ComponentInfo& p, bool isDiff);
+    static bool readColorValue(std::uint32_t& c, ComponentInfo& p, bool isDiff);
     static void readColor(ComponentInfo& p, bool isDiff);
     static bool readSourceTextureWithReplacement(
         const std::string*& texturePath, std::uint32_t& textureReplacement,
