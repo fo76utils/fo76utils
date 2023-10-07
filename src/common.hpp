@@ -193,6 +193,38 @@ inline void hashFunctionUInt64(std::uint64_t& h, std::uint64_t m)
 #endif
 }
 
+extern const std::uint32_t crc32Table_EDB88320[256];
+#if !ENABLE_X86_64_AVX
+extern const std::uint32_t crc32Table_82F63B78[256];
+#endif
+
+inline void hashFunctionCRC32(std::uint32_t& h, unsigned char c)
+{
+  h = (h >> 8) ^ crc32Table_EDB88320[(h ^ c) & 0xFFU];
+}
+
+template< typename T > inline void hashFunctionCRC32C(std::uint32_t& h, T c)
+{
+#if ENABLE_X86_64_AVX
+  if (sizeof(T) == 8)
+  {
+    std::uint64_t v = h;
+    __asm__ ("crc32 %1, %0" : "+r" (v) : "r" (std::uint64_t(c)));
+    h = std::uint32_t(v);
+    return;
+  }
+  if (sizeof(T) == 4)
+    __asm__ ("crc32 %1, %0" : "+r" (h) : "r" (std::uint32_t(c)));
+  else if (sizeof(T) == 2)
+    __asm__ ("crc32 %1, %0" : "+r" (h) : "r" (std::uint16_t(c)));
+  else if (sizeof(T) == 1)
+    __asm__ ("crc32 %1, %0" : "+r" (h) : "r" (std::uint8_t(c)));
+#else
+  for (size_t i = 0; i < sizeof(T); i++, c = c >> 8)
+    h = (h >> 8) ^ crc32Table_82F63B78[(h ^ c) & 0xFFU];
+#endif
+}
+
 inline unsigned long long rgba32ToRBGA64(unsigned int c)
 {
   return ((unsigned long long) (c & 0x00FF00FFU)
