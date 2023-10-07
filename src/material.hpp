@@ -4,8 +4,10 @@
 
 #include "common.hpp"
 #include "fp32vec4.hpp"
+#include "filebuf.hpp"
 #include "ba2file.hpp"
 #include "ddstxt.hpp"
+#include "cdb_file.hpp"
 
 // CE2Material (.mat file), object type 1
 //   |
@@ -391,12 +393,13 @@ class CE2MaterialDB
     typedef void (*ReadFunctionType)(ComponentInfo&, bool);
     static const ReadFunctionType readFunctionTable[64];
     CE2MaterialDB&  cdb;
-    const std::vector< CE2MaterialObject * >& objectTable;
     FileBuffer    buf;
     CE2MaterialObject *o;
     unsigned int  componentIndex;
     unsigned int  componentType;
     std::string   stringBuf;
+    std::vector< CE2MaterialObject * >  objectTable;
+    CDBFile&      cdbBuf;
     static void readLayeredEmissivityComponent(ComponentInfo& p, bool isDiff);
     static void readAlphaBlenderSettings(ComponentInfo& p, bool isDiff);
     static void readBSFloatCurve(ComponentInfo& p, bool isDiff);
@@ -501,10 +504,10 @@ class CE2MaterialDB
     static void readCollisionComponent(ComponentInfo& p, bool isDiff);
     static void readTerrainSettingsComponent(ComponentInfo& p, bool isDiff);
     static void readLODMaterialID(ComponentInfo& p, bool isDiff);
-    ComponentInfo(CE2MaterialDB& p, const std::vector< CE2MaterialObject * >& t)
+    ComponentInfo(CE2MaterialDB& p, CDBFile& fileBuf)
       : cdb(p),
-        objectTable(t),
-        buf((unsigned char *) 0, 0, 0)
+        buf((unsigned char *) 0, 0, 0),
+        cdbBuf(fileBuf)
     {
     }
     inline bool getFieldNumber(unsigned int& n, unsigned int nMax, bool isDiff);
@@ -525,13 +528,9 @@ class CE2MaterialDB
     stringBufMask = 0xFFFF,
     stringHashMask = 0x001FFFFF
   };
-  static const std::uint32_t  crc32Table[256];
-  static const char *stringTable[451];
   // objectNameHashMask + 1 elements
   std::vector< CE2MaterialObject * >  objectNameMap;
   std::vector< std::vector< unsigned char > > objectBuffers;
-  // STRT chunk offset | (stringTable index << 32)
-  std::vector< std::uint64_t >  stringMap;
   // stringHashMask + 1 elements
   std::vector< std::uint32_t >  storedStringParams;
   // stringBuffers[0][0] = ""
@@ -539,8 +538,6 @@ class CE2MaterialDB
   // returns extension of fileName (0x0074616D for ".mat")
   static std::uint32_t calculateHash(std::uint64_t& h,
                                      const std::string& fileName);
-  static int findString(const char *s);
-  int findString(unsigned int strtOffs) const;
   inline const CE2MaterialObject *findObject(
       const std::vector< CE2MaterialObject * >& t, unsigned int objectID) const;
   void initializeObject(CE2MaterialObject *o,
@@ -554,30 +551,16 @@ class CE2MaterialDB
   // type = 1: DDS file name (prefix = "textures/", suffix = ".dds")
   const std::string *readStringParam(std::string& stringBuf, FileBuffer& buf,
                                      size_t len, int type);
-  // returns the number of components, the position of buf is set to the
-  // beginning of the component data
-  size_t readTables(const unsigned char*& componentInfoPtr,
-                    std::vector< CE2MaterialObject * >& objectTable,
-                    FileBuffer& buf);
-  // should be called after readTables()
-  void readComponents(
-      FileBuffer& buf,
-      const unsigned char *componentInfoPtr, size_t componentCnt,
-      const std::vector< CE2MaterialObject * >& objectTable);
  public:
   CE2MaterialDB();
   // fileName defaults to "materials/materialsbeta.cdb", it can be a comma
   // separated list of multiple CDB file names
   CE2MaterialDB(const BA2File& ba2File, const char *fileName = (char *) 0);
   virtual ~CE2MaterialDB();
-  void loadCDBFile(FileBuffer& buf);
+  void loadCDBFile(CDBFile& buf);
   void loadCDBFile(const unsigned char *buf, size_t bufSize);
   void loadCDBFile(const BA2File& ba2File, const char *fileName = (char *) 0);
   const CE2Material *findMaterial(const std::string& fileName) const;
-#if 0
-  static void printTables(const BA2File& ba2File,
-                          const char *fileName = (char *) 0);
-#endif
 };
 
 #endif

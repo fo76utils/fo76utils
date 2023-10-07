@@ -468,7 +468,7 @@ void CE2MaterialDB::ComponentInfo::readAlphaBlenderSettings(
 }
 
 // BSFloatCurve
-//   -253  Controls
+//   List  Controls
 //   Float  MaxInput
 //   Float  MinInput
 //   Float  InputDistance
@@ -573,8 +573,8 @@ void CE2MaterialDB::ComponentInfo::readWaterFoamSettingsComponent(
 
 // BSMaterial::FlipbookComponent
 //   Bool  IsAFlipbook
-//   Int32  Columns
-//   Int32  Rows
+//   UInt32  Columns
+//   UInt32  Rows
 //   Float  FPS
 //   Bool  Loops
 
@@ -586,7 +586,7 @@ void CE2MaterialDB::ComponentInfo::readFlipbookComponent(
 }
 
 // BSMaterial::PhysicsMaterialType
-//   Int32  Value
+//   UInt32  Value
 
 void CE2MaterialDB::ComponentInfo::readPhysicsMaterialType(
     ComponentInfo& p, bool isDiff)
@@ -636,7 +636,7 @@ void CE2MaterialDB::ComponentInfo::readUVStreamID(
 // BSMaterial::DecalSettingsComponent
 //   Bool  IsDecal
 //   Float  MaterialOverallAlpha
-//   Int32  WriteMask
+//   UInt32  WriteMask
 //   Bool  IsPlanet
 //   Bool  IsProjected
 //   BSMaterial::ProjectedDecalSettings  ProjectedDecalSetting
@@ -734,8 +734,8 @@ void CE2MaterialDB::ComponentInfo::readDecalSettingsComponent(
 
 // BSBind::Directory
 //   String  Name
-//   -252  Children
-//   -241  SourceDirectoryHash
+//   Map  Children
+//   UInt64  SourceDirectoryHash
 
 void CE2MaterialDB::ComponentInfo::readDirectory(
     ComponentInfo& p, bool isDiff)
@@ -771,6 +771,7 @@ void CE2MaterialDB::ComponentInfo::readDirectory(
 void CE2MaterialDB::ComponentInfo::readWaterSettingsComponent(
     ComponentInfo& p, bool isDiff)
 {
+  (void) isDiff;
   if (BRANCH_LIKELY(p.o->type == 1))
   {
     CE2Material *m = static_cast< CE2Material * >(p.o);
@@ -794,7 +795,7 @@ void CE2MaterialDB::ComponentInfo::readControl(
 //   String  Name
 //   BSComponentDB2::ID  Object
 //   ClassReference  ComponentType
-//   Int16  ComponentIndex
+//   UInt16  ComponentIndex
 //   String  PathStr
 
 void CE2MaterialDB::ComponentInfo::readComponentProperty(
@@ -856,7 +857,7 @@ bool CE2MaterialDB::ComponentInfo::readXMFLOAT4(
 //   Bool  DepthMVFixup
 //   Bool  DepthMVFixupEdgesOnly
 //   Bool  ForceRenderBeforeOIT
-//   Int16  DepthBiasInUlp
+//   UInt16  DepthBiasInUlp
 
 void CE2MaterialDB::ComponentInfo::readEffectSettingsComponent(
     ComponentInfo& p, bool isDiff)
@@ -1069,7 +1070,7 @@ void CE2MaterialDB::ComponentInfo::readFloatCurveController(
 // BSMaterialBinding::MaterialPropertyNode
 //   String  Name
 //   String  Binding
-//   Int16  LayerIndex
+//   UInt16  LayerIndex
 
 void CE2MaterialDB::ComponentInfo::readMaterialPropertyNode(
     ComponentInfo& p, bool isDiff)
@@ -1083,7 +1084,7 @@ void CE2MaterialDB::ComponentInfo::readMaterialPropertyNode(
 //   BSMaterial::TextureFile  SurfaceHeightMap
 //   Float  ParallaxOcclusionScale
 //   Bool  ParallaxOcclusionShadows
-//   Int8  MaxParralaxOcclusionSteps
+//   UInt8  MaxParralaxOcclusionSteps
 //   String  RenderLayer
 //   Bool  UseGBufferNormals
 
@@ -1238,8 +1239,8 @@ bool CE2MaterialDB::ComponentInfo::readSourceTextureWithReplacement(
 // BSComponentDB2::DBFileIndex::EdgeInfo
 //   BSComponentDB2::ID  SourceID
 //   BSComponentDB2::ID  TargetID
-//   Int16  Index
-//   Int16  Type
+//   UInt16  Index
+//   UInt16  Type
 
 void CE2MaterialDB::ComponentInfo::readEdgeInfo(
     ComponentInfo& p, bool isDiff)
@@ -1307,7 +1308,7 @@ void CE2MaterialDB::ComponentInfo::readLayerID(
 
 // BSBind::Controllers::Mapping
 //   BSBind::Address  Address
-//   -251  Controller
+//   Ref  Controller
 
 void CE2MaterialDB::ComponentInfo::readMapping(
     ComponentInfo& p, bool isDiff)
@@ -1327,8 +1328,8 @@ void CE2MaterialDB::ComponentInfo::readClassReference(
 
 // BSComponentDB2::DBFileIndex::ComponentInfo
 //   BSComponentDB2::ID  ObjectID
-//   Int16  Index
-//   Int16  Type
+//   UInt16  Index
+//   UInt16  Type
 
 void CE2MaterialDB::ComponentInfo::readComponentInfo(
     ComponentInfo& p, bool isDiff)
@@ -1385,7 +1386,7 @@ void CE2MaterialDB::ComponentInfo::readUVStreamParamBool(
 
 // BSComponentDB2::DBFileIndex::ComponentTypeInfo
 //   ClassReference  Class
-//   Int16  Version
+//   UInt16  Version
 //   Bool  IsEmpty
 
 void CE2MaterialDB::ComponentInfo::readComponentTypeInfo(
@@ -1397,7 +1398,7 @@ void CE2MaterialDB::ComponentInfo::readComponentTypeInfo(
 
 // BSBind::Multiplex
 //   String  Name
-//   -252  Nodes
+//   Map  Nodes
 
 void CE2MaterialDB::ComponentInfo::readMultiplex(
     ComponentInfo& p, bool isDiff)
@@ -1508,10 +1509,10 @@ void CE2MaterialDB::ComponentInfo::readBlendParamFloat(
 }
 
 // BSComponentDB2::DBFileIndex
-//   -252  ComponentTypes
-//   -253  Objects
-//   -253  Components
-//   -253  Edges
+//   Map  ComponentTypes
+//   List  Objects
+//   List  Components
+//   List  Edges
 //   Bool  Optimized
 
 void CE2MaterialDB::ComponentInfo::readDBFileIndex(
@@ -1588,7 +1589,7 @@ void CE2MaterialDB::ComponentInfo::readFloat2DLerpController(
 }
 
 // BSComponentDB2::ID
-//   Int32  Value
+//   UInt32  Value
 
 const CE2MaterialObject * CE2MaterialDB::ComponentInfo::readBSComponentDB2ID(
     ComponentInfo& p, bool isDiff, unsigned char typeRequired)
@@ -1687,11 +1688,11 @@ void CE2MaterialDB::ComponentInfo::readBlendModeComponent(
 }
 
 // BSMaterial::LayeredEdgeFalloffComponent
-//   -253  FalloffStartAngles
-//   -253  FalloffStopAngles
-//   -253  FalloffStartOpacities
-//   -253  FalloffStopOpacities
-//   Int8  ActiveLayersMask
+//   List  FalloffStartAngles
+//   List  FalloffStopAngles
+//   List  FalloffStartOpacities
+//   List  FalloffStopOpacities
+//   UInt8  ActiveLayersMask
 //   Bool  UseRGBFallOff
 
 void CE2MaterialDB::ComponentInfo::readLayeredEdgeFalloffComponent(
@@ -1788,7 +1789,7 @@ void CE2MaterialDB::ComponentInfo::readTextureResolutionSetting(
 }
 
 // BSBind::Address
-//   -253  Path
+//   List  Path
 
 void CE2MaterialDB::ComponentInfo::readAddress(
     ComponentInfo& p, bool isDiff)
@@ -1798,7 +1799,7 @@ void CE2MaterialDB::ComponentInfo::readAddress(
 }
 
 // BSBind::DirectoryComponent
-//   -251  upDir
+//   Ref  upDir
 
 void CE2MaterialDB::ComponentInfo::readDirectoryComponent(
     ComponentInfo& p, bool isDiff)
@@ -1912,7 +1913,7 @@ void CE2MaterialDB::ComponentInfo::readAlphaSettingsComponent(
 }
 
 // BSMaterial::LevelOfDetailSettings
-//   Int8  NumLODMaterials
+//   UInt8  NumLODMaterials
 //   String  MostSignificantLayer
 //   String  SecondMostSignificantLayer
 //   String  MediumLODRootMaterial
@@ -2297,7 +2298,7 @@ void CE2MaterialDB::ComponentInfo::readTimerController(
 }
 
 // BSBind::Controllers
-//   -253  MappingsA
+//   List  MappingsA
 //   Bool  UseRandomOffset
 
 void CE2MaterialDB::ComponentInfo::readControllers(
@@ -2423,9 +2424,9 @@ void CE2MaterialDB::ComponentInfo::readShaderModelComponent(
 }
 
 // BSResource::ID
-//   Int32  Dir
-//   Int32  File
-//   Int32  Ext
+//   UInt32  Dir
+//   UInt32  File
+//   UInt32  Ext
 
 void CE2MaterialDB::ComponentInfo::readBSResourceID(
     ComponentInfo& p, bool isDiff)
@@ -2492,9 +2493,9 @@ void CE2MaterialDB::ComponentInfo::readColorCurveController(
 
 // BSMaterial::Internal::CompiledDB
 //   String  BuildVersion
-//   -252  HashMap
-//   -253  Collisions
-//   -253  Circular
+//   Map  HashMap
+//   List  Collisions
+//   List  Circular
 
 void CE2MaterialDB::ComponentInfo::readCompiledDB(
     ComponentInfo& p, bool isDiff)
@@ -2560,7 +2561,7 @@ void CE2MaterialDB::ComponentInfo::readBSColorCurve(
 }
 
 // BSBind::ControllerComponent
-//   -251  upControllers
+//   Ref  upControllers
 
 void CE2MaterialDB::ComponentInfo::readControllerComponent(
     ComponentInfo& p, bool isDiff)
