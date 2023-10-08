@@ -9,15 +9,28 @@
 class DDSTexture
 {
  protected:
+  struct DXGIFormatInfo
+  {
+    size_t (*decodeFunction)(std::uint32_t *,
+                             const unsigned char *, unsigned int);
+    const char  *name;
+    bool    isCompressed;
+    bool    isSRGB;
+    unsigned char channelCnt;
+    unsigned char blockSize;
+  };
+  static const DXGIFormatInfo dxgiFormatInfoTable[31];
+  static const unsigned char  dxgiFormatMap[128];
   unsigned int  xMaskMip0;              // width - 1
   unsigned int  yMaskMip0;              // height - 1
   std::uint32_t maxMipLevel;
-  std::uint32_t textureDataSize;        // total texture data size / textureCnt
+  std::uint32_t textureDataSize;        // total data size / (maxTextureNum + 1)
   std::uint32_t textureColor;           // for 1x1 texture without allocation
-  bool          haveAlpha;
-  bool          isCubeMap;              // true if textureCnt == 6
-  unsigned short  textureCnt;
-  std::uint32_t *textureData[20];
+  bool          isSRGB;
+  unsigned char channelCnt;
+  unsigned char maxTextureNum;
+  unsigned char dxgiFormat;             // 0 if constructed from a color
+  std::uint32_t *textureData[19];
   static size_t decodeBlock_BC1(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC2(
@@ -31,6 +44,10 @@ class DDSTexture
   static size_t decodeBlock_BC5(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC5S(
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
+  static size_t decodeBlock_BC6U(
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
+  static size_t decodeBlock_BC6S(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeBlock_BC7(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
@@ -50,7 +67,9 @@ class DDSTexture
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
   static size_t decodeLine_R8(
       std::uint32_t *dst, const unsigned char *src, unsigned int w);
-  void loadTextureData(const unsigned char *srcPtr, int n, size_t blockSize,
+  static size_t decodeLine_RGBA64F(
+      std::uint32_t *dst, const unsigned char *src, unsigned int w);
+  void loadTextureData(const unsigned char *srcPtr, int n, bool isCompressed,
                        size_t (*decodeFunction)(std::uint32_t *,
                                                 const unsigned char *,
                                                 unsigned int));
@@ -70,8 +89,9 @@ class DDSTexture
   DDSTexture(const char *fileName, int mipOffset = 0);
   DDSTexture(const unsigned char *buf, size_t bufSize, int mipOffset = 0);
   DDSTexture(FileBuffer& buf, int mipOffset = 0);
-  DDSTexture(std::uint32_t c);          // create 1x1 texture of color c
-  virtual ~DDSTexture();
+  // create 1x1 texture of color c without allocating memory
+  DDSTexture(std::uint32_t c, bool srgbColor = false);
+  ~DDSTexture();
   inline int getWidth() const
   {
     return int(xMaskMip0 + 1U);
@@ -84,17 +104,29 @@ class DDSTexture
   {
     return int(maxMipLevel);
   }
-  inline bool isRGBATexture() const
+  inline bool isSRGBTexture() const
   {
-    return haveAlpha;
+    return isSRGB;
+  }
+  inline unsigned char getChannelCount() const
+  {
+    return channelCnt;
   }
   inline bool getIsCubeMap() const
   {
-    return isCubeMap;
+    return (maxTextureNum == 5);
   }
   inline size_t getTextureCount() const
   {
-    return textureCnt;
+    return (size_t(maxTextureNum) + 1);
+  }
+  inline unsigned char getDXGIFormat() const
+  {
+    return dxgiFormat;
+  }
+  inline const char *getFormatName() const
+  {
+    return dxgiFormatInfoTable[dxgiFormatMap[dxgiFormat]].name;
   }
   // no interpolation, returns color in RGBA format (LSB = red, MSB = alpha)
   inline const std::uint32_t& getPixelN(int x, int y, int mipLevel) const

@@ -3,6 +3,7 @@
 #define SDLVIDEO_HPP_INCLUDED
 
 #include "common.hpp"
+#include "fp32vec4.hpp"
 
 #ifdef HAVE_SDL2
 #  include <SDL2/SDL.h>
@@ -20,10 +21,14 @@ class SDLDisplay
 #else
   std::vector< std::uint32_t >  screenBuf;
 #endif
-  bool    isDownsampled;
+  unsigned char downsampleLevel;        // 0 = disabled, 1 = 2x, 2 = 4x
   bool    usingImageBuf;
   bool    textInputEnabled;
+#if ENABLE_X86_64_AVX
+  std::vector< YMM_UInt32 >     imageBuf;
+#else
   std::vector< std::uint32_t >  imageBuf;
+#endif
   std::vector< unsigned char >  fontData;
   // bits 0 to 13: Unicode character
   // bit 14: underline
@@ -55,6 +60,7 @@ class SDLDisplay
   // returns 0 if there is not enough data yet, 0xFFFD on error
   std::uint32_t decodeUTF8Character();
   inline void printCharacter(std::uint32_t c);
+  inline void resizeImageBuffer(int w, int h);
   struct BrowseFileItem
   {
     std::string fileName;
@@ -209,14 +215,14 @@ class SDLDisplay
   {
     return textHeight;
   }
-  inline bool getIsDownsampled() const
+  inline unsigned char getDownsampleLevel() const
   {
-    return isDownsampled;
+    return downsampleLevel;
   }
   inline std::uint32_t *lockDrawSurface()
   {
     if (usingImageBuf)
-      return imageBuf.data();
+      return reinterpret_cast< std::uint32_t * >(imageBuf.data());
 #ifdef HAVE_SDL2
     SDL_LockSurface(sdlScreen);
     surfaceLockCnt++;
@@ -263,13 +269,23 @@ class SDLDisplay
 #ifdef HAVE_SDL2
     return (size_t(sdlScreen->pitch) >> 2);
 #else
-    return size_t(imageWidth >> int(isDownsampled));
+    return size_t(imageWidth >> downsampleLevel);
 #endif
   }
   // enable console on Windows
   static void enableConsole();
-  void setEnableDownsample(bool isEnabled);
+  void setDownsampleLevel(int n);
   void blitSurface();
+  // c = 0:
+  //     fill with transparent black color
+  // c > 0x0FFFFFFF:
+  //     fill with solid color (R8G8B8A8 or RGB10A2 format)
+  // c = 01dddcccbbb (octal):
+  //     fill with gradient, b = bottom color (R3G3B3 format), c = middle
+  //     color, d = top color
+  // c = 0x0scccbbb:
+  //     fill with checkerboard pattern, b = color0 (R4G4B4 format),
+  //     c = color1, s = log2(grid size) - 3 (0 to 7 for 8 to 1024 pixels)
   void clearSurface(std::uint32_t c = 0U);
   void copyFromDrawSurface(std::vector< std::uint32_t >& buf);
   void copyToDrawSurface(const std::vector< std::uint32_t >& buf);

@@ -4,6 +4,9 @@
 #include "downsamp.hpp"
 
 #include <algorithm>
+#ifdef HAVE_SDL2
+#  include <SDL2/SDL.h>
+#endif
 
 #include "viewrtbl.cpp"
 
@@ -74,7 +77,20 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
     for (size_t i = 0; i < sortBuf.size(); i++)
     {
       Plot3D_TriShape&  ts = *(p->renderers[n]);
-      ts = p->meshData[size_t(sortBuf[i])];
+      {
+        size_t  j = size_t(sortBuf[i]);
+        ts = p->meshData[j];
+        if (BRANCH_UNLIKELY(p->debugMode == 1))
+        {
+          std::uint32_t c = std::uint32_t(j + 1);
+          c = ((c & 1U) << 23) | ((c & 2U) << 14) | ((c & 4U) << 5)
+              | ((c & 8U) << 19) | ((c & 16U) << 10) | ((c & 32U) << 1)
+              | ((c & 64U) << 15) | ((c & 128U) << 6) | ((c & 256U) >> 3)
+              | ((c & 512U) << 11) | ((c & 1024U) << 2) | ((c & 2048U) >> 7);
+          c = c ^ 0xFFFFFFFFU;
+          ts.setDebugMode(1, c);
+        }
+      }
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
       if (BRANCH_UNLIKELY(ts.m.flags & BGSMFile::Flag_TSWater))
@@ -194,7 +210,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
     debugMode(0)
 {
   threadCnt = int(std::thread::hardware_concurrency());
-  threadCnt = (threadCnt > 1 ? (threadCnt < 8 ? threadCnt : 8) : 1);
+  threadCnt = (threadCnt > 1 ? (threadCnt < 16 ? threadCnt : 16) : 1);
   renderers.resize(size_t(threadCnt), (Plot3D_TriShape *) 0);
   threadErrMsg.resize(size_t(threadCnt));
   viewOffsetY.resize(size_t(threadCnt + 1), 0);
@@ -249,12 +265,29 @@ void NIF_View::loadModel(const std::string& fileName)
   }
   if (fileName.empty())
     return;
+  bool    isMaterialFile =
+      (fileName.starts_with("materials/") &&
+       (fileName.ends_with(".bgsm") || fileName.ends_with(".bgem")));
   std::vector< unsigned char >& fileBuf = threadFileBuffers[0];
-  ba2File.extractFile(fileBuf, fileName);
+  if (isMaterialFile)
+  {
+    ba2File.extractFile(fileBuf,
+                        std::string("meshes/preview/previewsphere01.nif"));
+  }
+  else
+  {
+    ba2File.extractFile(fileBuf, fileName);
+  }
   nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), &ba2File);
   try
   {
     nifFile->getMesh(meshData);
+    if (isMaterialFile)
+    {
+      BGSMFile  bgsmFile(ba2File, fileName);
+      for (size_t i = 0; i < meshData.size(); i++)
+        meshData[i].setMaterial(bgsmFile);
+    }
   }
   catch (...)
   {
@@ -459,7 +492,7 @@ static void updateRotation(float& rx, float& ry, float& rz,
   ry = (ry < -180.0f ? (ry + 360.0f) : (ry > 180.0f ? (ry - 360.0f) : ry));
   rz = (rz < -180.0f ? (rz + 360.0f) : (rz > 180.0f ? (rz - 360.0f) : rz));
   if (!msg)
-    msg = "";
+    return;
   char    buf[64];
   std::snprintf(buf, 64, "%s %7.2f %7.2f %7.2f\n", msg, rx, ry, rz);
   buf[63] = '\0';
@@ -492,11 +525,26 @@ static void updateValueLogScale(float& s, int d, float minVal, float maxVal,
   s = float(std::exp2(float(tmp + d) * 0.0625f));
   s = (s > minVal ? (s < maxVal ? s : maxVal) : minVal);
   if (!msg)
-    msg = "";
+    return;
   char    buf[64];
   std::snprintf(buf, 64, "%s: %7.4f\n", msg, s);
   buf[63] = '\0';
   messageBuf = buf;
+}
+
+static void printViewScale(SDLDisplay& display, float viewScale,
+                           const NIFFile::NIFVertexTransform& vt)
+{
+  float   z = (vt.rotateXX * vt.rotateXX) + (vt.rotateYX * vt.rotateYX);
+  z = std::max(z, (vt.rotateXY * vt.rotateXY) + (vt.rotateYY * vt.rotateYY));
+  z = std::max(z, (vt.rotateXZ * vt.rotateXZ) + (vt.rotateYZ * vt.rotateYZ));
+  z = float(std::sqrt(std::max(z, 0.25f)));
+  float   vtScale = vt.scale * z / float(1 << display.getDownsampleLevel());
+  char    buf[256];
+  std::snprintf(buf, 256, "View scale: %7.4f (1 unit = %7.4f pixels)\n",
+                viewScale, vtScale);
+  buf[255] = '\0';
+  display.printString(buf);
 }
 
 static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName,
@@ -523,8 +571,8 @@ static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName,
     std::sprintf(buf, "_%02u%02u%02u.dds", h, m, s);
     fileName += buf;
   }
-  int     w = display.getWidth() >> int(display.getIsDownsampled());
-  int     h = display.getHeight() >> int(display.getIsDownsampled());
+  int     w = display.getWidth() >> display.getDownsampleLevel();
+  int     h = display.getHeight() >> display.getDownsampleLevel();
   if (!renderer)
   {
     display.blitSurface();
@@ -542,6 +590,88 @@ static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName,
   display.printString("Saved screenshot to ");
   display.printString(fileName.c_str());
   display.printString("\n");
+}
+
+static void printMaterialInfo(SDLDisplay& display, const BGSMFile& bgsmFile)
+{
+  display.consolePrint("    Material version: %2u\n",
+                       (unsigned int) bgsmFile.version);
+  display.consolePrint("    Material flags (defined in bgsmfile.hpp): "
+                       "0x%04X\n", (unsigned int) bgsmFile.flags);
+  display.consolePrint("    Material alpha flags: 0x%04X\n",
+                       (unsigned int) bgsmFile.alphaFlags);
+  display.consolePrint("    Material alpha threshold: %3u (%.3f)\n",
+                       (unsigned int) bgsmFile.alphaThreshold,
+                       bgsmFile.alphaThresholdFloat);
+  display.consolePrint("    Material alpha: %.3f\n", bgsmFile.alpha);
+  display.consolePrint("    Material texture U, V offset: %.3f, %.3f\n",
+                       bgsmFile.textureOffsetU, bgsmFile.textureOffsetV);
+  display.consolePrint("    Material texture U, V scale: %.3f, %.3f\n",
+                       bgsmFile.textureScaleU, bgsmFile.textureScaleV);
+  if (bgsmFile.flags & BGSMFile::Flag_TSWater)
+  {
+    unsigned int  shallowColor =
+        std::uint32_t(bgsmFile.w.shallowColor * 255.0f);
+    unsigned int  deepColor = std::uint32_t(bgsmFile.w.deepColor * 255.0f);
+    display.consolePrint("    Water shallow color (0xAABBGGRR): 0x%08X\n",
+                         shallowColor);
+    display.consolePrint("    Water deep color (0xAABBGGRR): 0x%08X\n",
+                         deepColor);
+    display.consolePrint("    Water depth range: %.3f\n", bgsmFile.w.maxDepth);
+    display.consolePrint("    Water environment map scale: %.3f\n",
+                         bgsmFile.w.envMapScale);
+    display.consolePrint("    Water specular smoothness: %.3f\n",
+                         bgsmFile.w.specularSmoothness);
+  }
+  else if (bgsmFile.flags & BGSMFile::Flag_IsEffect)
+  {
+    unsigned int  baseColor = std::uint32_t(bgsmFile.e.baseColor * 255.0f);
+    display.consolePrint("    Effect base color (0xAABBGGRR): 0x%08X\n",
+                         baseColor);
+    display.consolePrint("    Effect base color scale: %.3f\n",
+                         bgsmFile.e.baseColorScale);
+    display.consolePrint("    Effect lighting influence: %.3f\n",
+                         bgsmFile.e.lightingInfluence);
+    display.consolePrint("    Effect environment map scale: %.3f\n",
+                         bgsmFile.e.envMapScale);
+    display.consolePrint("    Effect specular smoothness: %.3f\n",
+                         bgsmFile.e.specularSmoothness);
+    display.consolePrint("    Effect falloff parameters: "
+                         "%.3f, %.3f, %.3f, %.3f\n",
+                         bgsmFile.e.falloffParams[0],
+                         bgsmFile.e.falloffParams[1],
+                         bgsmFile.e.falloffParams[2],
+                         bgsmFile.e.falloffParams[3]);
+  }
+  else
+  {
+    display.consolePrint("    Material gradient map scale: %.3f\n",
+                         bgsmFile.s.gradientMapV);
+    display.consolePrint("    Material environment map scale: %.3f\n",
+                         bgsmFile.s.envMapScale);
+    unsigned int  specularColor =
+        std::uint32_t(bgsmFile.s.specularColor * 255.0f);
+    unsigned int  emissiveColor =
+        std::uint32_t(bgsmFile.s.emissiveColor * 255.0f);
+    display.consolePrint("    Material specular color (0xBBGGRR): 0x%06X\n",
+                         specularColor & 0x00FFFFFFU);
+    display.consolePrint("    Material specular scale: %.3f\n",
+                         bgsmFile.s.specularColor[3]);
+    display.consolePrint("    Material specular smoothness: %.3f\n",
+                         bgsmFile.s.specularSmoothness);
+    display.consolePrint("    Material emissive color (0xBBGGRR): 0x%06X\n",
+                         emissiveColor & 0x00FFFFFFU);
+    display.consolePrint("    Material emissive scale: %.3f\n",
+                         bgsmFile.s.emissiveColor[3]);
+  }
+  unsigned int  m = bgsmFile.texturePathMask;
+  for (size_t i = 0; m; i++, m = m >> 1)
+  {
+    if (!(m & 1U))
+      continue;
+    display.consolePrint("    Material texture %d: %s\n",
+                         int(i), bgsmFile.texturePaths[i].c_str());
+  }
 }
 
 static bool viewModelInfo(SDLDisplay& display, const NIFFile& nifFile)
@@ -633,91 +763,7 @@ static bool viewModelInfo(SDLDisplay& display, const NIFFile& nifFile)
       }
       if (lspBlock->textureSet >= 0)
         display.consolePrint("    Texture set: %3d\n", lspBlock->textureSet);
-      display.consolePrint("    Material version: %2u\n",
-                           (unsigned int) lspBlock->material.version);
-      display.consolePrint("    Material flags (defined in bgsmfile.hpp): "
-                           "0x%04X\n", (unsigned int) lspBlock->material.flags);
-      display.consolePrint("    Material alpha flags: 0x%04X\n",
-                           (unsigned int) lspBlock->material.alphaFlags);
-      display.consolePrint("    Material alpha threshold: %3u (%.3f)\n",
-                           (unsigned int) lspBlock->material.alphaThreshold,
-                           lspBlock->material.alphaThresholdFloat);
-      display.consolePrint("    Material alpha: %.3f\n",
-                           lspBlock->material.alpha);
-      display.consolePrint("    Material texture U, V offset: %.3f, %.3f\n",
-                           lspBlock->material.textureOffsetU,
-                           lspBlock->material.textureOffsetV);
-      display.consolePrint("    Material texture U, V scale: %.3f, %.3f\n",
-                           lspBlock->material.textureScaleU,
-                           lspBlock->material.textureScaleV);
-      if (lspBlock->material.flags & BGSMFile::Flag_TSWater)
-      {
-        unsigned int  shallowColor =
-            std::uint32_t(lspBlock->material.w.shallowColor * 255.0f);
-        unsigned int  deepColor =
-            std::uint32_t(lspBlock->material.w.deepColor * 255.0f);
-        display.consolePrint("    Water shallow color (0xAABBGGRR): 0x%08X\n",
-                             shallowColor);
-        display.consolePrint("    Water deep color (0xAABBGGRR): 0x%08X\n",
-                             deepColor);
-        display.consolePrint("    Water depth range: %.3f\n",
-                             lspBlock->material.w.maxDepth);
-        display.consolePrint("    Water environment map scale: %.3f\n",
-                             lspBlock->material.w.envMapScale);
-        display.consolePrint("    Water specular smoothness: %.3f\n",
-                             lspBlock->material.w.specularSmoothness);
-      }
-      else if (lspBlock->material.flags & BGSMFile::Flag_IsEffect)
-      {
-        unsigned int  baseColor =
-            std::uint32_t(lspBlock->material.e.baseColor * 255.0f);
-        display.consolePrint("    Effect base color (0xAABBGGRR): 0x%08X\n",
-                             baseColor);
-        display.consolePrint("    Effect base color scale: %.3f\n",
-                             lspBlock->material.e.baseColorScale);
-        display.consolePrint("    Effect lighting influence: %.3f\n",
-                             lspBlock->material.e.lightingInfluence);
-        display.consolePrint("    Effect environment map scale: %.3f\n",
-                             lspBlock->material.e.envMapScale);
-        display.consolePrint("    Effect specular smoothness: %.3f\n",
-                             lspBlock->material.e.specularSmoothness);
-        display.consolePrint("    Effect falloff parameters: "
-                             "%.3f, %.3f, %.3f, %.3f\n",
-                             lspBlock->material.e.falloffParams[0],
-                             lspBlock->material.e.falloffParams[1],
-                             lspBlock->material.e.falloffParams[2],
-                             lspBlock->material.e.falloffParams[3]);
-      }
-      else
-      {
-        display.consolePrint("    Material gradient map scale: %.3f\n",
-                             lspBlock->material.s.gradientMapV);
-        display.consolePrint("    Material environment map scale: %.3f\n",
-                             lspBlock->material.s.envMapScale);
-        unsigned int  specularColor =
-            std::uint32_t(lspBlock->material.s.specularColor * 255.0f);
-        unsigned int  emissiveColor =
-            std::uint32_t(lspBlock->material.s.emissiveColor * 255.0f);
-        display.consolePrint("    Material specular color (0xBBGGRR): 0x%06X\n",
-                             specularColor & 0x00FFFFFFU);
-        display.consolePrint("    Material specular scale: %.3f\n",
-                             lspBlock->material.s.specularColor[3]);
-        display.consolePrint("    Material specular smoothness: %.3f\n",
-                             lspBlock->material.s.specularSmoothness);
-        display.consolePrint("    Material emissive color (0xBBGGRR): 0x%06X\n",
-                             emissiveColor & 0x00FFFFFFU);
-        display.consolePrint("    Material emissive scale: %.3f\n",
-                             lspBlock->material.s.emissiveColor[3]);
-      }
-      unsigned int  m = lspBlock->material.texturePathMask;
-      for (size_t j = 0; m; j++, m = m >> 1)
-      {
-        if (!(m & 1U))
-          continue;
-        display.consolePrint(
-            "    Material texture %d: %s\n",
-            int(j), lspBlock->material.texturePaths[j].c_str());
-      }
+      printMaterialInfo(display, lspBlock->material);
     }
     else if (tsBlock)
     {
@@ -744,6 +790,98 @@ static bool viewModelInfo(SDLDisplay& display, const NIFFile& nifFile)
     }
   }
   return display.viewTextBuffer();
+}
+
+static bool viewMaterialInfo(
+    SDLDisplay& display, const BA2File& ba2File, const std::string& fileName)
+{
+  display.clearTextBuffer();
+  display.consolePrint("Material path: \"%s\"\n", fileName.c_str());
+  try
+  {
+    BGSMFile  bgsmFile(ba2File, fileName);
+    printMaterialInfo(display, bgsmFile);
+    return display.viewTextBuffer();
+  }
+  catch (FO76UtilsError&)
+  {
+    display.consolePrint("Not found in database\n");
+  }
+  return true;
+}
+
+static bool printGeometryBlockInfo(
+    SDLDisplay& display, int x, int y, int mouseButton,
+    const NIFFile *nifFile, const std::vector< NIFFile::NIFTriShape >& meshData)
+{
+  std::uint32_t c =
+      display.lockDrawSurface()[size_t(y) * size_t(display.getWidth())
+                                + size_t(x)];
+  display.unlockDrawSurface();
+#if USE_PIXELFMT_RGB10A2
+  c = ((c >> 2) & 0xFFU) | ((c >> 4) & 0xFF00U) | ((c >> 6) & 0xFF0000U);
+#else
+  c = ((c & 0xFFU) << 16) | ((c >> 16) & 0xFFU) | (c & 0xFF00U);
+#endif
+  c = c ^ 0xFFFFFFFFU;
+  c = ((c >> 23) & 0x0001U) | ((c >> 14) & 0x0002U) | ((c >> 5) & 0x0004U)
+      | ((c >> 19) & 0x0008U) | ((c >> 10) & 0x0010U) | ((c >> 1) & 0x0020U)
+      | ((c >> 15) & 0x0040U) | ((c >> 6) & 0x0080U) | ((c << 3) & 0x0100U)
+      | ((c >> 11) & 0x0200U) | ((c >> 2) & 0x0400U) | ((c << 7) & 0x0800U)
+      | ((c >> 7) & 0x1000U) | ((c << 2) & 0x2000U) | ((c << 11) & 0x4000U);
+  if (!c || c > meshData.size() || !nifFile)
+    return false;
+  c--;
+  std::string tmpBuf;
+  const NIFFile::NIFTriShape& ts = meshData[c];
+  const std::string *blkName = nifFile->getString(ts.nameID);
+  if (blkName && !blkName->empty())
+    printToString(tmpBuf, "BSTriShape: \"%s\"\n", blkName->c_str());
+  if (ts.haveMaterialPath())
+    printToString(tmpBuf, "Material path: \"%s\"\n", ts.materialPath().c_str());
+  if (mouseButton == 2)
+  {
+    printToString(tmpBuf, "Vertex count: %u\n", ts.vertexCnt);
+    printToString(tmpBuf, "Triangle count: %u\n", ts.triangleCnt);
+    printToString(tmpBuf, "Vertex data:\n");
+    for (size_t i = 0; i < ts.vertexCnt; i++)
+    {
+      NIFFile::NIFVertex  v(ts.vertexData[i]);
+      FloatVector4  t(v.getBitangent());
+      FloatVector4  b(v.getTangent());
+      FloatVector4  n(v.getNormal());
+      ts.vertexTransform.transformXYZ(v.x, v.y, v.z);
+      t = ts.vertexTransform.rotateXYZ(t);
+      b = ts.vertexTransform.rotateXYZ(b);
+      n = ts.vertexTransform.rotateXYZ(n);
+      printToString(tmpBuf,
+                    "  %5d: XYZ: %f, %f, %f  UV: %f, %f  VC: 0x%08X\n",
+                    int(i), v.x, v.y, v.z, v.getU(), v.getV(),
+                    (unsigned int) v.vertexColor);
+      printToString(tmpBuf,
+                    "         T: %6.3f, %6.3f, %6.3f  B: %6.3f, %6.3f, %6.3f  "
+                    "N: %6.3f, %6.3f, %6.3f\n",
+                    t[0], t[1], t[2], b[0], b[1], b[2], n[0], n[1], n[2]);
+    }
+    printToString(tmpBuf, "Triangle data:\n");
+    for (size_t i = 0; i < ts.triangleCnt; i++)
+    {
+      printToString(tmpBuf, "  %6d: %5d, %5d, %5d\n",
+                    int(i), int(ts.triangleData[i].v0),
+                    int(ts.triangleData[i].v1), int(ts.triangleData[i].v2));
+    }
+  }
+  if (!tmpBuf.empty())
+  {
+    if (mouseButton == 2 || mouseButton == 3)
+      display.clearTextBuffer();
+    display.printString(tmpBuf.c_str());
+    if (mouseButton == 3)
+      printMaterialInfo(display, ts.m);
+    (void) SDL_SetClipboardText(tmpBuf.c_str());
+    return true;
+  }
+  return false;
 }
 
 static const char *keyboardUsageString =
@@ -800,6 +938,8 @@ static const char *keyboardUsageString =
     "Enable downsampling (slow).                                     \n"
     "  \033[4m\033[38;5;228mPage Down\033[m             "
     "Disable downsampling.                                           \n"
+    "  \033[4m\033[38;5;228mB\033[m                     "
+    "Cycle background type (black/checkerboard/gradient).            \n"
     "  \033[4m\033[38;5;228mSpace\033[m, "
     "\033[4m\033[38;5;228mBackspace\033[m      "
     "Load next or previous file matching the pattern.                \n"
@@ -814,6 +954,12 @@ static const char *keyboardUsageString =
     "Print current settings and file name.                           \n"
     "  \033[4m\033[38;5;228mV\033[m                     "
     "View detailed model information.                                \n"
+    "  \033[4m\033[38;5;228mMouse buttons\033[m         "
+    "In debug mode 1 only: print the TriShape block and material path\n"
+    "                        "
+    "of the selected shape based on the color of the pixel, and also \n"
+    "                        "
+    "copy it to the clipboard.                                       \n"
     "  \033[4m\033[38;5;228mH\033[m                     "
     "Show help screen.                                               \n"
     "  \033[4m\033[38;5;228mC\033[m                     "
@@ -821,6 +967,11 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mEsc\033[m                   "
     "Quit viewer.                                                    \n";
 #endif
+
+static const char *downsampModeNames[4] =
+{
+  "disabled", "enabled (4x SSAA)", "enabled (16x SSAA)", ""
+};
 
 bool NIF_View::viewModels(SDLDisplay& display,
                           const std::vector< std::string >& nifFileNames)
@@ -831,6 +982,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
   std::vector< SDLDisplay::SDLEvent > eventBuf;
   std::string messageBuf;
   unsigned char quitFlag = 0;   // 1 = Esc key pressed, 2 = window closed
+  unsigned char backgroundType = 1;
   try
   {
     int     imageWidth = display.getWidth();
@@ -839,6 +991,15 @@ bool NIF_View::viewModels(SDLDisplay& display,
     float   lightRotationX = 0.0f;
     int     fileNum = 0;
     int     d = 4;              // scale of adjusting parameters
+    if (nifFileNames.size() > 10)
+    {
+      int     n = display.browseFile(nifFileNames, "Select file", fileNum,
+                                     0x0B080F04FFFFULL);
+      if (n >= 0 && size_t(n) < nifFileNames.size())
+        fileNum = n;
+      else if (n < -1)
+        quitFlag = 2;
+    }
 
     size_t  imageDataSize = size_t(imageWidth) * size_t(imageHeight);
     std::vector< float >  outBufZ(imageDataSize);
@@ -850,6 +1011,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
 
       bool    nextFileFlag = false;
       // 1: screenshot, 2: high quality screenshot, 4: view info, 8: browse file
+      // 16: view text buffer
       unsigned char eventFlags = 0;
       unsigned char redrawFlags = 3;    // bit 0: blit only, bit 1: render
       while (!(nextFileFlag || quitFlag))
@@ -869,9 +1031,10 @@ bool NIF_View::viewModels(SDLDisplay& display,
             display.printString(viewRotationMessages[viewRotation]);
             viewRotation = -1;
           }
-          display.clearSurface();
-          for (size_t i = 0; i < imageDataSize; i++)
-            outBufZ[i] = 16777216.0f;
+          display.clearSurface(backgroundType == 0 ?
+                               0U : (backgroundType == 1 ?
+                                     0x02666333U : 01333111222U));
+          memsetFloat(outBufZ.data(), 16777216.0f, imageDataSize);
           std::uint32_t *outBufRGBA = display.lockDrawSurface();
           renderModel(outBufRGBA, outBufZ.data(), imageWidth, imageHeight);
           display.unlockDrawSurface();
@@ -884,7 +1047,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
             if (eventFlags & 8)
             {
               int     n = display.browseFile(
-                              nifFileNames, "Select NIF file", fileNum,
+                              nifFileNames, "Select file", fileNum,
                               0x0B080F04FFFFULL);
               if (n >= 0 && size_t(n) < nifFileNames.size() && n != fileNum)
               {
@@ -898,7 +1061,22 @@ bool NIF_View::viewModels(SDLDisplay& display,
             }
             else if ((eventFlags & 4) && nifFile)
             {
-              if (!viewModelInfo(display, *nifFile))
+              const std::string&  fileName = nifFileNames[fileNum];
+              if (fileName.starts_with("materials/") &&
+                  (fileName.ends_with(".bgsm") || fileName.ends_with(".bgem")))
+              {
+                if (!viewMaterialInfo(display, ba2File, fileName))
+                  quitFlag = 2;
+              }
+              else if (!viewModelInfo(display, *nifFile))
+              {
+                quitFlag = 2;
+              }
+              display.clearTextBuffer();
+            }
+            else if (eventFlags & 16)
+            {
+              if (!display.viewTextBuffer())
                 quitFlag = 2;
               display.clearTextBuffer();
             }
@@ -912,7 +1090,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
 
         while (!(redrawFlags || nextFileFlag || quitFlag))
         {
-          display.pollEvents(eventBuf);
+          display.pollEvents(eventBuf, -1000, false, true);
           for (size_t i = 0; i < eventBuf.size(); i++)
           {
             int     t = eventBuf[i].type();
@@ -928,6 +1106,21 @@ bool NIF_View::viewModels(SDLDisplay& display,
             if (!(t == SDLDisplay::SDLEventKeyRepeat ||
                   t == SDLDisplay::SDLEventKeyDown))
             {
+              if (t == SDLDisplay::SDLEventMButtonDown)
+              {
+                int     x = std::min(std::max(d1, 0), imageWidth - 1);
+                int     y = eventBuf[i].data2();
+                y = std::min(std::max(y, 0), imageHeight - 1);
+                int     mouseButton = eventBuf[i].data3();
+                if (debugMode == 1 && eventBuf[i].data4() >= 1 &&
+                    printGeometryBlockInfo(display, x, y, mouseButton,
+                                           nifFile, meshData))
+                {
+                  if (mouseButton == 2 || mouseButton == 3)
+                    eventFlags = eventFlags | 16;
+                  redrawFlags = redrawFlags | 2;
+                }
+              }
               continue;
             }
             redrawFlags = 2;
@@ -939,9 +1132,9 @@ bool NIF_View::viewModels(SDLDisplay& display,
               case '3':
               case '4':
               case '5':
-                debugMode = int(d1 != '1' ? (d1 - '0') : 0);
+                debugMode = int(d1 - '0');
                 messageBuf += "Debug mode set to ";
-                messageBuf += char(debugMode | 0x30);
+                messageBuf += char(d1);
                 messageBuf += '\n';
                 break;
               case '-':
@@ -1074,21 +1267,25 @@ bool NIF_View::viewModels(SDLDisplay& display,
                 break;
               case SDLDisplay::SDLKeySymPageUp:
               case SDLDisplay::SDLKeySymPageDown:
-                if ((d1 == SDLDisplay::SDLKeySymPageUp)
-                    == display.getIsDownsampled())
                 {
-                  redrawFlags = 0;
-                  continue;
+                  int     prvLevel = display.getDownsampleLevel();
+                  display.setDownsampleLevel(
+                      prvLevel + (d1 == SDLDisplay::SDLKeySymPageUp ? 1 : -1));
+                  if (display.getDownsampleLevel() == (unsigned char) prvLevel)
+                  {
+                    redrawFlags = 0;
+                    continue;
+                  }
                 }
-                display.setEnableDownsample(d1 == SDLDisplay::SDLKeySymPageUp);
                 imageWidth = display.getWidth();
                 imageHeight = display.getHeight();
                 imageDataSize = size_t(imageWidth) * size_t(imageHeight);
                 outBufZ.resize(imageDataSize);
-                if (display.getIsDownsampled())
-                  messageBuf += "Downsampling enabled\n";
-                else
-                  messageBuf += "Downsampling disabled\n";
+                printToString(messageBuf, "Downsampling %s\n",
+                              downsampModeNames[display.getDownsampleLevel()]);
+                break;
+              case 'b':
+                backgroundType = (unsigned char) ((backgroundType + 1) % 3);
                 break;
               case SDLDisplay::SDLKeySymBackspace:
                 fileNum = (fileNum > 0 ? fileNum : int(nifFileNames.size()));
@@ -1120,19 +1317,15 @@ bool NIF_View::viewModels(SDLDisplay& display,
                 display.printString(messageBuf.c_str());
                 updateLightColor(lightColor, 0, 0, 0, messageBuf);
                 display.printString(messageBuf.c_str());
-                updateValueLogScale(viewScale, 0, 0.0625f, 16.0f, messageBuf,
-                                    "View scale");
-                display.printString(messageBuf.c_str());
+                printViewScale(display, viewScale, viewTransform);
                 updateValueLogScale(reflZScale, 0, 0.5f, 4.0f, messageBuf,
                                     "Reflection f scale");
                 if (d == 1)
                   messageBuf += "Step size: 2.8125\302\260, exp2(1/16)\n";
                 else
                   messageBuf += "Step size: 11.25\302\260, exp2(1/4)\n";
-                if (display.getIsDownsampled())
-                  messageBuf += "Downsampling enabled\n";
-                else
-                  messageBuf += "Downsampling disabled\n";
+                printToString(messageBuf, "Downsampling %s\n",
+                              downsampModeNames[display.getDownsampleLevel()]);
                 messageBuf += "Default environment map: ";
                 messageBuf += defaultEnvMap;
                 messageBuf += "\nFile name:\n  \033[44m\033[37m\033[1m";

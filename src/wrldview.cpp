@@ -1541,8 +1541,8 @@ void WorldSpaceViewer::saveScreenshot(bool disableDownsampling)
                   imageDataSize * sizeof(std::uint32_t));
       display.unlockDrawSurface();
       display.blitSurface();
-      w = display.getWidth() >> int(display.getIsDownsampled());
-      h = display.getHeight() >> int(display.getIsDownsampled());
+      w = display.getWidth() >> display.getDownsampleLevel();
+      h = display.getHeight() >> display.getDownsampleLevel();
       pitch = display.getPitch();
       p = display.lockScreenSurface();
       screenSurfaceLocked = true;

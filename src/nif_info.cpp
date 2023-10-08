@@ -326,9 +326,87 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
   }
 }
 
-static void printOBJData(std::FILE *f, const NIFFile& nifFile,
-                         const char *mtlFileName)
+struct ObjFileMaterialNames
 {
+  std::set< std::string > namesUsed;
+  std::map< std::string, std::string >  nameMap;
+  bool getMaterialName(std::string& s, const NIFFile::NIFTriShape& ts);
+};
+
+bool ObjFileMaterialNames::getMaterialName(
+    std::string& s, const NIFFile::NIFTriShape& ts)
+{
+  s.clear();
+  std::string fullPath;
+  if (ts.haveMaterialPath())
+  {
+    s = ts.materialPath();
+    fullPath = s;
+    if (s.ends_with(".bgsm") || s.ends_with(".bgem"))
+      s.resize(s.length() - 5);
+    size_t  n = s.rfind('/');
+    if (n != std::string::npos)
+      s.erase(0, n + 1);
+  }
+  if (s.empty())
+  {
+    fullPath.clear();
+    s = "Material";
+  }
+  if (!fullPath.empty())
+  {
+    std::map< std::string, std::string >::const_iterator  i =
+        nameMap.find(fullPath);
+    if (i != nameMap.end())
+    {
+      s = i->second;
+      return false;
+    }
+  }
+  for (size_t j = 0; j < s.length(); j++)
+  {
+    char    c = s[j];
+    if (!((c >= '0' && c <= '9') ||
+          (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')))
+    {
+      s[j] = '_';
+    }
+  }
+  while (namesUsed.find(s) != namesUsed.end())
+  {
+    if (!(s.length() > 5 && s[s.length() - 5] == '_' &&
+          (FileBuffer::readUInt32Fast(s.c_str() + (s.length() - 4))
+           & 0xF0F0F0F0U) == 0x30303030U))
+    {
+      s += "_0001";
+    }
+    else
+    {
+      for (size_t j = s.length() - 1; s[j] >= '0' && s[j] <= '9'; j--)
+      {
+        if (s[j] == '9')
+        {
+          s[j] = '0';
+          continue;
+        }
+        s[j]++;
+        break;
+      }
+      if (s.ends_with("_0000"))
+        s += '1';
+    }
+  }
+  namesUsed.insert(s);
+  if (!fullPath.empty())
+    nameMap.insert(std::pair< std::string, std::string >(fullPath, s));
+  return true;
+}
+
+static void printOBJData(std::FILE *f, const NIFFile& nifFile,
+                         const char *mtlFileName, bool enableVertexColors)
+{
+  ObjFileMaterialNames  matNames;
+  std::string matName;
   std::vector< NIFFile::NIFTriShape > meshData;
   nifFile.getMesh(meshData);
   unsigned int  vertexNumBase = 1;
@@ -339,13 +417,45 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
     const char  *tsName = "";
     if (nifFile.getString(ts.nameID))
       tsName = nifFile.getString(ts.nameID)->c_str();
-    std::fprintf(f, "# %s\n\ng %s\n", tsName, tsName);
-    std::fprintf(f, "usemtl Material%06u\n\n", (unsigned int) (i + 1));
+    std::fprintf(f, "# %s\n\ng ", tsName);
+    for (size_t j = 0; tsName[j]; j++)
+    {
+      char    c = tsName[j];
+      if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+          (c >= '0' && c <= '9'))
+      {
+        std::fputc(c, f);
+      }
+    }
+    matNames.getMaterialName(matName, ts);
+    std::fprintf(f, "\nusemtl %s\n\n", matName.c_str());
+    bool    haveVertexColors = false;
+    if (enableVertexColors)
+    {
+      for (size_t j = 0; j < ts.vertexCnt; j++)
+      {
+        if (ts.vertexData[j].vertexColor != 0xFFFFFFFFU)
+        {
+          haveVertexColors = true;
+          break;
+        }
+      }
+    }
     for (size_t j = 0; j < ts.vertexCnt; j++)
     {
       NIFFile::NIFVertex  v = ts.vertexData[j];
       ts.vertexTransform.transformXYZ(v.x, v.y, v.z);
-      std::fprintf(f, "v %.8f %.8f %.8f\n", v.x, v.y, v.z);
+      if (!haveVertexColors)
+      {
+        std::fprintf(f, "v %.8f %.8f %.8f\n", v.x, v.y, v.z);
+      }
+      else
+      {
+        FloatVector4  c(&(v.vertexColor));
+        c *= (1.0f / 255.0f);
+        std::fprintf(f, "v %.8f %.8f %.8f %.4f %.4f %.4f\n",
+                     v.x, v.y, v.z, c[0], c[1], c[2]);
+      }
     }
     for (size_t j = 0; j < ts.vertexCnt; j++)
     {
@@ -373,12 +483,16 @@ static void printOBJData(std::FILE *f, const NIFFile& nifFile,
 
 static void printMTLData(std::FILE *f, const NIFFile& nifFile)
 {
+  ObjFileMaterialNames  matNames;
+  std::string matName;
   std::vector< NIFFile::NIFTriShape > meshData;
   nifFile.getMesh(meshData);
   for (size_t i = 0; i < meshData.size(); i++)
   {
     const NIFFile::NIFTriShape& ts = meshData[i];
-    std::fprintf(f, "newmtl Material%06u\n", (unsigned int) (i + 1));
+    if (!matNames.getMaterialName(matName, ts))
+      continue;
+    std::fprintf(f, "newmtl %s\n", matName.c_str());
     std::fprintf(f, "Ka 1.0 1.0 1.0\n");
     std::fprintf(f, "Kd 1.0 1.0 1.0\n");
     FloatVector4  specularColor(ts.m.s.specularColor);
@@ -396,14 +510,12 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
                  specularColor[0], specularColor[1], specularColor[2]);
     std::fprintf(f, "d 1.0\n");
     std::fprintf(f, "Ns %.1f\n", specularGlossiness);
-    for (size_t j = 0; j < 2; j++)
-    {
-      if (ts.m.texturePathMask & (1U << (unsigned int) j))
-      {
-        std::fprintf(f, "%s %s\n",
-                     (!j ? "map_Kd" : "map_Kn"), ts.m.texturePaths[j].c_str());
-      }
-    }
+    if (ts.m.texturePathMask & 0x0001U)
+      std::fprintf(f, "map_Kd %s\n", ts.m.texturePaths[0].c_str());
+    if (ts.m.texturePathMask & 0x0002U)
+      std::fprintf(f, "map_Bump %s\n", ts.m.texturePaths[1].c_str());
+    if (ts.m.texturePathMask & 0x0004U)
+      std::fprintf(f, "map_Ke %s\n", ts.m.texturePaths[2].c_str());
     std::fprintf(f, "\n");
   }
 }
@@ -427,6 +539,7 @@ int main(int argc, char **argv)
     int     renderWidth = 1344;
     int     renderHeight = 896;
     bool    verboseMaterialInfo = false;
+    bool    enableVertexColors = false;
     for ( ; argc >= 2 && argv[1][0] == '-'; argc--, argv++)
     {
       if (std::strcmp(argv[1], "--") == 0)
@@ -451,6 +564,10 @@ int main(int argc, char **argv)
       {
         outFmt = 4;
       }
+      else if (std::strcmp(argv[1], "-c") == 0)
+      {
+        enableVertexColors = true;
+      }
       else if (std::strncmp(argv[1], "-render", 7) == 0 ||
                std::strncmp(argv[1], "-view", 5) == 0)
       {
@@ -460,10 +577,10 @@ int main(int argc, char **argv)
         if (n != std::string::npos)
         {
           renderHeight = int(parseInteger(tmp.c_str() + (n + 1), 10,
-                                          "invalid image height", 8, 16384));
+                                          "invalid image height", 16, 16384));
           tmp.resize(n);
           renderWidth = int(parseInteger(tmp.c_str(), 10,
-                                         "invalid image width", 8, 16384));
+                                         "invalid image width", 16, 16384));
         }
         else if (!tmp.empty())
         {
@@ -520,6 +637,7 @@ int main(int argc, char **argv)
       std::fprintf(stderr, "    -m      Print detailed material information\n");
       std::fprintf(stderr, "    -obj    Print model data in .obj format\n");
       std::fprintf(stderr, "    -mtl    Print material data in .mtl format\n");
+      std::fprintf(stderr, "    -c      Enable vertex colors in .obj output\n");
       std::fprintf(stderr, "    -render[WIDTHxHEIGHT] DDSFILE   "
                            "Render model to DDS file\n");
 #ifdef HAVE_SDL2
@@ -528,12 +646,29 @@ int main(int argc, char **argv)
       return 1;
     }
     std::vector< std::string >  fileNames;
+    bool    haveMaterialPath = false;
     for (int i = 2; i < argc; i++)
-      fileNames.push_back(argv[i]);
-    fileNames.push_back(".bgem");
-    fileNames.push_back(".bgsm");
+    {
+      fileNames.emplace_back(argv[i]);
+      if (fileNames.back() == "materials" ||
+          fileNames.back().starts_with("materials/") ||
+          fileNames.back().ends_with(".bgsm") ||
+          fileNames.back().ends_with(".bgem"))
+      {
+        haveMaterialPath = true;
+      }
+    }
+    if (haveMaterialPath && outFmt == 6)
+    {
+      fileNames.emplace_back("meshes/preview/previewsphere01.nif");
+    }
+    else
+    {
+      fileNames.emplace_back(".bgem");
+      fileNames.emplace_back(".bgsm");
+    }
     if (outFmt >= 5)
-      fileNames.push_back(".dds");
+      fileNames.emplace_back(".dds");
     BA2File ba2File(argv[1], &fileNames);
     ba2File.getFileList(fileNames);
     if (outFmt >= 5)
@@ -544,11 +679,10 @@ int main(int argc, char **argv)
       {
         if (fileNames[i].length() >= 5)
         {
-          const char  *suffix =
-              fileNames[i].c_str() + (fileNames[i].length() - 4);
-          if (std::strcmp(suffix, ".nif") == 0 ||
-              std::strcmp(suffix, ".btr") == 0 ||
-              std::strcmp(suffix, ".bto") == 0)
+          if (fileNames[i].ends_with(".nif") ||
+              (haveMaterialPath && (fileNames[i].ends_with(".bgsm") ||
+                                    fileNames[i].ends_with(".bgem"))) ||
+              fileNames[i].ends_with(".btr") || fileNames[i].ends_with(".bto"))
           {
             i++;
             continue;
@@ -614,7 +748,7 @@ int main(int argc, char **argv)
         std::string mtlName(fileNames[i].c_str() + n);
         mtlName.resize(mtlName.length() - 3);
         mtlName += "mtl";
-        printOBJData(outFile, nifFile, mtlName.c_str());
+        printOBJData(outFile, nifFile, mtlName.c_str(), enableVertexColors);
       }
       if (outFmt == 4)
         printMTLData(outFile, nifFile);

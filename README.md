@@ -5,7 +5,7 @@ Simple command line utilities for extracting data from Elder Scrolls and Fallout
 **Note:** For Starfield and Creation Engine 2, a fork of fo76utils has been created, [ce2utils](https://github.com/fo76utils/ce2utils).
 
 * [baunpack](doc/baunpack.md) - list the contents of, or extract from .BA2 or .BSA archives.
-* [bcdecode](doc/bcdecode.md) - convert BC1 to BC5 block compressed DDS textures to uncompressed RGBA image data in raw or DDS format. BC7 decompression is also supported, using code from [detex](https://github.com/hglm/detex).
+* [bcdecode](doc/bcdecode.md) - convert BC1 to BC5 block compressed DDS textures to uncompressed RGBA image data in raw or DDS format. BC6H and BC7 decompression are also supported, using code from [detex](https://github.com/hglm/detex).
 * [btddump](doc/btddump.md) - extract terrain data from Fallout 76 .BTD files to raw height map, land textures, ground cover, or terrain color.
 * [cubeview](doc/cubeview.md) - view cube maps or other textures from archive files.
 * [esmdump](doc/esmdump.md) - list records from .ESM files in text or TSV format.
@@ -22,6 +22,18 @@ Simple command line utilities for extracting data from Elder Scrolls and Fallout
 Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on Linux. Run "scons" to compile. mman.c and mman.h are from mman-win32 (https://github.com/alitrack/mman-win32). All source code is under the MIT license.
 
 Running any of the programs without arguments prints detailed usage information.
+
+### Installation from binary packages
+
+Windows and Linux binaries are automatically compiled on every update to the source code, using GitHub workflows. To download these as .zip archives, select the most recent successful "Build FO76Utils" workflow run on the GitHub [Actions](https://github.com/fo76utils/fo76utils/actions) page, then either "build-linux" or "build-win" under Artifacts. Note that downloading the files requires logging in to GitHub.
+
+#### Setting the game data path
+
+The environment variable **FO76UTILS\_DATAPATH** can be used to set the default input data path globally for all tools. If this environment variable is set, for example to "D:/SteamLibrary/steamapps/common/Fallout76/Data", then the paths Fallout76/Data and Fallout76/Data/SeventySix.esm can be replaced in all the example commands with "" and SeventySix.esm, respectively.
+
+### Building from source code
+
+Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on Linux. Run "scons" to compile. mman.c and mman.h are from mman-win32 (https://github.com/alitrack/mman-win32). All source code is under the MIT license.
 
 ### Building from source code on Windows
 

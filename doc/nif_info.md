@@ -11,12 +11,13 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **-m**: Print detailed material information.
 * **-obj**: Print model data in .obj format.
 * **-mtl**: Print material data in .mtl format.
+* **-c**: Enable vertex colors in .obj output.
 * **-render[WIDTHxHEIGHT] DDSFILE**: Render model to DDS file.
-* **-view[WIDTHxHEIGHT]**: View model. Full screen mode is enabled if the specified width and height match the current screen resolution.
+* **-view[WIDTHxHEIGHT]**: View model. Full screen mode is enabled if the specified width and height match the current screen resolution. Downsampling is enabled if the image dimensions exceed the screen resolution, and are even numbers. For example with a 1920x1080 display, -view1920x1080 runs in full screen mode, -view3200x1800 downsamples to 1600x900, and -view3840x2160 downsamples and uses full screen mode.
 
 ### Keyboard controls in view mode
 
-* **0** to **5**: Set debug render mode. 0 or 1: disabled (default), 2: depth, 3: normals, 4: diffuse texture only with no lighting, 5: light only (white textures).
+* **0** to **5**: Set debug render mode. 0: disabled (default), 1: TriShape block IDs, 2: depth, 3: normals, 4: diffuse texture only with no lighting, 5: light only (white textures).
 * **+**, **-**: Zoom in or out.
 * **Keypad 0**, **5**: Set view from the bottom or top.
 * **Keypad 1** to **9**: Set isometric view from the SW to NE (default = NW).
@@ -36,12 +37,14 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **Caps Lock**: Toggle fine adjustment of view and lighting parameters.
 * **Page Up**: Enable downsampling (slow).
 * **Page Down**: Disable downsampling.
+* **B**: Cycle background type (black/checkerboard/gradient).
 * **Space**, **Backspace**: Load next or previous file matching the pattern.
-* **F9**: Select file from list.
+* **F9**: Select file from list. Use the mouse or the arrow keys to navigate the file list, left clicking selects an item, double or right clicking opens it.
 * **F12** or **Print Screen**: Save screenshot.
 * **F11**: Save high quality screenshot (double resolution and downsample).
 * **P**: Print current settings and file name.
-* **V**: View detailed model information.
+* **V**: View detailed model information. The text can be scrolled with Page Up/Page Down or with the mouse wheel, Ctrl-A copies the entire buffer to the clipboard, C returns to model view mode.
+* **Mouse buttons**: In debug mode 1 only: print the TriShape block and material path of the selected shape based on the color of the pixel, and also copy it to the clipboard. The left button prints basic information only, while the middle and right buttons print verbose information (in text view mode) about the geometry and material, respectively.
 * **H**: Show help screen.
 * **C**: Clear messages.
 * **Esc**: Quit program.

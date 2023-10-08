@@ -298,18 +298,20 @@ void BA2File::loadFile(FileBuffer& buf, size_t archiveFile,
       continue;
     fileName2 += c;
   }
-  if ((n = fileName2.rfind("/interface/")) != std::string::npos ||
+  if ((n = fileName2.rfind("/geometries/")) != std::string::npos ||
+      (n = fileName2.rfind("/interface/")) != std::string::npos ||
       (n = fileName2.rfind("/materials/")) != std::string::npos ||
       (n = fileName2.rfind("/meshes/")) != std::string::npos ||
       (n = fileName2.rfind("/sound/")) != std::string::npos ||
       (n = fileName2.rfind("/strings/")) != std::string::npos ||
+      (n = fileName2.rfind("/terrain/")) != std::string::npos ||
       (n = fileName2.rfind("/textures/")) != std::string::npos)
   {
     fileName2.erase(0, n + 1);
   }
-  while (std::strncmp(fileName2.c_str(), "./", 2) == 0)
+  while (fileName2.starts_with("./"))
     fileName2.erase(0, 2);
-  while (std::strncmp(fileName2.c_str(), "../", 3) == 0)
+  while (fileName2.starts_with("../"))
     fileName2.erase(0, 3);
   if (fileName2.empty())
     return;
@@ -366,25 +368,36 @@ void BA2File::loadArchivesFromDir(const char *pathName)
           baseName[i] = baseName[i] + ('a' - 'A');
       }
       size_t  n = baseName.rfind('.');
-      if (n == std::string::npos || (n + 4) > baseName.length())
-        continue;
-      const char  *s = baseName.c_str() + (baseName.length() - 4);
-      if (!(FileBuffer::checkType(0x3261622E, s) ||     // ".ba2"
-            FileBuffer::checkType(0x6173622E, s) ||     // ".bsa"
-            FileBuffer::checkType(0x6D656762, s) ||     // "bgem"
-            FileBuffer::checkType(0x6D736762, s) ||     // "bgsm"
-            FileBuffer::checkType(0x6F74622E, s) ||     // ".bto"
-            FileBuffer::checkType(0x7274622E, s) ||     // ".btr"
-            FileBuffer::checkType(0x7364642E, s) ||     // ".dds"
-            FileBuffer::checkType(0x66696E2E, s) ||     // ".nif"
-            FileBuffer::checkType(0x73676E69, s)))      // "ings"
+      if (n == std::string::npos ||
+          ((((baseName.length() - n) - 4) & ~1ULL) &&
+           !baseName.ends_with("strings")))
       {
         continue;
       }
-      if ((std::strncmp(baseName.c_str(), "oblivion", 8) == 0 ||
-           std::strncmp(baseName.c_str(), "fallout", 7) == 0 ||
-           std::strncmp(baseName.c_str(), "skyrim", 6) == 0 ||
-           std::strncmp(baseName.c_str(), "seventysix", 10) == 0) &&
+      const char  *s = baseName.c_str() + (baseName.length() - 4);
+      std::uint32_t fileType = FileBuffer::readUInt32Fast(s);
+      switch (fileType)
+      {
+        case 0x3261622EU:               // ".ba2"
+        case 0x6173622EU:               // ".bsa"
+        case 0x6474622EU:               // ".btd"
+        case 0x6F74622EU:               // ".bto"
+        case 0x7274622EU:               // ".btr"
+        case 0x7364642EU:               // ".dds"
+        case 0x74616D2EU:               // ".mat"
+        case 0x66696E2EU:               // ".nif"
+        case 0x6D656762U:               // "bgem"
+        case 0x6D736762U:               // "bgsm"
+        case 0x6873656DU:               // "mesh"
+        case 0x73676E69U:               // "ings"
+          break;
+        default:
+          continue;
+      }
+      if ((baseName.starts_with("oblivion") ||
+           baseName.starts_with("fallout") || baseName.starts_with("skyrim") ||
+           baseName.starts_with("seventysix") ||
+           baseName.starts_with("starfield")) &&
           baseName.find("update") == std::string::npos)
       {
         archiveNames1.insert(fullName);
@@ -864,5 +877,45 @@ int BA2File::extractTexture(std::vector< unsigned char >& buf,
 
   extractBlock(buf, unpackedSize, fileDecl, p, packedSize);
   return mipOffset;
+}
+
+size_t BA2File::extractFile(
+    const unsigned char*& fileData, std::vector< unsigned char >& buf,
+    const std::string& fileName) const
+{
+  fileData = (unsigned char *) 0;
+  buf.clear();
+  const FileDeclaration *fd = findFile(fileName);
+  if (!fd)
+    throw FO76UtilsError("file %s not found in archive", fileName.c_str());
+  const FileDeclaration&  fileDecl = *fd;
+  const unsigned char *p = fileDecl.fileData;
+  unsigned int  packedSize = fileDecl.packedSize;
+  unsigned int  unpackedSize = fileDecl.unpackedSize;
+  int     archiveType = fileDecl.archiveType;
+  if (archiveType & 0x40000100)         // BSA with compression or full names
+  {
+    unpackedSize = getBSAUnpackedSize(p, fileDecl);
+    packedSize = packedSize - (unsigned int) (p - fileDecl.fileData);
+  }
+  if (!unpackedSize)
+    return 0;
+  if (!(packedSize || archiveType == 1 || archiveType == 2))
+  {
+    const FileBuffer& fileBuf = *(archiveFiles[fileDecl.archiveFile]);
+    size_t  offs = size_t(p - fileBuf.data());
+    if (offs >= fileBuf.size() || (offs + unpackedSize) > fileBuf.size())
+      errorMessage("invalid packed data offset or size");
+    fileData = p;
+    return unpackedSize;
+  }
+
+  buf.reserve(unpackedSize);
+  if (archiveType == 1 || archiveType == 2)
+    (void) extractBA2Texture(buf, fileDecl);
+  else
+    extractBlock(buf, unpackedSize, fileDecl, p, packedSize);
+  fileData = buf.data();
+  return buf.size();
 }
 

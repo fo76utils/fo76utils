@@ -170,16 +170,58 @@ inline std::uint16_t convertToFloat16(float x)
 std::uint16_t convertToFloat16(float x);
 #endif
 
+inline void hashFunctionUInt32(std::uint32_t& h, std::uint32_t m)
+{
+#if ENABLE_X86_64_AVX
+  __asm__ ("crc32 %1, %0" : "+r" (h) : "r" (m));
+#else
+  std::uint64_t tmp = (h ^ m) * std::uint64_t(0xEE088D97U);
+  h = std::uint32_t((tmp + (tmp >> 32)) & 0xFFFFFFFFU);
+#endif
+}
+
 inline void hashFunctionUInt64(std::uint64_t& h, std::uint64_t m)
 {
 #if ENABLE_X86_64_AVX
   __asm__ ("crc32 %1, %0" : "+r" (h) : "r" (m));
 #else
-  static const std::uint64_t  multValue = 0xEE088D97U;
+  const std::uint64_t multValue = 0xEE088D97U;
   h = std::uint32_t((h ^ m) & 0xFFFFFFFFU) * multValue;
   h = h + (h >> 32);
   h = std::uint32_t((h ^ (m >> 32)) & 0xFFFFFFFFU) * multValue;
   h = h + (h >> 32);
+#endif
+}
+
+extern const std::uint32_t crc32Table_EDB88320[256];
+#if !ENABLE_X86_64_AVX
+extern const std::uint32_t crc32Table_82F63B78[256];
+#endif
+
+inline void hashFunctionCRC32(std::uint32_t& h, unsigned char c)
+{
+  h = (h >> 8) ^ crc32Table_EDB88320[(h ^ c) & 0xFFU];
+}
+
+template< typename T > inline void hashFunctionCRC32C(std::uint32_t& h, T c)
+{
+#if ENABLE_X86_64_AVX
+  if (sizeof(T) == 8)
+  {
+    std::uint64_t v = h;
+    __asm__ ("crc32 %1, %0" : "+r" (v) : "r" (std::uint64_t(c)));
+    h = std::uint32_t(v);
+    return;
+  }
+  if (sizeof(T) == 4)
+    __asm__ ("crc32 %1, %0" : "+r" (h) : "r" (std::uint32_t(c)));
+  else if (sizeof(T) == 2)
+    __asm__ ("crc32 %1, %0" : "+r" (h) : "r" (std::uint16_t(c)));
+  else if (sizeof(T) == 1)
+    __asm__ ("crc32 %1, %0" : "+r" (h) : "r" (std::uint8_t(c)));
+#else
+  for (size_t i = 0; i < sizeof(T); i++, c = c >> 8)
+    h = (h >> 8) ^ crc32Table_82F63B78[(h ^ c) & 0xFFU];
 #endif
 }
 
@@ -252,6 +294,27 @@ long parseInteger(const char *s, int base = 0, const char *errMsg = (char *) 0,
 
 double parseFloat(const char *s, const char *errMsg = (char *) 0,
                   double minVal = -1.0e38, double maxVal = 1.0e38);
+
+inline std::uint64_t timerFunctionRDTSC()
+{
+#if defined(__GNUC__) && (defined(__x86_64__) || defined(__x86_64))
+  std::uint32_t tmp1, tmp2;
+  __asm__ __volatile__ ("lfence\n\t"
+                        "rdtsc" : "=a" (tmp1), "=d" (tmp2));
+  return ((std::uint64_t(tmp2) << 32) | tmp1);
+#else
+  return 0UL;
+#endif
+}
+
+void memsetUInt32(std::uint32_t *p, std::uint32_t c, size_t n);
+void memsetUInt64(std::uint64_t *p, std::uint64_t c, size_t n);
+void memsetFloat(float *p, float c, size_t n);
+
+#ifdef __GNUC__
+__attribute__ ((__format__ (__printf__, 2, 3)))
+#endif
+void printToString(std::string& s, const char *fmt, ...);
 
 #endif
 

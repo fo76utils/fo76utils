@@ -2,6 +2,8 @@
 #include "common.hpp"
 #include "filebuf.hpp"
 
+#include <bit>
+
 #if defined(_WIN32) || defined(_WIN64)
 #  include <windows.h>
 #  include <io.h>
@@ -81,7 +83,7 @@ float FileBuffer::readFloat()
 #if defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
   if (!((tmp + 0x00800000U) & 0x7F000000U))
     return 0.0f;
-  return *(reinterpret_cast< const float * >(fileBuf + (filePos - 4)));
+  return std::bit_cast< float, std::uint32_t >(tmp);
 #else
   int     e = int((tmp >> 23) & 0xFF);
   if (e == 0x00 || e == 0xFF)
@@ -135,7 +137,7 @@ FloatVector4 FileBuffer::readFloat16Vector4()
   tmp = (std::uint64_t) readUInt32Fast();
   tmp = tmp | ((std::uint64_t) readUInt32Fast() << 32);
 #endif
-  return FloatVector4::convertFloat16(tmp);
+  return FloatVector4::convertFloat16(tmp, true);
 }
 
 std::uint64_t FileBuffer::readUInt64()
@@ -243,15 +245,8 @@ void FileBuffer::readPath(std::string& s, size_t n,
     if (p == std::string::npos)
       s.insert(0, prefix);
   }
-  if (suffix && suffix[0] != '\0')
-  {
-    size_t  suffixLen = std::strlen(suffix);
-    if (s.length() < suffixLen ||
-        std::strcmp(s.c_str() + (s.length() - suffixLen), suffix) != 0)
-    {
-      s += suffix;
-    }
-  }
+  if (suffix && suffix[0] != '\0' && !s.ends_with(suffix))
+    s += suffix;
 }
 
 unsigned char FileBuffer::readUInt8(size_t offs) const

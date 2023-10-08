@@ -228,7 +228,8 @@ class DDSInputFile : public FileBuffer
     pixelFormatL8A24 = 7,
     // Ground cover opacities only (8 layers).
     pixelFormatA8 = 8,
-    // 3-bit opacities for 5 additional texture layers.
+    // 3-bit opacities for 5 additional texture layers and one with 1-bit alpha.
+    // b0 to b2 = top layer.
     pixelFormatA16 = 9,
     // 4-bit opacities for 8 additional texture layers.
     pixelFormatA32 = 10,

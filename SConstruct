@@ -37,6 +37,7 @@ libSources += ["src/terrmesh.cpp", "src/render.cpp", "src/rndrbase.cpp"]
 libSources += ["src/markers.cpp"]
 # detex source files
 libSources += ["src/bits.c", "src/bptc-tables.c", "src/decompress-bptc.c"]
+libSources += ["src/decompress-bptc-float.c"]
 fo76utilsLib = env.StaticLibrary("fo76utils", libSources)
 
 if int(ARGUMENTS.get("pymodule", 0)):
