@@ -19,8 +19,6 @@ Simple command line utilities for extracting data from Elder Scrolls and Fallout
 * [terrain](doc/terrain.md) - older and simpler program to render terrain and water only to an RGB image, using files created by btddump, findwater, or fo4land. Includes 2D and isometric mode.
 * [wrldview](doc/wrldview.md) - interactive version of render.
 
-Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on Linux. Run "scons" to compile. mman.c and mman.h are from mman-win32 (https://github.com/alitrack/mman-win32). All source code is under the MIT license.
-
 Running any of the programs without arguments prints detailed usage information.
 
 ### Installation from binary packages
