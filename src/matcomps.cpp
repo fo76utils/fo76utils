@@ -619,16 +619,26 @@ void CE2MaterialDB::ComponentInfo::readUVStreamID(
         static_cast< const CE2Material::UVStream * >(
             readBSComponentDB2ID(p, isDiff, 6));
     if (BRANCH_LIKELY(p.componentType == 0x006BU))
-    {                                   // "BSMaterial::UVStreamID"
+    {                           // "BSMaterial::UVStreamID"
       if (p.o->type == 2)
         static_cast< CE2Material::Blender * >(p.o)->uvStream = uvStream;
       else if (p.o->type == 3)
         static_cast< CE2Material::Layer * >(p.o)->uvStream = uvStream;
     }
     else if (p.componentType == 0x0075U)
-    {                                   // "BSMaterial::AlphaSettingsComponent"
+    {                           // "BSMaterial::AlphaSettingsComponent"
       if (p.o->type == 1)
         static_cast< CE2Material * >(p.o)->alphaUVStream = uvStream;
+    }
+    else if (p.componentType == 0x0074U)
+    {                           // "BSMaterial::DetailBlenderSettingsComponent"
+      if (p.o->type == 1)
+      {
+        CE2Material::DetailBlenderSettings  *sp =
+            const_cast< CE2Material::DetailBlenderSettings * >(
+                static_cast< CE2Material * >(p.o)->detailBlenderSettings);
+        sp->uvStream = uvStream;
+      }
     }
   }
 }
@@ -1157,7 +1167,14 @@ void CE2MaterialDB::ComponentInfo::readParamBool(
       break;
     unsigned int  i = p.componentIndex;
     if (p.o->type == 2 && i < CE2Material::Blender::maxBoolParams)
+    {
       static_cast< CE2Material::Blender * >(p.o)->boolParams[i] = tmp;
+    }
+    else if (p.o->type == 1 && i == 0U)
+    {
+      static_cast< CE2Material * >(p.o)->setFlags(CE2Material::Flag_TwoSided,
+                                                  tmp);
+    }
   }
 }
 
@@ -1228,12 +1245,33 @@ bool CE2MaterialDB::ComponentInfo::readSourceTextureWithReplacement(
     const std::string*& texturePath, std::uint32_t& textureReplacement,
     bool& textureReplacementEnabled, ComponentInfo& p, bool isDiff)
 {
-  (void) texturePath;
-  (void) textureReplacement;
-  (void) textureReplacementEnabled;
-  (void) p;
-  (void) isDiff;
-  return false;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 1U, isDiff); )
+  {
+    if (n == 0U)
+    {
+      for (unsigned int n2 = 0U - 1U; p.getFieldNumber(n2, 0U, isDiff); )
+      {
+        if (!p.readAndStoreString(texturePath, 1))
+          return false;
+      }
+    }
+    else
+    {
+      for (unsigned int n2 = 0U - 1U; p.getFieldNumber(n2, 1U, isDiff); )
+      {
+        if (n2 == 0U)
+        {
+          if (!p.readBool(textureReplacementEnabled))
+            return false;
+        }
+        else
+        {
+          readColorValue(textureReplacement, p, isDiff);
+        }
+      }
+    }
+  }
+  return true;
 }
 
 // BSComponentDB2::DBFileIndex::EdgeInfo
@@ -1280,8 +1318,43 @@ void CE2MaterialDB::ComponentInfo::readFlowSettingsComponent(
 void CE2MaterialDB::ComponentInfo::readDetailBlenderSettings(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  CE2Material *m = (CE2Material *) 0;
+  CE2Material::DetailBlenderSettings  *sp =
+      (CE2Material::DetailBlenderSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    sp = const_cast< CE2Material::DetailBlenderSettings * >(
+             m->detailBlenderSettings);
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 2U, isDiff); )
+  {
+    if (n == 0U)
+    {
+      bool    tmp;
+      if (!p.readBool(tmp))
+        break;
+      if (!m)
+        continue;
+      m->setFlags(CE2Material::Flag_UseDetailBlender, tmp);
+      sp->isEnabled = tmp;
+    }
+    else if (n == 1U)
+    {
+      CE2Material::DetailBlenderSettings  tmp;
+      CE2Material::DetailBlenderSettings  *spTmp = (!sp ? &tmp : sp);
+      if (!readSourceTextureWithReplacement(
+               spTmp->texturePath, spTmp->textureReplacement,
+               spTmp->textureReplacementEnabled, p, isDiff))
+      {
+        break;
+      }
+    }
+    else
+    {
+      readUVStreamID(p, isDiff);
+    }
+  }
 }
 
 // BSMaterial::LayerID
@@ -1658,12 +1731,16 @@ void CE2MaterialDB::ComponentInfo::readTextureReplacement(
       bool    isEnabled;
       if (!p.readBool(isEnabled))
         break;
-      if (txtSet)
+      if (BRANCH_LIKELY(txtSet))
       {
         if (!isEnabled)
           txtSet->textureReplacementMask &= ~(1U << p.componentIndex);
         else
           txtSet->textureReplacementMask |= (1U << p.componentIndex);
+      }
+      else if (blender)
+      {
+        blender->textureReplacementEnabled = isEnabled;
       }
       continue;
     }
@@ -1683,8 +1760,17 @@ void CE2MaterialDB::ComponentInfo::readTextureReplacement(
 void CE2MaterialDB::ComponentInfo::readBlendModeComponent(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    unsigned char tmp = 0xFF;
+    if (!p.readEnum(tmp, "\006Linear\010Additive\020PositionContrast\004None"
+                         "\020CharacterCombine\004Skin"))
+    {
+      break;
+    }
+    if (p.o->type == 2 && tmp != 0xFF)
+      static_cast< CE2Material::Blender * >(p.o)->blendMode = tmp;
+  }
 }
 
 // BSMaterial::LayeredEdgeFalloffComponent
@@ -1698,8 +1784,12 @@ void CE2MaterialDB::ComponentInfo::readBlendModeComponent(
 void CE2MaterialDB::ComponentInfo::readLayeredEdgeFalloffComponent(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
   (void) isDiff;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    static_cast< CE2Material * >(p.o)->setFlags(
+        CE2Material::Flag_LayeredEdgeFalloff, true);
+  }
 }
 
 // BSMaterial::VegetationSettingsComponent
@@ -1784,8 +1874,17 @@ void CE2MaterialDB::ComponentInfo::readVegetationSettingsComponent(
 void CE2MaterialDB::ComponentInfo::readTextureResolutionSetting(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    unsigned char tmp = 0xFF;
+    if (!p.readEnum(tmp, "\006Tiling\011UniqueMap"
+                         "\017DetailMapTiling\020HighResUniqueMap"))
+    {
+      break;
+    }
+    if (p.o->type == 5 && tmp != 0xFF)
+      static_cast< CE2Material::TextureSet * >(p.o)->resolutionHint = tmp;
+  }
 }
 
 // BSBind::Address
@@ -1859,8 +1958,14 @@ void CE2MaterialDB::ComponentInfo::readFloatLerpController(
 void CE2MaterialDB::ComponentInfo::readColorChannelTypeComponent(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    unsigned char tmp = 0xFF;
+    if (!p.readEnum(tmp, "\003Red\005Green\004Blue\005Alpha"))
+      break;
+    if (p.o->type == 2 && tmp != 0xFF)
+      static_cast< CE2Material::Blender * >(p.o)->colorChannel = tmp;
+  }
 }
 
 // BSMaterial::AlphaSettingsComponent
@@ -2100,8 +2205,29 @@ void CE2MaterialDB::ComponentInfo::readDistortionComponent(
 void CE2MaterialDB::ComponentInfo::readDetailBlenderSettingsComponent(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  CE2Material *m = (CE2Material *) 0;
+  CE2Material::DetailBlenderSettings  *sp =
+      (CE2Material::DetailBlenderSettings *) 0;
+  if (BRANCH_LIKELY(p.o->type == 1))
+  {
+    m = static_cast< CE2Material * >(p.o);
+    sp = reinterpret_cast< CE2Material::DetailBlenderSettings * >(
+             p.cdb.allocateSpace(sizeof(CE2Material::DetailBlenderSettings),
+                                 m->detailBlenderSettings));
+    if (!m->detailBlenderSettings)
+    {
+      sp->isEnabled = false;
+      sp->textureReplacementEnabled = false;
+      sp->textureReplacement = 0xFFFFFFFFU;
+      sp->texturePath = p.cdb.stringBuffers.front().data();
+      sp->uvStream = (CE2Material::UVStream *) 0;
+    }
+    m->detailBlenderSettings = sp;
+  }
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    readDetailBlenderSettings(p, isDiff);
+  }
 }
 
 // BSComponentDB2::DBFileIndex::ObjectInfo
@@ -2475,8 +2601,14 @@ void CE2MaterialDB::ComponentInfo::readMaterialOverrideColorTypeComponent(
 void CE2MaterialDB::ComponentInfo::readChannel(
     ComponentInfo& p, bool isDiff)
 {
-  (void) p;
-  (void) isDiff;
+  for (unsigned int n = 0U - 1U; p.getFieldNumber(n, 0U, isDiff); )
+  {
+    unsigned char tmp = 0xFF;
+    if (!p.readEnum(tmp, "\004Zero\003One\003Two\005Three"))
+      break;
+    if (p.o->type == 6 && p.componentType == 0x0095U && tmp != 0xFF)
+      static_cast< CE2Material::UVStream * >(p.o)->channel = tmp;
+  }
 }
 
 // BSBind::ColorCurveController

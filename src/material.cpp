@@ -173,6 +173,7 @@ void CE2MaterialDB::initializeObject(
         p->translucencySettings = (CE2Material::TranslucencySettings *) 0;
         p->decalSettings = (CE2Material::DecalSettings *) 0;
         p->vegetationSettings = (CE2Material::VegetationSettings *) 0;
+        p->detailBlenderSettings = (CE2Material::DetailBlenderSettings *) 0;
       }
       break;
     case 2:
@@ -181,6 +182,9 @@ void CE2MaterialDB::initializeObject(
         p->uvStream = (CE2Material::UVStream *) 0;
         p->texturePath = emptyString;
         p->textureReplacement = 0xFFFFFFFFU;
+        p->textureReplacementEnabled = false;
+        p->blendMode = 0;               // "Linear"
+        p->colorChannel = 0;            // "Red"
         for (size_t i = 0; i < CE2Material::Blender::maxFloatParams; i++)
           p->floatParams[i] = 0.5f;
         for (size_t i = 0; i < CE2Material::Blender::maxBoolParams; i++)
@@ -213,6 +217,7 @@ void CE2MaterialDB::initializeObject(
         p->textureReplacementMask = 0U;
         for (size_t i = 0; i < CE2Material::TextureSet::maxTexturePaths; i++)
           p->textureReplacements[i] = defaultTextureRepl[i];
+        p->resolutionHint = 0;          // "Tiling"
       }
       break;
     case 6:
@@ -220,6 +225,7 @@ void CE2MaterialDB::initializeObject(
         CE2Material::UVStream *p = static_cast< CE2Material::UVStream * >(o);
         p->scaleAndOffset = FloatVector4(1.0f, 1.0f, 0.0f, 0.0f);
         p->textureAddressMode = 0;      // "Wrap"
+        p->channel = 1;                 // "One"
       }
       break;
   }

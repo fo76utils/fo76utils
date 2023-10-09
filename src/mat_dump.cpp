@@ -32,8 +32,8 @@ const char * CE2Material::materialFlagNames[32] =
   "Opacity layer 3 active",             // 18 (0x00040000)
   "Is terrain",                         // 19 (0x00080000)
   "Is hair",                            // 20 (0x00100000)
-  "",                                   // 21 (0x00200000)
-  "",                                   // 22 (0x00400000)
+  "Use detail blender",                 // 21 (0x00200000)
+  "Layered edge falloff",               // 22 (0x00400000)
   "",                                   // 23 (0x00800000)
   "",                                   // 24 (0x01000000)
   "",                                   // 25 (0x02000000)
@@ -124,9 +124,10 @@ static const char *colorChannelNames[4] =
   "Red", "Green", "Blue", "Alpha"
 };
 
-static const char *alphaBlendModeNames[4] =
+static const char *alphaBlendModeNames[8] =
 {
-  "Linear", "Additive", "PositionContrast", "None"
+  "Linear", "Additive", "PositionContrast", "None",
+  "CharacterCombine", "Skin", "Unknown", "Unknown"
 };
 
 static const char *blenderModeNames[4] =
@@ -184,6 +185,16 @@ static const char *decalRenderLayerNames[2] =
 static const char *maskSourceBlenderNames[4] =
 {
   "None", "Blender1", "Blender2", "Blender3"
+};
+
+static const char *channelNames[4] =
+{
+  "Zero", "One", "Two", "Three"
+};
+
+static const char *resolutionSettingNames[4] =
+{
+  "Tiling", "UniqueMap", "DetailMapTiling", "HighResUniqueMap"
 };
 
 static
@@ -256,7 +267,7 @@ void CE2Material::printObjectInfo(
     printToStringBuf(buf, indentCnt, "Alpha source layer: %d\n",
                      int(alphaSourceLayer));
     printToStringBuf(buf, indentCnt, "Alpha blend mode: %s\n",
-                     alphaBlendModeNames[alphaBlendMode & 3]);
+                     alphaBlendModeNames[alphaBlendMode & 7]);
     if (flags & Flag_AlphaVertexColor)
     {
       printToStringBuf(buf, indentCnt, "Alpha vertex color channel: %s\n",
@@ -555,6 +566,29 @@ void CE2Material::printObjectInfo(
                      "(deprecated): %f\n",
                      vegetationSettings->terrainBlendGradientFactor);
   }
+  if ((flags & Flag_UseDetailBlender) && detailBlenderSettings &&
+      detailBlenderSettings->isEnabled)
+  {
+    if (!detailBlenderSettings->textureReplacementEnabled)
+    {
+      printToStringBuf(buf, indentCnt, "Detail blender texture file: \"");
+    }
+    else
+    {
+      printToStringBuf(buf, indentCnt,
+                       "Detail blender texture replacement: 0x%08X, file: \"",
+                       (unsigned int)
+                           detailBlenderSettings->textureReplacement);
+    }
+    buf += *(detailBlenderSettings->texturePath);
+    buf += "\"\n";
+    if (detailBlenderSettings->uvStream)
+    {
+      buf.resize(buf.length() + indentCnt, ' ');
+      buf += "Detail blender UV stream:  ";
+      detailBlenderSettings->uvStream->printObjectInfo(buf, indentCnt);
+    }
+  }
   for (unsigned int i = 0U; i < maxLayers && layerMask >= (1U << i); i++)
   {
     if (!((layerMask & (1U << i)) && layers[i]))
@@ -601,9 +635,20 @@ void CE2Material::Blender::printObjectInfo(
   for (unsigned int i = 0U; i < maxBoolParams; i++)
     printToStringBuf(buf, 0, "%s%d", (!i ? "  " : ", "), int(boolParams[i]));
   buf += '\n';
-  printToStringBuf(buf, indentCnt,
-                   "Texture replacement: 0x%08X, file: \"",
-                   (unsigned int) textureReplacement);
+  printToStringBuf(buf, indentCnt, "Blend mode: %s\n",
+                   alphaBlendModeNames[blendMode & 7]);
+  printToStringBuf(buf, indentCnt, "Color channel: %s\n",
+                   colorChannelNames[colorChannel & 3]);
+  if (!textureReplacementEnabled)
+  {
+    printToStringBuf(buf, indentCnt, "Texture file: \"");
+  }
+  else
+  {
+    printToStringBuf(buf, indentCnt,
+                     "Texture replacement: 0x%08X, file: \"",
+                     (unsigned int) textureReplacement);
+  }
   buf += *texturePath;
   buf += "\"\n";
 }
@@ -651,6 +696,8 @@ void CE2Material::TextureSet::printObjectInfo(
   CE2MaterialObject::printObjectInfo(buf, indentCnt);
   indentCnt = indentCnt + indentTabSize;
   printToStringBuf(buf, indentCnt, "Float param: %f\n", floatParam);
+  printToStringBuf(buf, indentCnt, "Resolution setting: %s\n",
+                   resolutionSettingNames[resolutionHint & 3]);
   for (unsigned int i = 0U; i < maxTexturePaths; i++)
   {
     if (!((texturePathMask | textureReplacementMask) & (1U << i)))
@@ -682,7 +729,8 @@ void CE2Material::UVStream::printObjectInfo(
                    "U, V offset: %f, %f\n",
                    scaleAndOffset[2], scaleAndOffset[3]);
   printToStringBuf(buf, indentCnt,
-                   "Texture address mode: %s\n",
-                   textureAddressModeNames[textureAddressMode & 3]);
+                   "Texture address mode: %s, Channel: %s\n",
+                   textureAddressModeNames[textureAddressMode & 3],
+                   channelNames[channel & 3]);
 }
 

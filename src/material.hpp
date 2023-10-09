@@ -52,6 +52,8 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     FloatVector4  scaleAndOffset;
     // 0 = "Wrap", 1 = "Clamp", 2 = "Mirror", 3 = "Border"
     unsigned char textureAddressMode;
+    // 1 = "One" (default), 2 = "Two"
+    unsigned char channel;
     void printObjectInfo(std::string& buf, size_t indentCnt) const;
   };
   struct TextureSet : public CE2MaterialObject  // object type 5
@@ -77,6 +79,9 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     // texture replacements are colors in R8G8B8A8 format
     std::uint32_t textureReplacementMask;
     std::uint32_t textureReplacements[maxTexturePaths];
+    // 0 = "Tiling" (default), 1 = "UniqueMap", 2 = "DetailMapTiling",
+    // 3 = "HighResUniqueMap"
+    unsigned char resolutionHint;
     void printObjectInfo(std::string& buf, size_t indentCnt) const;
   };
   struct Material : public CE2MaterialObject    // object type 4
@@ -103,6 +108,12 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     const UVStream  *uvStream;
     const std::string *texturePath;
     std::uint32_t textureReplacement;
+    bool    textureReplacementEnabled;
+    // 0 = "Linear" (default), 1 = "Additive", 2 = "PositionContrast",
+    // 3 = "None", 4 = "CharacterCombine", 5 = "Skin"
+    unsigned char blendMode;
+    // 0 = "Red" (default), 1 = "Green", 2 = "Blue", 3 = "Alpha"
+    unsigned char colorChannel;
     // parameters set via component types 0x0098 and 0x009A
     float   floatParams[maxFloatParams];
     bool    boolParams[maxBoolParams];
@@ -146,7 +157,9 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     Flag_OpacityLayer2Active = 0x00020000,
     Flag_OpacityLayer3Active = 0x00040000,
     Flag_IsTerrain = 0x00080000,
-    Flag_IsHair = 0x00100000
+    Flag_IsHair = 0x00100000,
+    Flag_UseDetailBlender = 0x00200000,
+    Flag_LayeredEdgeFalloff = 0x00400000
   };
   enum
   {
@@ -282,6 +295,14 @@ struct CE2Material : public CE2MaterialObject   // object type 1
     float   terrainBlendStrength;       // the last two variables are deprecated
     float   terrainBlendGradientFactor;
   };
+  struct DetailBlenderSettings
+  {
+    bool    isEnabled;
+    bool    textureReplacementEnabled;
+    std::uint32_t textureReplacement;
+    const std::string *texturePath;
+    const UVStream  *uvStream;
+  };
   static const char *materialFlagNames[32];
   static const char *shaderModelNames[64];
   std::uint32_t flags;
@@ -320,6 +341,7 @@ struct CE2Material : public CE2MaterialObject   // object type 1
   const TranslucencySettings  *translucencySettings;
   const DecalSettings   *decalSettings;
   const VegetationSettings  *vegetationSettings;
+  const DetailBlenderSettings *detailBlenderSettings;
   inline void setFlags(std::uint32_t m, bool n)
   {
     flags = (flags & ~m) | ((0U - std::uint32_t(n)) & m);
