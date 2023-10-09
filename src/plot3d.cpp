@@ -396,15 +396,14 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
   float   ao = 1.0f;
   if (p.textures[5])
   {
-    FloatVector4  tmp(p.textures[5]->getPixelT(txtU, txtV,
-                                               z.mipLevel + p.mipOffsets[5]));
-    ao = tmp[0] * (1.0f / 255.0f);
+    ao = p.textures[5]->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsets[5])[0]
+         * (1.0f / 255.0f);
   }
   if (p.textures[3])
   {
-    FloatVector4  tmp(p.textures[3]->getPixelT(txtU, txtV,
-                                               z.mipLevel + p.mipOffsets[3]));
-    smoothness = 255.0f - tmp[0];
+    smoothness =
+        255.0f
+        - p.textures[3]->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsets[3])[0];
   }
   int     s_i = roundFloat(smoothness) & 0xFF;
   smoothness = smoothness * (1.0f / 255.0f);
@@ -530,15 +529,13 @@ bool Plot3D_TriShape::getDiffuseColor_C(
     const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
   FloatVector4  baseColor(p.mp.s.baseColor);
-  if (false)
-    baseColor *= z.vertexColor;         // FIXME: this can be incorrect
   float   a = 255.0f;
   if (p.textures[2])
   {
     a = p.textures[2]->getPixelT_Inline(
             z.u(), z.v(), z.mipLevel + p.mipOffsets[2])[0];
   }
-  a *= baseColor[3];
+  a *= (baseColor * z.vertexColor)[3];
   if (BRANCH_UNLIKELY(a < p.mp.s.alphaThreshold))
     return false;
   FloatVector4  tmp(p.textures[0]->getPixelT_Inline(
