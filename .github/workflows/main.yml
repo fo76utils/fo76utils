@@ -14,7 +14,8 @@ jobs:
     - name: 'Checkout'
       uses: actions/checkout@v3
       with:
-        fetch-depth: 1
+        fetch-depth: 0
+        submodules: true
     
     - name: 'Setup MSYS2'
       uses: msys2/setup-msys2@v2
@@ -51,7 +52,8 @@ jobs:
     - name: 'Checkout'
       uses: actions/checkout@v3
       with:
-        fetch-depth: 1
+        fetch-depth: 0
+        submodules: true
       
     - name: 'Install required packages'
       uses: awalsh128/cache-apt-pkgs-action@latest
