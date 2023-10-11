@@ -91,22 +91,21 @@ if buildCubeView:
 render = env.Program("render", ["src/rndrmain.cpp"])
 terrain = env.Program("terrain", ["src/terrain.cpp"])
 
-if "win" in sys.platform:
-    if buildPackage:
-        pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, esm_view]
-        pkgFiles += [findwater, fo4land, landtxt, markers, nif_info, render]
-        pkgFiles += [terrain]
-        if buildCubeView:
-            pkgFiles += [cubeview, wrldview]
-            pkgFiles += ["/mingw64/bin/SDL2.dll", "LICENSE.SDL"]
-        pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
-        pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
-        pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
-        pkgFiles += Split("doc libfo76utils ltex scripts src SConstruct")
-        pkgFiles += Split("SConstruct.maps .github .gitignore LICENSE")
-        pkgFiles += Split("README.md README.mman-win32 README.detex")
-        pkgFiles += Split("mapicons.py tes5cell.txt")
-        package = env.Command(
-                      "fo76utils-" + str(buildPackage) + ".7z", pkgFiles,
-                      "7za a -m0=lzma -mx=9 -x!*/*.o $TARGET $SOURCES")
+if buildPackage and ("win" in sys.platform):
+    pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, esm_view]
+    pkgFiles += [findwater, fo4land, landtxt, markers, nif_info, render]
+    pkgFiles += [terrain]
+    if buildCubeView:
+        pkgFiles += [cubeview, wrldview]
+        pkgFiles += ["/mingw64/bin/SDL2.dll", "LICENSE.SDL"]
+    pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
+    pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
+    pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
+    pkgFiles += Split("doc libfo76utils ltex scripts src SConstruct")
+    pkgFiles += Split("SConstruct.maps .github .gitignore LICENSE")
+    pkgFiles += Split("README.md README.mman-win32 README.detex")
+    pkgFiles += Split("mapicons.py tes5cell.txt")
+    package = env.Command(
+                  "fo76utils-" + str(buildPackage) + ".7z", pkgFiles,
+                  "7za a -m0=lzma -mx=9 -x!*/*.o  -x!*/*/*.o $TARGET $SOURCES")
 
