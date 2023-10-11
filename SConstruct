@@ -108,5 +108,5 @@ if "win" in sys.platform:
         pkgFiles += Split("mapicons.py tes5cell.txt")
         package = env.Command(
                       "fo76utils-" + str(buildPackage) + ".7z", pkgFiles,
-                      "7za a -m0=lzma -mx=9 -x!src/*.o $TARGET $SOURCES")
+                      "7za a -m0=lzma -mx=9 -x!*/*.o $TARGET $SOURCES")
 
