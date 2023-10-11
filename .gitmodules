@@ -1,0 +1,3 @@
+[submodule "libfo76utils"]
+	path = libfo76utils
+	url = https://github.com/fo76utils/libfo76utils.git
