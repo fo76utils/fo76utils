@@ -4,7 +4,7 @@ import os, sys
 env = Environment(tools = [*filter(None, ARGUMENTS.get('tools','').split(','))] or None,
                   ENV = { "PATH" : os.environ["PATH"],
                           "HOME" : os.environ["HOME"] })
-env["CCFLAGS"] = Split("-Wall -Isrc")
+env["CCFLAGS"] = Split("-Wall -Isrc -Ilibfo76utils/src -DBUILD_CE2UTILS")
 env["CFLAGS"] = Split("-std=c99")
 env["CXXFLAGS"] = Split("-std=c++20")
 avxLevel = int(ARGUMENTS.get("avx", 2))
@@ -33,17 +33,21 @@ cdbDebugLevel = int(ARGUMENTS.get("matdebug", -1))
 if cdbDebugLevel >= 0:
     env.Append(CCFLAGS = ["-DENABLE_CDB_DEBUG=%d" % (cdbDebugLevel)])
 
-libSources = ["src/common.cpp", "src/filebuf.cpp", "src/zlib.cpp"]
-libSources += ["src/ba2file.cpp", "src/esmfile.cpp", "src/stringdb.cpp"]
-libSources += ["src/btdfile.cpp", "src/ddstxt.cpp", "src/downsamp.cpp"]
-libSources += ["src/esmdbase.cpp", "src/nif_file.cpp", "src/meshfile.cpp"]
-libSources += ["src/cdb_file.cpp", "src/material.cpp", "src/matcomps.cpp"]
-libSources += ["src/mat_dump.cpp", "src/markers.cpp", "src/landdata.cpp"]
-libSources += ["src/landtxt.cpp", "src/terrmesh.cpp", "src/plot3d.cpp"]
-libSources += ["src/render.cpp", "src/rndrbase.cpp"]
+libSources = ["libfo76utils/src/common.cpp", "libfo76utils/src/filebuf.cpp"]
+libSources += ["libfo76utils/src/zlib.cpp", "libfo76utils/src/ba2file.cpp"]
+libSources += ["libfo76utils/src/esmfile.cpp", "libfo76utils/src/stringdb.cpp"]
+libSources += ["src/btdfile.cpp", "libfo76utils/src/ddstxt.cpp"]
+libSources += ["libfo76utils/src/downsamp.cpp", "src/esmdbase.cpp"]
+libSources += ["src/nif_file.cpp", "src/meshfile.cpp"]
+libSources += ["libfo76utils/src/cdb_file.cpp", "libfo76utils/src/material.cpp"]
+libSources += ["libfo76utils/src/matcomps.cpp", "libfo76utils/src/mat_dump.cpp"]
+libSources += ["src/markers.cpp", "src/landdata.cpp", "src/landtxt.cpp"]
+libSources += ["src/terrmesh.cpp", "src/plot3d.cpp", "src/render.cpp"]
+libSources += ["src/rndrbase.cpp"]
 # detex source files
-libSources += ["src/bits.c", "src/bptc-tables.c", "src/decompress-bptc.c"]
-libSources += ["src/decompress-bptc-float.c"]
+libSources += ["libfo76utils/src/bits.c", "libfo76utils/src/bptc-tables.c"]
+libSources += ["libfo76utils/src/decompress-bptc.c"]
+libSources += ["libfo76utils/src/decompress-bptc-float.c"]
 ce2utilsLib = env.StaticLibrary("ce2utils", libSources)
 
 if int(ARGUMENTS.get("pymodule", 0)):
@@ -71,7 +75,7 @@ try:
 except:
     buildCubeView = False
 sdlVideoLib = nifViewEnv.StaticLibrary("sdlvideo",
-                                       ["src/nif_view.cpp", "src/sdlvideo.cpp"])
+                                       ["src/nif_view.cpp", "libfo76utils/src/sdlvideo.cpp"])
 nifViewEnv.Prepend(LIBS = [sdlVideoLib])
 
 baunpack = env.Program("baunpack", ["src/baunpack.cpp"])
@@ -84,7 +88,7 @@ markers = env.Program("markers", ["src/markmain.cpp"])
 mat_info = nifViewEnv.Program("mat_info", ["src/mat_info.cpp"])
 nif_info = nifViewEnv.Program("nif_info", ["src/nif_info.cpp"])
 esm_view_o = env.Object("esm_view", ["src/esmview.cpp"])
-sdlvstub_o = env.Object("sdlvstub", ["src/sdlvideo.cpp"])
+sdlvstub_o = env.Object("sdlvstub", ["libfo76utils/src/sdlvideo.cpp"])
 esm_view = env.Program("esm_view", [esm_view_o, sdlvstub_o])
 esmview_o = nifViewEnv.Object("esmview", ["src/esmview.cpp"])
 esmview = nifViewEnv.Program("esmview", [esmview_o])
@@ -94,21 +98,20 @@ if buildCubeView:
 render = env.Program("render", ["src/rndrmain.cpp"])
 terrain = env.Program("terrain", ["src/terrain.cpp"])
 
-if "win" in sys.platform:
-    if buildPackage:
-        pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, esm_view]
-        pkgFiles += [findwater, landtxt, markers, mat_info, nif_info]
-        pkgFiles += [render, terrain]
-        if buildCubeView:
-            pkgFiles += [cubeview, wrldview]
-            pkgFiles += ["/mingw64/bin/SDL2.dll", "LICENSE.SDL"]
-        pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
-        pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
-        pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
-        pkgFiles += Split("doc ltex scripts src SConstruct SConstruct.maps")
-        pkgFiles += Split(".github .gitignore LICENSE README.detex README.md")
-        pkgFiles += Split("README.mman-win32 mapicons.py tes5cell.txt")
-        package = env.Command(
-                      "ce2utils-" + str(buildPackage) + ".7z", pkgFiles,
-                      "7za a -m0=lzma -mx=9 -x!src/*.o $TARGET $SOURCES")
+if ("win" in sys.platform) and buildPackage:
+    pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, esm_view]
+    pkgFiles += [findwater, landtxt, markers, mat_info, nif_info]
+    pkgFiles += [render, terrain]
+    if buildCubeView:
+        pkgFiles += [cubeview, wrldview]
+        pkgFiles += ["/mingw64/bin/SDL2.dll", "LICENSE.SDL"]
+    pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
+    pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
+    pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
+    pkgFiles += Split("doc libfo76utils ltex scripts src SConstruct")
+    pkgFiles += Split("SConstruct.maps .github .gitignore LICENSE README.detex")
+    pkgFiles += Split("README.md README.mman-win32 mapicons.py tes5cell.txt")
+    package = env.Command(
+                  "ce2utils-" + str(buildPackage) + ".7z", pkgFiles,
+                  "7za a -m0=lzma -mx=9 -x!*/*.o -x!*/*/*.o $TARGET $SOURCES")
 

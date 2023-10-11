@@ -14,6 +14,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   static const float  fresnelRoughTable[1024];
   static const float  fresnelPoly3N_Glass[4];
   static const float  fresnelPoly3_Water[4];
+  static const float  fresnelPoly3_FO4[4];
   struct Vertex
   {
     FloatVector4  xyz;
