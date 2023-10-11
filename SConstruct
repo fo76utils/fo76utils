@@ -91,7 +91,7 @@ if buildCubeView:
 render = env.Program("render", ["src/rndrmain.cpp"])
 terrain = env.Program("terrain", ["src/terrain.cpp"])
 
-if buildPackage and ("win" in sys.platform):
+if ("win" in sys.platform) and buildPackage:
     pkgFiles = [baunpack, bcdecode, btddump, esmdump, esmview, esm_view]
     pkgFiles += [findwater, fo4land, landtxt, markers, nif_info, render]
     pkgFiles += [terrain]
