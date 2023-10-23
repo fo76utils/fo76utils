@@ -153,11 +153,7 @@ void readStarfieldMeshFile(std::vector< NIFFile::NIFVertex >& vertexData,
     FloatVector4  normal(FloatVector4::convertX10Y10Z10(vertexData[i].normal));
     FloatVector4  tangent(FloatVector4::convertX10Y10Z10(tmp));
     // calculate cross product
-    FloatVector4  bitangent(
-                      (tangent[1] * normal[2]) - (tangent[2] * normal[1]),
-                      (tangent[2] * normal[0]) - (tangent[0] * normal[2]),
-                      (tangent[0] * normal[1]) - (tangent[1] * normal[0]),
-                      0.0f);
+    FloatVector4  bitangent(tangent.crossProduct3(normal));
     vertexData[i].bitangent = bitangent.convertToX10Y10Z10();
   }
 
