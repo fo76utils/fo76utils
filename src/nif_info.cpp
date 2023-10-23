@@ -122,7 +122,7 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile,
         std::fprintf(f, "    Controller: %3d\n", lspBlock->controller);
       if (verboseMaterialInfo && lspBlock->material)
       {
-        std::string tmpBuf("    MaterialFile ");
+        std::string tmpBuf("    LayeredMaterial ");
         lspBlock->material->printObjectInfo(tmpBuf, 4, false);
         std::fwrite(tmpBuf.c_str(), sizeof(char), tmpBuf.length(), f);
       }

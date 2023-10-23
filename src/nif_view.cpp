@@ -651,7 +651,7 @@ static bool viewModelInfo(SDLDisplay& display, const NIFFile& nifFile)
         display.consolePrint("    Controller: %3d\n", lspBlock->controller);
       if (lspBlock->material)
       {
-        std::string tmpBuf("    MaterialFile ");
+        std::string tmpBuf("    LayeredMaterial ");
         lspBlock->material->printObjectInfo(tmpBuf, 4, false);
         std::string lineBuf;
         for (size_t j = 0; j < tmpBuf.length(); )
@@ -694,7 +694,7 @@ static bool viewMaterialInfo(
   }
   else
   {
-    std::string tmpBuf("MaterialFile ");
+    std::string tmpBuf("LayeredMaterial ");
     m->printObjectInfo(tmpBuf, 0, false);
     std::string lineBuf;
     for (size_t j = 0; j < tmpBuf.length(); )
@@ -809,7 +809,7 @@ static bool printGeometryBlockInfo(
   }
   if (mouseButton == 3 && meshData[c].m)
   {
-    tmpBuf += "MaterialFile ";
+    tmpBuf += "LayeredMaterial ";
     meshData[c].m->printObjectInfo(tmpBuf, 0, false);
   }
   if (!tmpBuf.empty())
