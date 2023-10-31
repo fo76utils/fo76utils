@@ -4,7 +4,6 @@
 #include "fp32vec4.hpp"
 
 #include <algorithm>
-#include <bit>
 #include <chrono>
 
 bool Renderer::RenderObject::operator<(const RenderObject& r) const

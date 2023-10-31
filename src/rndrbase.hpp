@@ -11,7 +11,6 @@
 #include "nif_file.hpp"
 #include "plot3d.hpp"
 
-#include <bit>
 #include <thread>
 #include <mutex>
 

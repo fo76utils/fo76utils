@@ -5,7 +5,6 @@
 #include "sdlvideo.hpp"
 #include "markers.hpp"
 
-#include <bit>
 #include <ctime>
 #include <SDL2/SDL.h>
 

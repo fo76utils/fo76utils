@@ -8,7 +8,6 @@
 #include "landtxt.hpp"
 #include "downsamp.hpp"
 
-#include <bit>
 #include <thread>
 
 static bool checkNameExtension(const char *fileName, const char *suffix)

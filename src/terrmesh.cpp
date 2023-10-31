@@ -5,8 +5,6 @@
 #include "landtxt.hpp"
 #include "material.hpp"
 
-#include <bit>
-
 static inline FloatVector4 calculateNormal(FloatVector4 v1, FloatVector4 v2)
 {
   // cross product of v1 and v2

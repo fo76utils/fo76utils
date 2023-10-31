@@ -3,7 +3,6 @@
 #include "plot3d.hpp"
 
 #include <algorithm>
-#include <bit>
 
 // vertex coordinates closer than this to exact integers are rounded
 #ifndef VERTEX_XY_SNAP
