@@ -6,6 +6,7 @@
 #include "esmfile.hpp"
 #include "ba2file.hpp"
 #include "stringdb.hpp"
+#include "cdb_file.hpp"
 
 class ESMDump : public ESMFile
 {
@@ -85,6 +86,30 @@ class ESMDump : public ESMFile
   void findEDIDs(unsigned int formID = 0U);
   void loadFieldDefFile(const char *fileName);
   void loadFieldDefFile(FileBuffer& inFile);
+};
+
+struct CDBDump
+{
+  CDBFile cdbFile;
+ protected:
+  struct CDBClassDef
+  {
+    std::vector< std::pair< std::uint32_t, std::uint32_t > >  fields;
+    bool    isUser = false;
+  };
+  std::map< std::uint32_t, CDBClassDef >  classes;
+  void dumpItem(std::string& s, CDBFile::CDBChunk& chunkBuf, bool isDiff,
+                std::uint32_t itemName, std::uint32_t itemType, int indentCnt);
+ public:
+  CDBDump(const unsigned char *fileData, size_t fileSize)
+    : cdbFile(fileData, fileSize)
+  {
+  }
+  CDBDump(const char *fileName)
+    : cdbFile(fileName)
+  {
+  }
+  void readAllChunks(std::string& s, int indentCnt);
 };
 
 #endif
