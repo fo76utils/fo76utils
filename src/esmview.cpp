@@ -511,24 +511,12 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
     tmpField.type = f.type;
     if (!convertField(tmpField.data, r, f) && f.size() > 0 && !noUnknownFields)
     {
-      char    tmpBuf[32];
-      std::sprintf(tmpBuf, "\t[%5u]", (unsigned int) f.size());
-      tmpField.data = tmpBuf;
-      size_t  maxElements = size_t(getTextColumns());
-      if (maxElements < 32)
-        maxElements = 32;
-      maxElements = ((maxElements - 24) * 39) >> 7;
-      for (size_t i = 0; i < f.size(); i++)
-      {
-        if (i >= maxElements)
-        {
-          tmpField.data += " ...";
-          break;
-        }
-        std::sprintf(tmpBuf, (!(i & 3) ? "  %02X" : " %02X"),
-                     (unsigned int) f[i]);
-        tmpField.data += tmpBuf;
-      }
+      size_t  bytesPerLine = 8;
+      if (getTextColumns() >= 144)
+        bytesPerLine = 32;
+      else if (getTextColumns() >= 78)
+        bytesPerLine = 16;
+      FileBuffer::printHexData(tmpField.data, f.data(), f.size(), bytesPerLine);
     }
     if (!tmpField.data.empty())
       fields.push_back(tmpField);
@@ -541,7 +529,29 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
   {
     consolePrint("  ");
     printID(fields[i].type);
-    consolePrint(":%s\n", fields[i].data.c_str());
+    if (!fields[i].data.ends_with('\n'))
+    {
+      consolePrint(":%s\n", fields[i].data.c_str());
+    }
+    else
+    {
+      consolePrint(":\n");
+      const char  *s = fields[i].data.c_str();
+      size_t  n = fields[i].data.find('\n');
+      do
+      {
+        if (s[0] == '0' && s[1] == '0' && s[2] == '0' && s[3] == '0')
+          s = s + 4;
+        fields[i].data[n] = '\0';
+        consolePrint("    %s\n", s);
+        fields[i].data[n] = '\n';
+        s = fields[i].data.c_str() + (n + 1);
+        if (!*s)
+          break;
+        n = fields[i].data.find('\n', n + 1);
+      }
+      while (n != std::string::npos);
+    }
   }
 }
 
