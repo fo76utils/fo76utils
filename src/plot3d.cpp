@@ -334,7 +334,7 @@ inline FloatVector4 Plot3D_TriShape::specularGGX(
   float   h2 = reflectedView.dotProduct3(lightVector) + 1.0f;
   float   a = roughness * roughness;
   float   d = h2 * (a * a - 1.0f) + 2.0f;
-  d = (a * a * (nDotL * nDotV)) / (d * d * g);
+  d = (a * a * nDotL) / (d * d * g);
   FloatVector4  f(FloatVector4::polynomial3(fresnelPoly, vDotH));
   f = f0 + ((FloatVector4(1.0f) - f0) * (f * f));
   return (f * d);
