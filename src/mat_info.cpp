@@ -4,6 +4,7 @@
 #include "material.hpp"
 #include "sdlvideo.hpp"
 #include "nif_view.hpp"
+#include "esmdbase.hpp"
 
 static const char *usageString =
     "Usage: mat_info [OPTIONS...] ARCHIVEPATH [FILE1.MAT [FILE2.MAT...]]\n"
@@ -16,21 +17,23 @@ static const char *usageString =
 #ifdef HAVE_SDL2
     "    -view[WIDTHxHEIGHT] run in interactive mode\n"
 #endif
-    "    -list FILENAME  read list of material paths from FILENAME\n";
+    "    -list FILENAME  read list of material paths from FILENAME\n"
+    "    -dump_db        dump all reflection data\n";
 
 int main(int argc, char **argv)
 {
-  const char  *outFileName = (char *) 0;
-  std::FILE *outFile = (std::FILE *) 0;
+  const char  *outFileName = nullptr;
+  std::FILE *outFile = nullptr;
 #ifdef HAVE_SDL2
-  NIF_View  *renderer = (NIF_View *) 0;
+  NIF_View  *renderer = nullptr;
 #endif
   bool    consoleFlag = true;
+  bool    dumpReflData = false;
   try
   {
     std::vector< std::string >  args;
-    const char  *cdbFileName = (char *) 0;
-    const char  *listFileName = (char *) 0;
+    const char  *cdbFileName = nullptr;
+    const char  *listFileName = nullptr;
 #ifdef HAVE_SDL2
     int     displayWidth = 0;
     int     displayHeight = 0;
@@ -95,6 +98,10 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         listFileName = argv[i];
       }
+      else if (std::strcmp(argv[i], "-dump_db") == 0)
+      {
+        dumpReflData = true;
+      }
       else
       {
         throw FO76UtilsError("invalid option: %s", argv[i]);
@@ -130,12 +137,54 @@ int main(int argc, char **argv)
       fileNameFilter = ".cdb\t.dds\t.mesh\t.nif";
 #endif
     BA2File ba2File(args[0].c_str(), fileNameFilter);
+    if (dumpReflData)
+    {
+      if (!(cdbFileName && *cdbFileName))
+        cdbFileName = "materials/materialsbeta.cdb";
+      std::vector< unsigned char >  cdbBuf;
+      ba2File.extractFile(cdbBuf, std::string(cdbFileName));
+      CDBDump cdbFile(cdbBuf.data(), cdbBuf.size());
+      std::string stringBuf;
+      std::string errMsgBuf;
+      try
+      {
+        cdbFile.readAllChunks(stringBuf, 0);
+      }
+      catch (std::exception& e)
+      {
+        errMsgBuf = e.what();
+      }
+      if (!outFileName)
+      {
+        std::fwrite(stringBuf.c_str(), sizeof(char), stringBuf.length(),
+                    stdout);
+      }
+      else
+      {
+        outFile = std::fopen(outFileName, "w");
+        if (!outFile)
+          errorMessage("error opening output file");
+        if (std::fwrite(stringBuf.c_str(), sizeof(char), stringBuf.length(),
+                        outFile) != stringBuf.length())
+        {
+          errorMessage("error writing output file");
+        }
+        std::fclose(outFile);
+        outFile = nullptr;
+      }
+      if (!errMsgBuf.empty())
+      {
+        std::fprintf(stderr, "mat_info: %s\n", errMsgBuf.c_str());
+        return 1;
+      }
+      return 0;
+    }
 #ifdef HAVE_SDL2
     if (displayWidth && displayHeight && args.size() > 1)
     {
       args.erase(args.begin(), args.begin() + 1);
       std::sort(args.begin(), args.end());
-      renderer = new NIF_View(ba2File, (ESMFile *) 0, cdbFileName);
+      renderer = new NIF_View(ba2File, nullptr, cdbFileName);
       SDLDisplay  display(displayWidth, displayHeight, "mat_info", 4U, 48);
       display.setDefaultTextColor(0x00, 0xC0);
       renderer->viewModels(display, args, 0);

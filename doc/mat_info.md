@@ -10,9 +10,11 @@ List data from a set of materials in Starfield CDB file(s), or display the mater
 * **-cdb FILENAME**: Set material database file name(s), can be a comma separated list of multiple CDB files (default: materials/materialsbeta.cdb).
 * **-list FILENAME**: Read list of material paths from FILENAME. [mat\_names.txt](https://github.com/fo76utils/ce2utils/blob/main/mat_names.txt) contains an extensive list of materials used in the game.
 * **-view[WIDTHxHEIGHT]**: View material(s) on a test model. The usage of this mode is identical to [nif\_info](nif_info.md), see its documentation for the complete list of controls.
+* **-dump\_db**: Dump all reflection data.
 
 ### Examples
 
     ./mat_info -o materials.txt -list mat_names.txt Starfield/Data
     ./mat_info -view3840x2160 -list mat_names.txt Starfield/Data
+    ./mat_info -dump_db -o cdb_data.txt Starfield/Data
 
