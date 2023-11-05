@@ -37,7 +37,7 @@ void CDBDump::dumpItem(std::string& s, CDBFile::CDBChunk& chunkBuf, bool isDiff,
     }
     else
     {
-      unsigned int  nMax = 0U;
+      unsigned int  nMax = (unsigned int) i->second.fields.size();
       if (i->second.isUser)
       {
         CDBFile::CDBChunk userBuf;
@@ -48,13 +48,39 @@ void CDBDump::dumpItem(std::string& s, CDBFile::CDBChunk& chunkBuf, bool isDiff,
           throw FO76UtilsError("unexpected chunk type in CDB file at 0x%08x",
                                (unsigned int) cdbFile.getPosition());
         }
-        // TODO: implement reading USER and USRD chunks
+        std::uint32_t className1 = userBuf.readUInt32();
+        std::uint32_t className2 = userBuf.readUInt32();
+        if (className1 != itemType || className2 != className1)
+        {
+          if (className2 & 0x80000000U)
+          {
+            for (unsigned int n = 0U; n < nMax; n++)
+            {
+              dumpItem(s, userBuf, false,
+                       i->second.fields[n].first, className2, indentCnt + 2);
+              className2 = userBuf.readUInt32();
+            }
+            nMax = 0U;
+          }
+          else
+          {
+            throw FO76UtilsError("USER chunk has unexpected type at 0x%08x",
+                                 (unsigned int) cdbFile.getPosition());
+          }
+        }
+        if (nMax--)
+        {
+          bool    isUSRD = (userChunkType == CDBFile::ChunkType_USRD);
+          for (unsigned int n = 0U - 1U;
+               userBuf.getFieldNumber(n, nMax, isUSRD); )
+          {
+            dumpItem(s, userBuf, isUSRD,
+                     i->second.fields[n].first, i->second.fields[n].second,
+                     indentCnt + 2);
+          }
+        }
       }
-      else
-      {
-        nMax = (unsigned int) i->second.fields.size();
-      }
-      if (nMax--)
+      else if (nMax--)
       {
         for (unsigned int n = 0U - 1U;
              chunkBuf.getFieldNumber(n, nMax, isDiff); )
@@ -119,7 +145,7 @@ void CDBDump::dumpItem(std::string& s, CDBFile::CDBChunk& chunkBuf, bool isDiff,
         s += '\n';
         while (listSize--)
         {
-          dumpItem(s, listBuf, false,
+          dumpItem(s, listBuf, isDiff,
                    0xFFFFFFFFU, listClassName, indentCnt + 2);
         }
         printToString(s, "%*s]\n", indentCnt, "");
@@ -151,7 +177,7 @@ void CDBDump::dumpItem(std::string& s, CDBFile::CDBChunk& chunkBuf, bool isDiff,
         {
           dumpItem(s, mapBuf, false,
                    0xFFFFFFFEU, keyClassName, indentCnt + 2);   // "<Key>"
-          dumpItem(s, mapBuf, false,
+          dumpItem(s, mapBuf, isDiff,
                    0xFFFFFFFDU, valueClassName, indentCnt + 2); // "<Value>"
         }
         printToString(s, "%*s]\n", indentCnt, "");
@@ -163,7 +189,7 @@ void CDBDump::dumpItem(std::string& s, CDBFile::CDBChunk& chunkBuf, bool isDiff,
         std::uint32_t refType = buf2.readUInt32();
         s[s.length() - 1] = '{';
         s += '\n';
-        dumpItem(s, chunkBuf, false, 0xFFFFFFFCU, refType, indentCnt + 2);
+        dumpItem(s, chunkBuf, isDiff, 0xFFFFFFFCU, refType, indentCnt + 2);
         printToString(s, "%*s}\n", indentCnt, "");
         return;
       }
@@ -912,6 +938,14 @@ bool ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
       if (verboseMode && r == "REFR")
       {
         dataType = 7;
+      }
+      break;
+    default:
+      if (esmVersion > 0xFF && f.size() > 24 &&
+          FileBuffer::readUInt64Fast(f.data()) == 0x0000000848544542ULL &&
+          FileBuffer::readUInt32Fast(f.data() + 8) == 4U)       // "BETH", 8, 4
+      {
+        dataType = 12;
       }
       break;
   }
