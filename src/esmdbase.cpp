@@ -863,6 +863,15 @@ bool ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
       if (r == "TXST")
         dataType = 10;
       break;
+    case 0x4D4C4F4D:            // "MOLM"
+      if (esmVersion > 0xFF && f.size() >= 2)
+      {
+        dataType = 6;
+        arraySize = int(f.readUInt16Fast());
+        arraySize = std::min(arraySize, int((f.size() - 2) >> 2));
+        exactSizeRequired = false;
+      }
+      break;
     case 0x314D414E:            // "NAM1"
       dataType =
           ((r == "INFO" || r == "QUST") ? (!(esmFlags & 0x80) ? 9 : 8) : 6);
@@ -933,6 +942,13 @@ bool ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
     case 0x50534D58:            // "XMSP"
       if (!((r == "REFR" || r == "ACHR") && !verboseMode))
         dataType = 6;
+      break;
+    case 0x534D4C58:            // "XLMS"
+      if (esmVersion > 0xFF && !((r == "REFR" || r == "ACHR") && !verboseMode))
+      {
+        dataType = 6;
+        arraySize = int(f.size() >> 2);
+      }
       break;
     case 0x4C435358:            // "XSCL"
       if (verboseMode && r == "REFR")
