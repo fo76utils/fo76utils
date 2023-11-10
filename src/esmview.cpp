@@ -52,6 +52,7 @@ const char * ESMView::parseFormID(
   n = 0xFFFFFFFFU;
   std::string tmp;
   bool    isHexValue = true;
+  bool    isDecValue = false;
   for ( ; len > 0 && s && (unsigned char) *s > 0x20; s++, len--)
   {
     char    c = *s;
@@ -60,16 +61,20 @@ const char * ESMView::parseFormID(
     if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
           (c == 'x' && tmp.length() == 1 && tmp[0] == '0')))
     {
-      bool    skipCharacter = (c == '$' && tmp.empty() && isHexValue);
+      bool    skipCharacter =
+          ((c == '#' || c == '$') && tmp.empty() && isHexValue);
       isHexValue = false;
       if (skipCharacter)
+      {
+        isDecValue = (c == '#');
         continue;
+      }
     }
     tmp += c;
   }
   if (tmp.empty())
     return s;
-  if (!isHexValue)
+  if (!(isHexValue || isDecValue))
   {
     for (std::map< unsigned int, std::string >::const_iterator
              i = edidDB.begin(); i != edidDB.end(); i++)
@@ -96,12 +101,11 @@ const char * ESMView::parseFormID(
     n = 0U;
     for (size_t i = 0; i < tmp.length(); i++)
     {
-      n = (n << 4) & 0xFFFFFFFFU;
       unsigned char c = (unsigned char) tmp[i];
       if (c >= 0x30 && c <= 0x39)       // '0' to '9'
-        n = n | (c - 0x30U);
+        n = ((n * (isDecValue ? 10U : 16U)) & 0xFFFFFFFFU) + (c - 0x30U);
       else if (c >= 0x61 && c <= 0x66)  // 'a' to 'f'
-        n = n | (c - 0x57U);
+        n = ((n * (isDecValue ? 10U : 16U)) & 0xFFFFFFFFU) + (c - 0x57U);
     }
   }
   return s;
@@ -824,6 +828,7 @@ static void printUsage()
 static const char *usageString =
     "$EDID:          select record by editor ID\n"
     "0xxxxxx:        hexadecimal form ID\n"
+    "#xxxxxx:        decimal form ID\n"
     "B:              print history of records viewed\n"
     "C:              first child record\n"
     "D r:f:name:data define field(s)\n"
@@ -1258,7 +1263,8 @@ int main(int argc, char **argv)
           esmFile.consolePrint("Printing unknown fields: %s\n",
                                (!noUnknownFields ? "on" : "off"));
         }
-        else if ((cmdBuf[0] >= '0' && cmdBuf[0] <= '9') || cmdBuf[0] == '$')
+        else if ((cmdBuf[0] >= '0' && cmdBuf[0] <= '9') ||
+                 cmdBuf[0] == '#' || cmdBuf[0] == '$')
         {
           unsigned int  newFormID = 0U;
           esmFile.parseFormID(newFormID, cmdBuf.c_str(), cmdBuf.length());
