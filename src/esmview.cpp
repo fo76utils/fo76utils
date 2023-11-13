@@ -535,14 +535,18 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
   {
     consolePrint("  ");
     printID(fields[i].type);
-    if (!fields[i].data.ends_with('\n'))
+    if (fields[i].data.find('\n') == std::string::npos)
     {
       consolePrint(":%s\n", fields[i].data.c_str());
     }
     else
     {
       consolePrint(":\n");
+      if (!fields[i].data.ends_with('\n'))
+        fields[i].data += '\n';
       const char  *s = fields[i].data.c_str();
+      if (*s == '\t')
+        s++;
       size_t  n = fields[i].data.find('\n');
       do
       {
