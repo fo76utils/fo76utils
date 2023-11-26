@@ -54,12 +54,16 @@ void CDBDump::dumpItem(std::string& s, CDBFile::CDBChunk& chunkBuf, bool isDiff,
         {
           if (className2 & 0x80000000U)
           {
-            for (unsigned int n = 0U; n < nMax; n++)
+            unsigned int  n = 0U;
+            do
             {
-              dumpItem(s, userBuf, false,
-                       i->second.fields[n].first, className2, indentCnt + 2);
+              std::uint32_t fieldName = 0xFFFFFF01U;    // "None"
+              if (nMax) [[likely]]
+                fieldName = i->second.fields[n].first;
+              dumpItem(s, userBuf, false, fieldName, className2, indentCnt + 2);
               className2 = userBuf.readUInt32();
             }
+            while (++n < nMax);
             nMax = 0U;
           }
           else
@@ -237,7 +241,7 @@ void CDBDump::dumpItem(std::string& s, CDBFile::CDBChunk& chunkBuf, bool isDiff,
   printToString(s, "\"\n");
 }
 
-void CDBDump::readAllChunks(std::string& s, int indentCnt)
+void CDBDump::readAllChunks(std::string& s, int indentCnt, bool verboseMode)
 {
   CDBFile::CDBChunk chunkBuf;
   unsigned int  chunkType;
@@ -248,27 +252,49 @@ void CDBDump::readAllChunks(std::string& s, int indentCnt)
       std::uint32_t className = chunkBuf.readUInt32();
       if (className & 0x80000000U)
         errorMessage("invalid class ID in CDB file");
+      unsigned int  classID = chunkBuf.readUInt32();
+      unsigned int  classFlags = chunkBuf.readUInt16();
+      unsigned int  fieldCnt = chunkBuf.readUInt16();
+      if (verboseMode)
+      {
+        printToString(s, "%*s<Class> %s (ID = %u, flags = %u, fields = %u) {\n",
+                      indentCnt, "", cdbFile.getStringPtr(className),
+                      classID, classFlags, fieldCnt);
+      }
       CDBClassDef&  classDef = classes[className];
-      (void) chunkBuf.readUInt32();
-      classDef.isUser = bool(chunkBuf.readUInt32() & 4U);
+      classDef.isUser = bool(classFlags & 4U);
       while ((chunkBuf.getPosition() + 12ULL) <= chunkBuf.size())
       {
         std::uint32_t fieldName = chunkBuf.readUInt32Fast();
         if (fieldName & 0x80000000U)
           errorMessage("invalid field name in class definition in CDB file");
         std::uint32_t fieldType = chunkBuf.readUInt32Fast();
-        (void) chunkBuf.readUInt16Fast();       // data offset
-        (void) chunkBuf.readUInt16Fast();       // data size
+        unsigned int  dataOffset = chunkBuf.readUInt16Fast();
+        unsigned int  dataSize = chunkBuf.readUInt16Fast();
+        if (verboseMode)
+        {
+          printToString(s, "%*s%s  %s  (offset = %u, size = %u)\n",
+                        indentCnt + 2, "", cdbFile.getStringPtr(fieldType),
+                        cdbFile.getStringPtr(fieldName), dataOffset, dataSize);
+        }
         classDef.fields.emplace_back(fieldName, fieldType);
       }
+      if (verboseMode)
+        printToString(s, "%*s}\n", indentCnt, "");
       continue;
     }
     if (chunkType == CDBFile::ChunkType_DIFF ||
-        chunkType == CDBFile::ChunkType_OBJT)
+        chunkType == CDBFile::ChunkType_OBJT) [[likely]]
     {
       std::uint32_t className = chunkBuf.readUInt32();
       bool    isDiff = (chunkType == CDBFile::ChunkType_DIFF);
       dumpItem(s, chunkBuf, isDiff, 0xFFFFFFFFU, className, indentCnt);
+      continue;
+    }
+    if (chunkType != CDBFile::ChunkType_TYPE)
+    {
+      printToString(s, "%*s[Warning: unexpected chunk type 0x%08X]\n",
+                    indentCnt, "", chunkType);
     }
   }
 }
