@@ -110,8 +110,7 @@ struct CDBDump
   {
   }
   // if verboseMode is true, class definitions are also printed
-  void readAllChunks(std::string& s, int indentCnt,
-                     bool verboseMode = bool(ENABLE_CDB_DEBUG));
+  void readAllChunks(std::string& s, int indentCnt, bool verboseMode = false);
 };
 
 #endif
