@@ -24,6 +24,7 @@ C, N, P, and V can be grouped and used as a single command.
 
 * **B**: Print history of records viewed.
 * **I**: Print short info and all parent groups.
+* **T**: Toggle display of REFL type definitions.
 * **U**: Toggle hexadecimal display of unknown field types.
 * **D r:f:name:data**: Define field(s).
 * **F xx xx xx xx**: Convert binary floating point value(s).

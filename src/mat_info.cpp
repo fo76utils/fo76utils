@@ -148,7 +148,7 @@ int main(int argc, char **argv)
       std::string errMsgBuf;
       try
       {
-        cdbFile.readAllChunks(stringBuf, 0);
+        cdbFile.readAllChunks(stringBuf, 0, true);
       }
       catch (std::exception& e)
       {

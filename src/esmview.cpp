@@ -31,7 +31,8 @@ class ESMView : public ESMDump, public SDLDisplay
   unsigned int findNextRecord(unsigned int formID, const char *pattern) const;
   void printFormID(unsigned int formID);
   void printRecordHdr(unsigned int formID);
-  void dumpRecord(unsigned int formID = 0U, bool noUnknownFields = false);
+  void dumpRecord(unsigned int formID = 0U, bool noUnknownFields = false,
+                  bool enableReflClassDefs = false);
 #ifdef HAVE_SDL2
   // returns true on success
   bool readBaseObject(std::string& modelPath, unsigned int formID);
@@ -479,11 +480,13 @@ void ESMView::printRecordHdr(unsigned int formID)
   consolePrint("\033[m\n");
 }
 
-void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields)
+void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields,
+                         bool enableReflClassDefs)
 {
   consolePrint("\033[31m\033[1m");
   printRecordHdr(formID);
   const ESMRecord&  r = getRecord(formID);
+  verboseMode = enableReflClassDefs | (r == "REFR" || r == "ACHR");
   consolePrint("Parent:\t");
   printID(getRecord(r.parent).type);
   consolePrint(" ");
@@ -853,6 +856,7 @@ static const char *usageString =
 #ifdef HAVE_SDL2
     "S:              select record interactively\n"
 #endif
+    "T:              toggle display of REFL type definitions\n"
     "U:              toggle hexadecimal display of unknown field types\n"
     "V:              previous record in current group\n"
 #ifdef HAVE_SDL2
@@ -883,6 +887,7 @@ int main(int argc, char **argv)
   unsigned int  formID = 0U;
   bool    helpFlag = false;
   bool    noUnknownFields = false;
+  bool    enableReflClassDefs = false;
   // 0: print usage and return 0, 1: error, 2: print usage, 3: usage + error
   unsigned char errorFlag = 1;
   ESMView *esmFilePtr = (ESMView *) 0;
@@ -1039,7 +1044,7 @@ int main(int argc, char **argv)
       {
         if (!helpFlag)
         {
-          esmFile.dumpRecord(formID, noUnknownFields);
+          esmFile.dumpRecord(formID, noUnknownFields, enableReflClassDefs);
           esmFile.consolePrint("\n");
         }
         helpFlag = false;
@@ -1260,6 +1265,13 @@ int main(int argc, char **argv)
           }
         }
 #endif
+        else if (cmdBuf == "t")
+        {
+          helpFlag = true;
+          enableReflClassDefs = !enableReflClassDefs;
+          esmFile.consolePrint("Printing REFL type definitions: %s\n",
+                               (!enableReflClassDefs ? "off" : "on"));
+        }
         else if (cmdBuf == "u")
         {
           helpFlag = true;
