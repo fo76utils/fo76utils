@@ -1249,7 +1249,7 @@ void WorldSpaceViewer::pollEvents()
             viewRotationY = viewRotations[size_t(viewRotation) * 3 + 1];
             viewRotationZ = viewRotations[size_t(viewRotation) * 3 + 2];
             FloatVector4  v;
-            if (screenToWorldSpace(v, x0, y0))
+            if (false && screenToWorldSpace(v, x0, y0))
             {
               camPositionX = v[0];
               camPositionY = v[1];
