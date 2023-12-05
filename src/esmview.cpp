@@ -18,7 +18,7 @@ class ESMView : public ESMDump, public SDLDisplay
   void printID(unsigned int id);
  public:
   ESMView(const char *fileName, const char *archivePath,
-          int w = 1152, int h = 648, int l = 36, bool enableDownsampling = true,
+          int w = 1152, int h = 648, int l = 36, int downsampleLevel = 1,
           unsigned char bgColor = 0xE6, unsigned char fgColor = 0x00);
   virtual ~ESMView();
   void loadStrings(const char *stringsPrefix);
@@ -134,7 +134,7 @@ void ESMView::printID(unsigned int id)
 
 ESMView::ESMView(
     const char *fileName, const char *archivePath, int w, int h, int l,
-    bool enableDownsampling, unsigned char bgColor, unsigned char fgColor)
+    int downsampleLevel, unsigned char bgColor, unsigned char fgColor)
   : ESMDump(fileName, (std::FILE *) 0),
 #ifdef HAVE_SDL2
     SDLDisplay(w, h, "esmview", 4U, l),
@@ -146,13 +146,13 @@ ESMView::ESMView(
 #endif
 {
 #ifdef HAVE_SDL2
-  setDownsampleLevel(int(enableDownsampling));
+  setDownsampleLevel(downsampleLevel);
   setDefaultTextColor(bgColor, fgColor);
 #else
   (void) w;
   (void) h;
   (void) l;
-  (void) enableDownsampling;
+  (void) downsampleLevel;
   (void) bgColor;
   (void) fgColor;
 #endif
@@ -876,7 +876,7 @@ int main(int argc, char **argv)
   int     consoleWidth = 1152;
   int     consoleHeight = 648;
   int     consoleRows = 36;
-  bool    consoleDownsampling = true;
+  unsigned char consoleDownsampling = 1;
   unsigned char consoleBGColor = 0xE6;
   unsigned char consoleFGColor = 0x00;
 
@@ -974,6 +974,8 @@ int main(int argc, char **argv)
                           errorMessage("-w: invalid number of rows");
                         if (n == 2 && !(tmp >= 9L && tmp <= 120L))
                           errorMessage("-w: invalid font height");
+                        if (n == 3 && !(tmp >= 0L && tmp <= 2L))
+                          errorMessage("-w: invalid downsample level");
                         if (n == 4 && (tmp & ~0xFFL))
                           errorMessage("-w: invalid background color");
                         if (n == 5 && (tmp & ~0xFFL))
@@ -993,7 +995,7 @@ int main(int argc, char **argv)
                       errorMessage("invalid console dimensions");
                     }
                     consoleRows = consoleParams[1];
-                    consoleDownsampling = bool(consoleParams[3]);
+                    consoleDownsampling = (unsigned char) consoleParams[3];
                     consoleBGColor = (unsigned char) consoleParams[4];
                     consoleFGColor = (unsigned char) consoleParams[5];
                   }
