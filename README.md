@@ -13,7 +13,7 @@ Simple command line utilities for extracting data from Starfield game files.
 * [findwater](doc/findwater.md) - create a height map of water bodies, optionally using .NIF meshes.
 * [landtxt](doc/landtxt.md) - create an RGB land texture from the output of btddump (formats 2 and 8), or directly from terrain data in ESM/BTD file(s), using a set of DDS texture files.
 * [markers](doc/markers.md) - find references to a set of form IDs defined in a text file, and mark their locations on an RGBA format map, optionally using DDS icon files.
-* [mat\_info](doc/mat_info.md) - list data from materials in Starfield component database.
+* [mat\_info](doc/mat_info.md) - list data from materials in Starfield component database. It can also extract .mat files in JSON format.
 * [nif\_info](doc/nif_info.md) - list data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ format, or render the model to a DDS file, or display it.
 * [render](doc/render.md) - render a Starfield world, cell, or object from ESM file(s), terrain data, and archives. Currently does not support material swaps.
 * [terrain](doc/terrain.md) - older and simpler program to render terrain and water only to an RGB image, using files created by btddump, or findwater. Includes 2D and isometric mode.

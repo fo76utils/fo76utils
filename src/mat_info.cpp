@@ -5,6 +5,7 @@
 #include "sdlvideo.hpp"
 #include "nif_view.hpp"
 #include "esmdbase.hpp"
+#include "mat_json.hpp"
 
 static const char *usageString =
     "Usage: mat_info [OPTIONS...] ARCHIVEPATH [FILE1.MAT [FILE2.MAT...]]\n"
@@ -18,7 +19,8 @@ static const char *usageString =
     "    -view[WIDTHxHEIGHT] run in interactive mode\n"
 #endif
     "    -list FILENAME  read list of material paths from FILENAME\n"
-    "    -dump_db        dump all reflection data\n";
+    "    -dump_db        dump all reflection data\n"
+    "    -json           write JSON format .mat file\n";
 
 int main(int argc, char **argv)
 {
@@ -29,6 +31,7 @@ int main(int argc, char **argv)
 #endif
   bool    consoleFlag = true;
   bool    dumpReflData = false;
+  bool    dumpJSONData = false;
   try
   {
     std::vector< std::string >  args;
@@ -101,6 +104,12 @@ int main(int argc, char **argv)
       else if (std::strcmp(argv[i], "-dump_db") == 0)
       {
         dumpReflData = true;
+        dumpJSONData = false;
+      }
+      else if (std::strcmp(argv[i], "-json") == 0)
+      {
+        dumpReflData = false;
+        dumpJSONData = true;
       }
       else
       {
@@ -137,22 +146,38 @@ int main(int argc, char **argv)
       fileNameFilter = ".cdb\t.dds\t.mesh\t.nif";
 #endif
     BA2File ba2File(args[0].c_str(), fileNameFilter);
-    if (dumpReflData)
+    if (dumpReflData || dumpJSONData)
     {
       if (!(cdbFileName && *cdbFileName))
         cdbFileName = "materials/materialsbeta.cdb";
       std::vector< unsigned char >  cdbBuf;
       ba2File.extractFile(cdbBuf, std::string(cdbFileName));
-      CDBDump cdbFile(cdbBuf.data(), cdbBuf.size());
       std::string stringBuf;
       std::string errMsgBuf;
-      try
+      if (dumpReflData)
       {
-        cdbFile.readAllChunks(stringBuf, 0, true);
+        CDBDump cdbFile(cdbBuf.data(), cdbBuf.size());
+        try
+        {
+          cdbFile.readAllChunks(stringBuf, 0, true);
+        }
+        catch (std::exception& e)
+        {
+          errMsgBuf = e.what();
+        }
       }
-      catch (std::exception& e)
+      else
       {
-        errMsgBuf = e.what();
+        CDBMaterialToJSON cdbFile(cdbBuf.data(), cdbBuf.size());
+        std::string tmpBuf;
+        for (size_t i = 1; i < args.size(); i++)
+        {
+          if (args.size() > 2)
+            printToString(stringBuf, "// %s\n", args[i].c_str());
+          cdbFile.dumpMaterial(tmpBuf, args[i]);
+          stringBuf += tmpBuf;
+          stringBuf += '\n';
+        }
       }
       if (!outFileName)
       {
