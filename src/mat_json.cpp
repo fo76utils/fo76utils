@@ -317,7 +317,7 @@ void CDBMaterialToJSON::readAllChunks()
         o.dbID = dbID;
         o.baseObject = chunkBuf.readUInt32();
         (void) static_cast< FileBuffer * >(&chunkBuf)->readUInt8(); // HasData
-        o.parent = 0U;
+        o.parent = nullptr;
       }
     }
     else if (className == String_BSComponentDB2_DBFileIndex_ComponentInfo)
@@ -346,15 +346,20 @@ void CDBMaterialToJSON::readAllChunks()
         std::map< std::uint32_t, MaterialObject >::iterator p =
             objects.find(targetID);
         if (o != objects.end() && p != objects.end())
-          o->second.parent = targetID;
+          o->second.parent = &(p->second);
       }
     }
   }
   for (std::map< std::uint32_t, MaterialObject >::iterator
            i = objects.begin(); i != objects.end(); i++)
   {
-    if (!isRootObject(i->second.baseObject))
-      copyBaseObject(i->second);
+    MaterialObject  *p = &(i->second);
+    if (!isRootObject(p->baseObject))
+      copyBaseObject(*p);
+    while (p->parent)
+      p = const_cast< MaterialObject * >(p->parent);
+    if (p->persistentID.file == 0x0074616DU)    // "mat\0"
+      matFileObjectMap[p->persistentID].push_back(i->second.dbID);
   }
 }
 
@@ -495,29 +500,24 @@ void CDBMaterialToJSON::dumpMaterial(
     return;
   std::uint64_t h = 0U;
   std::uint32_t e = calculateHash(h, materialPath);
-  jsonBuf = "{\n  \"Objects\": [\n";
-  for (std::map< std::uint32_t, MaterialObject >::const_iterator
-           i = objects.begin(); i != objects.end(); i++)
+  const std::vector< std::uint32_t >  *objectList;
   {
-    bool    foundMatch = false;
-    {
-      std::map< std::uint32_t, MaterialObject >::const_iterator j = i;
-      do
-      {
-        if (j->second.persistentID.dir == std::uint32_t(h & 0xFFFFFFFFU) &&
-            !((j->second.persistentID.file ^ e) & 0xDFDFDFDFU) &&
-            j->second.persistentID.ext == std::uint32_t(h >> 32))
-        {
-          foundMatch = true;
-          break;
-        }
-        if (!j->second.parent)
-          break;
-        j = objects.find(j->second.parent);
-      }
-      while (j != objects.end());
-    }
-    if (!foundMatch)
+    BSResourceID  tmp;
+    tmp.dir = std::uint32_t(h & 0xFFFFFFFFU);
+    tmp.file = e;
+    tmp.ext = std::uint32_t(h >> 32);
+    std::map< BSResourceID, std::vector< std::uint32_t > >::const_iterator  i =
+        matFileObjectMap.find(tmp);
+    if (i == matFileObjectMap.end())
+      return;
+    objectList = &(i->second);
+  }
+  jsonBuf = "{\n  \"Objects\": [\n";
+  for (size_t n = 0; n < objectList->size(); n++)
+  {
+    std::map< std::uint32_t, MaterialObject >::const_iterator i =
+        objects.find((*objectList)[n]);
+    if (i == objects.end())
       continue;
     printToString(jsonBuf, "    {\n      \"Components\": [\n");
     for (std::map< std::uint64_t, CDBObject >::const_iterator
@@ -563,11 +563,6 @@ void CDBMaterialToJSON::dumpMaterial(
         parentStr = "materials\\\\layered\\\\root\\\\uvstreams.mat";
     }
     printToString(jsonBuf, "      \"Parent\": \"%s\"\n    },\n", parentStr);
-  }
-  if (!jsonBuf.ends_with(",\n"))
-  {
-    jsonBuf.clear();
-    return;
   }
   jsonBuf.resize(jsonBuf.length() - 2);
   jsonBuf += "\n  ],\n  \"Version\": \"1\"\n}";

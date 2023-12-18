@@ -25,19 +25,25 @@ class CDBMaterialToJSON : public CDBFile
     std::uint32_t dir;
     std::uint32_t file;
     std::uint32_t ext;
+    inline bool operator<(const BSResourceID& r) const
+    {
+      return (dir < r.dir || (dir == r.dir && file < r.file) ||
+              (dir == r.dir && file == r.file && ext < r.ext));
+    }
   };
   struct MaterialObject
   {
     BSResourceID  persistentID;
     std::uint32_t dbID;
     std::uint32_t baseObject;
-    std::uint32_t parent;
+    const MaterialObject  *parent;
     // key = (type << 32) | index
     std::map< std::uint64_t, CDBObject >  components;
   };
   std::map< std::uint32_t, CDBClassDef >  classes;
   std::map< std::uint32_t, MaterialObject > objects;
   std::vector< std::pair< std::uint32_t, std::uint32_t > >  componentInfo;
+  std::map< BSResourceID, std::vector< std::uint32_t > >  matFileObjectMap;
   static inline bool isRootObject(std::uint32_t dbID)
   {
     return (dbID <= 7U);
