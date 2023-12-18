@@ -7,6 +7,12 @@
 #include "esmdbase.hpp"
 #include "mat_json.hpp"
 
+#if defined(_WIN32) || defined(_WIN64)
+#  include <direct.h>
+#else
+#  include <sys/stat.h>
+#endif
+
 static const char *usageString =
     "Usage: mat_info [OPTIONS...] ARCHIVEPATH [FILE1.MAT [FILE2.MAT...]]\n"
     "\n"
@@ -20,7 +26,57 @@ static const char *usageString =
 #endif
     "    -list FILENAME  read list of material paths from FILENAME\n"
     "    -dump_db        dump all reflection data\n"
-    "    -json           write JSON format .mat file\n";
+    "    -json           write JSON format .mat file(s)\n";
+
+static inline char convertNameCharacter(unsigned char c)
+{
+  if (c >= 'A' && c <= 'Z')
+    return char(c + ('a' - 'A'));
+  if (c == '\\')
+    return '/';
+  if (c <= (unsigned char) ' ')
+    return ' ';
+  return char(c);
+}
+
+static void writeFileWithPath(const char *fileName, const std::string& buf)
+{
+  OutputFile  *f = (OutputFile *) 0;
+  try
+  {
+    f = new OutputFile(fileName, 0);
+  }
+  catch (...)
+  {
+    std::string pathName;
+    size_t  pathOffs = 0;
+    while (true)
+    {
+      pathName = fileName;
+      pathOffs = pathName.find('/', pathOffs);
+      if (pathOffs == size_t(std::string::npos))
+        break;
+      pathName.resize(pathOffs);
+      pathOffs++;
+#if defined(_WIN32) || defined(_WIN64)
+      (void) _mkdir(pathName.c_str());
+#else
+      (void) mkdir(pathName.c_str(), 0755);
+#endif
+    }
+    f = new OutputFile(fileName, 0);
+  }
+  try
+  {
+    f->writeData(buf.c_str(), sizeof(char) * buf.length());
+  }
+  catch (...)
+  {
+    delete f;
+    throw;
+  }
+  delete f;
+}
 
 int main(int argc, char **argv)
 {
@@ -46,6 +102,14 @@ int main(int argc, char **argv)
       if (argv[i][0] != '-')
       {
         args.emplace_back(argv[i]);
+        if (args.size() > 1)
+        {
+          for (size_t j = 0; j < args.back().length(); j++)
+          {
+            args.back()[j] =
+                convertNameCharacter((unsigned char) args.back()[j]);
+          }
+        }
         continue;
       }
       if (std::strcmp(argv[i], "--") == 0)
@@ -131,7 +195,7 @@ int main(int argc, char **argv)
       {
         char    c = '\0';
         if (listFile[i] >= 0x20)
-          c = char(listFile[i]);
+          c = convertNameCharacter(listFile[i]);
         if (c == '\0')
           startPos = i + 1;
         else if (i > startPos)
@@ -148,6 +212,8 @@ int main(int argc, char **argv)
     BA2File ba2File(args[0].c_str(), fileNameFilter);
     if (dumpReflData || dumpJSONData)
     {
+      consoleFlag = false;
+      SDLDisplay::enableConsole();
       if (!(cdbFileName && *cdbFileName))
         cdbFileName = "materials/materialsbeta.cdb";
       std::vector< unsigned char >  cdbBuf;
@@ -173,29 +239,43 @@ int main(int argc, char **argv)
         for (size_t i = 1; i < args.size(); i++)
         {
           if (args.size() > 2)
-            printToString(stringBuf, "// %s\n", args[i].c_str());
+            std::printf("%s\n", args[i].c_str());
           cdbFile.dumpMaterial(tmpBuf, args[i]);
-          stringBuf += tmpBuf;
-          stringBuf += '\n';
+          if (tmpBuf.empty())
+          {
+            std::fprintf(stderr, "Warning: %s: material not found\n",
+                         args[i].c_str());
+          }
+          else
+          {
+            tmpBuf += '\n';
+            if (args.size() <= 2)
+              stringBuf += tmpBuf;
+            else
+              writeFileWithPath(args[i].c_str(), tmpBuf);
+          }
         }
       }
-      if (!outFileName)
+      if (!(dumpJSONData && args.size() > 2))
       {
-        std::fwrite(stringBuf.c_str(), sizeof(char), stringBuf.length(),
-                    stdout);
-      }
-      else
-      {
-        outFile = std::fopen(outFileName, "w");
-        if (!outFile)
-          errorMessage("error opening output file");
-        if (std::fwrite(stringBuf.c_str(), sizeof(char), stringBuf.length(),
-                        outFile) != stringBuf.length())
+        if (!outFileName)
         {
-          errorMessage("error writing output file");
+          std::fwrite(stringBuf.c_str(), sizeof(char), stringBuf.length(),
+                      stdout);
         }
-        std::fclose(outFile);
-        outFile = nullptr;
+        else
+        {
+          outFile = std::fopen(outFileName, "w");
+          if (!outFile)
+            errorMessage("error opening output file");
+          if (std::fwrite(stringBuf.c_str(), sizeof(char), stringBuf.length(),
+                          outFile) != stringBuf.length())
+          {
+            errorMessage("error writing output file");
+          }
+          std::fclose(outFile);
+          outFile = nullptr;
+        }
       }
       if (!errMsgBuf.empty())
       {
