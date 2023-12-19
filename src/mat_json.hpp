@@ -25,6 +25,10 @@ class CDBMaterialToJSON : public CDBFile
     std::uint32_t dir;
     std::uint32_t file;
     std::uint32_t ext;
+    inline BSResourceID()
+    {
+    }
+    BSResourceID(const std::string& fileName);
     inline bool operator<(const BSResourceID& r) const
     {
       return (dir < r.dir || (dir == r.dir && file < r.file) ||

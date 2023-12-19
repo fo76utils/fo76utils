@@ -2,6 +2,61 @@
 #include "common.hpp"
 #include "mat_json.hpp"
 
+CDBMaterialToJSON::BSResourceID::BSResourceID(const std::string& fileName)
+{
+  size_t  baseNamePos = fileName.rfind('/');
+  size_t  baseNamePos2 = fileName.rfind('\\');
+  size_t  extPos = fileName.rfind('.');
+  if (baseNamePos == std::string::npos ||
+      (baseNamePos2 != std::string::npos && baseNamePos2 > baseNamePos))
+  {
+    baseNamePos = baseNamePos2;
+  }
+  if (extPos == std::string::npos ||
+      (baseNamePos != std::string::npos && extPos < baseNamePos))
+  {
+    extPos = fileName.length();
+  }
+  size_t  i = 0;
+  std::uint32_t crcValue = 0U;
+  if (baseNamePos != std::string::npos)
+  {
+    // directory name
+    for ( ; i < baseNamePos; i++)
+    {
+      unsigned char c = (unsigned char) fileName.c_str()[i];
+      if (c >= 0x41 && c <= 0x5A)       // 'A' - 'Z'
+        c = c | 0x20;                   // convert to lower case
+      else if (c == 0x2F)               // '/'
+        c = 0x5C;                       // convert to '\\'
+      hashFunctionCRC32(crcValue, c);
+    }
+    i++;
+  }
+  ext = crcValue;
+  crcValue = 0U;
+  for ( ; i < extPos; i++)
+  {
+    // base name
+    unsigned char c = (unsigned char) fileName.c_str()[i];
+    if (c >= 0x41 && c <= 0x5A)         // 'A' - 'Z'
+      c = c | 0x20;                     // convert to lower case
+    hashFunctionCRC32(crcValue, c);
+  }
+  dir = crcValue;
+  i++;
+  if ((i + 3) <= fileName.length())
+    file = FileBuffer::readUInt32Fast(fileName.c_str() + i);
+  else if ((i + 2) <= fileName.length())
+    file = FileBuffer::readUInt16Fast(fileName.c_str() + i);
+  else if (i < fileName.length())
+    file = (unsigned char) fileName.c_str()[i];
+  else
+    file = 0U;
+  // convert extension to lower case
+  file = file | ((file >> 1) & 0x20202020U);
+}
+
 void CDBMaterialToJSON::copyBaseObject(MaterialObject& o)
 {
   if (isRootObject(o.baseObject))
@@ -395,101 +450,90 @@ void CDBMaterialToJSON::dumpObject(
     printToString(s, "%*s}", indentCnt, "");
     return;
   }
-  if (o.type == String_String ||
-      (o.type >= String_Int8 && o.type <= String_Double))
+  switch (o.type)
   {
-    printToString(s, "\"%s\"", o.value.c_str());
-    return;
-  }
-  if (o.type == String_List)
-  {
-    printToString(s, "{\n%*s\"Data\": [\n", indentCnt + 2, "");
-    for (std::map< std::uint32_t, CDBObject >::const_iterator
-             i = o.children.begin(); i != o.children.end(); )
-    {
-      printToString(s, "%*s", indentCnt + 4, "");
-      dumpObject(s, i->second, indentCnt + 4);
-      std::map< std::uint32_t, CDBObject >::const_iterator  k = i;
-      k++;
-      if (k != o.children.end())
-        printToString(s, ",\n");
+    case String_None:
+      printToString(s, "null");
+      break;
+    case String_String:
+      printToString(s, "\"%s\"", o.value.c_str());
+      break;
+    case String_List:
+      printToString(s, "{\n%*s\"Data\": [\n", indentCnt + 2, "");
+      for (std::map< std::uint32_t, CDBObject >::const_iterator
+               i = o.children.begin(); i != o.children.end(); )
+      {
+        printToString(s, "%*s", indentCnt + 4, "");
+        dumpObject(s, i->second, indentCnt + 4);
+        std::map< std::uint32_t, CDBObject >::const_iterator  k = i;
+        k++;
+        if (k != o.children.end())
+          printToString(s, ",\n");
+        else
+          printToString(s, "\n");
+        i = k;
+      }
+      printToString(s, "%*s],\n", indentCnt + 2, "");
+      if (o.children.begin() != o.children.end())
+      {
+        printToString(s, "%*s\"ElementType\": \"%s\",\n",
+                      indentCnt + 2, "",
+                      stringTable[o.children.begin()->second.type]);
+      }
+      printToString(s, "%*s\"Type\": \"<collection>\"\n", indentCnt + 2, "");
+      printToString(s, "%*s}", indentCnt, "");
+      break;
+    case String_Map:
+      printToString(s, "{\n%*s\"Data\": [\n", indentCnt + 2, "");
+      for (std::map< std::uint32_t, CDBObject >::const_iterator
+               i = o.children.begin(); i != o.children.end(); )
+      {
+        std::map< std::uint32_t, CDBObject >::const_iterator  j = i;
+        if (++j == o.children.end())
+          break;
+        std::map< std::uint32_t, CDBObject >::const_iterator  k = j;
+        k++;
+        printToString(s, "%*s{", indentCnt + 4, "");
+        printToString(s, "\n%*s\"Data\": {", indentCnt + 6, "");
+        printToString(s, "\n%*s\"Key\": ", indentCnt + 8, "");
+        dumpObject(s, i->second, indentCnt + 8);
+        printToString(s, ",\n%*s\"Value\": ", indentCnt + 8, "");
+        dumpObject(s, j->second, indentCnt + 8);
+        printToString(s, "\n%*s},", indentCnt + 6, "");
+        printToString(s, "\n%*s\"Type\": \"StdMapType::Pair\"\n",
+                      indentCnt + 6, "");
+        printToString(s, "%*s}", indentCnt + 4, "");
+        if (k != o.children.end())
+          printToString(s, ",\n");
+        else
+          printToString(s, "\n");
+        i = k;
+      }
+      printToString(s, "%*s],\n", indentCnt + 2, "");
+      if (o.children.begin() != o.children.end())
+      {
+        printToString(s, "%*s\"ElementType\": \"StdMapType::Pair\",\n",
+                      indentCnt + 2, "");
+      }
+      printToString(s, "%*s\"Type\": \"<collection>\"\n", indentCnt + 2, "");
+      printToString(s, "%*s}", indentCnt, "");
+      break;
+    case String_Ref:
+      printToString(s, "{\n%*s\"Data\": ", indentCnt + 2, "");
+      if (o.children.begin() == o.children.end())
+        printToString(s, "null");
       else
-        printToString(s, "\n");
-      i = k;
-    }
-    printToString(s, "%*s],\n", indentCnt + 2, "");
-    if (o.children.begin() != o.children.end())
-    {
-      printToString(s, "%*s\"ElementType\": \"%s\",\n",
-                    indentCnt + 2, "",
-                    stringTable[o.children.begin()->second.type]);
-    }
-    printToString(s, "%*s\"Type\": \"<collection>\"\n", indentCnt + 2, "");
-    printToString(s, "%*s}", indentCnt, "");
-    return;
+        dumpObject(s, o.children.begin()->second, indentCnt + 2);
+      printToString(s, ",\n%*s\"Type\": \"<ref>\"\n", indentCnt + 2, "");
+      printToString(s, "%*s}", indentCnt, "");
+      break;
+    case String_Unknown:
+      printToString(s, "\"<unknown>\"");
+      break;
+    default:                            // numbers and booleans
+      printToString(s, "%s", o.value.c_str());
+      break;
   }
-  // TODO: map and ref
-  if (o.type == String_None)
-  {
-    s += "\"null\"";
-    return;
-  }
-  if (o.type == String_Unknown)
-  {
-    s += "\"<unknown>\"";
-    return;
-  }
-}
-
-static std::uint32_t calculateHash(
-    std::uint64_t& h, const std::string& fileName)
-{
-  size_t  baseNamePos = fileName.rfind('/');
-  size_t  baseNamePos2 = fileName.rfind('\\');
-  size_t  extPos = fileName.rfind('.');
-  if (baseNamePos == std::string::npos ||
-      (baseNamePos2 != std::string::npos && baseNamePos2 > baseNamePos))
-  {
-    baseNamePos = baseNamePos2;
-  }
-  if (extPos == std::string::npos ||
-      (baseNamePos != std::string::npos && extPos < baseNamePos))
-  {
-    extPos = fileName.length();
-  }
-  size_t  i = 0;
-  std::uint32_t crcValue = 0U;
-  if (baseNamePos != std::string::npos)
-  {
-    for ( ; i < baseNamePos; i++)
-    {
-      unsigned char c = (unsigned char) fileName.c_str()[i];
-      if (c >= 0x41 && c <= 0x5A)       // 'A' - 'Z'
-        c = c | 0x20;                   // convert to lower case
-      else if (c == 0x2F)               // '/'
-        c = 0x5C;                       // convert to '\\'
-      hashFunctionCRC32(crcValue, c);
-    }
-    i++;
-  }
-  h = std::uint64_t(crcValue) << 32;
-  crcValue = 0U;
-  for ( ; i < extPos; i++)
-  {
-    unsigned char c = (unsigned char) fileName.c_str()[i];
-    if (c >= 0x41 && c <= 0x5A)         // 'A' - 'Z'
-      c = c | 0x20;                     // convert to lower case
-    hashFunctionCRC32(crcValue, c);
-  }
-  h = h | crcValue;
-  i++;
-  if ((i + 3) <= fileName.length())
-    return FileBuffer::readUInt32Fast(fileName.c_str() + i);
-  if ((i + 2) <= fileName.length())
-    return FileBuffer::readUInt16Fast(fileName.c_str() + i);
-  if (i < fileName.length())
-    return (unsigned char) fileName.c_str()[i];
-  return 0U;
 }
 
 void CDBMaterialToJSON::dumpMaterial(
@@ -498,16 +542,10 @@ void CDBMaterialToJSON::dumpMaterial(
   jsonBuf.clear();
   if (materialPath.empty())
     return;
-  std::uint64_t h = 0U;
-  std::uint32_t e = calculateHash(h, materialPath);
   const std::vector< std::uint32_t >  *objectList;
   {
-    BSResourceID  tmp;
-    tmp.dir = std::uint32_t(h & 0xFFFFFFFFU);
-    tmp.file = e;
-    tmp.ext = std::uint32_t(h >> 32);
     std::map< BSResourceID, std::vector< std::uint32_t > >::const_iterator  i =
-        matFileObjectMap.find(tmp);
+        matFileObjectMap.find(BSResourceID(materialPath));
     if (i == matFileObjectMap.end())
       return;
     objectList = &(i->second);
@@ -529,7 +567,7 @@ void CDBMaterialToJSON::dumpMaterial(
       if (jsonBuf.ends_with("\n        }"))
       {
         jsonBuf.resize(jsonBuf.length() - 10);
-        printToString(jsonBuf, ",\n          \"Index\": \"%u\"\n",
+        printToString(jsonBuf, ",\n          \"Index\": %u\n",
                       (unsigned int) (j->first & 0xFFFFFFFFU));
         printToString(jsonBuf, "        },\n");
       }
@@ -565,6 +603,6 @@ void CDBMaterialToJSON::dumpMaterial(
     printToString(jsonBuf, "      \"Parent\": \"%s\"\n    },\n", parentStr);
   }
   jsonBuf.resize(jsonBuf.length() - 2);
-  jsonBuf += "\n  ],\n  \"Version\": \"1\"\n}";
+  jsonBuf += "\n  ],\n  \"Version\": 1\n}";
 }
 
