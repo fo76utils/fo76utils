@@ -45,13 +45,16 @@ class CDBMaterialToJSON : public CDBFile
     std::map< std::uint64_t, CDBObject >  components;
   };
   std::map< std::uint32_t, CDBClassDef >  classes;
-  std::map< std::uint32_t, MaterialObject > objects;
+  std::vector< std::uint32_t >  objectsHashMap;
+  std::vector< MaterialObject > objects;
   std::vector< std::pair< std::uint32_t, std::uint32_t > >  componentInfo;
   std::map< BSResourceID, std::vector< std::uint32_t > >  matFileObjectMap;
   static inline bool isRootObject(std::uint32_t dbID)
   {
     return (dbID <= 7U);
   }
+  inline MaterialObject *findObject(std::uint32_t dbID);
+  inline const MaterialObject *findObject(std::uint32_t dbID) const;
   void copyBaseObject(MaterialObject& o);
   void loadItem(CDBObject& o, CDBChunk& chunkBuf, bool isDiff,
                 std::uint32_t itemType);
