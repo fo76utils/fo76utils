@@ -10,14 +10,17 @@ List data from a set of materials in Starfield CDB file(s), or display the mater
 * **-cdb FILENAME**: Set material database file name(s), can be a comma separated list of multiple CDB files (default: materials/materialsbeta.cdb).
 * **-list FILENAME**: Read list of material paths from FILENAME.
 * **-view[WIDTHxHEIGHT]**: View material(s) on a test model. The usage of this mode is identical to [nif\_info](nif_info.md), see its documentation for the complete list of controls.
+* **-all**: Use built-in list of all known material paths.
+* **-dump\_list**: Print list of .mat paths (useful with -all).
 * **-dump\_db**: Dump all reflection data.
 * **-json**: Write JSON format .mat file(s).
 
 ### Examples
 
-    ./mat_info -o materials.txt -list mat_names.txt Starfield/Data
-    ./mat_info -view3840x2160 -list mat_names.txt Starfield/Data
+    ./mat_info -o materials.txt -all Starfield/Data
+    ./mat_info -view3840x2160 -all Starfield/Data
     ./mat_info -dump_db -o cdb_data.txt Starfield/Data
     ./mat_info -json -o airpurifier01.mat Starfield/Data materials/setdressing/airpurifier/airpurifier01.mat
-    ./mat_info -json -list mat_names.txt Starfield/Data
+    ./mat_info -json -all Starfield/Data
+    ./mat_info -dump_list -o mat_names.txt -all Starfield/Data
 

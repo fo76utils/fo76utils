@@ -6,6 +6,7 @@
 #include "nif_view.hpp"
 #include "esmdbase.hpp"
 #include "mat_json.hpp"
+#include "zlib.hpp"
 
 #if defined(_WIN32) || defined(_WIN64)
 #  include <direct.h>
@@ -25,6 +26,8 @@ static const char *usageString =
     "    -view[WIDTHxHEIGHT] run in interactive mode\n"
 #endif
     "    -list FILENAME  read list of material paths from FILENAME\n"
+    "    -all            use built-in list of all known material paths\n"
+    "    -dump_list      print list of .mat paths (useful with -all)\n"
     "    -dump_db        dump all reflection data\n"
     "    -json           write JSON format .mat file(s)\n";
 
@@ -78,6 +81,190 @@ static void writeFileWithPath(const char *fileName, const std::string& buf)
   delete f;
 }
 
+static void loadCDBFiles(std::vector< std::vector< unsigned char > >& bufs,
+                         const BA2File& ba2File, const char *fileName)
+{
+  if (!fileName || fileName[0] == '\0')
+    fileName = "materials/materialsbeta.cdb";
+  while (true)
+  {
+    size_t  len = 0;
+    while (fileName[len] != ',' && fileName[len] != '\0')
+      len++;
+    bufs.emplace_back();
+    ba2File.extractFile(bufs.back(), std::string(fileName, len));
+    if (!fileName[len])
+      break;
+    fileName = fileName + (len + 1);
+  }
+}
+
+#include "mat_dirs.cpp"
+
+struct MatFileObject
+{
+  const unsigned char *objectInfo;
+  std::string baseName;
+};
+
+static void loadMaterialPaths(
+    std::vector< std::string >& args,
+    const std::vector< std::vector< unsigned char > >& cdbBufs)
+{
+  std::set< std::string > matPaths;
+  for (size_t i = 1; i < args.size(); i++)
+    matPaths.insert(args[i]);
+  args.resize(1);
+  std::map< std::uint32_t, std::string >  dirNameMap;
+  std::string tmp;
+  {
+    std::vector< unsigned char >  tmpBuf(matDirNamesSize + 1, 0);
+    (void) ZLibDecompressor::decompressData(tmpBuf.data(), matDirNamesSize,
+                                            matDirNamesZLib,
+                                            sizeof(matDirNamesZLib));
+    for (size_t i = 0; i < tmpBuf.size(); i++)
+    {
+      tmp = reinterpret_cast< char * >(tmpBuf.data() + i);
+      std::uint32_t h = 0U;
+      for ( ; tmpBuf[i]; i++)
+      {
+        unsigned char c = tmpBuf[i];
+        if (c == '/')
+          c = '\\';
+        hashFunctionCRC32(h, c);
+      }
+      tmp += '/';
+      dirNameMap[h] = tmp;
+    }
+  }
+  for (size_t i = 0; i < cdbBufs.size(); i++)
+  {
+    CDBFile cdbFile(cdbBufs[i].data(), cdbBufs[i].size());
+    std::map< std::uint32_t, MatFileObject >  matFileObjects;
+    const unsigned char *componentInfoPtr = nullptr;
+    size_t  componentCnt = 0;
+    size_t  componentID = 0;
+    CDBFile::CDBChunk chunkBuf;
+    unsigned int  chunkType;
+    while ((chunkType = cdbFile.readChunk(chunkBuf)) != CDBFile::ChunkType_NONE)
+    {
+      size_t  className = CDBFile::String_Unknown;
+      if (chunkBuf.size() >= 4) [[likely]]
+        className = cdbFile.findString(chunkBuf.readUInt32Fast());
+      if ((chunkType == CDBFile::ChunkType_DIFF ||
+           chunkType == CDBFile::ChunkType_OBJT) &&
+          componentID < componentCnt) [[likely]]
+      {
+        if (className == CDBFile::String_BSComponentDB_CTName)
+        {
+          std::uint32_t objectID =
+              FileBuffer::readUInt32Fast(componentInfoPtr + (componentID << 3));
+          std::map< std::uint32_t, MatFileObject >::iterator  j =
+              matFileObjects.find(objectID);
+          if (j != matFileObjects.end())
+          {
+            bool    isDiff = (chunkType == CDBFile::ChunkType_DIFF);
+            for (unsigned int n = 0U - 1U;
+                 chunkBuf.getFieldNumber(n, 0U, isDiff); )
+            {
+              if (!chunkBuf.readString(tmp))
+                break;
+              if (!tmp.empty())
+              {
+                for (size_t k = 0; k < tmp.length(); k++)
+                  tmp[k] = convertNameCharacter((unsigned char) tmp[k]);
+                j->second.baseName = tmp;
+              }
+            }
+          }
+        }
+        componentID++;
+        continue;
+      }
+      if (chunkType != CDBFile::ChunkType_LIST)
+        continue;
+      unsigned int  n = 0U;
+      if (chunkBuf.size() >= 8)
+        n = chunkBuf.readUInt32Fast();
+      switch (className)
+      {
+        case CDBFile::String_BSComponentDB2_DBFileIndex_ObjectInfo:
+          while (n--)
+          {
+            if ((chunkBuf.getPosition() + 21ULL) > chunkBuf.size())
+              break;
+            const unsigned char *p = chunkBuf.data() + chunkBuf.getPosition();
+            chunkBuf.setPosition(chunkBuf.getPosition() + 21);
+            if (FileBuffer::readUInt32Fast(p + 4) == 0x0074616DU && p[20])
+            {
+              // PersistentID.File = "mat\0" and HasData = true
+              matFileObjects[FileBuffer::readUInt32Fast(p + 12)].objectInfo = p;
+            }
+          }
+          break;
+        case CDBFile::String_BSComponentDB2_DBFileIndex_ComponentInfo:
+          componentInfoPtr = chunkBuf.data() + chunkBuf.getPosition();
+          componentCnt =
+              std::min(size_t(n),
+                       (chunkBuf.size() - chunkBuf.getPosition()) >> 3);
+          componentID = 0;
+          break;
+        case CDBFile::String_BSComponentDB2_DBFileIndex_EdgeInfo:
+          while (n--)
+          {
+            if ((chunkBuf.getPosition() + 12ULL) > chunkBuf.size())
+              break;
+            std::uint32_t objectID = chunkBuf.readUInt32Fast();
+            chunkBuf.setPosition(chunkBuf.getPosition() + 8);
+            std::map< std::uint32_t, MatFileObject >::iterator  j =
+                matFileObjects.find(objectID);
+            if (j != matFileObjects.end())
+              matFileObjects.erase(j);  // remove LOD materials
+          }
+          break;
+      }
+    }
+    for (std::map< std::uint32_t, MatFileObject >::const_iterator
+             j = matFileObjects.begin(); j != matFileObjects.end(); j++)
+    {
+      const std::string *baseName = &(j->second.baseName);
+      std::map< std::uint32_t, MatFileObject >::const_iterator  k = j;
+      while (baseName->empty())
+      {
+        std::uint32_t parentID =
+            FileBuffer::readUInt32Fast(k->second.objectInfo + 16);
+        if (!parentID)
+          break;
+        k = matFileObjects.find(parentID);
+        if (k == matFileObjects.end())
+          break;
+        baseName = &(k->second.baseName);
+      }
+      if (baseName->empty())
+        continue;
+      std::map< std::uint32_t, std::string >::const_iterator  l =
+          dirNameMap.find(FileBuffer::readUInt32Fast(j->second.objectInfo + 8));
+      if (l == dirNameMap.end())
+        continue;
+      tmp = *baseName;
+      std::uint32_t h = 0U;
+      for (size_t m = 0; m < tmp.length(); m++)
+        hashFunctionCRC32(h, (unsigned char) tmp[m]);
+      if (h == FileBuffer::readUInt32Fast(j->second.objectInfo))
+      {
+        tmp.insert(0, l->second);
+        tmp += ".mat";
+        matPaths.insert(tmp);
+      }
+    }
+  }
+  for (std::set< std::string >::const_iterator
+           i = matPaths.begin(); i != matPaths.end(); i++)
+  {
+    args.push_back(*i);
+  }
+}
+
 int main(int argc, char **argv)
 {
   const char  *outFileName = nullptr;
@@ -86,8 +273,9 @@ int main(int argc, char **argv)
   NIF_View  *renderer = nullptr;
 #endif
   bool    consoleFlag = true;
-  bool    dumpReflData = false;
-  bool    dumpJSONData = false;
+  bool    extractMatList = false;
+  // -1: view, 0: default, 1: dump_db, 2: JSON, 3: dump_list
+  signed char dumpMode = 0;
   try
   {
     std::vector< std::string >  args;
@@ -139,6 +327,7 @@ int main(int argc, char **argv)
       else if (std::strncmp(argv[i], "-view", 5) == 0)
       {
 #ifdef HAVE_SDL2
+        dumpMode = -1;
         displayWidth = 1792;
         displayHeight = 896;
         std::string tmp(argv[i] + 5);
@@ -165,15 +354,21 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         listFileName = argv[i];
       }
+      else if (std::strcmp(argv[i], "-all") == 0)
+      {
+        extractMatList = true;
+      }
+      else if (std::strcmp(argv[i], "-dump_list") == 0)
+      {
+        dumpMode = 3;
+      }
       else if (std::strcmp(argv[i], "-dump_db") == 0)
       {
-        dumpReflData = true;
-        dumpJSONData = false;
+        dumpMode = 1;
       }
       else if (std::strcmp(argv[i], "-json") == 0)
       {
-        dumpReflData = false;
-        dumpJSONData = true;
+        dumpMode = 2;
       }
       else
       {
@@ -206,35 +401,40 @@ int main(int argc, char **argv)
     }
     const char  *fileNameFilter = ".cdb";
 #ifdef HAVE_SDL2
-    if (displayWidth && displayHeight)
+    if (dumpMode < 0)
       fileNameFilter = ".cdb\t.dds\t.mesh\t.nif";
 #endif
     BA2File ba2File(args[0].c_str(), fileNameFilter);
-    if (dumpReflData || dumpJSONData)
+    std::vector< std::vector< unsigned char > > cdbBufs;
+    if (!(dumpMode < 0 && !extractMatList))
+      loadCDBFiles(cdbBufs, ba2File, cdbFileName);
+    if (extractMatList)
+      loadMaterialPaths(args, cdbBufs);
+    if (dumpMode > 0)
     {
       consoleFlag = false;
       SDLDisplay::enableConsole();
-      if (!(cdbFileName && *cdbFileName))
-        cdbFileName = "materials/materialsbeta.cdb";
-      std::vector< unsigned char >  cdbBuf;
-      ba2File.extractFile(cdbBuf, std::string(cdbFileName));
       std::string stringBuf;
       std::string errMsgBuf;
-      if (dumpReflData)
+      if (dumpMode == 1)
       {
-        CDBDump cdbFile(cdbBuf.data(), cdbBuf.size());
-        try
+        for (size_t i = 0; i < cdbBufs.size(); i++)
         {
-          cdbFile.readAllChunks(stringBuf, 0, true);
-        }
-        catch (std::exception& e)
-        {
-          errMsgBuf = e.what();
+          CDBDump cdbFile(cdbBufs[i].data(), cdbBufs[i].size());
+          try
+          {
+            cdbFile.readAllChunks(stringBuf, 0, true);
+          }
+          catch (std::exception& e)
+          {
+            errMsgBuf = e.what();
+            break;
+          }
         }
       }
-      else
+      else if (dumpMode == 2 && cdbBufs.size() > 0)
       {
-        CDBMaterialToJSON cdbFile(cdbBuf.data(), cdbBuf.size());
+        CDBMaterialToJSON cdbFile(cdbBufs[0].data(), cdbBufs[0].size());
         std::string tmpBuf;
         for (size_t i = 1; i < args.size(); i++)
         {
@@ -256,7 +456,12 @@ int main(int argc, char **argv)
           }
         }
       }
-      if (!(dumpJSONData && args.size() > 2))
+      else if (dumpMode == 3)
+      {
+        for (size_t i = 1; i < args.size(); i++)
+          printToString(stringBuf, "%s\n", args[i].c_str());
+      }
+      if (!(dumpMode == 2 && args.size() > 2))
       {
         if (!outFileName)
         {
@@ -285,7 +490,7 @@ int main(int argc, char **argv)
       return 0;
     }
 #ifdef HAVE_SDL2
-    if (displayWidth && displayHeight && args.size() > 1)
+    if (dumpMode < 0 && args.size() > 1)
     {
       args.erase(args.begin(), args.begin() + 1);
       std::sort(args.begin(), args.end());
@@ -297,7 +502,9 @@ int main(int argc, char **argv)
       return 0;
     }
 #endif
-    CE2MaterialDB materials(ba2File, cdbFileName);
+    CE2MaterialDB materials;
+    for (size_t i = 0; i < cdbBufs.size(); i++)
+      materials.loadCDBFile(cdbBufs[i].data(), cdbBufs[i].size());
     consoleFlag = false;
     SDLDisplay::enableConsole();
     if (outFileName)
