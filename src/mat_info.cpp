@@ -109,7 +109,9 @@ struct MatFileObject
 
 static void loadMaterialPaths(
     std::vector< std::string >& args,
-    const std::vector< std::vector< unsigned char > >& cdbBufs)
+    const std::vector< std::vector< unsigned char > >& cdbBufs,
+    const std::vector< std::string >& includePatterns,
+    const std::vector< std::string >& excludePatterns)
 {
   std::set< std::string > matPaths;
   for (size_t i = 1; i < args.size(); i++)
@@ -261,7 +263,33 @@ static void loadMaterialPaths(
   for (std::set< std::string >::const_iterator
            i = matPaths.begin(); i != matPaths.end(); i++)
   {
-    args.push_back(*i);
+    if (includePatterns.begin() != includePatterns.end())
+    {
+      bool    foundMatch = false;
+      for (std::vector< std::string >::const_iterator
+               j = includePatterns.begin(); j != includePatterns.end(); j++)
+      {
+        if (i->find(*j) != std::string::npos)
+        {
+          foundMatch = true;
+          break;
+        }
+      }
+      if (!foundMatch)
+        continue;
+    }
+    bool    foundMatch = true;
+    for (std::vector< std::string >::const_iterator
+             j = excludePatterns.begin(); j != excludePatterns.end(); j++)
+    {
+      if (i->find(*j) != std::string::npos)
+      {
+        foundMatch = false;
+        break;
+      }
+    }
+    if (foundMatch)
+      args.push_back(*i);
   }
 }
 
@@ -279,32 +307,41 @@ int main(int argc, char **argv)
   try
   {
     std::vector< std::string >  args;
+    std::vector< std::string >  includePatterns;
+    std::vector< std::string >  excludePatterns;
     const char  *cdbFileName = nullptr;
     const char  *listFileName = nullptr;
 #ifdef HAVE_SDL2
     int     displayWidth = 0;
     int     displayHeight = 0;
 #endif
+    bool    noOptionsFlag = false;
     for (int i = 1; i < argc; i++)
     {
-      if (argv[i][0] != '-')
+      if (noOptionsFlag || argv[i][0] != '-' || std::strcmp(argv[i], "--") == 0)
       {
-        args.emplace_back(argv[i]);
-        if (args.size() > 1)
+        if (!noOptionsFlag)
         {
-          for (size_t j = 0; j < args.back().length(); j++)
-          {
-            args.back()[j] =
-                convertNameCharacter((unsigned char) args.back()[j]);
-          }
+          noOptionsFlag = true;
+          if (std::strcmp(argv[i], "--") == 0)
+            continue;
         }
+        std::string s(argv[i]);
+        if (args.size() > 0)
+        {
+          for (size_t j = 0; j < s.length(); j++)
+            s[j] = convertNameCharacter((unsigned char) s[j]);
+        }
+        if (args.size() < 1 || !extractMatList)
+        {
+          args.push_back(s);
+          continue;
+        }
+        if (!s.starts_with("-x:"))
+          includePatterns.push_back(s);
+        else if (s.length() > 3)
+          excludePatterns.emplace_back(s, 3);
         continue;
-      }
-      if (std::strcmp(argv[i], "--") == 0)
-      {
-        while (++i < argc)
-          args.emplace_back(argv[i]);
-        break;
       }
       if (std::strcmp(argv[i], "-h") == 0 ||
           std::strcmp(argv[i], "--help") == 0)
@@ -409,7 +446,7 @@ int main(int argc, char **argv)
     if (!(dumpMode < 0 && !extractMatList))
       loadCDBFiles(cdbBufs, ba2File, cdbFileName);
     if (extractMatList)
-      loadMaterialPaths(args, cdbBufs);
+      loadMaterialPaths(args, cdbBufs, includePatterns, excludePatterns);
     if (dumpMode > 0)
     {
       consoleFlag = false;
