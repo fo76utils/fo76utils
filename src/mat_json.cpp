@@ -84,6 +84,81 @@ inline CDBMaterialToJSON::MaterialObject *
   return const_cast< MaterialObject * >(p->findObject(dbID));
 }
 
+void * CDBMaterialToJSON::allocateSpace(size_t nBytes, size_t alignBytes)
+{
+  std::uintptr_t  addr0 =
+      reinterpret_cast< std::uintptr_t >(objectBuffers.back().data());
+  std::uintptr_t  endAddr = addr0 + objectBuffers.back().capacity();
+  std::uintptr_t  addr =
+      reinterpret_cast< std::uintptr_t >(&(*(objectBuffers.back().end())));
+  std::uintptr_t  alignMask = std::uintptr_t(alignBytes - 1);
+  addr = (addr + alignMask) & ~alignMask;
+  std::uintptr_t  bytesRequired = (nBytes + alignMask) & ~alignMask;
+  if ((endAddr - addr) < bytesRequired) [[unlikely]]
+  {
+    std::uintptr_t  bufBytes = 65536U;
+    if (bytesRequired > bufBytes)
+      throw std::bad_alloc();
+    objectBuffers.emplace_back();
+    objectBuffers.back().reserve(size_t(bufBytes));
+    addr0 = reinterpret_cast< std::uintptr_t >(objectBuffers.back().data());
+    addr = (addr0 + alignMask) & ~alignMask;
+  }
+  objectBuffers.back().resize(size_t((addr + bytesRequired) - addr0));
+  unsigned char *p = reinterpret_cast< unsigned char * >(addr);
+  return p;
+}
+
+CDBMaterialToJSON::CDBObject * CDBMaterialToJSON::allocateObject(
+    std::uint32_t itemType, const CDBClassDef *classDef, size_t elementCnt)
+{
+  size_t  dataSize = sizeof(CDBObject);
+  size_t  childCnt = 0;
+  if (itemType == String_List || itemType == String_Map)
+    childCnt = elementCnt;
+  else if (itemType == String_Ref)
+    childCnt = 1;
+  else if (classDef)
+    childCnt = classDef->fields.size();
+  if (childCnt > 1)
+    dataSize += ((childCnt - 1) * sizeof(CDBObject *));
+  CDBObject *o =
+      reinterpret_cast< CDBObject * >(allocateSpace(dataSize,
+                                                    alignof(CDBObject)));
+  o->type = itemType;
+  o->childCnt = std::uint32_t(childCnt);
+  if (childCnt)
+  {
+    for (size_t i = 0; i < childCnt; i++)
+      o->data.children[i] = nullptr;
+  }
+  else if (itemType == String_String)
+  {
+    o->data.stringValue = "";
+  }
+  else
+  {
+    o->data.uint64Value = 0U;
+  }
+  return o;
+}
+
+void CDBMaterialToJSON::copyObject(CDBObject*& o)
+{
+  if (!o)
+    return;
+  size_t  dataSize = sizeof(CDBObject);
+  if (o->childCnt > 1)
+    dataSize += ((o->childCnt - 1) * sizeof(CDBObject *));
+  CDBObject *p =
+      reinterpret_cast< CDBObject * >(allocateSpace(dataSize,
+                                                    alignof(CDBObject)));
+  std::memcpy(p, o, dataSize);
+  o = p;
+  for (std::uint32_t i = 0U; i < p->childCnt; i++)
+    copyObject(p->data.children[i]);
+}
+
 void CDBMaterialToJSON::copyBaseObject(MaterialObject& o)
 {
   if (isRootObject(o.baseObject))
@@ -98,29 +173,35 @@ void CDBMaterialToJSON::copyBaseObject(MaterialObject& o)
     copyBaseObject(*p);
   o.components = p->components;
   o.baseObject = p->baseObject;
+  for (std::map< std::uint64_t, CDBObject * >::iterator
+           i = o.components.begin(); i != o.components.end(); i++)
+  {
+    copyObject(i->second);
+  }
 }
 
-void CDBMaterialToJSON::loadItem(CDBObject& o, CDBChunk& chunkBuf, bool isDiff,
+void CDBMaterialToJSON::loadItem(CDBObject*& o, CDBChunk& chunkBuf, bool isDiff,
                                  std::uint32_t itemType)
 {
-  o.type = itemType;
-  o.value.clear();
-  if (itemType == String_Unknown)
-  {
-    chunkBuf.setPosition(chunkBuf.size());
-    return;
-  }
+  const CDBClassDef *classDef = nullptr;
   if (itemType > String_Unknown)
   {
     std::map< std::uint32_t, CDBClassDef >::const_iterator
         i = classes.find(itemType);
-    if (i == classes.end())
-    {
-      chunkBuf.setPosition(chunkBuf.size());
-      return;
-    }
-    unsigned int  nMax = (unsigned int) i->second.fields.size();
-    if (i->second.isUser)
+    if (i != classes.end()) [[likely]]
+      classDef = &(i->second);
+    else
+      itemType = String_Unknown;
+  }
+  if (!(o && o->type == itemType))
+  {
+    if (!(itemType == String_List || itemType == String_Map))
+      o = allocateObject(itemType, classDef, 0);
+  }
+  if (itemType > String_Unknown)
+  {
+    unsigned int  nMax = (unsigned int) classDef->fields.size();
+    if (classDef->isUser)
     {
       CDBChunk  userBuf;
       unsigned int  userChunkType = readChunk(userBuf);
@@ -146,51 +227,34 @@ void CDBMaterialToJSON::loadItem(CDBObject& o, CDBChunk& chunkBuf, bool isDiff,
         for (unsigned int n = 0U - 1U;
              userBuf.getFieldNumber(n, nMax, isDiff); )
         {
-          loadItem(o.children[std::uint32_t(n)], userBuf, isDiff,
-                   i->second.fields[n].second);
+          loadItem(o->data.children[n], userBuf, isDiff,
+                   classDef->fields[n].second);
         }
       }
-      else
+      else if (className2 < String_Unknown)
       {
-        for (unsigned int n = 0U; className2 < String_Unknown; )
+        if (!o->childCnt)
         {
-          loadItem(o.children[std::uint32_t(n)], userBuf, isDiff,
-                   className2);
-          className2 = std::uint32_t(findString(userBuf.readUInt32()));
-          if (++n >= nMax)
-            break;
+          o->childCnt++;
+          o->data.children[0] = nullptr;
         }
+        unsigned int  n = 0U;
+        do
+        {
+          loadItem(o->data.children[n], userBuf, isDiff, className2);
+          className2 = std::uint32_t(findString(userBuf.readUInt32()));
+          n++;
+        }
+        while (int(n) <= int(nMax) && className2 < String_Unknown);
       }
     }
     else
     {
       nMax--;
-      unsigned int  n = 0U - 1U;
-      if (itemType == String_BSComponentDB2_ID) [[unlikely]]
+      for (unsigned int n = 0U - 1U; chunkBuf.getFieldNumber(n, nMax, isDiff); )
       {
-        o.type = String_String;
-        o.children.clear();
-        while (chunkBuf.getFieldNumber(n, nMax, isDiff))
-        {
-          std::uint32_t dbID = chunkBuf.readUInt32();
-          const MaterialObject  *p = findObject(dbID);
-          if (p)
-          {
-            o.value.clear();
-            printToString(o.value, "res:%08X:%08X:%08X",
-                          (unsigned int) p->persistentID.ext,
-                          (unsigned int) p->persistentID.dir,
-                          (unsigned int) p->persistentID.file);
-          }
-        }
-      }
-      else
-      {
-        while (chunkBuf.getFieldNumber(n, nMax, isDiff))
-        {
-          loadItem(o.children[std::uint32_t(n)], chunkBuf, isDiff,
-                   i->second.fields[n].second);
-        }
+        loadItem(o->data.children[n], chunkBuf, isDiff,
+                 classDef->fields[n].second);
       }
     }
     return;
@@ -198,75 +262,90 @@ void CDBMaterialToJSON::loadItem(CDBObject& o, CDBChunk& chunkBuf, bool isDiff,
   FileBuffer& buf2 = *(static_cast< FileBuffer * >(&chunkBuf));
   switch (itemType)
   {
-    case String_None:
-      o.value = "null";
-      break;
     case String_String:
       {
         unsigned int  len = buf2.readUInt16();
-        bool    endOfString = false;
-        while (len--)
-        {
-          unsigned char c = buf2.readUInt8();
-          if (!endOfString)
-          {
-            if (!c)
-              endOfString = true;
-            else if (c == '\\')
-              o.value += "\\\\";
-            else if (c >= 0x20)
-              o.value += char(c);
-            else if (c == '\t')
-              o.value += "\\t";
-            else if (c == '\n')
-              o.value += "\\n";
-            else if (c == '\r')
-              o.value += "\\r";
-            else
-              o.value += ' ';
-          }
-        }
+        if ((buf2.getPosition() + std::uint64_t(len)) > buf2.size())
+          errorMessage("unexpected end of CDB file");
+        char    *s =
+            reinterpret_cast< char * >(allocateSpace(len + 1U, sizeof(char)));
+        std::memcpy(s, buf2.data() + buf2.getPosition(), len);
+        s[len] = '\0';
+        o->data.stringValue = s;
+        buf2.setPosition(buf2.getPosition() + len);
       }
       break;
     case String_List:
+    case String_Map:
       {
         CDBChunk  listBuf;
         unsigned int  chunkType = readChunk(listBuf);
-        if (chunkType != ChunkType_LIST)
+        bool    isMap = (itemType == String_Map);
+        if (chunkType != (!isMap ? ChunkType_LIST : ChunkType_MAPC))
         {
           throw FO76UtilsError("unexpected chunk type in CDB file at 0x%08x",
                                (unsigned int) getPosition());
         }
-        std::uint32_t listClassName =
-            std::uint32_t(findString(listBuf.readUInt32()));
+        std::uint32_t classNames[2];
+        classNames[0] = std::uint32_t(findString(listBuf.readUInt32()));
+        classNames[1] = classNames[0];
+        if (isMap)
+          classNames[1] = std::uint32_t(findString(listBuf.readUInt32()));
         std::uint32_t listSize = 0U;
         if ((listBuf.getPosition() + 4ULL) <= listBuf.size())
           listSize = listBuf.readUInt32();
-        for (std::uint32_t n = 0U; n < listSize; n++)
-          loadItem(o.children[n], listBuf, isDiff, listClassName);
-        return;
-      }
-      break;
-    case String_Map:
-      {
-        CDBChunk  mapBuf;
-        unsigned int  chunkType = readChunk(mapBuf);
-        if (chunkType != ChunkType_MAPC)
+        if (isMap)
         {
-          throw FO76UtilsError("unexpected chunk type in CDB file at 0x%08x",
-                               (unsigned int) getPosition());
+          if (listSize > 0x7FFFFFFFU)
+            errorMessage("invalid map size in CDB file");
+          listSize = listSize << 1;
         }
-        std::uint32_t keyClassName =
-            std::uint32_t(findString(mapBuf.readUInt32()));
-        std::uint32_t valueClassName =
-            std::uint32_t(findString(mapBuf.readUInt32()));
-        std::uint32_t mapSize = 0U;
-        if ((mapBuf.getPosition() + 4ULL) <= mapBuf.size())
-          mapSize = mapBuf.readUInt32();
-        for (std::uint32_t n = 0U; n < mapSize; n++)
+        std::uint32_t n = 0U;
+        bool    appendingItems = false;
+        if (isDiff && o && o->type == itemType && o->childCnt &&
+            o->data.children[0]->type == classNames[0])
         {
-          loadItem(o.children[n << 1], mapBuf, false, keyClassName);
-          loadItem(o.children[(n << 1) + 1U], mapBuf, isDiff, valueClassName);
+          if (!isMap)
+            appendingItems = (std::uint32_t(classNames[0] - String_Int8) > 11U);
+          else
+            appendingItems = (o->data.children[1]->type == classNames[1]);
+        }
+        if (appendingItems)
+        {
+          std::uint32_t prvSize = o->childCnt;
+          if ((std::uint64_t(listSize) + prvSize) > 0xFFFFFFFFULL)
+            errorMessage("invalid list size in CDB file");
+          listSize = listSize + prvSize;
+          CDBObject *p = allocateObject(itemType, classDef, listSize);
+          for ( ; n < prvSize; n++)
+            p->data.children[n] = o->data.children[n];
+          o = p;
+        }
+        else if (!(o && o->type == itemType && o->childCnt >= listSize))
+        {
+          o = allocateObject(itemType, classDef, listSize);
+        }
+        o->childCnt = listSize;
+        for ( ; n < listSize; n++)
+        {
+          loadItem(o->data.children[n], listBuf, isDiff, classNames[n & 1U]);
+          if (isMap && !(n & 1U) && classNames[0] == String_String)
+          {
+            // check for duplicate keys
+            for (std::uint32_t k = 0U; k < n; k = k + 2U)
+            {
+              if (std::strcmp(o->data.children[k]->data.stringValue,
+                              o->data.children[n]->data.stringValue) == 0)
+              {
+                loadItem(o->data.children[k + 1U], listBuf, isDiff,
+                         classNames[1]);
+                listSize = listSize - 2U;
+                o->childCnt = listSize;
+                n--;
+                break;
+              }
+            }
+          }
         }
         return;
       }
@@ -274,45 +353,44 @@ void CDBMaterialToJSON::loadItem(CDBObject& o, CDBChunk& chunkBuf, bool isDiff,
     case String_Ref:
       {
         std::uint32_t refType = std::uint32_t(findString(buf2.readUInt32()));
-        loadItem(o.children[0U], chunkBuf, isDiff, refType);
+        loadItem(o->data.children[0], chunkBuf, isDiff, refType);
         return;
       }
       break;
     case String_Int8:
-      printToString(o.value, "%d", int(std::int8_t(buf2.readUInt8())));
+      o->data.int8Value = std::int8_t(buf2.readUInt8());
       break;
     case String_UInt8:
-      printToString(o.value, "%u", (unsigned int) buf2.readUInt8());
+      o->data.uint8Value = buf2.readUInt8();
       break;
     case String_Int16:
-      printToString(o.value, "%d", int(std::int16_t(buf2.readUInt16())));
+      o->data.int16Value = std::int16_t(buf2.readUInt16());
       break;
     case String_UInt16:
-      printToString(o.value, "%u", (unsigned int) buf2.readUInt16());
+      o->data.uint16Value = buf2.readUInt16();
       break;
     case String_Int32:
-      printToString(o.value, "%d", int(buf2.readInt32()));
+      o->data.int32Value = buf2.readInt32();
       break;
     case String_UInt32:
-      printToString(o.value, "%u", (unsigned int) buf2.readUInt32());
+      o->data.uint32Value = buf2.readUInt32();
       break;
     case String_Int64:
-      printToString(o.value,
-                    "%lld", (long long) std::int64_t(buf2.readUInt64()));
+      o->data.int64Value = std::int64_t(buf2.readUInt64());
       break;
     case String_UInt64:
-      printToString(o.value, "%llu", (unsigned long long) buf2.readUInt64());
+      o->data.uint64Value = buf2.readUInt64();
       break;
     case String_Bool:
-      printToString(o.value, "%s", (!buf2.readUInt8() ? "false" : "true"));
+      o->data.boolValue = bool(buf2.readUInt8());
       break;
     case String_Float:
-      printToString(o.value, "%.7g", buf2.readFloat());
+      o->data.floatValue = buf2.readFloat();
       break;
     case String_Double:
       // FIXME: implement this in a portable way
-      printToString(o.value, "%.14g",
-                    std::bit_cast< double, std::uint64_t >(buf2.readUInt64()));
+      o->data.doubleValue =
+          std::bit_cast< double, std::uint64_t >(buf2.readUInt64());
       break;
     default:
       chunkBuf.setPosition(chunkBuf.size());
@@ -322,6 +400,8 @@ void CDBMaterialToJSON::loadItem(CDBObject& o, CDBChunk& chunkBuf, bool isDiff,
 
 void CDBMaterialToJSON::readAllChunks()
 {
+  objectBuffers.emplace_back();
+  objectBuffers.back().reserve(65536);
   CDBChunk  chunkBuf;
   unsigned int  chunkType;
   size_t  componentID = 0;
@@ -469,119 +549,200 @@ void CDBMaterialToJSON::readAllChunks()
 }
 
 void CDBMaterialToJSON::dumpObject(
-    std::string& s, const CDBObject& o, int indentCnt) const
+    std::string& s, const CDBObject *o, int indentCnt) const
 {
-  if (o.type > String_Unknown)
+  if (!o)
+  {
+    printToString(s, "null");
+    return;
+  }
+  if (o->type > String_Unknown)
   {
     // structure
-    printToString(s, "{\n%*s\"Data\": {\n", indentCnt + 2, "");
-    for (std::map< std::uint32_t, CDBObject >::const_iterator
-             i = o.children.begin(); i != o.children.end(); )
+    if (o->type == String_BSComponentDB2_ID) [[unlikely]]
     {
-      std::uint32_t fieldNum = i->first;
-      std::map< std::uint32_t, CDBClassDef >::const_iterator  j =
-          classes.find(o.type);
-      const char  *fieldNameStr = "null";
-      if (j != classes.end() && fieldNum < j->second.fields.size())
-        fieldNameStr = stringTable[j->second.fields[fieldNum].first];
-      printToString(s, "%*s\"%s\": ", indentCnt + 4, "", fieldNameStr);
-      dumpObject(s, i->second, indentCnt + 4);
-      std::map< std::uint32_t, CDBObject >::const_iterator  k = i;
-      k++;
-      if (k != o.children.end())
-        printToString(s, ",\n");
+      const MaterialObject  *p = nullptr;
+      if (o->childCnt && o->data.children[0] &&
+          o->data.children[0]->type == String_UInt32)
+      {
+        p = findObject(o->data.children[0]->data.uint32Value);
+      }
+      if (!p)
+      {
+        printToString(s, "\"\"");
+      }
       else
-        printToString(s, "\n");
-      i = k;
+      {
+        printToString(s, "\"res:%08X:%08X:%08X\"",
+                      (unsigned int) p->persistentID.ext,
+                      (unsigned int) p->persistentID.dir,
+                      (unsigned int) p->persistentID.file);
+      }
+      return;
     }
-    printToString(s, "%*s},\n", indentCnt + 2, "");
-    printToString(s, "%*s\"Type\": \"%s\"\n",
-                  indentCnt + 2, "", stringTable[o.type]);
+    printToString(s, "{\n%*s\"Data\": {", indentCnt + 2, "");
+    std::map< std::uint32_t, CDBClassDef >::const_iterator  i =
+        classes.find(o->type);
+    for (std::uint32_t fieldNum = 0U; fieldNum < o->childCnt; fieldNum++)
+    {
+      if (!o->data.children[fieldNum])
+        continue;
+      const char  *fieldNameStr = "null";
+      if (i != classes.end() && fieldNum < i->second.fields.size())
+        fieldNameStr = stringTable[i->second.fields[fieldNum].first];
+      printToString(s, "\n%*s\"%s\": ", indentCnt + 4, "", fieldNameStr);
+      dumpObject(s, o->data.children[fieldNum], indentCnt + 4);
+      printToString(s, ",");
+    }
+    if (s.ends_with(','))
+    {
+      s[s.length() - 1] = '\n';
+      printToString(s, "%*s", indentCnt + 2, "");
+    }
+    printToString(s, "},\n%*s\"Type\": \"%s\"\n",
+                  indentCnt + 2, "", stringTable[o->type]);
     printToString(s, "%*s}", indentCnt, "");
     return;
   }
-  switch (o.type)
+  switch (o->type)
   {
     case String_None:
       printToString(s, "null");
       break;
     case String_String:
-      printToString(s, "\"%s\"", o.value.c_str());
+      s += '"';
+      for (size_t i = 0; o->data.stringValue[i]; i++)
+      {
+        char    c = o->data.stringValue[i];
+        if ((unsigned char) c < 0x20 || c == '"' || c == '\\')
+        {
+          s += '\\';
+          switch (c)
+          {
+            case '\b':
+              c = 'b';
+              break;
+            case '\t':
+              c = 't';
+              break;
+            case '\n':
+              c = 'n';
+              break;
+            case '\f':
+              c = 'f';
+              break;
+            case '\r':
+              c = 'r';
+              break;
+            default:
+              if ((unsigned char) c < 0x20)
+              {
+                printToString(s, "u%04X", (unsigned int) c);
+                continue;
+              }
+              break;
+          }
+        }
+        s += c;
+      }
+      s += '"';
       break;
     case String_List:
-      printToString(s, "{\n%*s\"Data\": [\n", indentCnt + 2, "");
-      for (std::map< std::uint32_t, CDBObject >::const_iterator
-               i = o.children.begin(); i != o.children.end(); )
+      printToString(s, "{\n%*s\"Data\": [", indentCnt + 2, "");
+      for (std::uint32_t i = 0U; i < o->childCnt; i++)
       {
-        printToString(s, "%*s", indentCnt + 4, "");
-        dumpObject(s, i->second, indentCnt + 4);
-        std::map< std::uint32_t, CDBObject >::const_iterator  k = i;
-        k++;
-        if (k != o.children.end())
-          printToString(s, ",\n");
+        printToString(s, "\n%*s", indentCnt + 4, "");
+        dumpObject(s, o->data.children[i], indentCnt + 4);
+        if ((i + 1U) < o->childCnt)
+          printToString(s, ",");
         else
-          printToString(s, "\n");
-        i = k;
+          printToString(s, "\n%*s", indentCnt + 2, "");
       }
-      printToString(s, "%*s],\n", indentCnt + 2, "");
-      if (o.children.begin() != o.children.end())
+      printToString(s, "],\n");
+      if (o->childCnt)
       {
+        const char  *elementType = "null";
+        if (o->data.children[0])
+        {
+          if (o->data.children[0]->type == String_String)
+            elementType = "BSFixedString";
+          else if (o->data.children[0]->type == String_Float)
+            elementType = "float";
+          else
+            elementType = stringTable[o->data.children[0]->type];
+        }
         printToString(s, "%*s\"ElementType\": \"%s\",\n",
-                      indentCnt + 2, "",
-                      stringTable[o.children.begin()->second.type]);
+                      indentCnt + 2, "", elementType);
       }
       printToString(s, "%*s\"Type\": \"<collection>\"\n", indentCnt + 2, "");
       printToString(s, "%*s}", indentCnt, "");
       break;
     case String_Map:
-      printToString(s, "{\n%*s\"Data\": [\n", indentCnt + 2, "");
-      for (std::map< std::uint32_t, CDBObject >::const_iterator
-               i = o.children.begin(); i != o.children.end(); )
+      printToString(s, "{\n%*s\"Data\": [", indentCnt + 2, "");
+      for (std::uint32_t i = 0U; i < o->childCnt; i++)
       {
-        std::map< std::uint32_t, CDBObject >::const_iterator  j = i;
-        if (++j == o.children.end())
-          break;
-        std::map< std::uint32_t, CDBObject >::const_iterator  k = j;
-        k++;
-        printToString(s, "%*s{", indentCnt + 4, "");
+        printToString(s, "\n%*s{", indentCnt + 4, "");
         printToString(s, "\n%*s\"Data\": {", indentCnt + 6, "");
         printToString(s, "\n%*s\"Key\": ", indentCnt + 8, "");
-        dumpObject(s, i->second, indentCnt + 8);
+        dumpObject(s, o->data.children[i], indentCnt + 8);
+        i++;
         printToString(s, ",\n%*s\"Value\": ", indentCnt + 8, "");
-        dumpObject(s, j->second, indentCnt + 8);
+        dumpObject(s, o->data.children[i], indentCnt + 8);
         printToString(s, "\n%*s},", indentCnt + 6, "");
         printToString(s, "\n%*s\"Type\": \"StdMapType::Pair\"\n",
                       indentCnt + 6, "");
         printToString(s, "%*s}", indentCnt + 4, "");
-        if (k != o.children.end())
-          printToString(s, ",\n");
+        if ((i + 1U) < o->childCnt)
+          printToString(s, ",");
         else
-          printToString(s, "\n");
-        i = k;
+          printToString(s, "\n%*s", indentCnt + 2, "");
       }
-      printToString(s, "%*s],\n", indentCnt + 2, "");
-      if (o.children.begin() != o.children.end())
-      {
-        printToString(s, "%*s\"ElementType\": \"StdMapType::Pair\",\n",
-                      indentCnt + 2, "");
-      }
+      printToString(s, "],\n%*s\"ElementType\": \"StdMapType::Pair\",\n",
+                    indentCnt + 2, "");
       printToString(s, "%*s\"Type\": \"<collection>\"\n", indentCnt + 2, "");
       printToString(s, "%*s}", indentCnt, "");
       break;
     case String_Ref:
       printToString(s, "{\n%*s\"Data\": ", indentCnt + 2, "");
-      if (o.children.begin() == o.children.end())
-        printToString(s, "null");
-      else
-        dumpObject(s, o.children.begin()->second, indentCnt + 2);
+      dumpObject(s, o->data.children[0], indentCnt + 2);
       printToString(s, ",\n%*s\"Type\": \"<ref>\"\n", indentCnt + 2, "");
       printToString(s, "%*s}", indentCnt, "");
       break;
-    case String_Unknown:
-      printToString(s, "\"<unknown>\"");
+    case String_Int8:
+      printToString(s, "%d", int(o->data.int8Value));
       break;
-    default:                            // numbers and booleans
-      printToString(s, "%s", o.value.c_str());
+    case String_UInt8:
+      printToString(s, "%u", (unsigned int) o->data.uint8Value);
+      break;
+    case String_Int16:
+      printToString(s, "%d", int(o->data.int16Value));
+      break;
+    case String_UInt16:
+      printToString(s, "%u", (unsigned int) o->data.uint16Value);
+      break;
+    case String_Int32:
+      printToString(s, "%d", int(o->data.int32Value));
+      break;
+    case String_UInt32:
+      printToString(s, "%u", (unsigned int) o->data.uint32Value);
+      break;
+    case String_Int64:
+      printToString(s, "\"%lld\"", (long long) o->data.int64Value);
+      break;
+    case String_UInt64:
+      printToString(s, "\"%llu\"", (unsigned long long) o->data.uint64Value);
+      break;
+    case String_Bool:
+      printToString(s, "%s", (!o->data.boolValue ? "false" : "true"));
+      break;
+    case String_Float:
+      printToString(s, "%.7g", o->data.floatValue);
+      break;
+    case String_Double:
+      printToString(s, "%.14g", o->data.doubleValue);
+      break;
+    default:
+      printToString(s, "\"<unknown>\"");
       break;
   }
 }
@@ -608,7 +769,7 @@ void CDBMaterialToJSON::dumpMaterial(
     if (!i)
       continue;
     printToString(jsonBuf, "    {\n      \"Components\": [\n");
-    for (std::map< std::uint64_t, CDBObject >::const_iterator
+    for (std::map< std::uint64_t, CDBObject * >::const_iterator
              j = i->components.begin(); j != i->components.end(); j++)
     {
       jsonBuf += "        ";

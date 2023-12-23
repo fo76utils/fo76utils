@@ -17,8 +17,24 @@ class CDBMaterialToJSON : public CDBFile
   struct CDBObject
   {
     std::uint32_t type;
-    std::string value;
-    std::map< std::uint32_t, CDBObject >  children;
+    std::uint32_t childCnt;
+    union
+    {
+      CDBObject     *children[1];
+      bool          boolValue;
+      std::int8_t   int8Value;
+      std::uint8_t  uint8Value;
+      std::int16_t  int16Value;
+      std::uint16_t uint16Value;
+      std::int32_t  int32Value;
+      std::uint32_t uint32Value;
+      std::int64_t  int64Value;
+      std::uint64_t uint64Value;
+      float         floatValue;
+      double        doubleValue;
+      const char    *stringValue;
+    }
+    data;
   };
   struct BSResourceID
   {
@@ -42,24 +58,29 @@ class CDBMaterialToJSON : public CDBFile
     std::uint32_t baseObject;
     const MaterialObject  *parent;
     // key = (type << 32) | index
-    std::map< std::uint64_t, CDBObject >  components;
+    std::map< std::uint64_t, CDBObject * >  components;
   };
   std::map< std::uint32_t, CDBClassDef >  classes;
   std::vector< std::uint32_t >  objectsHashMap;
   std::vector< MaterialObject > objects;
   std::vector< std::pair< std::uint32_t, std::uint32_t > >  componentInfo;
   std::map< BSResourceID, std::vector< std::uint32_t > >  matFileObjectMap;
+  std::vector< std::vector< unsigned char > > objectBuffers;
   static inline bool isRootObject(std::uint32_t dbID)
   {
     return (dbID <= 7U);
   }
   inline MaterialObject *findObject(std::uint32_t dbID);
   inline const MaterialObject *findObject(std::uint32_t dbID) const;
+  void *allocateSpace(size_t nBytes, size_t alignBytes = 16);
+  CDBObject *allocateObject(std::uint32_t itemType, const CDBClassDef *classDef,
+                            size_t elementCnt = 0);
+  void copyObject(CDBObject*& o);
   void copyBaseObject(MaterialObject& o);
-  void loadItem(CDBObject& o, CDBChunk& chunkBuf, bool isDiff,
+  void loadItem(CDBObject*& o, CDBChunk& chunkBuf, bool isDiff,
                 std::uint32_t itemType);
   void readAllChunks();
-  void dumpObject(std::string& s, const CDBObject& o, int indentCnt) const;
+  void dumpObject(std::string& s, const CDBObject *o, int indentCnt) const;
  public:
   CDBMaterialToJSON(const unsigned char *fileData, size_t fileSize)
     : CDBFile(fileData, fileSize)
