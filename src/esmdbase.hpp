@@ -99,7 +99,7 @@ struct CDBDump
   };
   std::map< std::uint32_t, CDBClassDef >  classes;
   void dumpItem(std::string& s, CDBFile::CDBChunk& chunkBuf, bool isDiff,
-                std::uint32_t itemName, std::uint32_t itemType, int indentCnt);
+                std::uint32_t itemType, int indentCnt);
  public:
   CDBDump(const unsigned char *fileData, size_t fileSize)
     : cdbFile(fileData, fileSize)
