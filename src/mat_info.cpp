@@ -531,8 +531,8 @@ int main(int argc, char **argv)
     {
       args.erase(args.begin(), args.begin() + 1);
       std::sort(args.begin(), args.end());
-      renderer = new NIF_View(ba2File, nullptr, cdbFileName);
-      SDLDisplay  display(displayWidth, displayHeight, "mat_info", 4U, 48);
+      renderer = new NIF_View(ba2File, nullptr, cdbFileName, true);
+      SDLDisplay  display(displayWidth, displayHeight, "mat_info", 4U, 56);
       display.setDefaultTextColor(0x00, 0xC0);
       renderer->viewModels(display, args, 0);
       delete renderer;

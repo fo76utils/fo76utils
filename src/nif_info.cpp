@@ -607,7 +607,7 @@ int main(int argc, char **argv)
       if (fileNames.size() > 0)
       {
         std::sort(fileNames.begin(), fileNames.end());
-        SDLDisplay  display(renderWidth, renderHeight, "nif_info", 4U, 48);
+        SDLDisplay  display(renderWidth, renderHeight, "nif_info", 4U, 56);
         display.setDefaultTextColor(0x00, 0xC0);
         renderer->viewModels(display, fileNames, l);
       }
