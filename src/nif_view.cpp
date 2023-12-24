@@ -175,7 +175,7 @@ void NIF_View::setDefaultTextures()
 }
 
 NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
-                   const char *materialDBPath)
+                   const char *materialDBPath, bool matViewMode)
   : ba2File(archiveFiles),
     esmFile(esmFilePtr),
     textureSet(0x10000000),
@@ -184,7 +184,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
     lightZ(1.0f),
     nifFile((NIFFile *) 0),
     defaultTexture(0xFFFFFFFFU),
-    materials(ba2File, materialDBPath),
+    materialConverter(nullptr),
     modelRotationX(0.0f),
     modelRotationY(0.0f),
     modelRotationZ(0.0f),
@@ -215,6 +215,23 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
   setDefaultTextures();
   getWaterMaterial(waterMaterials, *esmFile, (ESMFile::ESMRecord *) 0,
                    defaultWaterColor, true);
+  if (!(materialDBPath && *materialDBPath))
+    materialDBPath = "materials/materialsbeta.cdb";
+  {
+    std::vector< unsigned char >  cdbBuf;
+    ba2File.extractFile(cdbBuf, std::string(materialDBPath));
+    materials.loadCDBFile(cdbBuf.data(), cdbBuf.size());
+    if (matViewMode)
+    {
+      try
+      {
+        materialConverter = new CDBMaterialToJSON(cdbBuf.data(), cdbBuf.size());
+      }
+      catch (FO76UtilsError&)
+      {
+      }
+    }
+  }
   try
   {
     for (size_t i = 0; i < renderers.size(); i++)
@@ -233,6 +250,8 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
         renderers[i] = (Plot3D_TriShape *) 0;
       }
     }
+    if (materialConverter)
+      delete materialConverter;
     throw;
   }
 }
@@ -250,6 +269,8 @@ NIF_View::~NIF_View()
     if (renderers[i])
       delete renderers[i];
   }
+  if (materialConverter)
+    delete materialConverter;
 }
 
 void NIF_View::loadModel(const std::string& fileName, int l)
@@ -710,6 +731,34 @@ static bool viewMaterialInfo(
   return display.viewTextBuffer();
 }
 
+static bool viewMaterialJSON(
+    SDLDisplay& display, const CDBMaterialToJSON& materials,
+    const std::string& fileName)
+{
+  display.clearTextBuffer();
+  std::string s;
+  materials.dumpMaterial(s, fileName);
+  if (s.empty())
+  {
+    display.consolePrint("Not found in database\n");
+  }
+  else
+  {
+    std::string lineBuf;
+    for (size_t j = 0; j < s.length(); )
+    {
+      size_t  n = s.find('\n', j);
+      if (n == std::string::npos)
+        n = s.length();
+      lineBuf.assign(s, j, n - j);
+      j = n + 1;
+      display.consolePrint("%s\n", lineBuf.c_str());
+    }
+    (void) SDL_SetClipboardText(s.c_str());
+  }
+  return display.viewTextBuffer();
+}
+
 static bool printGeometryBlockInfo(
     SDLDisplay& display, int x, int y, int mouseButton,
     const NIFFile *nifFile, const std::vector< NIFFile::NIFTriShape >& meshData)
@@ -905,6 +954,10 @@ static const char *keyboardUsageString =
     "Clear messages.                                                 \n"
     "  \033[4m\033[38;5;228mEsc\033[m                   "
     "Quit viewer.                                                    \n";
+
+static const char *keyboardUsageString2 =
+    "  \033[4m\033[38;5;228mM\033[m                     "
+    "Print material in JSON format, and copy it to the clipboard.    \n";
 #endif
 
 static const char *downsampModeNames[4] =
@@ -950,7 +1003,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
 
       bool    nextFileFlag = false;
       // 1: screenshot, 2: high quality screenshot, 4: view info, 8: browse file
-      // 16: view text buffer
+      // 16: view text buffer, 36: view material data in JSON format
       unsigned char eventFlags = 0;
       unsigned char redrawFlags = 3;    // bit 0: blit only, bit 1: render
       while (!(nextFileFlag || quitFlag))
@@ -1004,8 +1057,13 @@ bool NIF_View::viewModels(SDLDisplay& display,
               if (fileName.starts_with("materials/") &&
                   fileName.ends_with(".mat"))
               {
-                if (!viewMaterialInfo(display, materials, fileName))
+                if ((!(eventFlags & 32) &&
+                     !viewMaterialInfo(display, materials, fileName)) ||
+                    ((eventFlags & 32) && materialConverter &&
+                     !viewMaterialJSON(display, *materialConverter, fileName)))
+                {
                   quitFlag = 2;
+                }
               }
               else if (!viewModelInfo(display, *nifFile))
               {
@@ -1276,12 +1334,21 @@ bool NIF_View::viewModels(SDLDisplay& display,
                 break;
               case 'h':
                 messageBuf = keyboardUsageString;
+                if (materialConverter)
+                  messageBuf += keyboardUsageString2;
                 break;
               case 'c':
                 break;
               case SDLDisplay::SDLKeySymEscape:
                 quitFlag = 1;
                 break;
+              case 'm':
+                if (materialConverter)
+                {
+                  eventFlags = eventFlags | 36; // view JSON material data
+                  break;
+                }
+                [[fallthrough]];
               default:
                 redrawFlags = 0;
                 continue;
