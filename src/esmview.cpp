@@ -16,6 +16,7 @@ class ESMView : public ESMDump, public SDLDisplay
 #endif
   static void printID(char *bufp, unsigned int id);
   void printID(unsigned int id);
+  void formatJSONData(std::string& s) const;
  public:
   ESMView(const char *fileName, const char *archivePath,
           int w = 1152, int h = 648, int l = 36, int downsampleLevel = 1,
@@ -130,6 +131,97 @@ void ESMView::printID(unsigned int id)
   printID(tmpBuf, id);
   tmpBuf[4] = '\0';
   consolePrint("%s", tmpBuf);
+}
+
+void ESMView::formatJSONData(std::string& s) const
+{
+  static const char *highlightColorTables[12] =
+  {
+    // 0: default, 1: brace, 2: key, 3: string value, 4: boolean, 5: number
+#ifdef HAVE_SDL2
+    // + 0: light background
+    "\033[m", "\033[38;5;34m", "\033[38;5;68m",
+    "\033[38;5;167m", "\033[38;5;169m", "\033[38;5;172m",
+    // + 6: dark background
+    "\033[m", "\033[38;5;76m", "\033[38;5;117m",
+    "\033[38;5;203m", "\033[38;5;170m", "\033[38;5;220m"
+#else
+    "", "", "", "", "", "", "", "", "", "", "", ""
+#endif
+  };
+  const char * const  *colorTable = highlightColorTables;
+  {
+    FloatVector4  c(backgroundColorToRGBA(getDefaultColors()));
+    if (c.dotProduct3(FloatVector4(0.299f, 0.587f, 0.114f, 0.0f)) < 128.0f)
+      colorTable = colorTable + 6;
+  }
+  std::string t(s);
+  s.clear();
+  int     curColor = 0;
+  int     prvColor = 0;
+  bool    quoteFlag = false;
+  bool    isKey = true;
+  const char  *p = t.c_str();
+  if (*p == '\t')
+    p++;
+  for ( ; *p; p++)
+  {
+    if (*p == '\t')
+    {
+      s += "  ";
+      continue;
+    }
+    if (!quoteFlag)
+    {
+      switch (*p)
+      {
+        case '\n':
+          curColor = 0;
+          break;
+        case '"':
+          quoteFlag = true;
+          curColor = (isKey ? 2 : 3);
+          break;
+        case ':':
+          isKey = false;
+          curColor = 1;
+          break;
+        case ',':
+        case '[':
+        case ']':
+        case '{':
+        case '}':
+          isKey = true;
+          curColor = 1;
+          break;
+        default:
+          if (curColor < 4 && *p != ' ')
+            curColor = (*p == 't' || *p == 'f' ? 4 : 5);
+          break;
+      }
+    }
+    else if (*p == '"')
+    {
+      size_t  backslashCnt = 0;
+      for (const char *q = p; q > t.c_str(); backslashCnt++)
+      {
+        if (*(--q) != '\\')
+          break;
+      }
+      if (!(backslashCnt & 1))
+      {
+        s += '"';
+        quoteFlag = false;
+        continue;
+      }
+    }
+    if (curColor != prvColor)
+    {
+      prvColor = curColor;
+      s += colorTable[curColor];
+    }
+    s += *p;
+  }
 }
 
 ESMView::ESMView(
@@ -544,19 +636,25 @@ void ESMView::dumpRecord(unsigned int formID, bool noUnknownFields,
     }
     else
     {
-      consolePrint(":\n");
       if (!fields[i].data.ends_with('\n'))
         fields[i].data += '\n';
+      bool    isJSON = (fields[i].data.starts_with('{') ||
+                        fields[i].data.starts_with("\t{"));
+      consolePrint(isJSON ? ": " : ":\n");
+      if (isJSON)
+        formatJSONData(fields[i].data);
       const char  *s = fields[i].data.c_str();
       if (*s == '\t')
         s++;
       size_t  n = fields[i].data.find('\n');
+      int     indentCnt = (!isJSON ? 4 : 0);
       do
       {
+        fields[i].data[n] = '\0';
         if (s[0] == '0' && s[1] == '0' && s[2] == '0' && s[3] == '0')
           s = s + 4;
-        fields[i].data[n] = '\0';
-        consolePrint("    %s\n", s);
+        consolePrint("%*s%s\n", indentCnt, "", s);
+        indentCnt = (indentCnt > 2 ? indentCnt : 2);
         fields[i].data[n] = '\n';
         s = fields[i].data.c_str() + (n + 1);
         if (!*s)
