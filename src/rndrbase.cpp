@@ -2,6 +2,7 @@
 #include "common.hpp"
 #include "fp32vec4.hpp"
 #include "rndrbase.hpp"
+#include "sfcube.hpp"
 
 size_t Renderer_Base::TextureCache::getTextureDataSize(const DDSTexture *t)
 {
@@ -93,6 +94,13 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
   try
   {
     mipLevel = ba2File.extractTexture(fileBuf, fileName, mipLevel);
+    if (fileName.find("/cubemaps/") != std::string::npos)
+    {
+      SFCubeMapFilter cubeMapFilter;
+      size_t  newSize =
+          cubeMapFilter.convertImage(fileBuf.data(), fileBuf.size());
+      fileBuf.resize(newSize);
+    }
     t = new DDSTexture(fileBuf.data(), fileBuf.size(), mipLevel);
     cachedTexture->texture = t;
     textureCacheMutex.lock();
