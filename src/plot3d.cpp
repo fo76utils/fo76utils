@@ -211,9 +211,7 @@ FloatVector4 Plot3D_TriShape::alphaBlend(
   unsigned char blendMode = (unsigned char) ((mp.s.alphaBlendMode >> 1) & 0xFF);
   if (a >= (511.0f / 512.0f) && blendMode == 0x76)
     return c;
-  FloatVector4  c0;
-  c0 = FloatVector4::convertRGBA32(*(z.cPtr), true);
-  c0 /= lightColor[3];
+  FloatVector4  c0(FloatVector4::convertRGBA32(*(z.cPtr), true));
   if (BRANCH_LIKELY(blendMode == 0x76))
     return (c0 + ((c - c0) * a));
   if (blendMode == 0x06)
@@ -239,11 +237,12 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_SF(
   float   f = FloatVector4::polynomial3(p, nDotV);
   c += ((e - c) * (f0 + ((FloatVector4(1.0f) - f0) * (f * f))));
   c += (specular * lightColor);
-  if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
-    c = alphaBlend(c, a, z);
-  if (BRANCH_UNLIKELY(glowEnabled()))
+  if (glowEnabled()) [[unlikely]]
     c += glowMap(z);
-  return (c * lightColor[3]).srgbCompress();
+  c *= lightColor[3];
+  if (alphaBlendingEnabled()) [[unlikely]]
+    c = alphaBlend(c, a, z);
+  return c.srgbCompress();
 }
 
 inline FloatVector4 Plot3D_TriShape::calculateLighting_SF(
@@ -263,13 +262,14 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_SF(
   float   a = c[3];
   c *= (lightColor * l + e);
   s *= (g * (l / (l + 1.0f)));
-  if (BRANCH_UNLIKELY(alphaBlendingEnabled()))
-    c = alphaBlend(c, a, z);
   FloatVector4  f((nDotV * 0.05959029f - 0.11906419f) * nDotV + 0.10030248f);
   c = c + ((e + s - c) * f);
-  if (BRANCH_UNLIKELY(glowEnabled()))
+  if (glowEnabled()) [[unlikely]]
     c += glowMap(z);
-  return (c * lightColor[3]).srgbCompress();
+  c *= lightColor[3];
+  if (alphaBlendingEnabled()) [[unlikely]]
+    c = alphaBlend(c, a, z);
+  return c.srgbCompress();
 }
 
 inline FloatVector4 Plot3D_TriShape::Fragment::normalMap(FloatVector4 n)
@@ -306,15 +306,16 @@ inline FloatVector4 Plot3D_TriShape::calculateReflection(const Vertex& v) const
 inline FloatVector4 Plot3D_TriShape::environmentMap(
     FloatVector4 reflectedView, float smoothness) const
 {
-  if (BRANCH_UNLIKELY(!textureE))
+  if (!textureE) [[unlikely]]
     return ambientLight;
   // inverse rotation by view matrix
   FloatVector4  v((viewTransformInvX * reflectedView[0])
                   + (viewTransformInvY * reflectedView[1])
                   + (viewTransformInvZ * reflectedView[2]));
-  float   mipLevel = (1.0f - smoothness) * float(textureE->getMaxMipLevel());
+  float   mipLevel = (1.0f - (smoothness * smoothness)) * 5.1041667f;
+  mipLevel = std::max(mipLevel, 6.0f - (smoothness * 7.0f));
   FloatVector4  e(textureE->cubeMap(v[0], v[1], -(v[2]), mipLevel));
-  if (BRANCH_LIKELY(textureE->isSRGBTexture()))
+  if (textureE->isSRGBTexture()) [[likely]]
     e.srgbExpand();
   else
     e *= (1.0f / 255.0f);
@@ -432,15 +433,15 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
   float   f =
       FloatVector4::polynomial3(&(fresnelRoughTable[0]) + (s_i << 2), nDotV);
   c += ((e - c) * (f0 + ((FloatVector4(1.0f) - f0) * (f * f))));
-  if (BRANCH_LIKELY(nDotL > 0.0f))
+  if (nDotL > 0.0f) [[likely]]
   {
     c += (p.specularGGX(reflectedView, roughness, nDotL, nDotV,
                         fresnelPoly3N_Glass, f0) * p.lightColor);
   }
-  if (BRANCH_LIKELY(p.alphaBlendingEnabled()))
+  c *= p.lightColor[3];
+  if (p.alphaBlendingEnabled()) [[likely]]
     c = p.alphaBlend(c, a, z);
-  c = (c * p.lightColor[3]).srgbCompress();
-  *(z.cPtr) = c.convertToRGBA32(true, true);
+  *(z.cPtr) = c.srgbCompress().convertToRGBA32(true, true);
 }
 
 static inline void srgbExpandWithBaseColor(
@@ -497,7 +498,7 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
                                     | CE2Material::EffectFlag_UseRGBFalloff))
   {
     float   d = p.mp.e.falloffParams[1] - p.mp.e.falloffParams[0];
-    if (BRANCH_UNLIKELY(!((d * d) >= (1.0f / float(0x10000000)))))
+    if (!((d * d) >= (1.0f / float(0x10000000)))) [[unlikely]]
     {
       f = 0.5f;
     }
@@ -506,6 +507,7 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
       float   nDotV = float(std::fabs(z.normal[2]));
       f = (nDotV - p.mp.e.falloffParams[0]) / d;
       f = std::min(std::max(f, 0.0f), 1.0f);
+      f = f * f * (3.0f - (f + f));
     }
     f = (p.mp.e.falloffParams[2] * (1.0f - f)) + (p.mp.e.falloffParams[3] * f);
     f = std::min(std::max(f, 0.0f), 1.0f);
@@ -979,7 +981,13 @@ void Plot3D_TriShape::setMaterialProperties(
     mp.e.falloffParams = FloatVector4(1.0f);
   }
   const CE2Material::TextureSet *t = (CE2Material::TextureSet *) 0;
-  if (BRANCH_LIKELY(m))
+  unsigned int  txtEnableMask =
+      0x003FU
+      | (flags & (CE2Material::Flag_Glow | CE2Material::Flag_Translucency))
+      | ((flags & CE2Material::Flag_LayeredEmissivity) << 1);
+  if (!(renderMode & 2U) || debugMode) [[unlikely]]
+    txtEnableMask &= (!((renderMode & 3U) || debugMode) ? 0x0085U : 0x0087U);
+  if (m) [[likely]]
   {
     // set properties from material objects
     if (flags & CE2Material::Flag_HasOpacity)
@@ -987,7 +995,7 @@ void Plot3D_TriShape::setMaterialProperties(
     unsigned int  i = (unsigned int) std::countr_zero(m->layerMask);
     i = std::min(i, (unsigned int) (CE2Material::maxLayers - 1));
     const CE2Material::Layer  *l = m->layers[i];
-    if (BRANCH_LIKELY(l))
+    if (l) [[likely]]
     {
       if (l->material)
       {
@@ -997,8 +1005,10 @@ void Plot3D_TriShape::setMaterialProperties(
       if (l->uvStream)
         mp.s.uvScaleAndOffset = l->uvStream->scaleAndOffset;
     }
-    if (BRANCH_UNLIKELY(m->flags & CE2Material::Flag_IsEffect))
+    if (m->flags & CE2Material::Flag_IsEffect) [[unlikely]]
     {
+      // Flag_HasOpacityComponent
+      txtEnableMask = txtEnableMask & ((flags >> 14) | ~0x0004U);
       mp.e.alphaBlendMode =
           alphaBlendModeTable[m->effectSettings->blendMode & 7];
       if (m->effectSettings->flags & (CE2Material::EffectFlag_EmissiveOnlyAuto
@@ -1019,6 +1029,11 @@ void Plot3D_TriShape::setMaterialProperties(
           FloatVector4(0.0174532925f, 0.0174532925f, 1.0f, 1.0f);
       mp.e.falloffParams[0] = float(std::cos(mp.e.falloffParams[0]));
       mp.e.falloffParams[1] = float(std::cos(mp.e.falloffParams[1]));
+    }
+    else
+    {
+      // Flag_HasOpacity
+      txtEnableMask = txtEnableMask & ((flags << 2) | ~0x0004U);
     }
     if (BRANCH_UNLIKELY(m->flags & (CE2Material::Flag_Glow
                                     | CE2Material::Flag_LayeredEmissivity)))
@@ -1046,13 +1061,6 @@ void Plot3D_TriShape::setMaterialProperties(
     }
   }
   DDSTexture  *defTxts = defaultTextures;
-  unsigned int  txtEnableMask =
-      0x003FU
-      | (flags & (CE2Material::Flag_Glow | CE2Material::Flag_Translucency))
-      | ((flags & CE2Material::Flag_LayeredEmissivity) << 1);
-  if (BRANCH_UNLIKELY(!(renderMode & 2U) || debugMode))
-    txtEnableMask &= (!((renderMode & 3U) || debugMode) ? 0x0085U : 0x0087U);
-  txtEnableMask = txtEnableMask & ((flags << 2) | ~0x0004U);
   unsigned int  maxTextureArea = 1U;
   int     maxTextureWidth = 1;
   int     maxTextureHeight = 1;
