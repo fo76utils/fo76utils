@@ -939,7 +939,7 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mF11\033[m                   "
     "Save high quality screenshot (double resolution and downsample).\n"
     "  \033[4m\033[38;5;228mP\033[m                     "
-    "Print current settings and file name.                           \n"
+    "Print current settings and file name, and copy the full path.   \n"
     "  \033[4m\033[38;5;228mV\033[m                     "
     "View detailed model information.                                \n"
     "  \033[4m\033[38;5;228mMouse buttons\033[m         "
@@ -1328,6 +1328,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
                 messageBuf += "\nFile name:\n  \033[44m\033[37m\033[1m";
                 messageBuf += nifFileNames[fileNum];
                 messageBuf += "\033[m  \n";
+                (void) SDL_SetClipboardText(nifFileNames[fileNum].c_str());
                 continue;
               case 'v':
                 eventFlags = eventFlags | 4;    // view model info
