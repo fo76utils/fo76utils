@@ -216,7 +216,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
   getWaterMaterial(waterMaterials, *esmFile, (ESMFile::ESMRecord *) 0,
                    defaultWaterColor, true);
   if (!(materialDBPath && *materialDBPath))
-    materialDBPath = "materials/materialsbeta.cdb";
+    materialDBPath = BSReflStream::getDefaultMaterialDBPath();
   {
     std::vector< unsigned char >  cdbBuf;
     ba2File.extractFile(cdbBuf, std::string(materialDBPath));
@@ -225,7 +225,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
     {
       try
       {
-        materialConverter = new CDBMaterialToJSON(cdbBuf.data(), cdbBuf.size());
+        materialConverter = new BSMaterialsCDB(cdbBuf.data(), cdbBuf.size());
       }
       catch (FO76UtilsError&)
       {
@@ -732,12 +732,12 @@ static bool viewMaterialInfo(
 }
 
 static bool viewMaterialJSON(
-    SDLDisplay& display, const CDBMaterialToJSON& materials,
+    SDLDisplay& display, const BSMaterialsCDB& materials,
     const std::string& fileName)
 {
   display.clearTextBuffer();
   std::string s;
-  materials.dumpMaterial(s, fileName);
+  materials.getJSONMaterial(s, fileName);
   if (s.empty())
   {
     display.consolePrint("Not found in database\n");

@@ -4,8 +4,7 @@
 #include "material.hpp"
 #include "sdlvideo.hpp"
 #include "nif_view.hpp"
-#include "esmdbase.hpp"
-#include "mat_json.hpp"
+#include "bsmatcdb.hpp"
 #include "zlib.hpp"
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -85,7 +84,7 @@ static void loadCDBFiles(std::vector< std::vector< unsigned char > >& bufs,
                          const BA2File& ba2File, const char *fileName)
 {
   if (!fileName || fileName[0] == '\0')
-    fileName = "materials/materialsbeta.cdb";
+    fileName = BSReflStream::getDefaultMaterialDBPath();
   while (true)
   {
     size_t  len = 0;
@@ -141,23 +140,24 @@ static void loadMaterialPaths(
   }
   for (size_t i = 0; i < cdbBufs.size(); i++)
   {
-    CDBFile cdbFile(cdbBufs[i].data(), cdbBufs[i].size());
+    BSReflStream  cdbFile(cdbBufs[i].data(), cdbBufs[i].size());
     std::map< std::uint32_t, MatFileObject >  matFileObjects;
     const unsigned char *componentInfoPtr = nullptr;
     size_t  componentCnt = 0;
     size_t  componentID = 0;
-    CDBFile::CDBChunk chunkBuf;
+    BSReflStream::Chunk chunkBuf;
     unsigned int  chunkType;
-    while ((chunkType = cdbFile.readChunk(chunkBuf)) != CDBFile::ChunkType_NONE)
+    while ((chunkType = cdbFile.readChunk(chunkBuf))
+           != BSReflStream::ChunkType_NONE)
     {
-      size_t  className = CDBFile::String_Unknown;
+      size_t  className = BSReflStream::String_Unknown;
       if (chunkBuf.size() >= 4) [[likely]]
         className = cdbFile.findString(chunkBuf.readUInt32Fast());
-      if ((chunkType == CDBFile::ChunkType_DIFF ||
-           chunkType == CDBFile::ChunkType_OBJT) &&
+      if ((chunkType == BSReflStream::ChunkType_DIFF ||
+           chunkType == BSReflStream::ChunkType_OBJT) &&
           componentID < componentCnt) [[likely]]
       {
-        if (className == CDBFile::String_BSComponentDB_CTName)
+        if (className == BSReflStream::String_BSComponentDB_CTName)
         {
           std::uint32_t objectID =
               FileBuffer::readUInt32Fast(componentInfoPtr + (componentID << 3));
@@ -165,7 +165,7 @@ static void loadMaterialPaths(
               matFileObjects.find(objectID);
           if (j != matFileObjects.end())
           {
-            bool    isDiff = (chunkType == CDBFile::ChunkType_DIFF);
+            bool    isDiff = (chunkType == BSReflStream::ChunkType_DIFF);
             for (unsigned int n = 0U - 1U;
                  chunkBuf.getFieldNumber(n, 0U, isDiff); )
             {
@@ -183,14 +183,14 @@ static void loadMaterialPaths(
         componentID++;
         continue;
       }
-      if (chunkType != CDBFile::ChunkType_LIST)
+      if (chunkType != BSReflStream::ChunkType_LIST)
         continue;
       unsigned int  n = 0U;
       if (chunkBuf.size() >= 8)
         n = chunkBuf.readUInt32Fast();
       switch (className)
       {
-        case CDBFile::String_BSComponentDB2_DBFileIndex_ObjectInfo:
+        case BSReflStream::String_BSComponentDB2_DBFileIndex_ObjectInfo:
           while (n--)
           {
             if ((chunkBuf.getPosition() + 21ULL) > chunkBuf.size())
@@ -204,14 +204,14 @@ static void loadMaterialPaths(
             }
           }
           break;
-        case CDBFile::String_BSComponentDB2_DBFileIndex_ComponentInfo:
+        case BSReflStream::String_BSComponentDB2_DBFileIndex_ComponentInfo:
           componentInfoPtr = chunkBuf.data() + chunkBuf.getPosition();
           componentCnt =
               std::min(size_t(n),
                        (chunkBuf.size() - chunkBuf.getPosition()) >> 3);
           componentID = 0;
           break;
-        case CDBFile::String_BSComponentDB2_DBFileIndex_EdgeInfo:
+        case BSReflStream::String_BSComponentDB2_DBFileIndex_EdgeInfo:
           while (n--)
           {
             if ((chunkBuf.getPosition() + 12ULL) > chunkBuf.size())
@@ -457,7 +457,7 @@ int main(int argc, char **argv)
       {
         for (size_t i = 0; i < cdbBufs.size(); i++)
         {
-          CDBDump cdbFile(cdbBufs[i].data(), cdbBufs[i].size());
+          BSReflDump  cdbFile(cdbBufs[i].data(), cdbBufs[i].size());
           try
           {
             cdbFile.readAllChunks(stringBuf, 0, true);
@@ -471,13 +471,13 @@ int main(int argc, char **argv)
       }
       else if (dumpMode == 2 && cdbBufs.size() > 0)
       {
-        CDBMaterialToJSON cdbFile(cdbBufs[0].data(), cdbBufs[0].size());
+        BSMaterialsCDB  cdbFile(cdbBufs[0].data(), cdbBufs[0].size());
         std::string tmpBuf;
         for (size_t i = 1; i < args.size(); i++)
         {
           if (args.size() > 2)
             std::printf("%s\n", args[i].c_str());
-          cdbFile.dumpMaterial(tmpBuf, args[i]);
+          cdbFile.getJSONMaterial(tmpBuf, args[i]);
           if (tmpBuf.empty())
           {
             std::fprintf(stderr, "Warning: %s: material not found\n",

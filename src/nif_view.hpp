@@ -10,7 +10,7 @@
 #include "plot3d.hpp"
 #include "rndrbase.hpp"
 #include "sdlvideo.hpp"
-#include "mat_json.hpp"
+#include "bsmatcdb.hpp"
 
 #include <thread>
 #include <mutex>
@@ -35,7 +35,7 @@ class NIF_View : protected Renderer_Base
   std::string defaultEnvMap;
   std::string waterTexture;
   CE2MaterialDB materials;
-  CDBMaterialToJSON *materialConverter;
+  BSMaterialsCDB  *materialConverter;
   static void threadFunction(NIF_View *p, size_t n);
   const DDSTexture *loadTexture(const std::string& texturePath,
                                 size_t threadNum = 0);
