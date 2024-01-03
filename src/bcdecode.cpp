@@ -2,6 +2,7 @@
 #include "common.hpp"
 #include "filebuf.hpp"
 #include "ddstxt.hpp"
+#include "sfcube.hpp"
 
 int main(int argc, char **argv)
 {
@@ -10,14 +11,51 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "Usage:\n");
     std::fprintf(stderr,
                  "    bcdecode INFILE.DDS "
-                 "[MULT | OUTFILE.RGBA | OUTFILE.DDS [FACE [FLAGS]]]\n\n");
+                 "[MULT | OUTFILE.RGBA | OUTFILE.DDS [FACE [FLAGS]]]\n");
+    std::fprintf(stderr,
+                 "    bcdecode INFILE.DDS "
+                 "OUTFILE.DDS -cube_filter [WIDTH]\n\n");
     std::fprintf(stderr, "    FLAGS & 1 = ignore alpha channel\n");
     std::fprintf(stderr, "    FLAGS & 2 = calculate normal map blue channel\n");
     return 1;
   }
-  OutputFile  *outFile = (OutputFile *) 0;
+  OutputFile  *outFile = nullptr;
   try
   {
+    if (argc > 3 && std::strcmp(argv[3], "-cube_filter") == 0)
+    {
+      size_t  w = 256;
+      if (argc > 4)
+      {
+        w = size_t(parseInteger(argv[4], 10, "invalid output image dimensions",
+                                128, 2048));
+      }
+      SFCubeMapFilter cubeFilter(w);
+      std::vector< unsigned char >  outBuf;
+      {
+        FileBuffer  inFile(argv[1]);
+        if (!(inFile.size() > 148 &&
+              FileBuffer::readUInt32Fast(inFile.data()) == 0x20534444U))
+        {
+          errorMessage("invalid input file");
+        }
+        size_t  bufCapacity = w * w * 8 * 4 + 148;
+        if (inFile.size() > bufCapacity)
+          bufCapacity = inFile.size();
+        outBuf.resize(bufCapacity);
+        std::memcpy(outBuf.data(), inFile.data(), inFile.size());
+        size_t  newSize = cubeFilter.convertImage(outBuf.data(), inFile.size(),
+                                                  true, bufCapacity);
+        if (outBuf[128] != 0x43 || !newSize)
+          errorMessage("failed to convert texture");
+        outBuf.resize(newSize);
+      }
+      outFile = new OutputFile(argv[2], 16384);
+      outFile->writeData(outBuf.data(), outBuf.size());
+      outFile->flush();
+      delete outFile;
+      return 0;
+    }
     DDSTexture  t(argv[1]);
     unsigned int  w = (unsigned int) t.getWidth();
     unsigned int  h = (unsigned int) t.getHeight();
@@ -33,7 +71,7 @@ int main(int argc, char **argv)
       // FO76: 1.608
       try
       {
-        rgbScale = parseFloat(argv[2], (char *) 0, 0.001, 1000.0) * 255.0;
+        rgbScale = parseFloat(argv[2], nullptr, 0.001, 1000.0) * 255.0;
       }
       catch (...)
       {

@@ -5,8 +5,7 @@ Simple command line utilities for extracting data from Elder Scrolls and Fallout
 **Note:** For Starfield and Creation Engine 2, a fork of fo76utils has been created, [ce2utils](https://github.com/fo76utils/ce2utils).
 
 * [baunpack](doc/baunpack.md) - list the contents of, or extract from .BA2 or .BSA archives.
-* [bcdecode](doc/bcdecode.md) - convert BC1 to BC5 block compressed DDS textures to uncompressed RGBA image data in raw or DDS format. BC6H and BC7 decompression are also supported, using code from [detex](https://github.com/hglm/detex).
-* [btddump](doc/btddump.md) - extract terrain data from Fallout 76 .BTD files to raw height map, land textures, ground cover, or terrain color.
+* [bcdecode](doc/bcdecode.md) - convert BC1 to BC5 block compressed DDS textures to uncompressed RGBA image data in raw or DDS format. BC6H and BC7 decompression are also supported, using code from [detex](https://github.com/hglm/detex). bcdecode can also be used to pre-filter cube maps for use in PBR.
 * [cubeview](doc/cubeview.md) - view cube maps or other textures from archive files.
 * [esmdump](doc/esmdump.md) - list records from .ESM files in text or TSV format.
 * [esmview](doc/esmview.md) - interactive version of esmdump, also includes a NIF viewer for objects with an associated model (MODL).
