@@ -1023,9 +1023,9 @@ bool NIF_View::viewModels(SDLDisplay& display,
             display.printString(viewRotationMessages[viewRotation]);
             viewRotation = -1;
           }
-          display.clearSurface(backgroundType == 0 ?
-                               0U : (backgroundType == 1 ?
-                                     0x02666333U : 01333111222U));
+          display.clearSurface((backgroundType == 0 ?
+                                0U : (backgroundType == 1 ?
+                                      0x02666333U : 01333111222U)), true);
           memsetFloat(outBufZ.data(), 16777216.0f, imageDataSize);
           std::uint32_t *outBufRGBA = display.lockDrawSurface();
           renderModel(outBufRGBA, outBufZ.data(), imageWidth, imageHeight);
