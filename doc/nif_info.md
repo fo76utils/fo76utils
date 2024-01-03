@@ -26,6 +26,7 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 * **Keypad 1** to **9**: Set isometric view from the SW to NE (default = NW).
 * **Shift** + **Keypad 0** to **9**: Set side view, or top/bottom view rotated by 45 degrees.
 * **F1** to **F8**: Select default cube map.
+* **G**: Toggle rendering editor markers and geometry flagged as hidden.
 * **A**, **D**: Rotate model around the Z axis.
 * **S**, **W**: Rotate model around the X axis.
 * **Q**, **E**: Rotate model around the Y axis.
