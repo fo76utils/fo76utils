@@ -488,11 +488,13 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
   FloatVector4  tmp(p.textures[0]->getPixelT_Inline(
                         z.u(), z.v(), z.mipLevel + p.mipOffsets[0]));
   FloatVector4  baseColor(p.mp.e.baseColor);
-  FloatVector4  vColor(z.vertexColor);
   float   a = 255.0f;
   if (p.textures[2])
     a = p.textures[2]->getPixelT(z.u(), z.v(), z.mipLevel + p.mipOffsets[2])[0];
   a *= baseColor[3];
+  FloatVector4  vColor(1.0f);
+  if (p.m->effectSettings->flags & CE2Material::EffectFlag_VertexColorBlend)
+    vColor = z.vertexColor;
   float   f = 1.0f;
   if (p.m->effectSettings->flags & (CE2Material::EffectFlag_UseFalloff
                                     | CE2Material::EffectFlag_UseRGBFalloff))
