@@ -55,12 +55,12 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
     }
     lineBuf.clear();
   }
-  std::vector< unsigned char >  tmpBuf(size_t(w * h) * 4);
+  std::vector< std::uint32_t >  tmpBuf(size_t(w * h), 0U);
   for (int y = 0; y < h; y++)
   {
     if ((inBuf.getPosition() + 4ULL) > inBuf.size())
       return false;
-    unsigned char *p = tmpBuf.data() + (size_t(y * w) << 2);
+    std::uint32_t *p = tmpBuf.data() + size_t(y * w);
     std::uint32_t tmp =
         FileBuffer::readUInt32Fast(inBuf.data() + inBuf.getPosition());
     if (tmp != ((std::uint32_t(w & 0xFF) << 24) | (std::uint32_t(w >> 8) << 16)
@@ -74,10 +74,7 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
         if ((c & 0x00FFFFFFU) != 0x00010101U || x < 1)
         {
           lenShift = 0;
-          p[x << 2] = (unsigned char) (c & 0xFF);
-          p[(x << 2) + 1] = (unsigned char) ((c >> 8) & 0xFF);
-          p[(x << 2) + 2] = (unsigned char) ((c >> 16) & 0xFF);
-          p[(x << 2) + 3] = (unsigned char) ((c >> 24) & 0xFF);
+          p[x] = c;
           x++;
         }
         else
@@ -88,10 +85,7 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
           {
             if (x >= w)
               return false;
-            p[x << 2] = p[(x << 2) - 4];
-            p[(x << 2) + 1] = p[(x << 2) - 3];
-            p[(x << 2) + 2] = p[(x << 2) - 2];
-            p[(x << 2) + 3] = p[(x << 2) - 1];
+            p[x] = p[x - 1];
           }
         }
       }
@@ -100,146 +94,97 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
     {
       // new RLE format
       inBuf.setPosition(inBuf.getPosition() + 4);
-      for (int c = 0; c < 4; c++)
+      for (unsigned char c = 0; c < 32; c = c + 8)
       {
         for (int x = 0; x < w; )
         {
-          unsigned char l = inBuf.readUInt8();
+          if (inBuf.getPosition() >= inBuf.size())
+            return false;
+          unsigned char l = inBuf.readUInt8Fast();
           if (l <= 0x80)
           {
             // copy literals
             for ( ; l; l--, x++)
             {
-              if (x >= w)
+              if (x >= w || inBuf.getPosition() >= inBuf.size())
                 return false;
-              p[(x << 2) + c] = inBuf.readUInt8();
+              p[x] |= (std::uint32_t(inBuf.readUInt8Fast()) << c);
             }
           }
           else
           {
             // RLE
-            unsigned char b = inBuf.readUInt8();
+            if (inBuf.getPosition() >= inBuf.size())
+              return false;
+            std::uint32_t b = std::uint32_t(inBuf.readUInt8Fast()) << c;
             for ( ; l > 0x80; l--, x++)
             {
               if (x >= w)
                 return false;
-              p[(x << 2) + c] = b;
+              p[x] |= b;
             }
           }
         }
       }
     }
   }
-  std::vector< FloatVector4 > tmpBuf2(size_t(w * h), FloatVector4(0.0f));
-  for (int y = 0; y < h; y++)
+  std::vector< FloatVector4 > tmpBuf2(tmpBuf.size(), FloatVector4(0.0f));
+  for (size_t i = 0; i < tmpBuf.size(); i++)
   {
-    for (int x = 0; x < w; x++)
+    std::uint32_t b = tmpBuf[i];
+    FloatVector4  c(b);
+    int     e = int(b >> 24);
+    if (e < 136)
     {
-      unsigned char *p = tmpBuf.data() + (size_t((y * w) + x) << 2);
-      std::uint32_t b = FileBuffer::readUInt32Fast(p);
-      FloatVector4  c(b);
-      int     e = int(b >> 24);
-      if (e < 136)
-      {
-        if (e < 106)
-          c = FloatVector4(0.0f);
-        else
-          c /= float(1 << (136 - e));
-      }
-      else if (e > 136)
-      {
-        if (e <= 166)
-          c *= float(1 << (e - 136));
-        else
-          c = FloatVector4(float(64.0 * 65536.0 * 65536.0));
-      }
-      c[3] = 1.0f;
-      tmpBuf2[size_t(y) * size_t(w) + size_t(x)] = c;
+      if (e < 106)
+        c = FloatVector4(0.0f);
+      else
+        c /= float(1 << (136 - e));
     }
+    else if (e > 136)
+    {
+      if (e <= 166)
+        c *= float(1 << (e - 136));
+      else
+        c = FloatVector4(float(64.0 * 65536.0 * 65536.0));
+    }
+    c[3] = 1.0f;
+    tmpBuf2[i] = c;
   }
   outBuf.resize(size_t(cubeWidth * cubeWidth) * 6 * sizeof(std::uint64_t) + 148,
                 0);
-  std::uint32_t ddsHdrBuf[37];
-  for (size_t i = 0; i < 37; i++)
-    ddsHdrBuf[i] = 0U;
-  ddsHdrBuf[0] = 0x20534444U;           // "DDS "
-  ddsHdrBuf[1] = 124;
-  ddsHdrBuf[2] = 0x0002100FU;           // flags
-  ddsHdrBuf[3] = std::uint32_t(cubeWidth);      // height
-  ddsHdrBuf[4] = std::uint32_t(cubeWidth);      // width
-  ddsHdrBuf[5] = std::uint32_t(cubeWidth * sizeof(std::uint64_t));      // pitch
-  ddsHdrBuf[7] = 1;                     // number of mipmaps
-  ddsHdrBuf[19] = 32;                   // size of pixel format
-  ddsHdrBuf[20] = 0x04;                 // DDPF_FOURCC
-  ddsHdrBuf[21] = 0x30315844U;          // "DX10"
-  ddsHdrBuf[27] = 0x00401008U;          // dwCaps
-  ddsHdrBuf[28] = 0xFE;                 // dwCaps2 (DDSCAPS2_CUBEMAP*)
-  ddsHdrBuf[32] = 0x0A;                 // DXGI_FORMAT_R16G16B16A16_FLOAT
-  ddsHdrBuf[33] = 3;                    // DDS_DIMENSION_TEXTURE2D
-  for (size_t i = 0; i < 37; i++)
-  {
-    outBuf[i << 2] = (unsigned char) (ddsHdrBuf[i] & 0xFF);
-    outBuf[(i << 2) + 1] = (unsigned char) ((ddsHdrBuf[i] >> 8) & 0xFF);
-    outBuf[(i << 2) + 2] = (unsigned char) ((ddsHdrBuf[i] >> 16) & 0xFF);
-    outBuf[(i << 2) + 3] = (unsigned char) ((ddsHdrBuf[i] >> 24) & 0xFF);
-  }
+  for (size_t i = 6; i < 37; i++)
+    FileBuffer::writeUInt32Fast(outBuf.data() + (i << 2), 0U);
+  FileBuffer::writeUInt32Fast(outBuf.data(), 0x20534444U);      // "DDS "
+  outBuf[4] = 124;
+  FileBuffer::writeUInt32Fast(outBuf.data() + 8, 0x0002100FU);  // flags
+  // height, width, pitch
+  FileBuffer::writeUInt32Fast(outBuf.data() + 12, std::uint32_t(cubeWidth));
+  FileBuffer::writeUInt32Fast(outBuf.data() + 16, std::uint32_t(cubeWidth));
+  FileBuffer::writeUInt32Fast(outBuf.data() + 20,
+                              std::uint32_t(cubeWidth * sizeof(std::uint64_t)));
+  outBuf[28] = 1;                       // number of mipmaps
+  outBuf[76] = 32;                      // size of pixel format
+  outBuf[80] = 0x04;                    // DDPF_FOURCC
+  FileBuffer::writeUInt32Fast(outBuf.data() + 84, 0x30315844U); // "DX10"
+  FileBuffer::writeUInt32Fast(outBuf.data() + 108, 0x00401008U);    // dwCaps
+  outBuf[113] = 0xFE;                   // dwCaps2 (DDSCAPS2_CUBEMAP*)
+  outBuf[128] = 0x0A;                   // DXGI_FORMAT_R16G16B16A16_FLOAT
+  outBuf[132] = 3;                      // DDS_DIMENSION_TEXTURE2D
   for (int n = 0; n < 6; n++)
   {
     for (int y = 0; y < cubeWidth; y++)
     {
+      FloatVector4  coordMult(1.0f, -1.0f, -1.0f, 1.0f);
+      if (invertCoord)
+        coordMult = FloatVector4(1.0f);
       for (int x = 0; x < cubeWidth; x++)
       {
-        FloatVector4  v(0.0f);
-        switch (n)
-        {
-          case 0:
-            v[0] = float(cubeWidth);
-            v[1] = float(cubeWidth - (y << 1));
-            v[2] = float(cubeWidth - (x << 1));
-            v += FloatVector4(0.0f, -1.0f, -1.0f, 0.0f);
-            break;
-          case 1:
-            v[0] = float(-cubeWidth);
-            v[1] = float(cubeWidth - (y << 1));
-            v[2] = float((x << 1) - cubeWidth);
-            v += FloatVector4(0.0f, -1.0f, 1.0f, 0.0f);
-            break;
-          case 2:
-            v[0] = float((x << 1) - cubeWidth);
-            v[1] = float(cubeWidth);
-            v[2] = float((y << 1) - cubeWidth);
-            v += FloatVector4(1.0f, 0.0f, 1.0f, 0.0f);
-            break;
-          case 3:
-            v[0] = float((x << 1) - cubeWidth);
-            v[1] = float(-cubeWidth);
-            v[2] = float(cubeWidth - (y << 1));
-            v += FloatVector4(1.0f, 0.0f, -1.0f, 0.0f);
-            break;
-          case 4:
-            v[0] = float((x << 1) - cubeWidth);
-            v[1] = float(cubeWidth - (y << 1));
-            v[2] = float(cubeWidth);
-            v += FloatVector4(1.0f, -1.0f, 0.0f, 0.0f);
-            break;
-          case 5:
-            v[0] = float(cubeWidth - (x << 1));
-            v[1] = float(cubeWidth - (y << 1));
-            v[2] = float(-cubeWidth);
-            v += FloatVector4(-1.0f, -1.0f, 0.0f, 0.0f);
-            break;
-        }
-        // normalize vector
-        float   scale = 1.0f / float(std::sqrt(v.dotProduct3(v)));
-        v *= scale;
+        FloatVector4  v(SFCubeMapFilter::convertCoord(x, y, cubeWidth, n));
+        v *= coordMult;
         // convert to equirectangular coordinates
         float   xf = float(std::atan2(v[1], v[0])) * 0.15915494f + 0.5f;
         float   yf = float(std::asin(v[2])) * 0.31830989f + 0.5f;
-        if (!invertCoord)
-        {
-          xf = 1.0f - xf;
-          yf = 1.0f - yf;
-        }
         xf *= float(w - 1);
         yf *= float(h - 1);
         int     x0 = std::min< int >(std::max< int >(int(xf), 0), w - 1);
@@ -258,18 +203,11 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
         c0 = c0 + ((c2 - c0) * yf);
         c0.maxValues(FloatVector4(0.0f));
         c0.minValues(FloatVector4(maxLevel));
-        std::uint64_t b = c0.convertToFloat16();
+        c0[3] = 1.0f;
         unsigned char *p =
             outBuf.data() + (size_t((n * cubeWidth + y) * cubeWidth + x)
                              * sizeof(std::uint64_t)) + 148;
-        p[0] = (unsigned char) (b & 0xFF);
-        p[1] = (unsigned char) ((b >> 8) & 0xFF);
-        p[2] = (unsigned char) ((b >> 16) & 0xFF);
-        p[3] = (unsigned char) ((b >> 24) & 0xFF);
-        p[4] = (unsigned char) ((b >> 32) & 0xFF);
-        p[5] = (unsigned char) ((b >> 40) & 0xFF);
-        p[6] = (unsigned char) ((b >> 48) & 0xFF);
-        p[7] = (unsigned char) ((b >> 56) & 0xFF);
+        FileBuffer::writeUInt64Fast(p, c0.convertToFloat16());
       }
     }
   }
