@@ -189,7 +189,8 @@ void NIFFile::NIFTriShape::setMaterial(const CE2Material *material)
 {
   m = material;
   // keep TriShape flags
-  flags = flags & (Flag_TSHidden | Flag_TSVertexColors | Flag_TSOrdered);
+  flags = flags & (Flag_TSHidden | Flag_TSVertexColors | Flag_TSOrdered
+                   | Flag_TSMarker);
   if (m)
   {
     // add material specific flags
@@ -702,6 +703,24 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   // hidden, has vertex colors
   t.flags = std::uint32_t(((b.flags & 0x01) << 15)
                           | ((b.vertexFmtDesc >> 36) & 0x2000));
+  if (b.nameID >= 0 && size_t(b.nameID) < stringTable.size() &&
+      stringTable[b.nameID].length() >= 12)
+  {
+    size_t  n = stringTable[b.nameID].length() - 11;
+    const char  *s = stringTable[b.nameID].c_str();
+    do
+    {
+      // "EditorMa", "rker"
+      if (FileBuffer::readUInt64Fast(s) == 0x614D726F74696445ULL &&
+          FileBuffer::readUInt32Fast(s + 8) == 0x72656B72U)
+      {
+        t.flags = t.flags | NIFTriShape::Flag_TSMarker;
+        break;
+      }
+      s++;
+    }
+    while (--n);
+  }
   t.vertexCnt = (unsigned int) b.vertexData.size();
   t.triangleCnt = (unsigned int) b.triangleData.size();
   t.vertexData = b.vertexData.data();

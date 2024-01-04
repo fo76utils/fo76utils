@@ -170,7 +170,8 @@ class NIFFile : public FileBuffer
       Flag_TSAlphaBlending = 0x1000,
       Flag_TSVertexColors = 0x2000,
       Flag_TSWater = 0x4000,
-      Flag_TSHidden = 0x8000
+      Flag_TSHidden = 0x8000,
+      Flag_TSMarker = 0x01000000
     };
     const CE2Material *m;
     const NIFBlkBSTriShape  *ts;
