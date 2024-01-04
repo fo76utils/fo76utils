@@ -65,14 +65,11 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
       const NIFFile::NIFTriShape& ts = p->meshData[i];
       if (!p->enableHidden)
       {
-        // ignore if hidden
-        if (ts.flags & NIFFile::NIFTriShape::Flag_TSHidden)
-          continue;
-        if (ts.ts)
+        // ignore if hidden or marker
+        if (ts.flags & (NIFFile::NIFTriShape::Flag_TSHidden
+                        | NIFFile::NIFTriShape::Flag_TSMarker))
         {
-          const std::string *blkName = p->nifFile->getString(ts.ts->nameID);
-          if (blkName && blkName->starts_with("EditorMarker"))
-            continue;
+          continue;
         }
       }
       NIFFile::NIFBounds  b;
@@ -404,15 +401,11 @@ void NIF_View::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
     {
       if (!enableHidden)
       {
-        // ignore if hidden
-        if (meshData[i].flags & NIFFile::NIFTriShape::Flag_TSHidden)
-          continue;
-        if (meshData[i].ts)
+        // ignore if hidden or marker
+        if (meshData[i].flags & (NIFFile::NIFTriShape::Flag_TSHidden
+                                 | NIFFile::NIFTriShape::Flag_TSMarker))
         {
-          const std::string *blkName =
-              nifFile->getString(meshData[i].ts->nameID);
-          if (blkName && blkName->starts_with("EditorMarker"))
-            continue;
+          continue;
         }
       }
       meshData[i].calculateBounds(b, &t);
