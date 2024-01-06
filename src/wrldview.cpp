@@ -1223,7 +1223,9 @@ void WorldSpaceViewer::pollEvents()
             viewRotationY = viewRotations[size_t(viewRotation) * 3 + 1];
             viewRotationZ = viewRotations[size_t(viewRotation) * 3 + 2];
             FloatVector4  v;
-            if (screenToWorldSpace(v, x0, y0))
+            if (!((newViewDir >= 5 && newViewDir <= 8) ||
+                  (newViewDir >= 15 && newViewDir <= 18)) &&
+                screenToWorldSpace(v, x0, y0))
             {
               camPositionX = v[0];
               camPositionY = v[1];
