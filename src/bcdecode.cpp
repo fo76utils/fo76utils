@@ -8,10 +8,10 @@
 bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
                      int cubeWidth, bool invertCoord, float maxLevel)
 {
-  // file should begin with "#?RADIANCE\nF"
-  if (inBuf.size() < 12 ||
+  // file should begin with "#?RADIANCE\n"
+  if (inBuf.size() < 11 ||
       FileBuffer::readUInt64Fast(inBuf.data()) != 0x4E41494441523F23ULL ||
-      FileBuffer::readUInt32Fast(inBuf.data() + 8) != 0x460A4543U)
+      FileBuffer::readUInt32Fast(inBuf.data() + 7) != 0x0A45434EU)
   {
     return false;
   }
