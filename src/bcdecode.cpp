@@ -205,7 +205,10 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
         c2 = c2 + ((c3 - c2) * xf);
         c0 = c0 + ((c2 - c0) * yf);
         c0.maxValues(FloatVector4(0.0f));
-        c0.minValues(FloatVector4(maxLevel));
+        if (maxLevel < 0.0f)
+          c0 = c0 * FloatVector4(maxLevel) / (FloatVector4(maxLevel) - c0);
+        else
+          c0.minValues(FloatVector4(maxLevel));
         c0[3] = 1.0f;
         FileBuffer::writeUInt64Fast(p, c0.convertToFloat16());
       }
@@ -253,7 +256,9 @@ int main(int argc, char **argv)
         if (argc > 5)
         {
           maxLevel = float(parseFloat(argv[5], "invalid maximum output level",
-                                      0.125, 65504.0));
+                                      -65504.0, 65504.0));
+          if (maxLevel > -0.125f && maxLevel < 0.125f)
+            errorMessage("invalid maximum output level");
         }
       }
       std::vector< unsigned char >  outBuf;
