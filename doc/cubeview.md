@@ -6,7 +6,7 @@ View Fallout 4 or 76 cube maps from archive files. Can also be used to view any 
 
 * **WIDTH**, **HEIGHT**: Image dimensions to display, matching the current screen resolution enables full screen mode.
 * **ARCHIVEPATH**: Path to archive(s) containing the cube map texture.
-* **TEXTURE.DDS**: File name pattern to search for within the archives. Cube map textures are expected to have the faces in the order used by Fallout 4 and 76. Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures.
+* **TEXTURE.DDS**: File name pattern to search for within the archives. For cube map textures, the order and orientation of faces are expected to be compatible with Starfield (see [sfcube.cpp](../libfo76utils/src/sfcube.cpp)). Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures.
 * **MIPLEVEL**: Initial mip level to display.
 
 ### Keyboard controls
@@ -15,10 +15,11 @@ View Fallout 4 or 76 cube maps from archive files. Can also be used to view any 
 * **W**, **S**: Look up or down.
 * **Q**, **E**: Roll left or right.
 * **Insert**, **Delete**: Zoom in or out.
-* **Home**: Reset view direction.
+* **Home**: Reset view direction, FOV and brightness.
 * **Page Up**, **Page Down**: Enable or disable conversion to sRGB color space.
-* **0** to **9**: Set mip level.
+* **0** to **9**: Set cube map mip level.
 * **+**, **-**: Increase or decrease mip level by 0.125.
+* **L**, **K**: Increase or decrease cube map brightness.
 * **Space**, **Backspace**: Load the next or previous file matching the pattern.
 * **F1**: Switch to cube map view mode.
 * **F2**: Switch to 2D texture view mode (disables view controls).

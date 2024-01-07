@@ -11,24 +11,29 @@
 static void renderCubeMapThread(
     std::uint32_t *outBuf, int w, int h, int y0, int y1,
     const DDSTexture *texture, const NIFFile::NIFVertexTransform *vt,
-    float viewScale, float mipLevel, bool isSRGB)
+    float viewScale, float mipLevel, bool isSRGB, float rgbScale)
 {
+  FloatVector4  tmpX(vt->rotateXX, vt->rotateYX, vt->rotateZX, vt->rotateXY);
+  FloatVector4  tmpY(vt->rotateXY, vt->rotateYY, vt->rotateZY, vt->rotateXZ);
+  tmpY *= viewScale;
   outBuf = outBuf + (size_t(y0) * size_t(w));
   for (int yc = y0; yc < y1; yc++)
   {
+    FloatVector4  tmpYZ(vt->rotateXZ, vt->rotateYZ, vt->rotateZZ, vt->scale);
+    tmpYZ *= ((float(h) * 0.5f) - float(yc));
+    tmpYZ += tmpY;
     for (int xc = 0; xc < w; xc++)
     {
-      float   x = float(xc) - (float(w) * 0.5f);
-      float   y = viewScale;
-      float   z = (float(h) * 0.5f) - float(yc);
-      vt->rotateXYZ(x, y, z);
-      FloatVector4  c(texture->cubeMap(x, y, -z, mipLevel));
+      FloatVector4  v(tmpYZ);
+      v += (tmpX * (float(xc) - (float(w) * 0.5f)));
+      FloatVector4  c(texture->cubeMap(v[0], v[1], -(v[2]), mipLevel));
+      c *= rgbScale;
       if (isSRGB)
       {
         c *= (1.0f / 255.0f);
         c.srgbCompress();
       }
-      outBuf[xc] = c.convertToRGBA32(false, true);
+      outBuf[xc] = c.convertToRGBA32(false, false);
     }
     outBuf = outBuf + w;
   }
@@ -174,7 +179,7 @@ static const char *keyboardUsageString =
     "\033[4m\033[38;5;228mDelete\033[m        "
     "Zoom cube map view in or out.                                   \n"
     "  \033[4m\033[38;5;228mHome\033[m                  "
-    "Reset view direction.                                           \n"
+    "Reset view direction, FOV and brightness.                       \n"
     "  \033[4m\033[38;5;228mPage Up\033[m               "
     "Enable gamma correction.                                        \n"
     "  \033[4m\033[38;5;228mPage Down\033[m             "
@@ -185,6 +190,9 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228m+\033[m, "
     "\033[4m\033[38;5;228m-\033[m                  "
     "Increase or decrease cube map mip level by 0.125.               \n"
+    "  \033[4m\033[38;5;228mL\033[m, "
+    "\033[4m\033[38;5;228mK\033[m                  "
+    "Increase or decrease cube map brightness.                       \n"
     "  \033[4m\033[38;5;228mSpace\033[m, "
     "\033[4m\033[38;5;228mBackspace\033[m      "
     "Load next or previous file matching the pattern.                \n"
@@ -234,6 +242,7 @@ static void renderCubeMap(const BA2File& ba2File,
   bool    fixNormalMap = false;
   bool    enableAlpha = true;
   unsigned char screenshotFlag = 0;     // 1: save screenshot, 2: save texture
+  float   cubeMapRGBScale = 1.0f;
   std::vector< SDLDisplay::SDLEvent > eventBuf;
   DDSTexture  *texture = (DDSTexture *) 0;
   do
@@ -297,7 +306,7 @@ static void renderCubeMap(const BA2File& ba2File,
                 new std::thread(renderCubeMapThread, dstPtr,
                                 imageWidth, imageHeight, y0, y1, texture,
                                 &viewTransformInv, viewScale_f, mipLevel,
-                                enableGamma);
+                                enableGamma, cubeMapRGBScale);
           }
         }
         catch (...)
@@ -313,7 +322,8 @@ static void renderCubeMap(const BA2File& ba2File,
           {
             renderCubeMapThread(
                 dstPtr, imageWidth, imageHeight, y0, y1, texture,
-                &viewTransformInv, viewScale_f, mipLevel, enableGamma);
+                &viewTransformInv, viewScale_f, mipLevel, enableGamma,
+                cubeMapRGBScale);
           }
         }
         y0 = y1;
@@ -379,6 +389,16 @@ static void renderCubeMap(const BA2File& ba2File,
               case SDLDisplay::SDLKeySymKPPlus:
                 mipLevel = (mipLevel < 8.875f ? (mipLevel + 0.125f) : 9.0f);
                 break;
+              case 'k':
+              case 'l':
+                {
+                  int     tmp =
+                      roundFloat(float(std::log2(cubeMapRGBScale)) * 4.0f);
+                  tmp += (d1 == 'k' ? -1 : 1);
+                  tmp = std::min< int >(std::max< int >(tmp, -4), 8);
+                  cubeMapRGBScale = float(std::exp2(float(tmp) * 0.25f));
+                }
+                break;
               case 'a':
                 viewRotationZ += 0.19634954f;           // 11.25 degrees
                 break;
@@ -402,6 +422,7 @@ static void renderCubeMap(const BA2File& ba2File,
                 viewRotationY = 0.0f;
                 viewRotationZ = 0.0f;
                 viewScale = 0;
+                cubeMapRGBScale = 1.0f;
                 break;
               case SDLDisplay::SDLKeySymInsert:
                 viewScale += int(viewScale < 16);
