@@ -6,7 +6,7 @@ View Fallout 4 or 76 cube maps from archive files. Can also be used to view any 
 
 * **WIDTH**, **HEIGHT**: Image dimensions to display, matching the current screen resolution enables full screen mode.
 * **ARCHIVEPATH**: Path to archive(s) containing the cube map texture.
-* **TEXTURE.DDS**: File name pattern to search for within the archives. For cube map textures, the order and orientation of faces are expected to be compatible with Starfield (see [sfcube.cpp](../libfo76utils/src/sfcube.cpp)). Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures.
+* **TEXTURE.DDS**: File name pattern to search for within the archives. For cube map textures, the order and orientation of faces are expected to be compatible with Starfield (see [sfcube.cpp](https://github.com/fo76utils/libfo76utils/src/sfcube.cpp)). Use **baunpack ARCHIVEPATH --list /cubemaps/** to print the list of available cube map textures.
 * **MIPLEVEL**: Initial mip level to display.
 
 ### Keyboard controls
