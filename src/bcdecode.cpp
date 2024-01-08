@@ -5,6 +5,25 @@
 #include "ddstxt.hpp"
 #include "sfcube.hpp"
 
+static inline float atan2NormFast(float y, float x, bool xNonNegative = false)
+{
+  // assumes x² + y² = 1.0, returns atan2(y, x) / π
+  float   xAbs = (xNonNegative ? x : float(std::fabs(x)));
+  float   yAbs = float(std::fabs(y));
+  float   tmp = std::min(xAbs, yAbs);
+  float   tmp2 = tmp * tmp;
+  float   tmp3 = tmp2 * tmp;
+  tmp = (((0.39603792f * tmp3) + (-0.98507216f * tmp2) + (1.09851059f * tmp)
+          - 0.65754361f) * tmp3
+         + (0.26000725f * tmp2) + (-0.05051132f * tmp) + 0.05919720f) * tmp3
+        + (-0.00037558f * tmp2) + (0.31831810f * tmp);
+  if (xAbs < yAbs)
+    tmp = 0.5f - tmp;
+  if (!xNonNegative && x < 0.0f)
+    tmp = 1.0f - tmp;
+  return (y < 0.0f ? -tmp : tmp);
+}
+
 bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
                      int cubeWidth, bool invertCoord, float maxLevel)
 {
@@ -184,10 +203,12 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
       {
         FloatVector4  v(SFCubeMapFilter::convertCoord(x, y, cubeWidth, n));
         v *= coordMult;
-        // convert to equirectangular coordinates
-        float   xf = float(std::atan2(v[1], v[0])) * 0.15915494f + 0.5f;
-        float   yf = float(std::asin(std::min(std::max(v[2], -1.0f), 1.0f)))
-                     * 0.31830989f + 0.5f;
+        // convert to spherical coordinates
+        float   xy = float(std::sqrt(v.dotProduct2(v)));
+        float   z = v[2];
+        v /= xy;
+        float   xf = atan2NormFast(v[1], v[0]) * 0.5f + 0.5f;
+        float   yf = atan2NormFast(z, xy, true) + 0.5f;
         xf *= float(w - 1);
         yf *= float(h - 1);
         int     x0 = std::min< int >(std::max< int >(int(xf), 0), w - 1);
