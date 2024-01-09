@@ -48,8 +48,10 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
       lineBuf += char(c);
       continue;
     }
-    if (lineBuf.starts_with("-Y"))
+    if ((lineBuf[0] == '-' || lineBuf[0] == '+') && lineBuf[1] == 'Y')
     {
+      if (lineBuf[0] == '+')
+        invertCoord = !invertCoord;
       const char  *s = lineBuf.c_str() + 2;
       while (*s == '\t' || *s == ' ')
         s++;
@@ -79,7 +81,8 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
   {
     if ((inBuf.getPosition() + 4ULL) > inBuf.size())
       return false;
-    std::uint32_t *p = tmpBuf.data() + size_t(y * w);
+    std::uint32_t *p =
+        tmpBuf.data() + size_t((invertCoord ? y : ((h - 1) - y)) * w);
     std::uint32_t tmp =
         FileBuffer::readUInt32Fast(inBuf.data() + inBuf.getPosition());
     if (tmp != ((std::uint32_t(w & 0xFF) << 24) | (std::uint32_t(w >> 8) << 16)
@@ -196,18 +199,14 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
   {
     for (int y = 0; y < cubeWidth; y++)
     {
-      FloatVector4  coordMult(1.0f, -1.0f, -1.0f, 1.0f);
-      if (invertCoord)
-        coordMult = FloatVector4(1.0f);
       for (int x = 0; x < cubeWidth; x++, p = p + sizeof(std::uint64_t))
       {
         FloatVector4  v(SFCubeMapFilter::convertCoord(x, y, cubeWidth, n));
-        v *= coordMult;
         // convert to spherical coordinates
         float   xy = float(std::sqrt(v.dotProduct2(v)));
         float   z = v[2];
         v /= xy;
-        float   xf = atan2NormFast(v[1], v[0]) * 0.5f + 0.5f;
+        float   xf = atan2NormFast(v[0], v[1]) * 0.5f + 0.5f;
         float   yf = atan2NormFast(z, xy, true) + 0.5f;
         xf *= float(w - 1);
         yf *= float(h - 1);
@@ -215,23 +214,28 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
         int     y0 = std::min< int >(std::max< int >(int(yf), 0), h - 1);
         xf = xf - float(std::floor(xf));
         yf = yf - float(std::floor(yf));
-        int     x1 = x0 + int(x0 < (w - 1));
-        int     y1 = y0 + int(y0 < (h - 1));
         // bilinear interpolation
-        FloatVector4  c0(tmpBuf2[y0 * w + x0]);
-        FloatVector4  c1(tmpBuf2[y0 * w + x1]);
-        FloatVector4  c2(tmpBuf2[y1 * w + x0]);
-        FloatVector4  c3(tmpBuf2[y1 * w + x1]);
-        c0 = c0 + ((c1 - c0) * xf);
-        c2 = c2 + ((c3 - c2) * xf);
-        c0 = c0 + ((c2 - c0) * yf);
-        c0.maxValues(FloatVector4(0.0f));
-        if (maxLevel < 0.0f)
-          c0 = c0 * FloatVector4(maxLevel) / (FloatVector4(maxLevel) - c0);
+        FloatVector4  c;
+        const FloatVector4  *inPtr = tmpBuf2.data() + (y0 * w + x0);
+        if (x0 < (w - 1)) [[likely]]
+        {
+          c = inPtr[0] * (1.0f - xf) + (inPtr[1] * xf);
+          if (y0 < (h - 1)) [[likely]]
+            c = c + (((inPtr[w] * (1.0f - xf) + (inPtr[w + 1] * xf)) - c) * yf);
+        }
         else
-          c0.minValues(FloatVector4(maxLevel));
-        c0[3] = 1.0f;
-        FileBuffer::writeUInt64Fast(p, c0.convertToFloat16());
+        {
+          c = *inPtr;
+          if (y0 < (h - 1)) [[likely]]
+            c = c + ((inPtr[w] - c) * yf);
+        }
+        c.maxValues(FloatVector4(0.0f));
+        if (maxLevel < 0.0f)
+          c = c * FloatVector4(maxLevel) / (FloatVector4(maxLevel) - c);
+        else
+          c.minValues(FloatVector4(maxLevel));
+        c[3] = 1.0f;
+        FileBuffer::writeUInt64Fast(p, c.convertToFloat16());
       }
     }
   }
@@ -400,7 +404,7 @@ int main(int argc, char **argv)
         unsigned char g = (unsigned char) ((c >> 8) & 0xFF);
         unsigned char b = (unsigned char) ((c >> 16) & 0xFF);
         unsigned char a = (unsigned char) ((c >> 24) & 0xFF);
-        if (BRANCH_UNLIKELY(calculateNormalZ))
+        if (calculateNormalZ) [[unlikely]]
         {
           float   normalX = float(int(r)) * (1.0f / 127.5f) - 1.0f;
           float   normalY = float(int(g)) * (1.0f / 127.5f) - 1.0f;

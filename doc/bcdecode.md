@@ -17,7 +17,7 @@ Pre-filter cube map for PBR with roughness = 0.0, 0.103, 0.220, 0.358, 0.535, 0.
 
     bcdecode INFILE.HDR OUTFILE.DDS -cube [WIDTH [MAXLEVEL]]
 
-Convert Radiance .hdr format image to DDS cube map in R16G16B16A16\_FLOAT format, without filtering or generating mipmaps. WIDTH specifies the resolution of the output image, which defaults to 2048x2048 per face. A negative value rotates the image by 180 degrees. MAXLEVEL can be used to limit the range of output colors, the default is 65504. MAXLEVEL < 0 enables simple Reinhard tone mapping: Cout = MAXLEVEL \* Cin / (MAXLEVEL - Cin).
+Convert Radiance .hdr format image to DDS cube map in R16G16B16A16\_FLOAT format, without filtering or generating mipmaps. WIDTH specifies the resolution of the output image, which defaults to 2048x2048 per face. A negative value inverts the Z axis. MAXLEVEL can be used to limit the range of output colors, the default is 65504. MAXLEVEL < 0 enables simple Reinhard tone mapping: Cout = MAXLEVEL \* Cin / (MAXLEVEL - Cin).
 
 ### Examples
 
