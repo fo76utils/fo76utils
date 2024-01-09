@@ -17,5 +17,33 @@ Pre-filter cube map for PBR with roughness = 0.0, 0.103, 0.220, 0.358, 0.535, 0.
 
     bcdecode INFILE.HDR OUTFILE.DDS -cube [WIDTH [MAXLEVEL]]
 
-Convert Radiance .hdr format image to DDS cube map in R16G16B16A16\_FLOAT format, without filtering or generating mipmaps. WIDTH specifies the resolution of the output image, which defaults to 2048x2048 per face. A negative value rotates the image by 180 degrees. MAXLEVEL can be used to limit the range of output colors, the default is 65504.
+Convert Radiance .hdr format image to DDS cube map in R16G16B16A16\_FLOAT format, without filtering or generating mipmaps. WIDTH specifies the resolution of the output image, which defaults to 2048x2048 per face. A negative value inverts the Z axis. MAXLEVEL can be used to limit the range of output colors, the default is 65504. MAXLEVEL < 0 enables simple Reinhard tone mapping: Cout = MAXLEVEL \* Cin / (MAXLEVEL - Cin).
+
+### Examples
+
+#### Decode DDS texture to raw RGBA data
+
+    bcdecode texture.dds texture.data
+
+#### Convert DDS texture to uncompressed DDS
+
+    bcdecode texture1.dds texture2.dds
+
+#### Extract all faces of a cube map to separate images
+
+    bcdecode cell_cityplazacube.dds face0.dds 0 1
+    bcdecode cell_cityplazacube.dds face1.dds 1 1
+    bcdecode cell_cityplazacube.dds face2.dds 2 1
+    bcdecode cell_cityplazacube.dds face3.dds 3 1
+    bcdecode cell_cityplazacube.dds face4.dds 4 1
+    bcdecode cell_cityplazacube.dds face5.dds 5 1
+
+#### Calculate the missing blue channel of a normal map in BC5\_SNORM format
+
+    bcdecode texture_normal.dds texture2_normal.dds 0 2
+
+#### Convert HDR format image to cube map, and pre-filter it for PBR
+
+    bcdecode studio_small_02_4k.hdr studio_small_02_cube.dds -cube 2048 -5
+    bcdecode studio_small_02_cube.dds studio_small_02_cube.dds -cube_filter 512
 
