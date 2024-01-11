@@ -9,7 +9,7 @@ List archive contents, filtered by name patterns or list file. Using --list-pack
 
     baunpack ARCHIVES... -- [PATTERNS...]
 
-Extract files with a name including any of the patterns, archives listed first have higher priority. Empty pattern list or "\*" extracts all files, patterns beginning with -x: exclude files. Patterns that are 4 or 5 characters long and begin with '.' (e.g. .nif or .mesh) are interpreted as extensions, and are checked for only at the end of each file name, while other patterns can be matched anywhere in the file name.
+Extract files with a name including any of the patterns, archives listed first have higher priority. Empty pattern list or "\*" extracts all files, patterns beginning with -x: exclude files.
 
     baunpack ARCHIVES... -- @LISTFILE
 
