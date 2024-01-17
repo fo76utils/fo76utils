@@ -312,8 +312,8 @@ inline FloatVector4 Plot3D_TriShape::environmentMap(
   FloatVector4  v((viewTransformInvX * reflectedView[0])
                   + (viewTransformInvY * reflectedView[1])
                   + (viewTransformInvZ * reflectedView[2]));
-  float   mipLevel = (1.0f - (smoothness * smoothness)) * 5.1041667f;
-  mipLevel = std::max(mipLevel, 6.0f - (smoothness * 7.0f));
+  float   mipLevel =
+      (1.0f - smoothness) * ((1.0f - smoothness) * -4.0f + 10.0f);
   FloatVector4  e(textureE->cubeMap(v[0], v[1], -(v[2]), mipLevel));
   if (textureE->isSRGBTexture()) [[likely]]
     e.srgbExpand();
