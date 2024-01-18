@@ -194,6 +194,8 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
   p[113] = 0xFE;                        // dwCaps2 (DDSCAPS2_CUBEMAP*)
   p[128] = 0x0A;                        // DXGI_FORMAT_R16G16B16A16_FLOAT
   p[132] = 3;                           // DDS_DIMENSION_TEXTURE2D
+  p[136] = 0x04;                        // DDS_RESOURCE_MISC_TEXTURECUBE
+  p[140] = 1;                           // arraySize
   p = p + 148;
   for (int n = 0; n < 6; n++)
   {
