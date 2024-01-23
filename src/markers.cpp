@@ -550,10 +550,10 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
   yf = float(yi) - yf;
   float   txtW = float(m.texture->getWidth() >> mipLevelI);
   float   txtH = float(m.texture->getHeight() >> mipLevelI);
-  txtW = (txtW > 1.0f ? (txtW - 1.0f) : 0.0f);
-  txtH = (txtH > 1.0f ? (txtH - 1.0f) : 0.0f);
-  float   txtSclX = 1.0f / (txtW > 1.0f ? txtW : 1.0f);
-  float   txtSclY = 1.0f / (txtH > 1.0f ? txtH : 1.0f);
+  txtW = (txtW > 1.0f ? txtW : 1.0f);
+  txtH = (txtH > 1.0f ? txtH : 1.0f);
+  float   txtSclX = 1.0f / txtW;
+  float   txtSclY = 1.0f / txtH;
   bool    integerMip = (m.mipLevel == float(mipLevelI));
   for (int yy = 0; true; yy++)
   {
