@@ -94,11 +94,18 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
   try
   {
     mipLevel = ba2File.extractTexture(fileBuf, fileName, mipLevel);
-    if (fileName.find("/cubemaps/") != std::string::npos)
+    size_t  fileBufSize = fileBuf.size();
+    if (fileBufSize >= 148 &&
+        (fileBuf[113] & 0x02) != 0 &&   // DDSCAPS2_CUBEMAP
+        fileBuf[128] != 0x43)           // DXGI_FORMAT_R9G9B9E5_SHAREDEXP
     {
-      SFCubeMapFilter cubeMapFilter;
+      SFCubeMapFilter cubeMapFilter(256);
+      size_t  bufCapacityRequired = 256 * 256 * 8 * sizeof(std::uint32_t) + 148;
+      if (fileBufSize < bufCapacityRequired)
+        fileBuf.resize(bufCapacityRequired);
       size_t  newSize =
-          cubeMapFilter.convertImage(fileBuf.data(), fileBuf.size());
+          cubeMapFilter.convertImage(fileBuf.data(), fileBufSize, false,
+                                     bufCapacityRequired);
       fileBuf.resize(newSize);
     }
     t = new DDSTexture(fileBuf.data(), fileBuf.size(), mipLevel);

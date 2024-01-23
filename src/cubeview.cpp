@@ -26,7 +26,7 @@ static void renderCubeMapThread(
     {
       FloatVector4  v(tmpYZ);
       v += (tmpX * (float(xc) - (float(w) * 0.5f)));
-      FloatVector4  c(texture->cubeMap(v[0], v[1], -(v[2]), mipLevel));
+      FloatVector4  c(texture->cubeMap(v[0], v[1], v[2], mipLevel));
       c *= rgbScale;
       if (isSRGB)
       {
@@ -43,13 +43,13 @@ static void renderTextureThread(
     std::uint32_t *outBuf, int w, int h, int y0, int y1,
     const DDSTexture *texture, bool isSRGB, bool fixNormalMap, bool enableAlpha)
 {
-  float   txtW = std::max(float(texture->getWidth() - 1), 1.0f);
-  float   txtH = std::max(float(texture->getHeight() - 1), 1.0f);
-  float   scale = std::max(txtW / float(w - 1), txtH / float(h - 1));
+  float   txtW = float(texture->getWidth());
+  float   txtH = float(texture->getHeight());
+  float   scale = std::max(txtW / float(w), txtH / float(h));
   float   uScale = scale / txtW;
   float   vScale = scale / txtH;
-  float   uOffset = float(w - 1) * -0.5f * uScale + 0.5f;
-  float   vOffset = float(h - 1) * -0.5f * vScale + 0.5f;
+  float   uOffset = float(w) * -0.5f * uScale + 0.5f;
+  float   vOffset = float(h) * -0.5f * vScale + 0.5f;
   float   mipLevel = FloatVector4::log2Fast(std::max(scale, 1.0f));
   mipLevel = std::min(std::max(mipLevel, 0.0f), 15.0f);
   outBuf = outBuf + (size_t(y0) * size_t(w));
