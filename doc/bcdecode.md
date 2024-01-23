@@ -11,13 +11,19 @@ Decode DDS texture to raw RGBA data. For cube maps, FACE (0 to 5) selects the fa
 
 Decode DDS texture to an uncompressed DDS file.
 
-    bcdecode INFILE.DDS OUTFILE.DDS -cube_filter [WIDTH]
+    bcdecode INFILE.DDS OUTFILE.DDS -cube_filter [WIDTH [ROUGHNESS...]]
 
-Pre-filter cube map for PBR with roughness = 0.0, 0.104, 0.219, 0.349, 0.500, 0.691 and 1.0 at mip levels 0 to 6, respectively. The optional width parameter sets the dimensions of the output image, and defaults to 256. It must be at least 128, and not greater than the size of the input image. Note that large values of WIDTH result in very long processing (the time is a function of WIDTH<sup>4</sup>). The output image is in R9G9B9E5\_SHAREDEXP format.
+Pre-filter cube map for PBR. The optional width parameter sets the dimensions of the output image, and defaults to 256. Note that large values of WIDTH result in very long processing (the time is a function of WIDTH<sup>4</sup>). The output image is in R9G9B9E5\_SHAREDEXP format. If no roughness parameters are specified, the default is 0.0 0.104 0.219 0.349 0.500 0.691 1.0 at mip levels 0 to 6.
 
-    bcdecode INFILE.HDR OUTFILE.DDS -cube [WIDTH [MAXLEVEL]]
+    bcdecode INFILE.HDR OUTFILE.DDS -cube [WIDTH [MAXLEVEL [DXGI_FMT]]]
 
-Convert Radiance .hdr format image to DDS cube map in R16G16B16A16\_FLOAT format, without filtering or generating mipmaps. WIDTH specifies the resolution of the output image, which defaults to 2048x2048 per face. A negative value inverts the Z axis. MAXLEVEL can be used to limit the range of output colors, the default is 65504. MAXLEVEL < 0 enables simple Reinhard tone mapping: Cout = MAXLEVEL \* Cin / (MAXLEVEL - Cin).
+Convert Radiance .hdr format image to DDS cube map, without filtering or generating mipmaps.
+
+WIDTH specifies the resolution of the output image, which defaults to 2048x2048 per face. A negative value inverts the Z axis.
+
+MAXLEVEL can be used to limit the range of output colors, the default is 65504. MAXLEVEL < 0 enables simple Reinhard tone mapping: Cout = MAXLEVEL \* Cin / (MAXLEVEL - Cin).
+
+DXGI\_FMT sets the output format, the allowed values are 0x0A (R16G16B16A16\_FLOAT, default) and 0x43 (R9G9B9E5\_SHAREDEXP).
 
 ### Examples
 
