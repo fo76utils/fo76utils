@@ -346,7 +346,7 @@ int main(int argc, char **argv)
         std::memcpy(outBuf.data(), inFile.data(), inFile.size());
         size_t  newSize = cubeFilter.convertImage(outBuf.data(), inFile.size(),
                                                   true, bufCapacity);
-        if (outBuf[128] != 0x43 || !newSize)
+        if (!newSize)
           errorMessage("failed to convert texture");
         outBuf.resize(newSize);
       }
