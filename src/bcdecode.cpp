@@ -25,7 +25,8 @@ static inline float atan2NormFast(float y, float x, bool xNonNegative = false)
 }
 
 bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
-                     int cubeWidth, bool invertCoord, float maxLevel)
+                     int cubeWidth, bool invertCoord, float maxLevel,
+                     unsigned char outFmt)
 {
   // file should begin with "#?RADIANCE\n"
   if (inBuf.size() < 11 ||
@@ -173,8 +174,9 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
     c[3] = 1.0f;
     tmpBuf2[i] = c;
   }
-  outBuf.resize(size_t(cubeWidth * cubeWidth) * 6 * sizeof(std::uint64_t) + 148,
-                0);
+  size_t  outPixelSize =        // 8 bytes for DXGI_FORMAT_R16G16B16A16_FLOAT
+      (outFmt == 0x0A ? sizeof(std::uint64_t) : sizeof(std::uint32_t));
+  outBuf.resize(size_t(cubeWidth * cubeWidth) * 6 * outPixelSize + 148, 0);
   unsigned char *p = outBuf.data();
   for (size_t i = 6; i < 37; i++)
     FileBuffer::writeUInt32Fast(p + (i << 2), 0U);
@@ -184,15 +186,14 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
   // height, width, pitch
   FileBuffer::writeUInt32Fast(p + 12, std::uint32_t(cubeWidth));
   FileBuffer::writeUInt32Fast(p + 16, std::uint32_t(cubeWidth));
-  FileBuffer::writeUInt32Fast(p + 20,
-                              std::uint32_t(cubeWidth * sizeof(std::uint64_t)));
+  FileBuffer::writeUInt32Fast(p + 20, std::uint32_t(cubeWidth * outPixelSize));
   p[28] = 1;                            // number of mipmaps
   p[76] = 32;                           // size of pixel format
   p[80] = 0x04;                         // DDPF_FOURCC
   FileBuffer::writeUInt32Fast(p + 84, 0x30315844U);     // "DX10"
   FileBuffer::writeUInt32Fast(p + 108, 0x00401008U);    // dwCaps
   p[113] = 0xFE;                        // dwCaps2 (DDSCAPS2_CUBEMAP*)
-  p[128] = 0x0A;                        // DXGI_FORMAT_R16G16B16A16_FLOAT
+  p[128] = outFmt;
   p[132] = 3;                           // DDS_DIMENSION_TEXTURE2D
   p[136] = 0x04;                        // DDS_RESOURCE_MISC_TEXTURECUBE
   p[140] = 1;                           // arraySize
@@ -201,7 +202,7 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
   {
     for (int y = 0; y < cubeWidth; y++)
     {
-      for (int x = 0; x < cubeWidth; x++, p = p + sizeof(std::uint64_t))
+      for (int x = 0; x < cubeWidth; x++, p = p + outPixelSize)
       {
         FloatVector4  v(SFCubeMapFilter::convertCoord(x, y, cubeWidth, n));
         // convert to spherical coordinates
@@ -210,34 +211,33 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
         v /= xy;
         float   xf = atan2NormFast(v[0], v[1]) * 0.5f + 0.5f;
         float   yf = atan2NormFast(z, xy, true) + 0.5f;
-        xf *= float(w - 1);
-        yf *= float(h - 1);
-        int     x0 = std::min< int >(std::max< int >(int(xf), 0), w - 1);
-        int     y0 = std::min< int >(std::max< int >(int(yf), 0), h - 1);
-        xf = xf - float(std::floor(xf));
-        yf = yf - float(std::floor(yf));
+        xf = xf * float(w) - 0.5f;
+        yf = yf * float(h) - 0.5f;
+        float   xi = float(std::floor(xf));
+        float   yi = float(std::floor(yf));
+        xf -= xi;
+        yf -= yi;
+        int     x0 = int(xi);
+        int     y0 = int(yi);
+        x0 = (x0 <= (w - 1) ? (x0 >= 0 ? x0 : (w - 1)) : 0);
+        int     x1 = (x0 < (w - 1) ? (x0 + 1) : 0);
+        int     y1 = std::min< int >(std::max< int >(y0 + 1, 0), h - 1);
+        y0 = std::min< int >(std::max< int >(y0, 0), h - 1);
         // bilinear interpolation
-        FloatVector4  c;
-        const FloatVector4  *inPtr = tmpBuf2.data() + (y0 * w + x0);
-        if (x0 < (w - 1)) [[likely]]
-        {
-          c = inPtr[0] * (1.0f - xf) + (inPtr[1] * xf);
-          if (y0 < (h - 1)) [[likely]]
-            c = c + (((inPtr[w] * (1.0f - xf) + (inPtr[w + 1] * xf)) - c) * yf);
-        }
-        else
-        {
-          c = *inPtr;
-          if (y0 < (h - 1)) [[likely]]
-            c = c + ((inPtr[w] - c) * yf);
-        }
+        const FloatVector4  *inPtr = tmpBuf2.data() + (y0 * w);
+        FloatVector4  c(inPtr[x0] * (1.0f - xf) + (inPtr[x1] * xf));
+        inPtr = inPtr + (y1 > y0 ? w : 0);
+        c = c + (((inPtr[x0] * (1.0f - xf) + (inPtr[x1] * xf)) - c) * yf);
         c.maxValues(FloatVector4(0.0f));
         if (maxLevel < 0.0f)
           c = c * FloatVector4(maxLevel) / (FloatVector4(maxLevel) - c);
         else
           c.minValues(FloatVector4(maxLevel));
         c[3] = 1.0f;
-        FileBuffer::writeUInt64Fast(p, c.convertToFloat16());
+        if (outPixelSize == sizeof(std::uint64_t))
+          FileBuffer::writeUInt64Fast(p, c.convertToFloat16());
+        else
+          FileBuffer::writeUInt32Fast(p, c.convertToR9G9B9E5());
       }
     }
   }
@@ -253,10 +253,11 @@ int main(int argc, char **argv)
                  "    bcdecode INFILE.DDS "
                  "[MULT | OUTFILE.RGBA | OUTFILE.DDS [FACE [FLAGS]]]\n");
     std::fprintf(stderr,
-                 "    bcdecode INFILE.DDS OUTFILE.DDS -cube_filter [WIDTH]\n");
+                 "    bcdecode INFILE.DDS "
+                 "OUTFILE.DDS -cube_filter [WIDTH [ROUGHNESS...]]\n");
     std::fprintf(stderr,
                  "    bcdecode INFILE.HDR "
-                 "OUTFILE.DDS -cube [WIDTH [MAXLEVEL]]\n\n");
+                 "OUTFILE.DDS -cube [WIDTH [MAXLEVEL [DXGI_FMT]]]\n\n");
     std::fprintf(stderr, "    FLAGS & 1 = ignore alpha channel\n");
     std::fprintf(stderr, "    FLAGS & 2 = calculate normal map blue channel\n");
     return 1;
@@ -268,6 +269,7 @@ int main(int argc, char **argv)
     {
       int     w = 2048;
       bool    invertCoord = false;
+      unsigned char outFmt = 0x0A;      // DXGI_FORMAT_R16G16B16A16_FLOAT
       float   maxLevel = 65504.0f;
       if (argc > 4)
       {
@@ -286,12 +288,20 @@ int main(int argc, char **argv)
                                       -65504.0, 65504.0));
           if (maxLevel > -0.125f && maxLevel < 0.125f)
             errorMessage("invalid maximum output level");
+          if (argc > 6)
+          {
+            outFmt = (unsigned char) parseInteger(argv[6], 0,
+                                                  "invalid output format",
+                                                  0x01, 0x78);
+            if (!(outFmt == 0x0A || outFmt == 0x43))
+              errorMessage("unsupported output format");
+          }
         }
       }
       std::vector< unsigned char >  outBuf;
       {
         FileBuffer  inFile(argv[1]);
-        if (!convertHDRToDDS(outBuf, inFile, w, invertCoord, maxLevel))
+        if (!convertHDRToDDS(outBuf, inFile, w, invertCoord, maxLevel, outFmt))
           errorMessage("invalid or unsupported input file");
       }
       outFile = new OutputFile(argv[2], 16384);
@@ -302,13 +312,25 @@ int main(int argc, char **argv)
     }
     if (argc > 3 && std::strcmp(argv[3], "-cube_filter") == 0)
     {
+      std::vector< float >  roughnessTable;
       size_t  w = 256;
       if (argc > 4)
       {
         w = size_t(parseInteger(argv[4], 10, "invalid output image dimensions",
-                                128, 2048));
+                                16, 2048));
+        for (int i = 5; i < argc; i++)
+        {
+          roughnessTable.push_back(float(parseFloat(argv[i],
+                                                    "invalid roughness value",
+                                                    0.0, 1.0)));
+        }
       }
       SFCubeMapFilter cubeFilter(w);
+      if (roughnessTable.size() > 0)
+      {
+        cubeFilter.setRoughnessTable(roughnessTable.data(),
+                                     roughnessTable.size());
+      }
       std::vector< unsigned char >  outBuf;
       {
         FileBuffer  inFile(argv[1]);
