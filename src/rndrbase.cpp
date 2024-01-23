@@ -106,7 +106,7 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
       size_t  newSize =
           cubeMapFilter.convertImage(fileBuf.data(), fileBufSize, false,
                                      bufCapacityRequired);
-      fileBuf.resize(newSize);
+      fileBuf.resize(newSize ? newSize : fileBufSize);
     }
 #endif
     t = new DDSTexture(fileBuf.data(), fileBuf.size(), mipLevel);
