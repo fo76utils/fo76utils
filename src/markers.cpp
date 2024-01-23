@@ -544,14 +544,12 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
     return;
   float   xf = x - m.xOffs;
   float   yf = y - m.yOffs;
-  int     xi = int(xf) - int(xf < 0.0f);
-  int     yi = int(yf) - int(yf < 0.0f);
-  xf = float(xi) - xf;
-  yf = float(yi) - yf;
-  float   txtW = float(m.texture->getWidth() >> mipLevelI);
-  float   txtH = float(m.texture->getHeight() >> mipLevelI);
-  txtW = (txtW > 1.0f ? txtW : 1.0f);
-  txtH = (txtH > 1.0f ? txtH : 1.0f);
+  int     xi = int(float(std::floor(xf)));
+  int     yi = int(float(std::floor(yf)));
+  xf = float(xi) + 0.5f - xf;
+  yf = float(yi) + 0.5f - yf;
+  float   txtW = std::max(float(m.texture->getWidth() >> mipLevelI), 1.0f);
+  float   txtH = std::max(float(m.texture->getHeight() >> mipLevelI), 1.0f);
   float   txtSclX = 1.0f / txtW;
   float   txtSclY = 1.0f / txtH;
   bool    integerMip = (m.mipLevel == float(mipLevelI));
@@ -559,15 +557,15 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
   {
     float   txtY = (yf + float(yy)) * mipMult;
     float   ay = 1.0f;
-    if (txtY < 0.0f)
+    if (txtY < 0.5f)
     {
-      ay = txtY + 1.0f;
+      ay = txtY + 0.5f;
       if (ay <= 0.0f)
         continue;
     }
-    else if (txtY > txtH)
+    else if (txtY > (txtH - 0.5f))
     {
-      ay = txtH + 1.0f - txtY;
+      ay = txtH + 0.5f - txtY;
       if (ay <= 0.0f)
         break;
     }
@@ -583,17 +581,17 @@ void MapImage::drawIcon(size_t n, float x, float y, float z)
     {
       float   txtX = (xf + float(xx)) * mipMult;
       float   a = ay;
-      if (txtX < 0.0f)
+      if (txtX < 0.5f)
       {
-        if (txtX <= -1.0f)
+        if (txtX <= -0.5f)
           continue;
-        a *= (txtX + 1.0f);
+        a *= (txtX + 0.5f);
       }
-      else if (txtX > txtW)
+      else if (txtX > (txtW - 0.5f))
       {
-        if (txtX >= (txtW + 1.0f))
+        if (txtX >= (txtW + 0.5f))
           break;
-        a *= (txtW + 1.0f - txtX);
+        a *= (txtW + 0.5f - txtX);
       }
       FloatVector4  c(0.0f);
       if (integerMip)

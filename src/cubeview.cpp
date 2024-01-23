@@ -48,8 +48,8 @@ static void renderTextureThread(
   float   scale = std::max(txtW / float(w), txtH / float(h));
   float   uScale = scale / txtW;
   float   vScale = scale / txtH;
-  float   uOffset = float(w) * -0.5f * uScale + 0.5f;
-  float   vOffset = float(h) * -0.5f * vScale + 0.5f;
+  float   uOffset = float(w - 1) * -0.5f * uScale + 0.5f;
+  float   vOffset = float(h - 1) * -0.5f * vScale + 0.5f;
   float   mipLevel = FloatVector4::log2Fast(std::max(scale, 1.0f));
   mipLevel = std::min(std::max(mipLevel, 0.0f), 15.0f);
   outBuf = outBuf + (size_t(y0) * size_t(w));
