@@ -36,6 +36,7 @@ libSources += ["libfo76utils/src/downsamp.cpp", "src/esmdbase.cpp"]
 libSources += ["src/nif_file.cpp", "src/bgsmfile.cpp", "src/landdata.cpp"]
 libSources += ["src/plot3d.cpp", "src/landtxt.cpp", "src/terrmesh.cpp"]
 libSources += ["src/render.cpp", "src/rndrbase.cpp", "src/markers.cpp"]
+libSources += ["libfo76utils/src/sfcube.cpp"]
 # detex source files
 libSources += ["libfo76utils/src/bits.c", "libfo76utils/src/bptc-tables.c"]
 libSources += ["libfo76utils/src/decompress-bptc.c"]
