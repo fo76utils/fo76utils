@@ -26,7 +26,7 @@ static void renderCubeMapThread(
     {
       FloatVector4  v(tmpYZ);
       v += (tmpX * (float(xc) - (float(w) * 0.5f)));
-      FloatVector4  c(texture->cubeMap(v[0], v[1], v[2], mipLevel));
+      FloatVector4  c(texture->cubeMap(v[0], v[1], -(v[2]), mipLevel));
       c *= rgbScale;
       if (isSRGB)
       {

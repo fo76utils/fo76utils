@@ -83,7 +83,7 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
     if ((inBuf.getPosition() + 4ULL) > inBuf.size())
       return false;
     std::uint32_t *p =
-        tmpBuf.data() + size_t((invertCoord ? y : ((h - 1) - y)) * w);
+        tmpBuf.data() + size_t((!invertCoord ? y : ((h - 1) - y)) * w);
     std::uint32_t tmp =
         FileBuffer::readUInt32Fast(inBuf.data() + inBuf.getPosition());
     if (tmp != ((std::uint32_t(w & 0xFF) << 24) | (std::uint32_t(w >> 8) << 16)
