@@ -22,7 +22,7 @@ static void renderCubeMapThread(
       float   y = viewScale;
       float   z = (float(h) * 0.5f) - float(yc);
       vt->rotateXYZ(x, y, z);
-      FloatVector4  c(texture->cubeMap(x, y, z, mipLevel));
+      FloatVector4  c(texture->cubeMap(x, y, -z, mipLevel));
       if (isSRGB)
       {
         c *= (1.0f / 255.0f);
