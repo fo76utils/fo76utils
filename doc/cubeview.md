@@ -1,6 +1,6 @@
     cubeview WIDTH HEIGHT ARCHIVEPATH TEXTURE.DDS [MIPLEVEL]
 
-View Fallout 4 or 76 cube maps from archive files. Can also be used to view any textures in supported formats.
+View Starfield cube maps from archive files. Can also be used to view any textures in supported formats.
 
 ### Options
 
