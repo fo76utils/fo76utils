@@ -23,8 +23,8 @@ bool Renderer::RenderObject::operator<(const RenderObject& r) const
 }
 
 Renderer::ModelData::ModelData()
-  : nifFile((NIFFile *) 0),
-    o((BaseObject *) 0),
+  : nifFile(nullptr),
+    o(nullptr),
     usesAlphaBlending(false)
 {
 }
@@ -39,9 +39,9 @@ void Renderer::ModelData::clear()
   if (nifFile)
   {
     delete nifFile;
-    nifFile = (NIFFile *) 0;
+    nifFile = nullptr;
   }
-  o = (BaseObject *) 0;
+  o = nullptr;
   objectBounds = NIFFile::NIFBounds();
   meshData.clear();
   usesAlphaBlending = false;
@@ -195,15 +195,15 @@ inline bool Renderer::TileMask::operator==(const TileMask& r) const
 }
 
 inline Renderer::RenderObjectQueue::ObjectList::ObjectList()
-  : front((RenderObjectQueueObj *) 0),
-    back((RenderObjectQueueObj *) 0)
+  : front(nullptr),
+    back(nullptr)
 {
 }
 
 inline void Renderer::RenderObjectQueue::ObjectList::push_front(
     RenderObjectQueueObj *o)
 {
-  o->prv = (RenderObjectQueueObj *) 0;
+  o->prv = nullptr;
   o->nxt = front;
   if (!front)
     back = o;
@@ -216,7 +216,7 @@ inline void Renderer::RenderObjectQueue::ObjectList::push_back(
     RenderObjectQueueObj *o)
 {
   o->prv = back;
-  o->nxt = (RenderObjectQueueObj *) 0;
+  o->nxt = nullptr;
   if (!back)
     front = o;
   else
@@ -269,7 +269,7 @@ void Renderer::RenderObjectQueue::clear()
     for (std::vector< RenderObjectQueueObj >::iterator
              i = buf.begin(); i != buf.end(); i++)
     {
-      i->o = (RenderObject *) 0;
+      i->o = nullptr;
       i->threadNum = std::intptr_t(-1);
       i->m = TileMask();
       freeObjects.push_back(&(*i));
@@ -282,10 +282,10 @@ bool Renderer::RenderObjectQueue::queueObject(RenderObjectQueueObj *o)
 {
   RenderObjectQueueObj  *p;
   bool    readyFlag;
-  if (BRANCH_UNLIKELY(o->threadNum >= 256L))
+  if (o->threadNum >= 256L) [[unlikely]]
   {
     unsigned int  n = 0xFFU;
-    if (BRANCH_LIKELY(o->o->flags & 0x02))
+    if (o->o->flags & 0x02) [[likely]]
       n = o->o->model.o.b->modelID & 0xFFU;
     readyFlag = true;
     for (int i = 0; i < 3 && readyFlag; i++)
@@ -346,9 +346,9 @@ void Renderer::RenderObjectQueue::findObjects()
       for (o = queuedObjects.front; o; o = nxt)
       {
         nxt = o->nxt;
-        if (BRANCH_UNLIKELY(!tileMask.overlapsWith(o->m)))
+        if (!tileMask.overlapsWith(o->m)) [[unlikely]]
         {
-          if (BRANCH_UNLIKELY(o->threadNum >= 256L))
+          if (o->threadNum >= 256L) [[unlikely]]
             break;
           queuedObjects.pop(o);
           objectsReady.push_back(o);
@@ -361,19 +361,22 @@ void Renderer::RenderObjectQueue::findObjects()
       for (o = queuedObjects.front; o; o = nxt)
       {
         nxt = o->nxt;
-        if (BRANCH_UNLIKELY(!tileMask.overlapsWith(o->m)))
+        if (!tileMask.overlapsWith(o->m)) [[unlikely]]
         {
-          if (BRANCH_UNLIKELY(o->threadNum >= 256L))
+          if (o->threadNum >= 256L) [[unlikely]]
             break;
           queuedObjects.pop(o);
           objectsReady.push_back(o);
+          tileMask |= o->m;
         }
-        if (o->o->flags & 0x1C)
+        else if (o->o->flags & 0x1C)
+        {
           tileMask |= o->m;     // do not reorder water, effects and decals
+        }
       }
     }
   }
-  if (BRANCH_UNLIKELY(loadingModelsFlag))
+  if (loadingModelsFlag) [[unlikely]]
   {
     std::uint64_t modelIDMask = 0U;
     for (o = objectsRendered.front; o; o = o->nxt)
@@ -407,9 +410,9 @@ void Renderer::RenderObjectQueue::findObjects()
 }
 
 Renderer::RenderThread::RenderThread()
-  : t((std::thread *) 0),
-    terrainMesh((TerrainMesh *) 0),
-    renderer((Plot3D_TriShape *) 0)
+  : t(nullptr),
+    terrainMesh(nullptr),
+    renderer(nullptr)
 {
 }
 
@@ -418,7 +421,7 @@ Renderer::RenderThread::~RenderThread()
   if (renderer)
   {
     delete renderer;
-    renderer = (Plot3D_TriShape *) 0;
+    renderer = nullptr;
   }
   clear();
 }
@@ -429,7 +432,7 @@ void Renderer::RenderThread::join()
   {
     t->join();
     delete t;
-    t = (std::thread *) 0;
+    t = nullptr;
   }
 }
 
@@ -440,7 +443,7 @@ void Renderer::RenderThread::clear()
   if (terrainMesh)
   {
     delete terrainMesh;
-    terrainMesh = (TerrainMesh *) 0;
+    terrainMesh = nullptr;
   }
 }
 
@@ -453,7 +456,7 @@ bool Renderer::setScreenAreaUsed(RenderObject& p)
     FloatVector4  b0(p.model.o.b->objectBounds.boundsMin);
     FloatVector4  b1(p.model.o.b->objectBounds.boundsMax);
     FloatVector4  tmp(1.0f, 1.0f, 1.0f, 0.0f);
-    if (BRANCH_UNLIKELY(p.flags & 0x10))
+    if (p.flags & 0x10) [[unlikely]]
     {
       tmp[0] = p.model.d.scaleX;
       tmp[2] = p.model.d.scaleZ;
@@ -558,13 +561,13 @@ bool Renderer::setScreenAreaUsed(RenderObject& p)
       screenBounds.xMax() < 0.0f || screenBounds.yMax() < 0.0f ||
       screenBounds.zMax() < 0.0f)
   {
-    if (BRANCH_LIKELY(!ignoreOBND))
+    if (!ignoreOBND) [[likely]]
       return false;
     if (!(p.flags & 0x02))
       return false;
   }
   p.z = roundFloat(screenBounds.zMin() * 64.0f);
-  if (BRANCH_UNLIKELY(!(p.flags & 0x02)))
+  if (!(p.flags & 0x02)) [[unlikely]]
   {
     FloatVector4  tmp(screenBounds.xMin(), screenBounds.yMin(),
                       screenBounds.xMax(), screenBounds.yMax());
@@ -877,9 +880,9 @@ void Renderer::readDecalProperties(BaseObject& p, const ESMFile::ESMRecord& r)
 const Renderer::BaseObject * Renderer::readModelProperties(
     RenderObject& p, const ESMFile::ESMRecord& r)
 {
-  if (BRANCH_UNLIKELY(baseObjects.size() < size_t(baseObjHashMask + 1)))
+  if (baseObjects.size() < size_t(baseObjHashMask + 1)) [[unlikely]]
     baseObjects.resize(size_t(baseObjHashMask + 1), std::int32_t(-1));
-  BaseObject    *o = (BaseObject *) 0;
+  BaseObject    *o = nullptr;
   std::uint32_t h;
   {
     std::uint64_t tmp = 0xFFFFFFFFU;
@@ -971,11 +974,10 @@ const Renderer::BaseObject * Renderer::readModelProperties(
       }
       if (!haveOBND || stringBuf.empty())
       {
-        if (BRANCH_LIKELY(!(enableActors && r == "NPC_")) ||
-            !(haveOBND = getNPCModel(tmp, r)))
-        {
+        if (!(enableActors && r == "NPC_")) [[likely]]
           continue;
-        }
+        if (!(haveOBND = getNPCModel(tmp, r)))
+          continue;
       }
 #if 0
       if (!isWater)
@@ -1017,7 +1019,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
     o = &(objBuf.back());
   }
   if (!(o->flags & 0x17))
-    return (BaseObject *) 0;
+    return nullptr;
   p.flags = o->flags;
   p.flags2 = o->gradientMapV;
   p.model.o.b = o;
@@ -1032,12 +1034,12 @@ void Renderer::addSCOLObjects(
   tmp.z = 0;
   tmp.formID = refrFormID;
   ESMFile::ESMField f(esmFile, r);
-  const BaseObject  *o = (BaseObject *) 0;
+  const BaseObject  *o = nullptr;
   while (f.next())
   {
     if (f == "ONAM" && f.size() >= 4)
     {
-      o = (BaseObject *) 0;
+      o = nullptr;
       unsigned int  modelFormID = f.readUInt32Fast();
       if (!modelFormID)
         continue;
@@ -1046,7 +1048,7 @@ void Renderer::addSCOLObjects(
         continue;
       if (!(o = readModelProperties(tmp, *r3)) || (tmp.flags & 0x14))
       {
-        o = (BaseObject *) 0;
+        o = nullptr;
         continue;
       }
     }
@@ -1074,13 +1076,13 @@ void Renderer::addSCOLObjects(
 
 void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
 {
-  const ESMFile::ESMRecord  *r = (ESMFile::ESMRecord *) 0;
+  const ESMFile::ESMRecord  *r = nullptr;
   do
   {
     r = esmFile.findRecord(formID);
-    if (BRANCH_UNLIKELY(!r))
+    if (!r) [[unlikely]]
       break;
-    if (BRANCH_UNLIKELY(!(*r == "REFR")))
+    if (!(*r == "REFR")) [[unlikely]]
     {
       if (*r == "CELL")
       {
@@ -1116,8 +1118,8 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     tmp.model.o.mswpFormID = 0U;
     tmp.model.o.mswpFormID2 = 0U;
     tmp.formID = r->formID;
-    const ESMFile::ESMRecord  *r2 = (ESMFile::ESMRecord *) 0;
-    const BaseObject  *o = (BaseObject *) 0;
+    const ESMFile::ESMRecord  *r2 = nullptr;
+    const BaseObject  *o = nullptr;
     float   scale = 1.0f;
     float   decalScaleX = 1.0f;
     float   decalScaleZ = 1.0f;
@@ -1176,7 +1178,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
               tmp.modelTransform =
                   NIFFile::NIFVertexTransform(
                       scale, d2[1], d2[2], d2[3], d1[0], d1[1], d2[0]);
-              if (BRANCH_UNLIKELY(tmp.flags & 0x10))
+              if (tmp.flags & 0x10) [[unlikely]]
               {
                 tmp.model.d.scaleX =
                     std::min(std::max(decalScaleX / scale, 0.0625f), 16.0f);
@@ -1185,7 +1187,7 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
               }
               if (*r2 == "SCOL")
                 addSCOLObjects(*r2, tmp.modelTransform, r->formID);
-              else if (BRANCH_LIKELY(o))
+              else if (o) [[likely]]
                 objectVisible = setScreenAreaUsed(tmp);
             }
             break;
@@ -1194,10 +1196,10 @@ void Renderer::findObjects(unsigned int formID, int type, bool isRecursive)
     }
     if (!objectVisible)
       continue;
-    if (BRANCH_LIKELY(!(tmp.flags & 0x10)))
+    if (!(tmp.flags & 0x10)) [[likely]]
     {
       tmp.model.o.mswpFormID = 0U;
-      if (BRANCH_UNLIKELY(tmp.flags & 0x04))
+      if (tmp.flags & 0x04) [[unlikely]]
       {
         if (waterRenderMode < 0)
         {
@@ -1317,12 +1319,16 @@ void Renderer::sortObjectList()
   for (std::map< ModelPathSortObject, unsigned int >::iterator
            i = modelPathsUsed.begin(); i != modelPathsUsed.end(); i++, n++)
   {
-    if (BRANCH_UNLIKELY((n & 0xFFU) >= modelBatchCnt) ||
-        BRANCH_UNLIKELY((i->first.o->flags ^ prvFlags) & 0xE000U))
+    if ((n & 0xFFU) < modelBatchCnt) [[likely]]
     {
-      n = (n + 0xFFU) & ~0xFFU;
-      prvFlags = i->first.o->flags;
+      if (!((i->first.o->flags ^ prvFlags) & 0xE000U)) [[likely]]
+      {
+        i->second = n;
+        continue;
+      }
     }
+    n = (n + 0xFFU) & ~0xFFU;
+    prvFlags = i->first.o->flags;
     i->second = n;
   }
   for (size_t i = 0; i < baseObjectBufs.size(); i++)
@@ -1370,12 +1376,12 @@ void Renderer::clear(unsigned int flags)
     if (landData)
     {
       delete landData;
-      landData = (LandscapeData *) 0;
+      landData = nullptr;
     }
     if (landTextures)
     {
       delete[] landTextures;
-      landTextures = (LandscapeTextureSet *) 0;
+      landTextures = nullptr;
     }
   }
   if (flags & 0x18)
@@ -1429,21 +1435,24 @@ bool Renderer::loadModel(const BaseObject& o, size_t threadNum)
   nifFiles[n].o = &o;
   if (o.modelPath.empty())
     return false;
-  if (BRANCH_UNLIKELY(renderPass & 4) && !(o.flags & 4))
+  if (renderPass & 4) [[unlikely]]
   {
-    if (effectMeshMode & 2)
-      return false;
-    if (!(effectMeshMode & 1))
+    if (!(o.flags & 4))
     {
-      if (o.modelPath.starts_with("meshes/sky/"))
+      if (effectMeshMode & 2)
         return false;
-      if (o.modelPath.starts_with("meshes/effects/"))
+      if (!(effectMeshMode & 1))
       {
-        if (o.modelPath.compare(15, 8, "ambient/") == 0 ||
-            o.modelPath.ends_with("fog.nif") ||
-            o.modelPath.ends_with("cloud.nif"))
-        {
+        if (o.modelPath.starts_with("meshes/sky/"))
           return false;
+        if (o.modelPath.starts_with("meshes/effects/"))
+        {
+          if (o.modelPath.compare(15, 8, "ambient/") == 0 ||
+              o.modelPath.ends_with("fog.nif") ||
+              o.modelPath.ends_with("cloud.nif"))
+          {
+            return false;
+          }
         }
       }
     }
@@ -1569,7 +1578,7 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
       (((unsigned int) t.renderer->flags & 0x80U) | texturePathMaskBase);
   if (!texturePathMask)
     return;
-  if (BRANCH_UNLIKELY(!enableTextures))
+  if (!enableTextures) [[unlikely]]
   {
     texturePathMask &= ~0x0001U;
     textures[0] = &whiteTexture;
@@ -1584,7 +1593,7 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
     bool    waitFlag = false;
     textures[k] = textureCache.loadTexture(
                       ba2File, *(txtSet->texturePaths[k]), t.fileBuf,
-                      textureMip, (j > 0x03FFU ? &waitFlag : (bool *) 0));
+                      textureMip, (j > 0x03FFU ? &waitFlag : nullptr));
     if (!waitFlag)
     {
       texturePathMask &= ~tmp;
@@ -1662,7 +1671,7 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
         continue;
       t.sortBuf.emplace(t.sortBuf.end(), j, b.zMin(),
                         bool(ts.flags & CE2Material::Flag_AlphaBlending));
-      if (BRANCH_UNLIKELY(ts.flags & NIFFile::NIFTriShape::Flag_TSOrdered))
+      if (ts.flags & NIFFile::NIFTriShape::Flag_TSOrdered) [[unlikely]]
         TriShapeSortObject::orderedNodeFix(t.sortBuf, nifFiles[n].meshData);
     }
     if (t.sortBuf.begin() == t.sortBuf.end())
@@ -1680,14 +1689,14 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
       *(t.renderer) = nifFiles[n].meshData[size_t(t.sortBuf[j])];
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
-      if (BRANCH_UNLIKELY(t.renderer->flags & CE2Material::Flag_IsWater))
+      if (t.renderer->flags & CE2Material::Flag_IsWater) [[unlikely]]
       {
         t.renderer->setRenderMode(3U | renderMode);
         std::map< unsigned int, WaterProperties >::const_iterator k =
             waterMaterials.find(p.model.o.mswpFormID);
         if (k == waterMaterials.end())
           continue;
-        t.renderer->m = (CE2Material *) 0;
+        t.renderer->m = nullptr;
         textures[1] = textureCache.loadTexture(ba2File, defaultWaterTexture,
                                                t.fileBuf, 0);
         if (textures[1])
@@ -1718,7 +1727,7 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
           textures[0] = &whiteTexture;  // marker with vertex colors only
           textureMask |= 0x0001U;
         }
-        if (BRANCH_UNLIKELY(!enableTextures))
+        if (!enableTextures) [[unlikely]]
         {
           texturePathMask &= ~0x0001U;
           textures[0] = &whiteTexture;
@@ -1733,7 +1742,7 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
           bool    waitFlag = false;
           textures[k] = textureCache.loadTexture(
                             ba2File, *(txtSet->texturePaths[k]), t.fileBuf,
-                            textureMip, (m > 0x03FFU ? &waitFlag : (bool *) 0));
+                            textureMip, (m > 0x03FFU ? &waitFlag : nullptr));
           if (!waitFlag)
           {
             texturePathMask &= ~tmp;
@@ -1809,7 +1818,7 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
         waterMaterials.find(p.model.t.waterFormID);
     if (j == waterMaterials.end())
       return;
-    tmp.m = (CE2Material *) 0;
+    tmp.m = nullptr;
     t.renderer->setRenderMode(3U | renderMode);
     *(t.renderer) = tmp;
     const DDSTexture  *textures[2];
@@ -1840,7 +1849,7 @@ void Renderer::renderThread(size_t threadNum)
   if (!t.renderer)
     return;
   RenderObjectQueue&    q = *renderObjectQueue;
-  RenderObjectQueueObj  *o = (RenderObjectQueueObj *) 0;
+  RenderObjectQueueObj  *o = nullptr;
   bool    isModel = false;
   while (true)
   {
@@ -1857,7 +1866,7 @@ void Renderer::renderThread(size_t threadNum)
       o->threadNum = std::intptr_t(threadNum);
       q.objectsRendered.push_back(o);
     }
-    if (BRANCH_LIKELY(!isModel))
+    if (!isModel) [[likely]]
       renderObject(t, *(o->o));
     else if (o->o->flags & 0x02)
       (void) loadModel(*(o->o->model.o.b), threadNum);
@@ -1866,7 +1875,7 @@ void Renderer::renderThread(size_t threadNum)
       std::lock_guard< std::mutex > tmpLock(q.m);
       q.objectsRendered.pop(o);
       q.freeObjects.push_front(o);
-      o = (RenderObjectQueueObj *) 0;
+      o = nullptr;
       notifyFlag = !q.objectsReady;
       q.findObjects();
       if (q.objectsReady && !(q.doneFlag || q.pauseFlag))
@@ -1945,7 +1954,7 @@ Renderer::Renderer(int imageWidth, int imageHeight, const BA2File& archiveFiles,
     landTextureMip(3.0f),
     landTxtRGBScale(1.0f),
     landTxtDefColor(0x003F3F3FU),
-    landData((LandscapeData *) 0),
+    landData(nullptr),
     cellTextureResolution(256),
     defaultWaterLevel(0.0f),
     modelLOD(0),
@@ -1963,10 +1972,10 @@ Renderer::Renderer(int imageWidth, int imageHeight, const BA2File& archiveFiles,
     ignoreOBND(false),
     threadCnt(0),
     modelBatchCnt(16),
-    landTextures((LandscapeTextureSet *) 0),
+    landTextures(nullptr),
     objectListPos(0),
     modelIDBase(0xFFFFFFFFU),
-    renderObjectQueue((RenderObjectQueue *) 0),
+    renderObjectQueue(nullptr),
     waterUVScale(0.032258f),
     waterReflectionLevel(1.0f),
     zRangeMax(zMax),
@@ -1975,7 +1984,7 @@ Renderer::Renderer(int imageWidth, int imageHeight, const BA2File& archiveFiles,
     waterRenderMode(0),
     bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
     whiteTexture(0xFFFFFFFFU),
-    outBufN((std::uint32_t *) 0),
+    outBufN(nullptr),
     materials(ba2File, materialDBPath)
 {
   if (!renderMode)
@@ -2050,18 +2059,18 @@ void Renderer::deallocateBuffers(unsigned int mask)
     if (outBufZ)
     {
       delete[] outBufZ;
-      outBufZ = (float *) 0;
+      outBufZ = nullptr;
     }
     if (outBufN)
     {
       delete[] outBufN;
-      outBufN = (std::uint32_t *) 0;
+      outBufN = nullptr;
     }
   }
   if (((bufAllocFlags & mask) & 0x01) && outBufRGBA)
   {
     delete[] outBufRGBA;
-    outBufRGBA = (std::uint32_t *) 0;
+    outBufRGBA = nullptr;
   }
   bufAllocFlags = bufAllocFlags & ~mask;
 }
@@ -2162,7 +2171,7 @@ void Renderer::setWaterColor(std::uint32_t n)
     n = 0xC0302010U;                    // default water color if not specified
   else
     n = bgraToRGBA(n);
-  getWaterMaterial(waterMaterials, esmFile, (ESMFile::ESMRecord *) 0, n, true);
+  getWaterMaterial(waterMaterials, esmFile, nullptr, n, true);
 }
 
 void Renderer::setRenderParameters(
@@ -2234,7 +2243,7 @@ void Renderer::loadTerrain(const char *btdFileName, unsigned int worldID,
     long    fileSizeD = -1L;
     for (unsigned int j = 0U; j < 8U; j++)
     {
-      landTextures[i][j] = (DDSTexture *) 0;
+      landTextures[i][j] = nullptr;
       if (!((1U << j) & (renderQuality < 1 ?
                          0x85U : (renderQuality < 3 ? 0x87U : 0xBFU))))
       {
@@ -2350,7 +2359,7 @@ bool Renderer::renderObjects(int t)
         }
         if (q.pauseFlag && !q.objectsRendered)
           return false;
-        if (BRANCH_UNLIKELY(q.loadingModelsFlag))
+        if (q.loadingModelsFlag) [[unlikely]]
         {
           if (queueEmptyFlag)
           {
@@ -2385,7 +2394,7 @@ bool Renderer::renderObjects(int t)
     if ((o.flags & 0x12) &&
         (((modelID = o.model.o.b->modelID) ^ modelIDBase) & ~0xFFU))
     {
-      if (BRANCH_UNLIKELY(q.pauseFlag))
+      if (q.pauseFlag) [[unlikely]]
         continue;
       // schedule loading new set of models
       modelIDBase = modelID & ~0xFFU;
@@ -2428,12 +2437,12 @@ bool Renderer::renderObjects(int t)
     objectListPos++;
     // calculate object bounds on screen
     TileMask  tileMask;
-    if (BRANCH_LIKELY(o.flags & 0x02))
+    if (o.flags & 0x02) [[likely]]
     {
       if (nifFiles[modelID & 0xFFU].usesAlphaBlending)
         o.flags = o.flags | 0x08;
       NIFFile::NIFBounds  b(nifFiles[modelID & 0xFFU].objectBounds);
-      if (BRANCH_UNLIKELY(!b))
+      if (!b) [[unlikely]]
         continue;
       NIFFile::NIFVertexTransform vt(o.modelTransform);
       vt *= viewTransform;
