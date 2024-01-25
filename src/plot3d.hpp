@@ -202,7 +202,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // that can be decoded with FloatVector4::uint32ToNormal().
   inline void setBuffers(std::uint32_t *outBufRGBA, float *outBufZ,
                          int imageWidth, int imageHeight,
-                         std::uint32_t *outBufN = (std::uint32_t *) 0)
+                         std::uint32_t *outBufN = nullptr)
   {
     bufZ = outBufZ;
     bufRGBA = outBufRGBA;
