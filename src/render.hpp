@@ -478,7 +478,7 @@ class Renderer : protected Renderer_Base
   void setRenderParameters(int lightColor, int ambientColor, int envColor,
                            float lightLevel, float envLevel, float rgbScale,
                            float reflZScale = 2.0f, int waterUVScale = 2048);
-  void loadTerrain(const char *btdFileName = (char *) 0,
+  void loadTerrain(const char *btdFileName = nullptr,
                    unsigned int worldID = 0U, unsigned int defTxtID = 0U,
                    int mipLevel = 2, int xMin = -32768, int yMin = -32768,
                    int xMax = 32767, int yMax = 32767);
