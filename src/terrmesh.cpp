@@ -19,7 +19,7 @@ TerrainMesh::TerrainMesh()
   : NIFFile::NIFTriShape()
 {
   for (size_t i = 0; i < (sizeof(landTexture) / sizeof(DDSTexture *)); i++)
-    landTexture[i] = (DDSTexture *) 0;
+    landTexture[i] = nullptr;
 }
 
 TerrainMesh::~TerrainMesh()
@@ -40,14 +40,14 @@ void TerrainMesh::createMesh(
 {
   int     w = std::abs(x1 - x0) + 1;
   int     h = std::abs(y1 - y0) + 1;
-  int     txtW = (w + 4) << textureScale;
-  int     txtH = (h + 4) << textureScale;
+  int     txtW = w << textureScale;
+  int     txtH = h << textureScale;
   x0 = (x0 < x1 ? x0 : x1);
   y0 = (y0 < y1 ? y0 : y1);
   x1 = x0 + w - 1;
   y1 = y0 + h - 1;
-  int     txtWP2 = 1 << int(std::bit_width((unsigned int) txtW - 1U));
-  int     txtHP2 = 1 << int(std::bit_width((unsigned int) txtH - 1U));
+  int     txtWP2 = 1 << int(std::bit_width((unsigned int) txtW + (4U - 1U)));
+  int     txtHP2 = 1 << int(std::bit_width((unsigned int) txtH + (4U - 1U)));
   // create vertex and triangle data
   vertexCnt = (unsigned int) w * (unsigned int) h;
   if (vertexCnt > 65536U)
@@ -164,7 +164,7 @@ void TerrainMesh::createMesh(
     if (landTexture[i])
     {
       delete landTexture[i];
-      landTexture[i] = (DDSTexture *) 0;
+      landTexture[i] = nullptr;
     }
   }
   textureBuf.reserve(size_t(txtWP2) * size_t(txtHP2) * 3U + 128U);
@@ -180,6 +180,8 @@ void TerrainMesh::createMesh(
   ddsHdrBuf[20] = 0x00000040;   // DDPF_RGB
   ddsHdrBuf[24] = 0x0000FF00;   // green mask
   ddsHdrBuf[27] = 0x00001000;   // DDSCAPS_TEXTURE
+  int     txtOffsX = (txtWP2 - txtW) >> 1;
+  int     txtOffsY = (txtHP2 - txtH) >> 1;
   for (size_t k = 0; k < (sizeof(landTexture) / sizeof(DDSTexture *)); k++)
   {
     unsigned int  b = 1U << (unsigned char) k;
@@ -202,30 +204,30 @@ void TerrainMesh::createMesh(
     }
     for (int y = 0; y < txtHP2; y++)
     {
-      int     yc =
-          std::min(std::max((y0 << textureScale) + y, 0), ltexHeight - 1);
+      int     yc = (y0 << textureScale) + ((y + txtOffsY) & (txtHP2 - 1));
+      yc = std::min(std::max(yc - txtOffsY, 0), ltexHeight - 1);
       const unsigned char *srcPtr =
           ltexData[k] + (size_t(yc) * size_t(ltexWidth) * pixelBytes);
       if (pixelBytes == 2U)
       {
         for (int x = 0; x < txtWP2; x++, dstPtr = dstPtr + 2)
         {
-          int     xc =
-              std::min(std::max((x0 << textureScale) + x, 0), ltexWidth - 1);
+          int     xc = (x0 << textureScale) + ((x + txtOffsX) & (txtWP2 - 1));
+          xc = std::min(std::max(xc - txtOffsX, 0), ltexWidth - 1);
           size_t  offs = size_t(xc) * 2U;
-          dstPtr[0] = srcPtr[offs];
-          dstPtr[1] = srcPtr[offs + 1];
+          FileBuffer::writeUInt16Fast(
+              dstPtr, FileBuffer::readUInt16Fast(srcPtr + offs));
         }
       }
       else
       {
         for (int x = 0; x < txtWP2; x++, dstPtr = dstPtr + 3)
         {
-          int     xc =
-              std::min(std::max((x0 << textureScale) + x, 0), ltexWidth - 1);
+          int     xc = (x0 << textureScale) + ((x + txtOffsX) & (txtWP2 - 1));
+          xc = std::min(std::max(xc - txtOffsX, 0), ltexWidth - 1);
           size_t  offs = size_t(xc) * 3U;
-          dstPtr[0] = srcPtr[offs];
-          dstPtr[1] = srcPtr[offs + 1];
+          FileBuffer::writeUInt16Fast(
+              dstPtr, FileBuffer::readUInt16Fast(srcPtr + offs));
           dstPtr[2] = srcPtr[offs + 2];
         }
       }
@@ -246,8 +248,8 @@ void TerrainMesh::createMesh(
   int     h = std::abs(y1 - y0) + 5;
   int     txtW = w << textureScale;
   int     txtH = h << textureScale;
-  x0 = (x0 < x1 ? x0 : x1) - 1;
-  y0 = (y0 < y1 ? y0 : y1) - 1;
+  x0 = (x0 < x1 ? x0 : x1) - 2;
+  y0 = (y0 < y1 ? y0 : y1) - 2;
   x1 = x0 + w - 1;
   y1 = y0 + h - 1;
   size_t  totalDataSize = 0;
@@ -266,7 +268,7 @@ void TerrainMesh::createMesh(
     unsigned int  b = 1U << (unsigned char) i;
     if (!(ltexMask & b))
     {
-      ltexData[i] = (unsigned char *) 0;
+      ltexData[i] = nullptr;
       continue;
     }
     ltexData[i] = p;
@@ -303,7 +305,7 @@ void TerrainMesh::createMesh(
   xOffset = xOffset * (4096.0f / float(cellResolution));
   yOffset = yOffset * (4096.0f / float(cellResolution));
   createMesh(hmapBuf.data(), w, h, ltexData, ltexMask, txtW, txtH,
-             textureScale, 1, 1, w - 4, h - 4, cellResolution,
+             textureScale, 2, 2, w - 3, h - 3, cellResolution,
              xOffset, yOffset, landData.getZMin(), landData.getZMax());
 }
 
