@@ -209,8 +209,8 @@ void TerrainMesh::createMesh(
       {
         for (int x = 0; x < txtWP2; x++, dstPtr++)
         {
-          int     xc =
-              std::min(std::max((x0 << textureScale) + x, 0), ltexWidth - 1);
+          int     xc = (x0 << textureScale) + ((x + txtOffsX) & (txtWP2 - 1));
+          xc = std::min(std::max(xc - txtOffsX, 0), ltexWidth - 1);
           *dstPtr = srcPtr[xc];
         }
       }
