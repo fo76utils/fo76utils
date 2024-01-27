@@ -10,15 +10,6 @@
 #include <algorithm>
 #include <ctime>
 
-static const char *materialFlagNames[32] =
-{
-  "tile U", "tile V", "is effect", "decal", "two sided", "tree",
-  "grayscale to alpha", "glow", "no Z buffer write", "falloff enabled",
-  "effect lighting", "ordered with previous", "alpha blending",
-  "has vertex colors", "is water", "hidden",
-  "is marker", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
-};
-
 static void printAuthorName(std::FILE *f,
                             const std::vector< unsigned char >& fileBuf,
                             const char *nifFileName)
@@ -143,9 +134,14 @@ static void printBlockList(std::FILE *f, const NIFFile& nifFile,
           if (!(m & 1U))
             continue;
           if ((m << j) != lspBlock->material.flags)
-            std::fprintf(f, ", %s", materialFlagNames[j]);
+          {
+            std::fprintf(f, ", %s", NIF_View::materialFlagNames[j]);
+          }
           else
-            std::fprintf(f, "    Material flags: %s", materialFlagNames[j]);
+          {
+            std::fprintf(f, "    Material flags: %s",
+                         NIF_View::materialFlagNames[j]);
+          }
         }
         if (lspBlock->material.flags)
           std::fputc('\n', f);
@@ -281,9 +277,9 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
         if (!(m & 1U))
           continue;
         if ((m << j) != ts.m.flags)
-          std::fprintf(f, ", %s", materialFlagNames[j]);
+          std::fprintf(f, ", %s", NIF_View::materialFlagNames[j]);
         else
-          std::fprintf(f, "  Flags: %s", materialFlagNames[j]);
+          std::fprintf(f, "  Flags: %s", NIF_View::materialFlagNames[j]);
       }
       std::fputc('\n', f);
     }

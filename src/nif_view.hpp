@@ -16,6 +16,8 @@
 
 class NIF_View : protected Renderer_Base
 {
+ public:
+  static const char *materialFlagNames[32];
  protected:
   const BA2File&  ba2File;
   ESMFile *esmFile;

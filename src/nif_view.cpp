@@ -40,6 +40,15 @@ static const char *cubeMapPaths[24] =
   "textures/shared/cubemaps/mipblur_defaultoutside_pitt.dds"
 };
 
+const char * NIF_View::materialFlagNames[32] =
+{
+  "tile U", "tile V", "is effect", "decal", "two sided", "tree",
+  "grayscale to alpha", "glow", "no Z buffer write", "falloff enabled",
+  "effect lighting", "ordered with previous", "alpha blending",
+  "has vertex colors", "is water", "hidden",
+  "is marker", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
+};
+
 void NIF_View::threadFunction(NIF_View *p, size_t n)
 {
   p->threadErrMsg[n].clear();
@@ -608,8 +617,20 @@ static void printMaterialInfo(SDLDisplay& display, const BGSMFile& bgsmFile)
 {
   display.consolePrint("    Material version: %2u\n",
                        (unsigned int) bgsmFile.version);
-  display.consolePrint("    Material flags (defined in bgsmfile.hpp): "
-                       "0x%04X\n", (unsigned int) bgsmFile.flags);
+  if (bgsmFile.flags)
+  {
+    display.consolePrint("    Material flags: ");
+    for (unsigned int i = 0U; i < 32U; i++)
+    {
+      if (!(bgsmFile.flags & (1U << i)))
+        continue;
+      if (!(bgsmFile.flags & ((1U << i) - 1U)))
+        display.consolePrint("%s", NIF_View::materialFlagNames[i]);
+      else
+        display.consolePrint(", %s", NIF_View::materialFlagNames[i]);
+    }
+    display.consolePrint("\n");
+  }
   display.consolePrint("    Material alpha flags: 0x%04X\n",
                        (unsigned int) bgsmFile.alphaFlags);
   display.consolePrint("    Material alpha threshold: %3u (%.3f)\n",
