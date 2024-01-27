@@ -51,7 +51,8 @@ class NIF_View : protected Renderer_Base
   float   reflZScale;
   float   waterEnvMapLevel;
   unsigned int  waterFormID;
-  int     defaultEnvMapNum;     // 0 to 7
+  bool    enableHidden;
+  unsigned char defaultEnvMapNum;       // 0 to 7
   int     debugMode;            // 0 to 5
   std::map< unsigned int, BGSMFile >  waterMaterials;
   NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr = (ESMFile *) 0);

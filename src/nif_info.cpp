@@ -16,7 +16,7 @@ static const char *materialFlagNames[32] =
   "grayscale to alpha", "glow", "no Z buffer write", "falloff enabled",
   "effect lighting", "ordered with previous", "alpha blending",
   "has vertex colors", "is water", "hidden",
-  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
+  "is marker", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
 };
 
 static void printAuthorName(std::FILE *f,
@@ -536,7 +536,7 @@ int main(int argc, char **argv)
     // 5: render to DDS file
     // 6: render and view in real time (requires SDL 2)
     int     outFmt = 0;
-    int     renderWidth = 1344;
+    int     renderWidth = 1792;
     int     renderHeight = 896;
     bool    verboseMaterialInfo = false;
     bool    enableVertexColors = false;
@@ -695,7 +695,7 @@ int main(int argc, char **argv)
       if (fileNames.size() > 0)
       {
         std::sort(fileNames.begin(), fileNames.end());
-        SDLDisplay  display(renderWidth, renderHeight, "nif_info", 4U, 48);
+        SDLDisplay  display(renderWidth, renderHeight, "nif_info", 4U, 56);
         display.setDefaultTextColor(0x00, 0xC0);
         renderer->viewModels(display, fileNames);
       }

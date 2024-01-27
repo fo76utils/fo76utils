@@ -55,8 +55,12 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
     for (size_t i = 0; i < p->meshData.size(); i++)
     {
       const NIFFile::NIFTriShape& ts = p->meshData[i];
-      if (ts.m.flags & BGSMFile::Flag_TSHidden)
-        continue;
+      if (!p->enableHidden)
+      {
+        // ignore if hidden or marker
+        if (ts.m.flags & (BGSMFile::Flag_TSHidden | BGSMFile::Flag_TSMarker))
+          continue;
+      }
       NIFFile::NIFBounds  b;
       ts.calculateBounds(b, &mt);
       if (roundFloat(b.xMax()) < 0 ||
@@ -206,6 +210,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
     reflZScale(1.0f),
     waterEnvMapLevel(1.0f),
     waterFormID(0U),
+    enableHidden(false),
     defaultEnvMapNum(0),
     debugMode(0)
 {
@@ -369,9 +374,16 @@ void NIF_View::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
     NIFFile::NIFBounds  b;
     for (size_t i = 0; i < meshData.size(); i++)
     {
-      // ignore if hidden
-      if (!(meshData[i].m.flags & BGSMFile::Flag_TSHidden))
-        meshData[i].calculateBounds(b, &t);
+      if (!enableHidden)
+      {
+        // ignore if hidden or marker
+        if (meshData[i].m.flags & (BGSMFile::Flag_TSHidden
+                                   | BGSMFile::Flag_TSMarker))
+        {
+          continue;
+        }
+      }
+      meshData[i].calculateBounds(b, &t);
     }
     float   xScale = float(imageWidth) * 0.96875f;
     if (b.xMax() > b.xMin())
@@ -900,6 +912,8 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mF1\033[m "
     "to \033[4m\033[38;5;228mF8\033[m              "
     "Select default cube map.                                        \n"
+    "  \033[4m\033[38;5;228mG\033[m                     "
+    "Toggle rendering editor markers and geometry flagged as hidden. \n"
     "  \033[4m\033[38;5;228mA\033[m, "
     "\033[4m\033[38;5;228mD\033[m                  "
     "Rotate model around the Z axis.                                 \n"
@@ -951,7 +965,7 @@ static const char *keyboardUsageString =
     "  \033[4m\033[38;5;228mF11\033[m                   "
     "Save high quality screenshot (double resolution and downsample).\n"
     "  \033[4m\033[38;5;228mP\033[m                     "
-    "Print current settings and file name.                           \n"
+    "Print current settings and file name, and copy the full path.   \n"
     "  \033[4m\033[38;5;228mV\033[m                     "
     "View detailed model information.                                \n"
     "  \033[4m\033[38;5;228mMouse buttons\033[m         "
@@ -1031,9 +1045,9 @@ bool NIF_View::viewModels(SDLDisplay& display,
             display.printString(viewRotationMessages[viewRotation]);
             viewRotation = -1;
           }
-          display.clearSurface(backgroundType == 0 ?
-                               0U : (backgroundType == 1 ?
-                                     0x02666333U : 01333111222U));
+          display.clearSurface((backgroundType == 0 ?
+                                0U : (backgroundType == 1 ?
+                                      0x02666333U : 01333111222U)), true);
           memsetFloat(outBufZ.data(), 16777216.0f, imageDataSize);
           std::uint32_t *outBufRGBA = display.lockDrawSurface();
           renderModel(outBufRGBA, outBufZ.data(), imageWidth, imageHeight);
@@ -1167,11 +1181,17 @@ bool NIF_View::viewModels(SDLDisplay& display,
               case SDLDisplay::SDLKeySymF6:
               case SDLDisplay::SDLKeySymF7:
               case SDLDisplay::SDLKeySymF8:
-                defaultEnvMapNum = d1 - SDLDisplay::SDLKeySymF1;
+                defaultEnvMapNum =
+                    (unsigned char) (d1 - SDLDisplay::SDLKeySymF1);
                 setDefaultTextures();
                 messageBuf += "Default environment map: ";
                 messageBuf += defaultEnvMap;
                 messageBuf += '\n';
+                break;
+              case 'g':
+                enableHidden = !enableHidden;
+                printToString(messageBuf, "Markers and hidden geometry %s\n",
+                              (!enableHidden ? "disabled" : "enabled"));
                 break;
               case SDLDisplay::SDLKeySymF9:
                 eventFlags = eventFlags | 8;    // browse file list
@@ -1326,11 +1346,14 @@ bool NIF_View::viewModels(SDLDisplay& display,
                   messageBuf += "Step size: 11.25\302\260, exp2(1/4)\n";
                 printToString(messageBuf, "Downsampling %s\n",
                               downsampModeNames[display.getDownsampleLevel()]);
-                messageBuf += "Default environment map: ";
-                messageBuf += defaultEnvMap;
-                messageBuf += "\nFile name:\n  \033[44m\033[37m\033[1m";
+                printToString(messageBuf, "Default environment map: %s\n",
+                              defaultEnvMap.c_str());
+                printToString(messageBuf, "Markers and hidden geometry %s\n",
+                              (!enableHidden ? "disabled" : "enabled"));
+                messageBuf += "File name:\n  \033[44m\033[37m\033[1m";
                 messageBuf += nifFileNames[fileNum];
                 messageBuf += "\033[m  \n";
+                (void) SDL_SetClipboardText(nifFileNames[fileNum].c_str());
                 continue;
               case 'v':
                 eventFlags = eventFlags | 4;    // view model info

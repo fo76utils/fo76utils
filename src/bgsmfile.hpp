@@ -69,7 +69,8 @@ struct BGSMFile
     Flag_TSAlphaBlending = 0x1000,
     Flag_TSVertexColors = 0x2000,
     Flag_TSWater = 0x4000,
-    Flag_TSHidden = 0x8000
+    Flag_TSHidden = 0x8000,
+    Flag_TSMarker = 0x00010000
   };
   std::uint32_t flags;
   // 0: material data from NIF file, 2: Fallout 4, 20: Fallout 76

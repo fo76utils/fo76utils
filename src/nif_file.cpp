@@ -186,7 +186,7 @@ void NIFFile::NIFTriShape::setMaterial(
 {
   // keep TriShape flags and NIF file version
   std::uint32_t tsFlagsMask =
-      BGSMFile::Flag_TSHidden | BGSMFile::Flag_TSWater
+      BGSMFile::Flag_TSMarker | BGSMFile::Flag_TSHidden | BGSMFile::Flag_TSWater
       | BGSMFile::Flag_TSVertexColors | BGSMFile::Flag_TSOrdered;
   std::uint32_t flags = m.flags & tsFlagsMask;
   std::uint32_t nifVersion = m.nifVersion;
@@ -947,6 +947,24 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
   t.m.flags = std::uint32_t(((b.flags & 0x01) << 15)
                             | ((b.vertexFmtDesc >> 36) & 0x2000));
   t.nameID = b.nameID;
+  if (b.nameID >= 0 && size_t(b.nameID) < stringTable.size() &&
+      stringTable[b.nameID].length() >= 12)
+  {
+    size_t  n = stringTable[b.nameID].length() - 11;
+    const char  *s = stringTable[b.nameID].c_str();
+    do
+    {
+      // "EditorMa", "rker"
+      if (FileBuffer::readUInt64Fast(s) == 0x614D726F74696445ULL &&
+          FileBuffer::readUInt32Fast(s + 8) == 0x72656B72U)
+      {
+        t.m.flags = t.m.flags | BGSMFile::Flag_TSMarker;
+        break;
+      }
+      s++;
+    }
+    while (--n);
+  }
   for (size_t i = parentBlocks.size(); i-- > size_t(noRootNodeTransform); )
   {
     t.vertexTransform *=
