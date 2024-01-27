@@ -12,7 +12,7 @@ jobs:
     
     steps:
     - name: 'Checkout'
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         submodules: true
@@ -34,7 +34,7 @@ jobs:
         scons -j 8 avx=0 buildpkg=main-noavx ce2utils-main-noavx.7z
     
     - name: 'Upload Artifacts'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: build-win
         path: |
@@ -50,7 +50,7 @@ jobs:
       
     steps:
     - name: 'Checkout'
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         submodules: true
@@ -66,7 +66,7 @@ jobs:
         scons -j 8
       
     - name: 'Upload Artifacts'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: build-linux
         path: '*'
