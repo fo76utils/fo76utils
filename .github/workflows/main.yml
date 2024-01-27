@@ -1,5 +1,9 @@
 name: Build FO76Utils
 
+runs:
+  using: 'node20'
+  main: 'main.js'
+
 on:
   workflow_dispatch:
   pull_request:
