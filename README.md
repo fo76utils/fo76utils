@@ -34,6 +34,7 @@ The environment variable **CE2UTILS\_DATAPATH** can be used to set the default i
 Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on Linux. Run "scons" to compile. mman.c and mman.h are from mman-win32 (https://github.com/alitrack/mman-win32). All source code is under the MIT license.
 
 **Note:** when downloading the source code with 'git clone', the --recurse-submodules or --recursive option needs to be added to also download libfo76utils:
+
     git clone --recurse-submodules https://github.com/fo76utils/ce2utils.git
 
 #### Building on Windows with MSYS2
