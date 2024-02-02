@@ -178,25 +178,7 @@ bool convertHDRToDDS(std::vector< unsigned char >& outBuf, FileBuffer& inBuf,
       (outFmt == 0x0A ? sizeof(std::uint64_t) : sizeof(std::uint32_t));
   outBuf.resize(size_t(cubeWidth * cubeWidth) * 6 * outPixelSize + 148, 0);
   unsigned char *p = outBuf.data();
-  for (size_t i = 6; i < 37; i++)
-    FileBuffer::writeUInt32Fast(p + (i << 2), 0U);
-  FileBuffer::writeUInt32Fast(p, 0x20534444U);          // "DDS "
-  p[4] = 124;                           // size of header
-  FileBuffer::writeUInt32Fast(p + 8, 0x0002100FU);      // flags
-  // height, width, pitch
-  FileBuffer::writeUInt32Fast(p + 12, std::uint32_t(cubeWidth));
-  FileBuffer::writeUInt32Fast(p + 16, std::uint32_t(cubeWidth));
-  FileBuffer::writeUInt32Fast(p + 20, std::uint32_t(cubeWidth * outPixelSize));
-  p[28] = 1;                            // number of mipmaps
-  p[76] = 32;                           // size of pixel format
-  p[80] = 0x04;                         // DDPF_FOURCC
-  FileBuffer::writeUInt32Fast(p + 84, 0x30315844U);     // "DX10"
-  FileBuffer::writeUInt32Fast(p + 108, 0x00401008U);    // dwCaps
-  p[113] = 0xFE;                        // dwCaps2 (DDSCAPS2_CUBEMAP*)
-  p[128] = outFmt;
-  p[132] = 3;                           // DDS_DIMENSION_TEXTURE2D
-  p[136] = 0x04;                        // DDS_RESOURCE_MISC_TEXTURECUBE
-  p[140] = 1;                           // arraySize
+  (void) FileBuffer::writeDDSHeader(p, outFmt, cubeWidth, cubeWidth, 1, true);
   p = p + 148;
   for (int n = 0; n < 6; n++)
   {
