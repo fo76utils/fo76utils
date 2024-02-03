@@ -16,7 +16,7 @@ View Starfield cube maps from archive files. Can also be used to view any textur
 * **Q**, **E**: Roll left or right.
 * **Insert**, **Delete**: Zoom in or out.
 * **Home**: Reset view direction, FOV and brightness.
-* **Page Up**, **Page Down**: Enable or disable conversion to sRGB color space.
+* **Page Up**, **Page Down**: Toggle conversion to sRGB color space.
 * **0** to **9**: Set cube map mip level.
 * **+**, **-**: Increase or decrease mip level by 0.125.
 * **L**, **K**: Increase or decrease cube map brightness.
@@ -27,7 +27,10 @@ View Starfield cube maps from archive files. Can also be used to view any textur
 * **F4**: Enable normal map Z channel fix (texture view only).
 * **F5**: Disable alpha blending.
 * **F6**: Enable alpha blending (texture view only).
+* **F7**: Disable tone mapping.
+* **F8**: Enable tone mapping (cube map view only).
 * **F9**: Select file from list.
+* **F10**: Save decompressed texture in floating point format.
 * **F11**: Save decompressed texture, including all faces of a cube map, but no mipmaps. Alpha channel and normal map Z fix settings are applied to the output file.
 * **F12** or **Print Screen**: Save screenshot.
 * **H**: Show help screen.

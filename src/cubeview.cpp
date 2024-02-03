@@ -2,7 +2,7 @@
 #include "common.hpp"
 #include "nif_file.hpp"
 #include "ba2file.hpp"
-#include "ddstxt.hpp"
+#include "ddstxt16.hpp"
 #include "sdlvideo.hpp"
 
 #include <ctime>
@@ -10,8 +10,9 @@
 
 static void renderCubeMapThread(
     std::uint32_t *outBuf, int w, int h, int y0, int y1,
-    const DDSTexture *texture, const NIFFile::NIFVertexTransform *vt,
-    float viewScale, float mipLevel, bool isSRGB, float rgbScale)
+    const DDSTexture16 *texture, const NIFFile::NIFVertexTransform *vt,
+    float viewScale, float mipLevel, bool enableGamma, float rgbScale,
+    bool enableToneMapping)
 {
   FloatVector4  tmpX(vt->rotateXX, vt->rotateYX, vt->rotateZX, vt->rotateXY);
   FloatVector4  tmpY(vt->rotateXY, vt->rotateYY, vt->rotateZY, vt->rotateXZ);
@@ -28,12 +29,12 @@ static void renderCubeMapThread(
       v += (tmpX * (float(xc) - (float(w) * 0.5f)));
       FloatVector4  c(texture->cubeMap(v[0], v[1], v[2], mipLevel));
       c *= rgbScale;
-      if (isSRGB)
-      {
-        c *= (1.0f / 255.0f);
-        c.srgbCompress();
-      }
-      outBuf[xc] = c.convertToRGBA32(false, false);
+      if (enableToneMapping)
+        c = c / (c + 1.0f);
+      c.maxValues(FloatVector4(0.0f)).minValues(FloatVector4(1.0f));
+      if (!enableGamma)
+        c = DDSTexture16::srgbCompress(c);
+      outBuf[xc] = (c * 255.0f).convertToRGBA32(false, true);
     }
     outBuf = outBuf + w;
   }
@@ -41,7 +42,8 @@ static void renderCubeMapThread(
 
 static void renderTextureThread(
     std::uint32_t *outBuf, int w, int h, int y0, int y1,
-    const DDSTexture *texture, bool isSRGB, bool fixNormalMap, bool enableAlpha)
+    const DDSTexture16 *texture, bool enableGamma, bool fixNormalMap,
+    bool enableAlpha)
 {
   float   txtW = float(texture->getWidth());
   float   txtH = float(texture->getHeight());
@@ -53,6 +55,12 @@ static void renderTextureThread(
   float   mipLevel = FloatVector4::log2Fast(std::max(scale, 1.0f));
   mipLevel = std::min(std::max(mipLevel, 0.0f), 15.0f);
   outBuf = outBuf + (size_t(y0) * size_t(w));
+  bool    txtSigned = (texture->getDXGIFormat() == 0x51 ||      // BC4_SNORM
+                       texture->getDXGIFormat() == 0x54 ||      // BC5_SNORM
+                       texture->getDXGIFormat() == 0x60);       // BC6H_SF16
+  bool    txtSRGB = texture->isSRGBTexture();
+  if (enableGamma)
+    txtSRGB = !txtSRGB;
   for (int yc = y0; yc < y1; yc++)
   {
     for (int xc = 0; xc < w; xc++)
@@ -62,23 +70,25 @@ static void renderTextureThread(
       if (u > -0.000001f && u < 1.000001f && v > -0.000001f && v < 1.000001f)
       {
         FloatVector4  c(texture->getPixelTC(u, v, mipLevel));
+        if (txtSigned)
+          c = c * 0.5f + 0.5f;
+        c.maxValues(FloatVector4(0.0f)).minValues(FloatVector4(1.0f));
         float   a = c[3];
         if (fixNormalMap)
         {
-          FloatVector4  tmp(c);
-          tmp -= 127.5f;
-          c[2] = float(std::sqrt(std::max(16256.25f - tmp.dotProduct2(tmp),
-                                          0.0f))) + 127.5f;
+          FloatVector4  tmp(c - 0.5f);
+          c[2] = float(std::sqrt(std::max(0.25f - tmp.dotProduct2(tmp), 0.0f)))
+                 + 0.5f;
         }
-        else if (isSRGB)
+        else if (txtSRGB)
         {
-          c *= (1.0f / 255.0f);
-          c.srgbCompress();
+          c = DDSTexture16::srgbCompress(c);
         }
+        c *= 255.0f;
         if (enableAlpha)
         {
           FloatVector4  c0(FloatVector4::convertRGBA32(outBuf[xc]));
-          c = c0 + ((c - c0) * (a * (1.0f / 255.0f)));
+          c = c0 + ((c - c0) * a);
         }
         outBuf[xc] = c.convertToRGBA32(false, true);
       }
@@ -88,8 +98,9 @@ static void renderTextureThread(
 }
 
 static void saveScreenshot(SDLDisplay& display, const std::string& ddsFileName,
-                           const DDSTexture *texture = (DDSTexture *) 0,
-                           bool enableAlpha = true, bool fixNormalMap = false)
+                           const DDSTexture16 *texture = nullptr,
+                           bool enableAlpha = true, bool fixNormalMap = false,
+                           bool floatFormat = false)
 {
   try
   {
@@ -102,7 +113,7 @@ static void saveScreenshot(SDLDisplay& display, const std::string& ddsFileName,
       fileName.assign(ddsFileName, n1, n2 - n1);
     else
       fileName = "cubeview";
-    std::time_t t = std::time((std::time_t *) 0);
+    std::time_t t = std::time(nullptr);
     {
       unsigned int  s = (unsigned int) (t % (std::time_t) (24 * 60 * 60));
       unsigned int  m = s / 60U;
@@ -116,29 +127,55 @@ static void saveScreenshot(SDLDisplay& display, const std::string& ddsFileName,
     }
     if (texture)
     {
+      unsigned char ddsHeader[148];
       int     w = texture->getWidth();
       int     h = texture->getHeight();
-      DDSOutputFile f(fileName.c_str(), w, h, DDSInputFile::pixelFormatRGBA32);
+      unsigned char dxgiFmt = 0x0A;     // R16G16B16A16_FLOAT
+      if (!floatFormat)                 // R8G8B8A8_UNORM
+        dxgiFmt = 0x1C + (unsigned char) texture->isSRGBTexture();
+      (void) FileBuffer::writeDDSHeader(ddsHeader, dxgiFmt,
+                                        w, h, 1, texture->getIsCubeMap());
+      bool    txtSigned = (texture->getDXGIFormat() == 0x51 ||  // BC4_SNORM
+                           texture->getDXGIFormat() == 0x54 ||  // BC5_SNORM
+                           texture->getDXGIFormat() == 0x60);   // BC6H_SF16
+      OutputFile  f(fileName.c_str(), 16384);
+      f.writeData(ddsHeader, 148);
       for (size_t i = 0; i < texture->getTextureCount(); i++)
       {
         for (int y = 0; y < h; y++)
         {
           for (int x = 0; x < w; x++)
           {
-            std::uint32_t c = texture->getPixelN(x, y, 0, int(i));
+            FloatVector4  c(FloatVector4::convertFloat16(
+                                texture->getPixelN(x, y, 0, int(i))));
             if (fixNormalMap)
             {
-              FloatVector4  tmp(c);
-              tmp -= 127.5f;
-              tmp[2] = float(std::sqrt(std::max(16256.25f
-                                                - tmp.dotProduct2(tmp), 0.0f)));
-              tmp += 127.5f;
-              c = std::uint32_t(tmp);
+              if (txtSigned)
+                c = c * 0.5f + 0.5f;
+              FloatVector4  tmp(c - 0.5f);
+              c[2] = float(std::sqrt(std::max(0.25f - tmp.dotProduct2(tmp),
+                                              0.0f))) + 0.5f;
             }
-            f.writeByte((unsigned char) ((c >> 16) & 0xFFU));
-            f.writeByte((unsigned char) ((c >> 8) & 0xFFU));
-            f.writeByte((unsigned char) (c & 0xFFU));
-            f.writeByte((unsigned char) (!enableAlpha ? 0xFFU : (c >> 24)));
+            else if (dxgiFmt != 0x0A)
+            {
+              if (dxgiFmt == 0x1D)      // DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
+                c = DDSTexture16::srgbCompress(c);
+              else if (txtSigned)
+                c = c * 0.5f + 0.5f;
+            }
+            if (!enableAlpha)
+              c[3] = 1.0f;
+            unsigned char tmp[8];
+            if (dxgiFmt == 0x0A)
+            {
+              FileBuffer::writeUInt64Fast(tmp, c.convertToFloat16());
+              f.writeData(tmp, 8);
+            }
+            else
+            {
+              FileBuffer::writeUInt32Fast(tmp, std::uint32_t(c * 255.0f));
+              f.writeData(tmp, 4);
+            }
           }
         }
       }
@@ -208,10 +245,16 @@ static const char *keyboardUsageString =
     "Disable alpha blending.                                         \n"
     "  \033[4m\033[38;5;228mF6\033[m                    "
     "Enable alpha blending (texture view only).                      \n"
+    "  \033[4m\033[38;5;228mF7\033[m                    "
+    "Disable tone mapping.                                           \n"
+    "  \033[4m\033[38;5;228mF8\033[m                    "
+    "Enable tone mapping (cube map view only).                       \n"
     "  \033[4m\033[38;5;228mF9\033[m                    "
     "Select file from list.                                          \n"
+    "  \033[4m\033[38;5;228mF10\033[m                   "
+    "Save decompressed texture (R16G16B16A16_FLOAT format).          \n"
     "  \033[4m\033[38;5;228mF11\033[m                   "
-    "Save decompressed texture.                                      \n"
+    "Save decompressed texture (R8G8B8A8 format).                    \n"
     "  \033[4m\033[38;5;228mF12\033[m "
     "or \033[4m\033[38;5;228mPrint Screen\033[m   "
     "Save screenshot.                                                \n"
@@ -241,10 +284,12 @@ static void renderCubeMap(const BA2File& ba2File,
   bool    enableGamma = false;
   bool    fixNormalMap = false;
   bool    enableAlpha = true;
-  unsigned char screenshotFlag = 0;     // 1: save screenshot, 2: save texture
+  bool    enableToneMapping = false;
+  // 1: save screenshot, 2: save texture, 3: save texture in float format
+  unsigned char screenshotFlag = 0;
   float   cubeMapRGBScale = 1.0f;
   std::vector< SDLDisplay::SDLEvent > eventBuf;
-  DDSTexture  *texture = (DDSTexture *) 0;
+  DDSTexture16  *texture = nullptr;
   if (texturePaths.size() > 10)
   {
     int     n = display.browseFile(texturePaths, "Select texture file",
@@ -261,7 +306,7 @@ static void renderCubeMap(const BA2File& ba2File,
       try
       {
         ba2File.extractFile(fileBuf, texturePaths[fileNum]);
-        texture = new DDSTexture(fileBuf.data(), fileBuf.size());
+        texture = new DDSTexture16(fileBuf.data(), fileBuf.size());
         display.clearTextBuffer();
         cubeViewMode = texture->getIsCubeMap();
         display.consolePrint("%s (%dx%d, %s)\n",
@@ -315,12 +360,13 @@ static void renderCubeMap(const BA2File& ba2File,
                 new std::thread(renderCubeMapThread, dstPtr,
                                 imageWidth, imageHeight, y0, y1, texture,
                                 &viewTransformInv, viewScale_f, mipLevel,
-                                enableGamma, cubeMapRGBScale);
+                                enableGamma, cubeMapRGBScale,
+                                enableToneMapping);
           }
         }
         catch (...)
         {
-          threads[i] = (std::thread *) 0;
+          threads[i] = nullptr;
           if (!cubeViewMode)
           {
             renderTextureThread(
@@ -332,7 +378,7 @@ static void renderCubeMap(const BA2File& ba2File,
             renderCubeMapThread(
                 dstPtr, imageWidth, imageHeight, y0, y1, texture,
                 &viewTransformInv, viewScale_f, mipLevel, enableGamma,
-                cubeMapRGBScale);
+                cubeMapRGBScale, enableToneMapping);
           }
         }
         y0 = y1;
@@ -349,8 +395,8 @@ static void renderCubeMap(const BA2File& ba2File,
       if (screenshotFlag)
       {
         saveScreenshot(display, texturePaths[fileNum],
-                       (screenshotFlag == 1 ? (DDSTexture *) 0 : texture),
-                       enableAlpha, fixNormalMap);
+                       (screenshotFlag != 1 ? texture : nullptr),
+                       enableAlpha, fixNormalMap, (screenshotFlag == 3));
       }
     }
     screenshotFlag = 0;
@@ -402,10 +448,10 @@ static void renderCubeMap(const BA2File& ba2File,
               case 'l':
                 {
                   int     tmp =
-                      roundFloat(float(std::log2(cubeMapRGBScale)) * 4.0f);
+                      roundFloat(float(std::log2(cubeMapRGBScale)) * 2.0f);
                   tmp += (d1 == 'k' ? -1 : 1);
-                  tmp = std::min< int >(std::max< int >(tmp, -4), 8);
-                  cubeMapRGBScale = float(std::exp2(float(tmp) * 0.25f));
+                  tmp = std::min< int >(std::max< int >(tmp, -32), 16);
+                  cubeMapRGBScale = float(std::exp2(float(tmp) * 0.5f));
                 }
                 break;
               case 'a':
@@ -449,7 +495,7 @@ static void renderCubeMap(const BA2File& ba2File,
                   if (texture)
                   {
                     delete texture;
-                    texture = (DDSTexture *) 0;
+                    texture = nullptr;
                   }
                   fileNum++;
                   if (fileNum >= texturePaths.size())
@@ -463,7 +509,7 @@ static void renderCubeMap(const BA2File& ba2File,
                   if (texture)
                   {
                     delete texture;
-                    texture = (DDSTexture *) 0;
+                    texture = nullptr;
                   }
                   if (fileNum < 1)
                     fileNum = texturePaths.size();
@@ -525,6 +571,24 @@ static void renderCubeMap(const BA2File& ba2File,
                   display.consolePrint("Texture alpha blending enabled\n");
                 }
                 break;
+              case SDLDisplay::SDLKeySymF7:
+                if (enableToneMapping)
+                {
+                  enableToneMapping = false;
+                  if (texture)
+                    redrawFlag = true;
+                  display.consolePrint("Tone mapping disabled\n");
+                }
+                break;
+              case SDLDisplay::SDLKeySymF8:
+                if (!enableToneMapping)
+                {
+                  enableToneMapping = true;
+                  if (texture)
+                    redrawFlag = true;
+                  display.consolePrint("Tone mapping enabled\n");
+                }
+                break;
               case SDLDisplay::SDLKeySymF9:
                 {
                   int     n = display.browseFile(
@@ -538,13 +602,20 @@ static void renderCubeMap(const BA2File& ba2File,
                     if (texture)
                     {
                       delete texture;
-                      texture = (DDSTexture *) 0;
+                      texture = nullptr;
                     }
                   }
                   else if (n < -1)
                   {
                     quitFlag = true;
                   }
+                }
+                break;
+              case SDLDisplay::SDLKeySymF10:
+                if (texture)
+                {
+                  screenshotFlag = 3;
+                  redrawFlag = true;
                 }
                 break;
               case SDLDisplay::SDLKeySymF11:
