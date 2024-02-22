@@ -293,6 +293,17 @@ static void loadMaterialPaths(
   }
 }
 
+static bool archiveFilterFunction(void *p, const std::string& s)
+{
+#ifdef HAVE_SDL2
+  if (p && (s.ends_with(".dds") || s.ends_with(".mesh") || s.ends_with(".nif")))
+    return true;
+#else
+  (void) p;
+#endif
+  return s.ends_with(".cdb");
+}
+
 int main(int argc, char **argv)
 {
   const char  *outFileName = nullptr;
@@ -436,12 +447,8 @@ int main(int argc, char **argv)
           args.emplace_back(&c, 1);
       }
     }
-    const char  *fileNameFilter = ".cdb";
-#ifdef HAVE_SDL2
-    if (dumpMode < 0)
-      fileNameFilter = ".cdb\t.dds\t.mesh\t.nif";
-#endif
-    BA2File ba2File(args[0].c_str(), fileNameFilter);
+    BA2File ba2File(args[0].c_str(), &archiveFilterFunction,
+                    (dumpMode < 0 ? args.data() : nullptr));
     std::vector< std::vector< unsigned char > > cdbBufs;
     if (!(dumpMode < 0 && !extractMatList))
       loadCDBFiles(cdbBufs, ba2File, cdbFileName);

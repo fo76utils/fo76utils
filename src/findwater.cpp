@@ -339,6 +339,12 @@ void findWater(ESMFile& esmFile, unsigned int formID)
   while (formID);
 }
 
+static bool archiveFilterFunction(void *p, const std::string& s)
+{
+  (void) p;
+  return (s.find("water") != std::string::npos);
+}
+
 int main(int argc, char **argv)
 {
   if (argc < 3)
@@ -385,11 +391,7 @@ int main(int argc, char **argv)
       }
     }
     if (meshArchivePaths.size() > 0)
-    {
-      std::vector< std::string >  includePatterns;
-      includePatterns.push_back(std::string("water"));
-      meshArchiveFile = new BA2File(meshArchivePaths, &includePatterns);
-    }
+      meshArchiveFile = new BA2File(meshArchivePaths, &archiveFilterFunction);
     unsigned int  hdrBuf[11];
     hdrBuf[0] = 0x36374F46;             // "FO76"
     hdrBuf[10] = 0;

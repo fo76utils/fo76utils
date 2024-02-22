@@ -226,6 +226,15 @@ static const char *usageStrings[] =
   (char *) 0
 };
 
+static bool archiveFilterFunction(void *p, const std::string& s)
+{
+  (void) p;
+  if (!(s.ends_with(".dds") || s.ends_with(".cdb") || s.ends_with(".btd")))
+    return false;
+  return (s.find("/lod/") == std::string::npos &&
+          s.find("/actors/") == std::string::npos);
+}
+
 int main(int argc, char **argv)
 {
   std::vector< LandscapeTextureSet >  landTextures;
@@ -385,7 +394,7 @@ int main(int argc, char **argv)
 
     if (archivePath)
     {
-      ba2File = new BA2File(archivePath, ".dds\t.cdb\t.btd", "/lod/\t/actors/");
+      ba2File = new BA2File(archivePath, &archiveFilterFunction);
       materials = new CE2MaterialDB(*ba2File, cdbFileName);
     }
     int     width = 0;

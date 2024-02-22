@@ -224,6 +224,21 @@ void ESMView::formatJSONData(std::string& s) const
   }
 }
 
+static bool archiveFilterFunction(void *p, const std::string& s)
+{
+  (void) p;
+#ifdef HAVE_SDL2
+  if (s.ends_with(".btd") || s.ends_with(".bto") || s.ends_with(".btr") ||
+      s.ends_with(".cdb") || s.ends_with(".dds") || s.ends_with(".mat") ||
+      s.ends_with(".mesh") || s.ends_with(".nif"))
+  {
+    return true;
+  }
+#endif
+  return (s.ends_with(".dlstrings") || s.ends_with(".ilstrings") ||
+          s.ends_with(".strings"));
+}
+
 ESMView::ESMView(
     const char *fileName, const char *archivePath, int w, int h, int l,
     int downsampleLevel, unsigned char bgColor, unsigned char fgColor)
@@ -250,13 +265,7 @@ ESMView::ESMView(
 #endif
   verboseMode = true;
   if (archivePath)
-  {
-    ba2File = new BA2File(archivePath,
-#ifdef HAVE_SDL2
-                          ".btd\t.bto\t.btr\t.cdb\t.dds\t.mat\t.mesh\t.nif\t"
-#endif
-                          ".dlstrings\t.ilstrings\t.strings");
-  }
+    ba2File = new BA2File(archivePath, &archiveFilterFunction);
 }
 
 ESMView::~ESMView()

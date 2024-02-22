@@ -168,6 +168,12 @@ static void loadPalette(unsigned long long *buf, const char *fileName)
   }
 }
 
+static bool archiveFilterFunction(void *p, const std::string& s)
+{
+  (void) p;
+  return s.ends_with(".btd");
+}
+
 int main(int argc, char **argv)
 {
   if (argc < 5 || argc > 7)
@@ -187,7 +193,7 @@ int main(int argc, char **argv)
   }
   try
   {
-    BA2File ba2File(argv[4], ".btd");
+    BA2File ba2File(argv[4], &archiveFilterFunction);
     std::vector< unsigned char >  btdBuf;
     const unsigned char *btdFileData = (unsigned char *) 0;
     size_t  btdFileSize =
