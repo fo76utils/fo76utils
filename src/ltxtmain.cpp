@@ -203,6 +203,15 @@ static const char *usageStrings[] =
   (char *) 0
 };
 
+static bool archiveFilterFunction(void *p, const std::string& s)
+{
+  (void) p;
+  if (!(s.ends_with(".dds") || s.ends_with(".bgsm")))
+    return false;
+  return (s.find("/lod/") == std::string::npos &&
+          s.find("/actors/") == std::string::npos);
+}
+
 int main(int argc, char **argv)
 {
   std::vector< LandscapeTextureSet >  landTextures;
@@ -390,7 +399,7 @@ int main(int argc, char **argv)
     threads.resize(size_t(threadCnt), (RenderThread *) 0);
 
     if (archivePath)
-      ba2File = new BA2File(archivePath, ".dds\t.bgsm", "/lod/\t/actors/");
+      ba2File = new BA2File(archivePath, &archiveFilterFunction);
     int     width = 0;
     int     height = 0;
     if (ssaaLevel > 0)

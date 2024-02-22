@@ -7,6 +7,15 @@
 static unsigned int worldFormID = 0x0000003CU;
 static unsigned int defaultTexture = 0U;
 
+static bool archiveFilterFunction(void *p, const std::string& s)
+{
+  (void) p;
+  if (!(s.ends_with(".dds") || s.ends_with(".bgsm")))
+    return false;
+  return (s.find("/lod/") == std::string::npos &&
+          s.find("/actors/") == std::string::npos);
+}
+
 int main(int argc, char **argv)
 {
   BA2File *ba2File = (BA2File *) 0;
@@ -90,7 +99,7 @@ int main(int argc, char **argv)
                                       0L, 0x0FFFFFFFL);
     }
     if (ba2Path && *ba2Path)
-      ba2File = new BA2File(ba2Path, ".dds\t.bgsm", "/lod/\t/actors/");
+      ba2File = new BA2File(ba2Path, &archiveFilterFunction);
     ESMFile   esmFile(args[0]);
     LandscapeData landData(&esmFile, (char *) 0, ba2File,
                            formatMask, worldFormID, defaultTexture, 2,

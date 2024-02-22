@@ -613,6 +613,20 @@ static void renderCubeMap(const BA2File& ba2File,
     delete texture;
 }
 
+static bool archiveFilterFunction(void *p, const std::string& s)
+{
+  char    *includePattern = reinterpret_cast< char * >(p);
+  if (!(includePattern && *includePattern))
+    return true;
+  if (includePattern[0] == '.' && includePattern[1] != '\0' &&
+      includePattern[2] != '\0' && includePattern[3] != '\0' &&
+      (includePattern[4] == '\0' || includePattern[5] == '\0'))
+  {
+    return s.ends_with(includePattern);
+  }
+  return (s.find(includePattern) != std::string::npos);
+}
+
 int main(int argc, char **argv)
 {
   try
@@ -632,7 +646,7 @@ int main(int argc, char **argv)
     float   mipLevel = 0.0f;
     if (argc > 5)
       mipLevel = float(parseFloat(argv[5], "invalid mip level", 0.0, 15.0));
-    BA2File ba2File(argv[3], argv[4]);
+    BA2File ba2File(argv[3], &archiveFilterFunction, argv[4]);
     std::vector< std::string >  fileNames;
     ba2File.getFileList(fileNames);
     if (fileNames.size() < 1)

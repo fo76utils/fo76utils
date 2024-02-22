@@ -129,6 +129,20 @@ void ESMView::printID(unsigned int id)
   consolePrint("%s", tmpBuf);
 }
 
+static bool archiveFilterFunction(void *p, const std::string& s)
+{
+  (void) p;
+#ifdef HAVE_SDL2
+  if (s.ends_with(".bgem") || s.ends_with(".bgsm") || s.ends_with(".bto") ||
+      s.ends_with(".btr") || s.ends_with(".dds") || s.ends_with(".nif"))
+  {
+    return true;
+  }
+#endif
+  return (s.ends_with(".dlstrings") || s.ends_with(".ilstrings") ||
+          s.ends_with(".strings"));
+}
+
 ESMView::ESMView(
     const char *fileName, const char *archivePath, int w, int h, int l,
     int downsampLevel, unsigned char bgColor, unsigned char fgColor)
@@ -155,13 +169,7 @@ ESMView::ESMView(
 #endif
   verboseMode = true;
   if (archivePath)
-  {
-    ba2File = new BA2File(archivePath,
-#ifdef HAVE_SDL2
-                          ".bgem\t.bgsm\t.bto\t.btr\t.dds\t.nif\t"
-#endif
-                          ".dlstrings\t.ilstrings\t.strings");
-  }
+    ba2File = new BA2File(archivePath, &archiveFilterFunction);
 }
 
 ESMView::~ESMView()
