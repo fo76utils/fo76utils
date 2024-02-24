@@ -98,7 +98,7 @@ static void loadCDBFiles(std::vector< std::vector< unsigned char > >& bufs,
   }
 }
 
-#include "mat_dirs.cpp"
+#include "../libfo76utils/src/mat_dirs.cpp"
 
 struct MatFileObject
 {
@@ -117,27 +117,8 @@ static void loadMaterialPaths(
     matPaths.insert(args[i]);
   args.resize(1);
   std::map< std::uint32_t, std::string >  dirNameMap;
+  getStarfieldMaterialDirMap(dirNameMap);
   std::string tmp;
-  {
-    std::vector< unsigned char >  tmpBuf(matDirNamesSize + 1, 0);
-    (void) ZLibDecompressor::decompressData(tmpBuf.data(), matDirNamesSize,
-                                            matDirNamesZLib,
-                                            sizeof(matDirNamesZLib));
-    for (size_t i = 0; i < tmpBuf.size(); i++)
-    {
-      tmp = reinterpret_cast< char * >(tmpBuf.data() + i);
-      std::uint32_t h = 0U;
-      for ( ; tmpBuf[i]; i++)
-      {
-        unsigned char c = tmpBuf[i];
-        if (c == '/')
-          c = '\\';
-        hashFunctionCRC32(h, c);
-      }
-      tmp += '/';
-      dirNameMap[h] = tmp;
-    }
-  }
   for (size_t i = 0; i < cdbBufs.size(); i++)
   {
     BSReflStream  cdbFile(cdbBufs[i].data(), cdbBufs[i].size());
