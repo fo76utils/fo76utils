@@ -152,13 +152,13 @@ void NIFFile::NIFVertexTransform::transformXYZ(
 }
 
 NIFFile::NIFTriShape::NIFTriShape()
-  : m((CE2Material *) 0),
-    ts((NIFBlkBSTriShape *) 0),
+  : m(nullptr),
+    ts(nullptr),
     flags(0U),
     vertexCnt(0),
     triangleCnt(0),
-    vertexData((NIFVertex *) 0),
-    triangleData((NIFTriangle *) 0)
+    vertexData(nullptr),
+    triangleData(nullptr)
 {
 }
 
@@ -429,7 +429,7 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
   : NIFBlock(NIFFile::BlkTypeBSLightingShaderProperty),
     shaderType(0U),
     controller(-1),
-    material((CE2Material *) 0)
+    material(nullptr)
 {
   if (f.bsVersion < 0x90)
     return;
@@ -536,7 +536,7 @@ void NIFFile::loadNIFFile(const CE2MaterialDB *materials, int l)
   if (bsVersion >= 0x84)
     (void) readUInt32();
   readString(headerStrings[1], 1);              // process script name
-  if (BRANCH_LIKELY(bsVersion >= 0xAC))
+  if (bsVersion >= 0xAC) [[likely]]
   {
     headerStrings[2] = "0x0000000000000000";
     size_t  n = readUInt8();
@@ -602,7 +602,7 @@ void NIFFile::loadNIFFile(const CE2MaterialDB *materials, int l)
 
   blocks = new NIFBlock*[blockCnt];
   for (size_t i = 0; i < blockCnt; i++)
-    blocks[i] = (NIFBlock *) 0;
+    blocks[i] = nullptr;
   const unsigned char *savedFileBuf = fileBuf;
   size_t  savedFileBufSize = fileBufSize;
   try
@@ -686,7 +686,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       getMesh(v, n, parentBlocks, switchActive, noRootNodeTransform);
     }
     parentBlocks.pop_back();
-    if (BRANCH_UNLIKELY(blockType == BlkTypeBSOrderedNode))
+    if (blockType == BlkTypeBSOrderedNode) [[unlikely]]
     {
       for (size_t i = firstTriShape + 1; i < v.size(); i++)
         v[i].flags = v[i].flags | NIFTriShape::Flag_TSOrdered;
@@ -762,8 +762,8 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
 NIFFile::NIFFile(const char *fileName, const BA2File& archiveFiles,
                  const CE2MaterialDB *materials, int l)
   : FileBuffer(fileName),
-    blockOffsets((size_t *) 0),
-    blocks((NIFBlock **) 0),
+    blockOffsets(nullptr),
+    blocks(nullptr),
     ba2File(archiveFiles)
 {
   try
@@ -784,8 +784,8 @@ NIFFile::NIFFile(const unsigned char *buf, size_t bufSize,
                  const BA2File& archiveFiles,
                  const CE2MaterialDB *materials, int l)
   : FileBuffer(buf, bufSize),
-    blockOffsets((size_t *) 0),
-    blocks((NIFBlock **) 0),
+    blockOffsets(nullptr),
+    blocks(nullptr),
     ba2File(archiveFiles)
 {
   try
@@ -805,8 +805,8 @@ NIFFile::NIFFile(const unsigned char *buf, size_t bufSize,
 NIFFile::NIFFile(FileBuffer& buf, const BA2File& archiveFiles,
                  const CE2MaterialDB *materials, int l)
   : FileBuffer(buf.data(), buf.size()),
-    blockOffsets((size_t *) 0),
-    blocks((NIFBlock **) 0),
+    blockOffsets(nullptr),
+    blocks(nullptr),
     ba2File(archiveFiles)
 {
   try

@@ -128,7 +128,7 @@ class NIFFile : public FileBuffer
     }
     inline bool checkBounds(FloatVector4 v) const
     {
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
       XMM_Int32 tmp1, tmp2;
       bool    z;
       __asm__ ("vcmpnleps %2, %1, %0"
@@ -147,7 +147,7 @@ class NIFFile : public FileBuffer
     }
     inline operator bool() const
     {
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
       XMM_Int32   tmp1 = (boundsMax.v > boundsMin.v);
       XMM_UInt64  tmp2;
       __asm__ ("vpshufd $0xaa, %1, %0" : "=x" (tmp2) : "x" (tmp1));
@@ -386,7 +386,7 @@ inline const std::string& NIFFile::getExportScriptName() const
 inline const std::string * NIFFile::getString(int n) const
 {
   if ((unsigned int) n >= (unsigned int) stringTable.size())
-    return (std::string *) 0;
+    return nullptr;
   return (stringTable.data() + n);
 }
 
@@ -431,21 +431,21 @@ inline const std::vector< unsigned int > *
     NIFFile::getNodeChildren(size_t n) const
 {
   if (!blocks[n]->isNode())
-    return (std::vector< unsigned int > *) 0;
+    return nullptr;
   return &(((const NIFBlkNiNode *) blocks[n])->children);
 }
 
 inline const NIFFile::NIFBlkNiNode * NIFFile::getNode(size_t n) const
 {
   if (!blocks[n]->isNode())
-    return (NIFBlkNiNode *) 0;
+    return nullptr;
   return ((const NIFBlkNiNode *) blocks[n]);
 }
 
 inline const NIFFile::NIFBlkBSTriShape * NIFFile::getTriShape(size_t n) const
 {
   if (!blocks[n]->isTriShape())
-    return (NIFBlkBSTriShape *) 0;
+    return nullptr;
   return ((const NIFBlkBSTriShape *) blocks[n]);
 }
 
@@ -453,7 +453,7 @@ inline const NIFFile::NIFBlkBSLightingShaderProperty *
     NIFFile::getLightingShaderProperty(size_t n) const
 {
   if (getBaseBlockType(n) != BlkTypeBSLightingShaderProperty)
-    return (NIFBlkBSLightingShaderProperty *) 0;
+    return nullptr;
   return ((const NIFBlkBSLightingShaderProperty *) blocks[n]);
 }
 
@@ -461,7 +461,7 @@ inline const NIFFile::NIFBlkNiAlphaProperty *
     NIFFile::getAlphaProperty(size_t n) const
 {
   if (getBaseBlockType(n) != BlkTypeNiAlphaProperty)
-    return (NIFBlkNiAlphaProperty *) 0;
+    return nullptr;
   return ((const NIFBlkNiAlphaProperty *) blocks[n]);
 }
 

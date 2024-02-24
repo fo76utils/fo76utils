@@ -83,7 +83,7 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
       }
       sortBuf.emplace(sortBuf.end(), i, b.zMin(),
                       bool(ts.flags & CE2Material::Flag_AlphaBlending));
-      if (BRANCH_UNLIKELY(ts.flags & NIFFile::NIFTriShape::Flag_TSOrdered))
+      if (ts.flags & NIFFile::NIFTriShape::Flag_TSOrdered) [[unlikely]]
         TriShapeSortObject::orderedNodeFix(sortBuf, p->meshData);
     }
     if (sortBuf.size() < 1)
@@ -95,7 +95,7 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
       {
         size_t  j = size_t(sortBuf[i]);
         ts = p->meshData[j];
-        if (BRANCH_UNLIKELY(p->debugMode == 1))
+        if (p->debugMode == 1) [[unlikely]]
         {
           std::uint32_t c = std::uint32_t(j + 1);
           c = ((c & 1U) << 23) | ((c & 2U) << 14) | ((c & 4U) << 5)
@@ -108,7 +108,7 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
       }
       const DDSTexture  *textures[10];
       unsigned int  textureMask = 0U;
-      if (BRANCH_UNLIKELY(ts.flags & CE2Material::Flag_IsWater))
+      if (ts.flags & CE2Material::Flag_IsWater) [[unlikely]]
       {
         if (bool(textures[1] = p->loadTexture(p->waterTexture, n)))
           textureMask |= 0x0002U;
@@ -189,7 +189,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
     lightX(0.0f),
     lightY(0.0f),
     lightZ(1.0f),
-    nifFile((NIFFile *) 0),
+    nifFile(nullptr),
     defaultTexture(0xFFFFFFFFU),
     materialConverter(nullptr),
     modelRotationX(0.0f),
@@ -216,13 +216,12 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
 {
   threadCnt = int(std::thread::hardware_concurrency());
   threadCnt = (threadCnt > 1 ? (threadCnt < 16 ? threadCnt : 16) : 1);
-  renderers.resize(size_t(threadCnt), (Plot3D_TriShape *) 0);
+  renderers.resize(size_t(threadCnt), nullptr);
   threadErrMsg.resize(size_t(threadCnt));
   viewOffsetY.resize(size_t(threadCnt + 1), 0);
   threadFileBuffers.resize(size_t(threadCnt));
   setDefaultTextures();
-  getWaterMaterial(waterMaterials, *esmFile, (ESMFile::ESMRecord *) 0,
-                   defaultWaterColor, true);
+  getWaterMaterial(waterMaterials, *esmFile, nullptr, defaultWaterColor, true);
   if (!(materialDBPath && *materialDBPath))
     materialDBPath = BSReflStream::getDefaultMaterialDBPath();
   {
@@ -243,10 +242,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
   try
   {
     for (size_t i = 0; i < renderers.size(); i++)
-    {
-      renderers[i] =
-          new Plot3D_TriShape((std::uint32_t *) 0, (float *) 0, 0, 0, 4U);
-    }
+      renderers[i] = new Plot3D_TriShape(nullptr, nullptr, 0, 0, 4U);
   }
   catch (...)
   {
@@ -255,7 +251,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr,
       if (renderers[i])
       {
         delete renderers[i];
-        renderers[i] = (Plot3D_TriShape *) 0;
+        renderers[i] = nullptr;
       }
     }
     if (materialConverter)
@@ -269,7 +265,7 @@ NIF_View::~NIF_View()
   if (nifFile)
   {
     delete nifFile;
-    nifFile = (NIFFile *) 0;
+    nifFile = nullptr;
   }
   textureSet.clear();
   for (size_t i = 0; i < renderers.size(); i++)
@@ -288,7 +284,7 @@ void NIF_View::loadModel(const std::string& fileName, int l)
   if (nifFile)
   {
     delete nifFile;
-    nifFile = (NIFFile *) 0;
+    nifFile = nullptr;
   }
   if (fileName.empty())
     return;
@@ -323,7 +319,7 @@ void NIF_View::loadModel(const std::string& fileName, int l)
   {
     meshData.clear();
     delete nifFile;
-    nifFile = (NIFFile *) 0;
+    nifFile = nullptr;
     throw;
   }
 }
@@ -424,7 +420,7 @@ void NIF_View::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
                           * 0.5f + viewOffsY;
     viewTransform.offsZ = viewOffsZ + 1.0f - (b.zMin() * scale);
   }
-  std::vector< std::thread * >  threads(renderers.size(), (std::thread *) 0);
+  std::vector< std::thread * >  threads(renderers.size(), nullptr);
   try
   {
     for (size_t i = 0; i < threads.size(); i++)
@@ -435,7 +431,7 @@ void NIF_View::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
       {
         threads[i]->join();
         delete threads[i];
-        threads[i] = (std::thread *) 0;
+        threads[i] = nullptr;
       }
       if (!threadErrMsg[i].empty())
         throw FO76UtilsError(1, threadErrMsg[i].c_str());
@@ -556,7 +552,7 @@ static void printViewScale(SDLDisplay& display, float viewScale,
 }
 
 static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName,
-                           NIF_View *renderer = (NIF_View *) 0)
+                           NIF_View *renderer = nullptr)
 {
   size_t  n1 = nifFileName.rfind('/');
   n1 = (n1 != std::string::npos ? (n1 + 1) : 0);
@@ -567,7 +563,7 @@ static void saveScreenshot(SDLDisplay& display, const std::string& nifFileName,
     fileName.assign(nifFileName, n1, n2 - n1);
   else
     fileName = "nif_info";
-  std::time_t t = std::time((std::time_t *) 0);
+  std::time_t t = std::time(nullptr);
   {
     unsigned int  s = (unsigned int) (t % (std::time_t) (24 * 60 * 60));
     unsigned int  m = s / 60U;

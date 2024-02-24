@@ -92,7 +92,7 @@ void readStarfieldMeshFile(std::vector< NIFFile::NIFVertex >& vertexData,
   {
     const unsigned char *p = buf.data() + buf.getPosition();
     buf.setPosition(buf.getPosition() + 6);
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
     const std::uint64_t&  tmp = *(reinterpret_cast< const std::uint64_t * >(p));
 #else
     std::uint64_t tmp = FileBuffer::readUInt64Fast(p);

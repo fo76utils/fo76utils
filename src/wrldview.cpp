@@ -103,7 +103,7 @@ static const char *usageStrings[] =
   "    -watercolor UINT32  water color (A7R8G8B8), 0 disables water",
   "    -wrefl FLOAT        water environment map scale",
   "    -wscale INT         water texture tile size",
-  (char *) 0
+  nullptr
 };
 
 static const char *keyboardUsageString =
@@ -283,7 +283,7 @@ struct WorldSpaceViewer
 WorldSpaceViewer::WorldSpaceViewer(
     int w, int h, const char *esmFiles, const char *archivePath,
     const char *materialDBPath, int argc, const char * const *argv)
-  : renderer((Renderer *) 0),
+  : renderer(nullptr),
     threadCnt(0),
     modelBatchCnt(16),
     textureCacheSize(1024U),
@@ -851,7 +851,7 @@ void WorldSpaceViewer::printError(const char *fmt, ...)
 
 void WorldSpaceViewer::updateDisplay()
 {
-  if (BRANCH_UNLIKELY(redrawWorldFlag))
+  if (redrawWorldFlag) [[unlikely]]
   {
     redrawWorldFlag = false;
     renderPass = 0;
@@ -923,7 +923,7 @@ void WorldSpaceViewer::updateDisplay()
         display.consolePrint("Rendering water and transparent objects\n");
       renderer->initRenderPass(renderPass, formID);
     }
-    else if (BRANCH_UNLIKELY(!markerDefsFileName.empty()))
+    else if (!markerDefsFileName.empty()) [[unlikely]]
     {
       display.consolePrint("Finding markers\n");
       try
@@ -1061,7 +1061,7 @@ void WorldSpaceViewer::printReferenceInfo(unsigned int refrFormID)
   {
     edid.clear();
     std::string modelPath;
-    const ESMFile::ESMRecord  *r2 = (ESMFile::ESMRecord *) 0;
+    const ESMFile::ESMRecord  *r2 = nullptr;
     if (refrName)
     {
       r2 = esmFile.findRecord(refrName);
@@ -1131,8 +1131,10 @@ void WorldSpaceViewer::pollEvents()
   float   xStep = 0.0f;
   float   yStep = 0.0f;
   float   zStep = 0.0f;
-  for (size_t i = 0; i < eventBuf.size() && BRANCH_LIKELY(!quitFlag); i++)
+  for (size_t i = 0; i < eventBuf.size(); i++)
   {
+    if (quitFlag) [[unlikely]]
+      break;
     if (eventBuf[i].type() == SDLDisplay::SDLEventWindow)
     {
       if (eventBuf[i].data1() == 0)
@@ -1485,7 +1487,7 @@ void WorldSpaceViewer::saveScreenshot(bool disableDownsampling)
   try
   {
     std::string fileName("wrldview");
-    std::time_t t = std::time((std::time_t *) 0);
+    std::time_t t = std::time(nullptr);
     {
       unsigned int  s = (unsigned int) (t % std::time_t(24 * 60 * 60));
       unsigned int  m = s / 60U;
@@ -1545,7 +1547,7 @@ void WorldSpaceViewer::saveScreenshot(bool disableDownsampling)
 
 int main(int argc, char **argv)
 {
-  WorldSpaceViewer  *wrldView = (WorldSpaceViewer *) 0;
+  WorldSpaceViewer  *wrldView = nullptr;
   try
   {
     std::vector< const char * > args;

@@ -49,7 +49,7 @@ void Renderer::ModelData::clear()
 
 inline Renderer::TileMask::TileMask()
 {
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
   const YMM_UInt64  tmp = { 0U, 0U, 0U, 0U };
   m = tmp;
 #else
@@ -65,7 +65,7 @@ inline Renderer::TileMask::TileMask(unsigned int x0, unsigned int y0,
 {
   unsigned int  xMask = (2U << x1) - (1U << x0);
   unsigned int  yMask = (2U << y1) - (1U << y0);
-#if ENABLE_X86_64_AVX2
+#if ENABLE_X86_64_SIMD >= 4
   const YMM_UInt16  maskTbl =
   {
     0x0001, 0x0002, 0x0004, 0x0008, 0x0010, 0x0020, 0x0040, 0x0080,
@@ -147,7 +147,7 @@ Renderer::TileMask::TileMask(
 
 inline bool Renderer::TileMask::overlapsWith(const TileMask& r) const
 {
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
   bool    nz;
   __asm__ ("vptest %t2, %t1" : "=@ccnz" (nz) : "x" (m), "xm" (r.m));
   return nz;
@@ -159,7 +159,7 @@ inline bool Renderer::TileMask::overlapsWith(const TileMask& r) const
 
 inline Renderer::TileMask& Renderer::TileMask::operator|=(const TileMask& r)
 {
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
   m = m | r.m;
 #else
   m[0] = m[0] | r.m[0];
@@ -172,7 +172,7 @@ inline Renderer::TileMask& Renderer::TileMask::operator|=(const TileMask& r)
 
 inline Renderer::TileMask::operator bool() const
 {
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
   bool    nz;
   __asm__ ("vptest %t1, %t1" : "=@ccnz" (nz) : "x" (m));
   return nz;
@@ -183,7 +183,7 @@ inline Renderer::TileMask::operator bool() const
 
 inline bool Renderer::TileMask::operator==(const TileMask& r) const
 {
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
   YMM_UInt64  tmp = m ^ r.m;
   bool    z;
   __asm__ ("vptest %t1, %t1" : "=@ccz" (z) : "x" (tmp));
