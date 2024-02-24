@@ -223,7 +223,7 @@ void BTDFile::loadBlocks(TileData& tileData, size_t x, size_t y,
                          size_t threadIndex, size_t threadCnt,
                          unsigned int blockMask)
 {
-  if (BRANCH_UNLIKELY(!vertexColorLOD4))
+  if (!vertexColorLOD4) [[unlikely]]
   {
     loadBlocks_SF(tileData, x, y, threadIndex, threadCnt, blockMask);
     return;
@@ -312,7 +312,7 @@ const BTDFile::TileData& BTDFile::loadTile(int cellX, int cellY,
     tileData.gcvrData.resize(0x00100000);
   if (blockMask & 0x02A0)
     tileData.vclrData.resize(0x00010000);
-  if (BRANCH_UNLIKELY(!vertexColorLOD4))
+  if (!vertexColorLOD4) [[unlikely]]
   {
     if (blockMask & 0x02A0)
       std::memset(tileData.vclrData.data(), 0xFF, sizeof(std::uint16_t) << 16);
@@ -352,7 +352,7 @@ const BTDFile::TileData& BTDFile::loadTile(int cellX, int cellY,
     threadCnt = 1;
   else if (threadCnt > 16)
     threadCnt = 16;
-  std::vector< std::thread * >  threads(threadCnt, (std::thread *) 0);
+  std::vector< std::thread * >  threads(threadCnt, nullptr);
   std::vector< std::string >    errMsgs(threadCnt);
   for (size_t i = 0; i < threadCnt; i++)
   {
@@ -403,7 +403,7 @@ BTDFile::BTDFile(const char *fileName)
   cellMaxX = readInt32();
   cellMaxY = readInt32();
   bool    isStarfieldBTD = !(cellMinX | cellMinY | cellMaxX | cellMaxY);
-  if (BRANCH_UNLIKELY(isStarfieldBTD))
+  if (isStarfieldBTD) [[unlikely]]
   {
     worldHeightMin *= 8.0f;             // FIXME: Z scale may be incorrect
     worldHeightMax *= 8.0f;
@@ -422,7 +422,7 @@ BTDFile::BTDFile(const char *fileName)
   filePos = filePos + ((nCellsY * nCellsX) << 3);
   ltexMapOffs = filePos;
   filePos = filePos + ((nCellsY * nCellsX) << 5);
-  if (BRANCH_UNLIKELY(isStarfieldBTD))
+  if (isStarfieldBTD) [[unlikely]]
   {
     gcvrCnt = 0;
     gcvrOffs = 0;
@@ -441,7 +441,7 @@ BTDFile::BTDFile(const char *fileName)
   filePos = filePos + ((nCellsY * nCellsX) << 7);
   landTexturesLOD4 = filePos;
   filePos = filePos + ((nCellsY * nCellsX) << 7);
-  if (BRANCH_UNLIKELY(isStarfieldBTD))
+  if (isStarfieldBTD) [[unlikely]]
   {
     vertexColorLOD4 = 0;
     zlibBlocksTableOffs = filePos;

@@ -154,8 +154,8 @@ NIFFile::NIFTriShape::NIFTriShape()
   : nameID(-1),
     vertexCnt(0),
     triangleCnt(0),
-    vertexData((NIFVertex *) 0),
-    triangleData((NIFTriangle *) 0)
+    vertexData(nullptr),
+    triangleData(nullptr)
 {
 }
 
@@ -193,7 +193,7 @@ void NIFFile::NIFTriShape::setMaterial(
   m = material;
   m.flags = (m.flags & ~tsFlagsMask) | flags;
   m.nifVersion = (nifVersion ? nifVersion : m.nifVersion);
-  if (BRANCH_UNLIKELY(alphaProperties))
+  if (alphaProperties) [[unlikely]]
   {
     m.alphaFlags = std::uint16_t(alphaProperties & 0xFFFFU);
     m.alphaThreshold = (unsigned char) ((alphaProperties >> 16) & 0xFFU);
@@ -735,7 +735,7 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
   if (bsVersion >= 0x84)
     (void) readUInt32();
   readString(headerStrings[1], 1);              // process script name
-  if (BRANCH_UNLIKELY(bsVersion == 0xAC))
+  if (bsVersion == 0xAC) [[unlikely]]
   {
     headerStrings[2] = "0x0000000000000000";
     size_t  n = readUInt8();
@@ -798,7 +798,7 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
       errorMessage("invalid block size in NIF file");
   }
 
-  blocks.resize(blockCnt, (NIFBlock *) 0);
+  blocks.resize(blockCnt, nullptr);
   const unsigned char *savedFileBuf = fileBuf;
   size_t  savedFileBufSize = fileBufSize;
   try
@@ -926,7 +926,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
       getMesh(v, n, parentBlocks, switchActive, noRootNodeTransform);
     }
     parentBlocks.pop_back();
-    if (BRANCH_UNLIKELY(blockType == BlkTypeBSOrderedNode))
+    if (blockType == BlkTypeBSOrderedNode) [[unlikely]]
     {
       for (size_t i = firstTriShape + 1; i < v.size(); i++)
         v[i].m.flags = v[i].m.flags | BGSMFile::Flag_TSOrdered;

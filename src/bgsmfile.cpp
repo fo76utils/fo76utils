@@ -13,7 +13,7 @@ BGSMFile::TextureSet::TextureSetData::TextureSetData(const TextureSetData& r)
 void BGSMFile::TextureSet::copyTextureSetData()
 {
   TextureSetData  *tmp = new TextureSetData(*dataPtr);
-  if (BRANCH_UNLIKELY(dataPtr->refCnt-- < 1))
+  if (dataPtr->refCnt-- < 1) [[unlikely]]
     delete dataPtr;
   dataPtr = tmp;
 }
@@ -50,7 +50,7 @@ void BGSMFile::TextureSet::setMaterialPath(const std::string& s)
 
 void BGSMFile::TextureSet::setTexturePath(size_t n, const char *s)
 {
-  if (BRANCH_UNLIKELY(n >= texturePathCnt))
+  if (n >= texturePathCnt) [[unlikely]]
     return;
   if (!s)
     s = "";
@@ -370,7 +370,7 @@ void BGSMFile::loadBGSMFile(const BA2File& ba2File, const std::string& fileName)
 void BGSMFile::updateAlphaProperties()
 {
   alphaThresholdFloat = 0.0f;
-  if (BRANCH_UNLIKELY(flags & Flag_TSWater))
+  if (flags & Flag_TSWater) [[unlikely]]
   {
     flags = flags | Flag_TSAlphaBlending;
     return;
@@ -378,15 +378,15 @@ void BGSMFile::updateAlphaProperties()
   bool    isAlphaBlending = bool(alphaFlags & 0x0001);
   bool    isAlphaTesting = !(~alphaFlags & 0x1200);
   flags = flags & ~(std::uint32_t(Flag_TSAlphaBlending));
-  if (BRANCH_LIKELY(!(isAlphaBlending || isAlphaTesting)))
+  if (!(isAlphaBlending || isAlphaTesting)) [[likely]]
     return;
-  if (BRANCH_UNLIKELY(!(alpha >= (1.0f / 512.0f))))
+  if (!(alpha >= (1.0f / 512.0f))) [[unlikely]]
   {
     alphaThresholdFloat = 256.0f;
   }
-  else if (BRANCH_LIKELY(isAlphaTesting))
+  else if (isAlphaTesting) [[likely]]
   {
-    if (BRANCH_UNLIKELY(alphaFlags & 0x0400))
+    if (alphaFlags & 0x0400) [[unlikely]]
     {
       if (alphaFlags & 0x0800)
         alphaThresholdFloat = 256.0f;

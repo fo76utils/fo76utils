@@ -132,7 +132,7 @@ class Renderer : protected Renderer_Base
   };
   struct TileMask
   {
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
     YMM_UInt64    m;
 #else
     std::uint64_t m[4];

@@ -49,8 +49,8 @@ struct Renderer_Base
     TextureCache(size_t n = 0x40000000)
       : textureDataSize(0),
         textureCacheSize(n),
-        firstTexture((CachedTexture *) 0),
-        lastTexture((CachedTexture *) 0)
+        firstTexture(nullptr),
+        lastTexture(nullptr)
     {
     }
     ~TextureCache();
@@ -59,7 +59,7 @@ struct Renderer_Base
     const DDSTexture *loadTexture(const BA2File& ba2File,
                                   const std::string& fileName,
                                   std::vector< unsigned char >& fileBuf,
-                                  int mipLevel, bool *waitFlag = (bool *) 0);
+                                  int mipLevel, bool *waitFlag = nullptr);
     void shrinkTextureCache();
     void clear();
   };
@@ -93,7 +93,7 @@ struct Renderer_Base
       zTmp = std::uint32_t(roundFloat(zMin * 64.0f) + 0x40000000);
 #endif
       // sort transparent shapes back to front, and after all other shapes
-      if (BRANCH_UNLIKELY(isAlphaBlending))
+      if (isAlphaBlending) [[unlikely]]
         zTmp = ~zTmp;
       n = std::uint64_t(i) | (std::uint64_t(zTmp) << 32);
     }

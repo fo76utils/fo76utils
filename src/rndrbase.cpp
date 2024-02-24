@@ -21,11 +21,11 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
     std::vector< unsigned char >& fileBuf, int mipLevel, bool *waitFlag)
 {
   if (fileName.empty())
-    return (DDSTexture *) 0;
+    return nullptr;
   CachedTextureKey  k;
   k.fd = ba2File.findFile(fileName);
   if (!k.fd)
-    return (DDSTexture *) 0;
+    return nullptr;
   k.mipLevel = mipLevel;
   textureCacheMutex.lock();
   std::map< CachedTextureKey, CachedTexture >::iterator i =
@@ -42,34 +42,34 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
       cachedTexture->nxt->prv = cachedTexture->prv;
       lastTexture->nxt = cachedTexture;
       cachedTexture->prv = lastTexture;
-      cachedTexture->nxt = (CachedTexture *) 0;
+      cachedTexture->nxt = nullptr;
       lastTexture = cachedTexture;
     }
     textureCacheMutex.unlock();
     if (!waitFlag)
       cachedTexture->textureLoadMutex->lock();
     else if ((*waitFlag = !cachedTexture->textureLoadMutex->try_lock()) == true)
-      return (DDSTexture *) 0;
+      return nullptr;
     const DDSTexture  *t = cachedTexture->texture;
     cachedTexture->textureLoadMutex->unlock();
     return t;
   }
 
-  CachedTexture *cachedTexture = (CachedTexture *) 0;
+  CachedTexture *cachedTexture = nullptr;
   std::mutex  *textureLoadMutex = new std::mutex();
   try
   {
     {
       CachedTexture tmp;
-      tmp.texture = (DDSTexture *) 0;
+      tmp.texture = nullptr;
       tmp.i = textureCache.end();
-      tmp.prv = (CachedTexture *) 0;
-      tmp.nxt = (CachedTexture *) 0;
+      tmp.prv = nullptr;
+      tmp.nxt = nullptr;
       tmp.textureLoadMutex = textureLoadMutex;
       i = textureCache.insert(std::pair< CachedTextureKey, CachedTexture >(
                                   k, tmp)).first;
     }
-    textureLoadMutex = (std::mutex *) 0;
+    textureLoadMutex = nullptr;
     cachedTexture = &(i->second);
     cachedTexture->i = i;
     if (lastTexture)
@@ -77,7 +77,7 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
     else
       firstTexture = cachedTexture;
     cachedTexture->prv = lastTexture;
-    cachedTexture->nxt = (CachedTexture *) 0;
+    cachedTexture->nxt = nullptr;
     lastTexture = cachedTexture;
   }
   catch (...)
@@ -87,7 +87,7 @@ const DDSTexture * Renderer_Base::TextureCache::loadTexture(
     throw;
   }
 
-  DDSTexture  *t = (DDSTexture *) 0;
+  DDSTexture  *t = nullptr;
   cachedTexture->textureLoadMutex->lock();
   textureCacheMutex.unlock();
   try
@@ -137,9 +137,9 @@ void Renderer_Base::TextureCache::shrinkTextureCache()
     delete firstTexture->textureLoadMutex;
     std::map< CachedTextureKey, CachedTexture >::iterator i = firstTexture->i;
     if (firstTexture->nxt)
-      firstTexture->nxt->prv = (CachedTexture *) 0;
+      firstTexture->nxt->prv = nullptr;
     else
-      lastTexture = (CachedTexture *) 0;
+      lastTexture = nullptr;
     firstTexture = firstTexture->nxt;
     textureCache.erase(i);
     textureDataSize = textureDataSize - dataSize;
@@ -157,8 +157,8 @@ void Renderer_Base::TextureCache::clear()
     delete p->textureLoadMutex;
   }
   textureDataSize = 0;
-  firstTexture = (CachedTexture *) 0;
-  lastTexture = (CachedTexture *) 0;
+  firstTexture = nullptr;
+  lastTexture = nullptr;
   textureCache.clear();
 }
 
@@ -271,7 +271,7 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
 void Renderer_Base::MaterialSwaps::materialSwap(
     Plot3D_TriShape& t, unsigned int formID) const
 {
-  if (BRANCH_UNLIKELY(!t.haveMaterialPath()))
+  if (!t.haveMaterialPath()) [[unlikely]]
     return;
   std::map< unsigned int,
             std::map< std::string, BGSMFile > >::const_iterator i =

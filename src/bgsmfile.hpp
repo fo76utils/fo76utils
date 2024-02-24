@@ -177,7 +177,7 @@ inline void BGSMFile::TextureSet::copyTexturePaths()
 }
 
 inline BGSMFile::TextureSet::TextureSet()
-  : dataPtr((TextureSetData *) 0)
+  : dataPtr(nullptr)
 {
 }
 

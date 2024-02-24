@@ -142,7 +142,7 @@ class NIFFile : public FileBuffer
     }
     inline bool checkBounds(FloatVector4 v) const
     {
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
       XMM_Int32 tmp1, tmp2;
       bool    z;
       __asm__ ("vcmpnleps %2, %1, %0"
@@ -161,7 +161,7 @@ class NIFFile : public FileBuffer
     }
     inline operator bool() const
     {
-#if ENABLE_X86_64_AVX
+#if ENABLE_X86_64_SIMD >= 2
       XMM_Int32   tmp1 = (boundsMax.v > boundsMin.v);
       XMM_UInt64  tmp2;
       __asm__ ("vpshufd $0xaa, %1, %0" : "=x" (tmp2) : "x" (tmp1));
@@ -285,7 +285,7 @@ class NIFFile : public FileBuffer
     {
       if (bool(material.texturePaths))
         return &(material.texturePaths.materialPath());
-      return (std::string *) 0;
+      return nullptr;
     }
   };
   struct NIFBlkBSShaderTextureSet : public NIFBlock
@@ -336,10 +336,10 @@ class NIFFile : public FileBuffer
                std::vector< unsigned int >& parentBlocks,
                unsigned int switchActive, bool noRootNodeTransform) const;
  public:
-  NIFFile(const char *fileName, const BA2File *ba2File = (BA2File *) 0);
+  NIFFile(const char *fileName, const BA2File *ba2File = nullptr);
   NIFFile(const unsigned char *buf, size_t bufSize,
-          const BA2File *ba2File = (BA2File *) 0);
-  NIFFile(FileBuffer& buf, const BA2File *ba2File = (BA2File *) 0);
+          const BA2File *ba2File = nullptr);
+  NIFFile(FileBuffer& buf, const BA2File *ba2File = nullptr);
   virtual ~NIFFile();
   inline unsigned int getVersion() const;
   inline const std::string& getAuthorName() const;
@@ -409,7 +409,7 @@ inline const std::string& NIFFile::getExportScriptName() const
 inline const std::string * NIFFile::getString(int n) const
 {
   if ((unsigned int) n >= (unsigned int) stringTable.size())
-    return (std::string *) 0;
+    return nullptr;
   return (stringTable.data() + n);
 }
 
@@ -454,21 +454,21 @@ inline const std::vector< unsigned int > *
     NIFFile::getNodeChildren(size_t n) const
 {
   if (!blocks[n]->isNode())
-    return (std::vector< unsigned int > *) 0;
+    return nullptr;
   return &(((const NIFBlkNiNode *) blocks[n])->children);
 }
 
 inline const NIFFile::NIFBlkNiNode * NIFFile::getNode(size_t n) const
 {
   if (!blocks[n]->isNode())
-    return (NIFBlkNiNode *) 0;
+    return nullptr;
   return ((const NIFBlkNiNode *) blocks[n]);
 }
 
 inline const NIFFile::NIFBlkBSTriShape * NIFFile::getTriShape(size_t n) const
 {
   if (!blocks[n]->isTriShape())
-    return (NIFBlkBSTriShape *) 0;
+    return nullptr;
   return ((const NIFBlkBSTriShape *) blocks[n]);
 }
 
@@ -476,7 +476,7 @@ inline const NIFFile::NIFBlkBSLightingShaderProperty *
     NIFFile::getLightingShaderProperty(size_t n) const
 {
   if (getBaseBlockType(n) != BlkTypeBSLightingShaderProperty)
-    return (NIFBlkBSLightingShaderProperty *) 0;
+    return nullptr;
   return ((const NIFBlkBSLightingShaderProperty *) blocks[n]);
 }
 
@@ -484,7 +484,7 @@ inline const NIFFile::NIFBlkBSShaderTextureSet *
     NIFFile::getShaderTextureSet(size_t n) const
 {
   if (getBaseBlockType(n) != BlkTypeBSShaderTextureSet)
-    return (NIFBlkBSShaderTextureSet *) 0;
+    return nullptr;
   return ((const NIFBlkBSShaderTextureSet *) blocks[n]);
 }
 
@@ -492,7 +492,7 @@ inline const NIFFile::NIFBlkNiAlphaProperty *
     NIFFile::getAlphaProperty(size_t n) const
 {
   if (getBaseBlockType(n) != BlkTypeNiAlphaProperty)
-    return (NIFBlkNiAlphaProperty *) 0;
+    return nullptr;
   return ((const NIFBlkNiAlphaProperty *) blocks[n]);
 }
 
