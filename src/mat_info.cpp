@@ -80,35 +80,63 @@ static void writeFileWithPath(const char *fileName, const std::string& buf)
   delete f;
 }
 
-static void loadCDBFiles(std::vector< std::vector< unsigned char > >& bufs,
-                         const BA2File& ba2File, const char *fileName)
+static int dumpCDBFiles(
+    const char *outFileName, const BA2File& ba2File, const char *fileName)
 {
   if (!fileName || fileName[0] == '\0')
     fileName = BSReflStream::getDefaultMaterialDBPath();
+  std::vector< unsigned char >  cdbBuf;
+  std::string stringBuf;
+  std::string errMsgBuf;
   while (true)
   {
     size_t  len = 0;
     while (fileName[len] != ',' && fileName[len] != '\0')
       len++;
-    bufs.emplace_back();
-    ba2File.extractFile(bufs.back(), std::string(fileName, len));
+    ba2File.extractFile(cdbBuf, std::string(fileName, len));
+    BSReflDump  cdbFile(cdbBuf.data(), cdbBuf.size());
+    try
+    {
+      cdbFile.readAllChunks(stringBuf, 0, true);
+    }
+    catch (std::exception& e)
+    {
+      errMsgBuf = e.what();
+      break;
+    }
     if (!fileName[len])
       break;
     fileName = fileName + (len + 1);
   }
+  if (!outFileName)
+  {
+    std::fwrite(stringBuf.c_str(), sizeof(char), stringBuf.length(), stdout);
+  }
+  else
+  {
+    std::FILE *outFile = std::fopen(outFileName, "w");
+    if (!outFile)
+      errorMessage("error opening output file");
+    if (std::fwrite(stringBuf.c_str(), sizeof(char), stringBuf.length(),
+                    outFile) != stringBuf.length())
+    {
+      std::fclose(outFile);
+      errorMessage("error writing output file");
+    }
+    std::fclose(outFile);
+  }
+  if (!errMsgBuf.empty())
+  {
+    std::fprintf(stderr, "mat_info: %s\n", errMsgBuf.c_str());
+    return 1;
+  }
+  return 0;
 }
 
 #include "../libfo76utils/src/mat_dirs.cpp"
 
-struct MatFileObject
-{
-  const unsigned char *objectInfo;
-  std::string baseName;
-};
-
 static void loadMaterialPaths(
-    std::vector< std::string >& args,
-    const std::vector< std::vector< unsigned char > >& cdbBufs,
+    std::vector< std::string >& args, const CE2MaterialDB& materials,
     const std::vector< std::string >& includePatterns,
     const std::vector< std::string >& excludePatterns)
 {
@@ -119,126 +147,46 @@ static void loadMaterialPaths(
   std::map< std::uint32_t, std::string >  dirNameMap;
   getStarfieldMaterialDirMap(dirNameMap);
   std::string tmp;
-  for (size_t i = 0; i < cdbBufs.size(); i++)
+  std::vector< const BSMaterialsCDB::MaterialObject * > matObjects;
+  materials.getMaterials(matObjects);
+  for (size_t i = 0; i < matObjects.size(); i++)
   {
-    BSReflStream  cdbFile(cdbBufs[i].data(), cdbBufs[i].size());
-    std::map< std::uint32_t, MatFileObject >  matFileObjects;
-    const unsigned char *componentInfoPtr = nullptr;
-    size_t  componentCnt = 0;
-    size_t  componentID = 0;
-    BSReflStream::Chunk chunkBuf;
-    unsigned int  chunkType;
-    while ((chunkType = cdbFile.readChunk(chunkBuf))
-           != BSReflStream::ChunkType_NONE)
-    {
-      size_t  className = BSReflStream::String_Unknown;
-      if (chunkBuf.size() >= 4) [[likely]]
-        className = cdbFile.findString(chunkBuf.readUInt32Fast());
-      if ((chunkType == BSReflStream::ChunkType_DIFF ||
-           chunkType == BSReflStream::ChunkType_OBJT) &&
-          componentID < componentCnt) [[likely]]
+    const BSMaterialsCDB::MaterialObject  *o = matObjects[i];
+    if (!o->parent && o->persistentID.ext == 0x0074616D &&      // "mat\0"
+        o->baseObject && o->baseObject->persistentID.file == 0x7EA3660C)
+    {                                                   // "layeredmaterials"
+      std::map< std::uint32_t, std::string >::const_iterator  j =
+          dirNameMap.find(o->persistentID.dir);
+      if (j == dirNameMap.end())
+        continue;
+      const char  *baseName = nullptr;
+      const BSMaterialsCDB::MaterialComponent *k = o->components;
+      while (k)
       {
-        if (className == BSReflStream::String_BSComponentDB_CTName)
+        if (k->className == BSReflStream::String_BSComponentDB_CTName &&
+            k->o && k->o->type == BSReflStream::String_BSComponentDB_CTName &&
+            k->o->childCnt >= 1 && k->o->children()[0] &&
+            k->o->children()[0]->type == BSReflStream::String_String)
         {
-          std::uint32_t objectID =
-              FileBuffer::readUInt32Fast(componentInfoPtr + (componentID << 3));
-          std::map< std::uint32_t, MatFileObject >::iterator  j =
-              matFileObjects.find(objectID);
-          if (j != matFileObjects.end())
-          {
-            bool    isDiff = (chunkType == BSReflStream::ChunkType_DIFF);
-            for (unsigned int n = 0U - 1U;
-                 chunkBuf.getFieldNumber(n, 0U, isDiff); )
-            {
-              if (!chunkBuf.readString(tmp))
-                break;
-              if (!tmp.empty())
-              {
-                for (size_t k = 0; k < tmp.length(); k++)
-                  tmp[k] = convertNameCharacter((unsigned char) tmp[k]);
-                j->second.baseName = tmp;
-              }
-            }
-          }
+          baseName = k->o->children()[0]->stringValue();
+          break;
         }
-        componentID++;
-        continue;
       }
-      if (chunkType != BSReflStream::ChunkType_LIST)
+      if (!(baseName && *baseName))
         continue;
-      unsigned int  n = 0U;
-      if (chunkBuf.size() >= 8)
-        n = chunkBuf.readUInt32Fast();
-      switch (className)
-      {
-        case BSReflStream::String_BSComponentDB2_DBFileIndex_ObjectInfo:
-          while (n--)
-          {
-            if ((chunkBuf.getPosition() + 21ULL) > chunkBuf.size())
-              break;
-            const unsigned char *p = chunkBuf.data() + chunkBuf.getPosition();
-            chunkBuf.setPosition(chunkBuf.getPosition() + 21);
-            if (FileBuffer::readUInt32Fast(p + 4) == 0x0074616DU && p[20])
-            {
-              // PersistentID.File = "mat\0" and HasData = true
-              matFileObjects[FileBuffer::readUInt32Fast(p + 12)].objectInfo = p;
-            }
-          }
-          break;
-        case BSReflStream::String_BSComponentDB2_DBFileIndex_ComponentInfo:
-          componentInfoPtr = chunkBuf.data() + chunkBuf.getPosition();
-          componentCnt =
-              std::min(size_t(n),
-                       (chunkBuf.size() - chunkBuf.getPosition()) >> 3);
-          componentID = 0;
-          break;
-        case BSReflStream::String_BSComponentDB2_DBFileIndex_EdgeInfo:
-          while (n--)
-          {
-            if ((chunkBuf.getPosition() + 12ULL) > chunkBuf.size())
-              break;
-            std::uint32_t objectID = chunkBuf.readUInt32Fast();
-            chunkBuf.setPosition(chunkBuf.getPosition() + 8);
-            std::map< std::uint32_t, MatFileObject >::iterator  j =
-                matFileObjects.find(objectID);
-            if (j != matFileObjects.end())
-              matFileObjects.erase(j);  // remove LOD materials
-          }
-          break;
-      }
-    }
-    for (std::map< std::uint32_t, MatFileObject >::const_iterator
-             j = matFileObjects.begin(); j != matFileObjects.end(); j++)
-    {
-      const std::string *baseName = &(j->second.baseName);
-      std::map< std::uint32_t, MatFileObject >::const_iterator  k = j;
-      while (baseName->empty())
-      {
-        std::uint32_t parentID =
-            FileBuffer::readUInt32Fast(k->second.objectInfo + 16);
-        if (!parentID)
-          break;
-        k = matFileObjects.find(parentID);
-        if (k == matFileObjects.end())
-          break;
-        baseName = &(k->second.baseName);
-      }
-      if (baseName->empty())
-        continue;
-      std::map< std::uint32_t, std::string >::const_iterator  l =
-          dirNameMap.find(FileBuffer::readUInt32Fast(j->second.objectInfo + 8));
-      if (l == dirNameMap.end())
-        continue;
-      tmp = *baseName;
+      tmp = baseName;
       std::uint32_t h = 0U;
-      for (size_t m = 0; m < tmp.length(); m++)
-        hashFunctionCRC32(h, (unsigned char) tmp[m]);
-      if (h == FileBuffer::readUInt32Fast(j->second.objectInfo))
+      for (size_t k = 0; k < tmp.length(); k++)
       {
-        tmp.insert(0, l->second);
-        tmp += ".mat";
-        matPaths.insert(tmp);
+        if (tmp[k] >= 'A' && tmp[k] <= 'Z')
+          tmp[k] = tmp[k] + ('a' - 'A');
+        hashFunctionCRC32(h, (unsigned char) tmp[k]);
       }
+      if (h != o->persistentID.file)
+        continue;
+      tmp.insert(0, j->second);
+      tmp += ".mat";
+      matPaths.insert(tmp);
     }
   }
   for (std::set< std::string >::const_iterator
@@ -282,7 +230,7 @@ static bool archiveFilterFunction(void *p, const std::string& s)
 #else
   (void) p;
 #endif
-  return s.ends_with(".cdb");
+  return (s.ends_with(".cdb") || s.ends_with(".mat"));
 }
 
 int main(int argc, char **argv)
@@ -430,42 +378,30 @@ int main(int argc, char **argv)
     }
     BA2File ba2File(args[0].c_str(), &archiveFilterFunction,
                     (dumpMode < 0 ? args.data() : nullptr));
-    std::vector< std::vector< unsigned char > > cdbBufs;
-    if (!(dumpMode < 0 && !extractMatList))
-      loadCDBFiles(cdbBufs, ba2File, cdbFileName);
+    if (dumpMode == 1)
+    {
+      consoleFlag = false;
+      SDLDisplay::enableConsole();
+      return dumpCDBFiles(outFileName, ba2File, cdbFileName);
+    }
+    CE2MaterialDB materials;
+    materials.loadArchives(ba2File);
     if (extractMatList)
-      loadMaterialPaths(args, cdbBufs, includePatterns, excludePatterns);
+      loadMaterialPaths(args, materials, includePatterns, excludePatterns);
     if (dumpMode > 0)
     {
       consoleFlag = false;
       SDLDisplay::enableConsole();
       std::string stringBuf;
       std::string errMsgBuf;
-      if (dumpMode == 1)
+      if (dumpMode == 2)
       {
-        for (size_t i = 0; i < cdbBufs.size(); i++)
-        {
-          BSReflDump  cdbFile(cdbBufs[i].data(), cdbBufs[i].size());
-          try
-          {
-            cdbFile.readAllChunks(stringBuf, 0, true);
-          }
-          catch (std::exception& e)
-          {
-            errMsgBuf = e.what();
-            break;
-          }
-        }
-      }
-      else if (dumpMode == 2 && cdbBufs.size() > 0)
-      {
-        BSMaterialsCDB  cdbFile(cdbBufs[0].data(), cdbBufs[0].size());
         std::string tmpBuf;
         for (size_t i = 1; i < args.size(); i++)
         {
           if (args.size() > 2)
             std::printf("%s\n", args[i].c_str());
-          cdbFile.getJSONMaterial(tmpBuf, args[i]);
+          materials.getJSONMaterial(tmpBuf, args[i]);
           if (tmpBuf.empty())
           {
             std::fprintf(stderr, "Warning: %s: material not found\n",
@@ -519,7 +455,7 @@ int main(int argc, char **argv)
     {
       args.erase(args.begin(), args.begin() + 1);
       std::sort(args.begin(), args.end());
-      renderer = new NIF_View(ba2File, nullptr, cdbFileName, true);
+      renderer = new NIF_View(ba2File, nullptr);
       SDLDisplay  display(displayWidth, displayHeight, "mat_info", 4U, 56);
       display.setDefaultTextColor(0x00, 0xC0);
       renderer->viewModels(display, args, 0);
@@ -527,9 +463,6 @@ int main(int argc, char **argv)
       return 0;
     }
 #endif
-    CE2MaterialDB materials;
-    for (size_t i = 0; i < cdbBufs.size(); i++)
-      materials.loadCDBFile(cdbBufs[i].data(), cdbBufs[i].size());
     consoleFlag = false;
     SDLDisplay::enableConsole();
     if (outFileName)
@@ -545,7 +478,7 @@ int main(int argc, char **argv)
     std::string stringBuf;
     for (size_t i = 1; i < args.size(); i++)
     {
-      const CE2Material *o = materials.findMaterial(args[i]);
+      const CE2Material *o = materials.loadMaterial(args[i]);
       if (!o)
       {
         std::fprintf(stderr, "Material '%s' not found in the database\n",

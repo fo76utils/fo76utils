@@ -29,9 +29,6 @@ else:
     env.Append(LINKFLAGS = ["-s"])
 if int(ARGUMENTS.get("rgb10a2", 0)):
     env.Append(CCFLAGS = ["-DUSE_PIXELFMT_RGB10A2=1"])
-cdbDebugLevel = int(ARGUMENTS.get("matdebug", -1))
-if cdbDebugLevel >= 0:
-    env.Append(CCFLAGS = ["-DENABLE_CDB_DEBUG=%d" % (cdbDebugLevel)])
 
 libSources = ["libfo76utils/src/common.cpp", "libfo76utils/src/filebuf.cpp"]
 libSources += ["libfo76utils/src/zlib.cpp", "libfo76utils/src/ba2file.cpp"]
@@ -41,7 +38,8 @@ libSources += ["libfo76utils/src/downsamp.cpp", "src/esmdbase.cpp"]
 libSources += ["src/nif_file.cpp", "src/meshfile.cpp"]
 libSources += ["libfo76utils/src/bsrefl.cpp", "libfo76utils/src/material.cpp"]
 libSources += ["libfo76utils/src/matcomps.cpp", "libfo76utils/src/mat_dump.cpp"]
-libSources += ["libfo76utils/src/bsmatcdb.cpp", "libfo76utils/src/markers.cpp"]
+libSources += ["libfo76utils/src/bsmatcdb.cpp", "libfo76utils/src/mat_json.cpp"]
+libSources += ["libfo76utils/src/jsonread.cpp", "libfo76utils/src/markers.cpp"]
 libSources += ["src/landdata.cpp", "src/landtxt.cpp", "src/terrmesh.cpp"]
 libSources += ["src/plot3d.cpp", "src/render.cpp", "src/rndrbase.cpp"]
 libSources += ["libfo76utils/src/sfcube.cpp", "libfo76utils/src/ddstxt16.cpp"]

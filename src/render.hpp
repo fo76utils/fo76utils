@@ -304,7 +304,7 @@ class Renderer : protected Renderer_Base
   static void threadFunction(Renderer *p, size_t threadNum);
  public:
   Renderer(int imageWidth, int imageHeight, const BA2File& archiveFiles,
-           ESMFile& masterFiles, const char *materialDBPath = nullptr,
+           ESMFile& masterFiles,
            std::uint32_t *bufRGBA = 0, float *bufZ = 0, int zMax = 16777216);
   virtual ~Renderer();
   // returns 0 if formID is not in an exterior world, 0xFFFFFFFF on error

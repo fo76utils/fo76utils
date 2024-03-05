@@ -219,7 +219,6 @@ static const char *usageStrings[] =
   "",
   "ESM/BTD input file options:",
   "    -btd FILENAME.BTD   read terrain data from Starfield .btd file",
-  "    -cdb FILENAME.CDB   set material database file name",
   "    -w FORMID           form ID of world to use from ESM input file",
   "    -r X0 Y0 X1 Y1      limit range of cells to X0,Y0 (SW) to X1,Y1 (NE)",
   "    -l INT              level of detail to use from BTD file (0 to 4)",
@@ -229,8 +228,11 @@ static const char *usageStrings[] =
 static bool archiveFilterFunction(void *p, const std::string& s)
 {
   (void) p;
-  if (!(s.ends_with(".dds") || s.ends_with(".cdb") || s.ends_with(".btd")))
+  if (!(s.ends_with(".dds") || s.ends_with(".cdb") || s.ends_with(".mat") ||
+        s.ends_with(".btd")))
+  {
     return false;
+  }
   return (s.find("/lod/") == std::string::npos &&
           s.find("/actors/") == std::string::npos);
 }
@@ -258,7 +260,6 @@ int main(int argc, char **argv)
     unsigned char txtSetMip = 0;
     const char    *archivePath = (char *) 0;
     const char    *btdFileName = (char *) 0;
-    const char    *cdbFileName = (char *) 0;
     unsigned int  worldFormID = 0U;
     int           xMin = -32768;
     int           yMin = -32768;
@@ -347,12 +348,6 @@ int main(int argc, char **argv)
           throw FO76UtilsError("missing argument for %s", argv[i - 1]);
         btdFileName = argv[i];
       }
-      else if (std::strcmp(argv[i], "-cdb") == 0)
-      {
-        if (++i >= argc)
-          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        cdbFileName = argv[i];
-      }
       else if (std::strcmp(argv[i], "-w") == 0)
       {
         if (++i >= argc)
@@ -395,7 +390,8 @@ int main(int argc, char **argv)
     if (archivePath)
     {
       ba2File = new BA2File(archivePath, &archiveFilterFunction);
-      materials = new CE2MaterialDB(*ba2File, cdbFileName);
+      materials = new CE2MaterialDB();
+      materials->loadArchives(*ba2File);
     }
     int     width = 0;
     int     height = 0;

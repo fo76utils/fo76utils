@@ -23,7 +23,6 @@ static const char *usageStrings[] =
   "    -ssaa INT           render at 2^N resolution and downsample",
   "    -f INT              output format, 0: RGB24, 1: A8R8G8B8, 2: RGB10A2",
   "    -rq INT             set render quality (0 - 2047, see doc/render.md)",
-  "    -cdb FILENAME       set material database file name(s)",
   "    -watermask BOOL     make non-water surfaces transparent or black",
   "    -q                  do not print messages other than errors",
   "",
@@ -119,7 +118,6 @@ int main(int argc, char **argv)
     bool    waterMaskMode = false;
     const char  *defaultEnvMap = "textures/cubemaps/cell_cityplazacube.dds";
     const char  *waterTexture = "textures/water/wavesdefault_normal.dds";
-    const char  *materialDBPath = (char *) 0;
     std::vector< const char * > hdModelNamePatterns;
     std::vector< const char * > excludeModelPatterns;
     float   d = float(std::atan(1.0) / 45.0);   // degrees to radians
@@ -274,12 +272,6 @@ int main(int argc, char **argv)
         renderQuality =
             (unsigned short) parseInteger(argv[i], 0,
                                           "invalid render quality", 0, 2047);
-      }
-      else if (std::strcmp(argv[i], "-cdb") == 0)
-      {
-        if (++i >= argc)
-          throw FO76UtilsError("missing argument for %s", argv[i - 1]);
-        materialDBPath = argv[i];
       }
       else if (std::strcmp(argv[i], "-watermask") == 0)
       {
@@ -592,7 +584,7 @@ int main(int argc, char **argv)
       zMax = (zMax < 16777216 ? zMax : 16777216);
     }
 
-    Renderer  renderer(width, height, ba2File, esmFile, materialDBPath,
+    Renderer  renderer(width, height, ba2File, esmFile,
                        (std::uint32_t *) 0, (float *) 0, zMax);
     renderer.setThreadCount(threadCnt);
     renderer.setTextureCacheSize(std::uint64_t(textureCacheSize) << 20);

@@ -90,5 +90,5 @@ Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on 
 
 #### Example 7
 
-    ./wrldview Starfield/Data/Starfield.esm 3200 1800 Starfield/Data "" -w 0x0001251B -light 1.0 45 90 -lcolor 1.5 -1 1.0 -1 -1 -rq 0x2F -minscale 1 -cam 2.828427 1 -1188.59 -1014.737 1428.076
+    ./wrldview Starfield/Data/Starfield.esm 3200 1800 Starfield/Data -w 0x0001251B -light 1.0 45 90 -lcolor 1.5 -1 1.0 -1 -1 -rq 0x2F -minscale 1 -cam 2.828427 1 -1188.59 -1014.737 1428.076
 

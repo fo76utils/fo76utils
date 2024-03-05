@@ -6,7 +6,6 @@ List data from a set of .NIF files in .BA2 or .BSA archives, convert to .OBJ for
 
 * **--**: Remaining options are file names.
 * **-o FILENAME**: Set output file name (default: standard output).
-* **-cdb FILENAME**: Set material database file name(s), can be a comma separated list of multiple CDB files (default: materials/materialsbeta.cdb).
 * **-q**: Print author name, file name, and file size only.
 * **-v**: Verbose mode, print block list, and vertex and triangle data.
 * **-m**: Print detailed material information.

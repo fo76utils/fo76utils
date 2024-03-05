@@ -35,7 +35,6 @@ class NIF_View : protected Renderer_Base
   std::string defaultEnvMap;
   std::string waterTexture;
   CE2MaterialDB materials;
-  BSMaterialsCDB  *materialConverter;
   static void threadFunction(NIF_View *p, size_t n);
   const DDSTexture *loadTexture(const std::string& texturePath,
                                 size_t threadNum = 0);
@@ -55,8 +54,7 @@ class NIF_View : protected Renderer_Base
   unsigned char defaultEnvMapNum;       // 0 to 7
   int     debugMode;            // 0 to 5
   std::map< unsigned int, WaterProperties > waterMaterials;
-  NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr = (ESMFile *) 0,
-           const char *materialDBPath = (char *) 0, bool matViewMode = false);
+  NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr = (ESMFile *) 0);
   virtual ~NIF_View();
   void loadModel(const std::string& fileName, int l = 0);
   void renderModel(std::uint32_t *outBufRGBA, float *outBufZ,

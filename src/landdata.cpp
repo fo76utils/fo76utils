@@ -121,7 +121,7 @@ void LandscapeData::loadBTDFile(
 }
 
 void LandscapeData::loadTextureInfo(
-    ESMFile& esmFile, const CE2MaterialDB *materials, size_t n)
+    ESMFile& esmFile, CE2MaterialDB *materials, size_t n)
 {
   const ESMFile::ESMRecord  *r = esmFile.findRecord(ltexFormIDs[n]);
   if (!r)
@@ -141,7 +141,7 @@ void LandscapeData::loadTextureInfo(
     }
   }
   if (materials && !materialPaths[n].empty())
-    ltexMaterials[n] = materials->findMaterial(materialPaths[n]);
+    ltexMaterials[n] = materials->loadMaterial(materialPaths[n]);
 }
 
 unsigned int LandscapeData::loadWorldInfo(ESMFile& esmFile,
@@ -178,7 +178,7 @@ unsigned int LandscapeData::loadWorldInfo(ESMFile& esmFile,
 
 LandscapeData::LandscapeData(
     ESMFile *esmFile, const char *btdFileName, const BA2File *ba2File,
-    const CE2MaterialDB *materials, unsigned int worldID, int mipLevel,
+    CE2MaterialDB *materials, unsigned int worldID, int mipLevel,
     int xMin, int yMin, int xMax, int yMax)
   : cellMinX(xMin),
     cellMinY(yMin),

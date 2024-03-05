@@ -425,7 +425,7 @@ NIFFile::NIFBlkBSTriShape::~NIFBlkBSTriShape()
 }
 
 NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
-    NIFFile& f, const CE2MaterialDB *materials)
+    NIFFile& f, CE2MaterialDB *materials)
   : NIFBlock(NIFFile::BlkTypeBSLightingShaderProperty),
     shaderType(0U),
     controller(-1),
@@ -461,7 +461,7 @@ NIFFile::NIFBlkBSLightingShaderProperty::NIFBlkBSLightingShaderProperty(
   controller = f.readBlockID();
   if (materials && !materialPath.empty())
   {
-    material = materials->findMaterial(materialPath);
+    material = materials->loadMaterial(materialPath);
     if (material && (material->flags & CE2Material::Flag_IsEffect))
       shaderType--;
   }
@@ -519,7 +519,7 @@ void NIFFile::readString(std::string& s, size_t stringLengthSize)
   }
 }
 
-void NIFFile::loadNIFFile(const CE2MaterialDB *materials, int l)
+void NIFFile::loadNIFFile(CE2MaterialDB *materials, int l)
 {
   if (fileBufSize < 57 ||
       std::memcmp(fileBuf, "Gamebryo File Format, Version ", 30) != 0)
@@ -760,7 +760,7 @@ void NIFFile::getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
 }
 
 NIFFile::NIFFile(const char *fileName, const BA2File& archiveFiles,
-                 const CE2MaterialDB *materials, int l)
+                 CE2MaterialDB *materials, int l)
   : FileBuffer(fileName),
     blockOffsets(nullptr),
     blocks(nullptr),
@@ -782,7 +782,7 @@ NIFFile::NIFFile(const char *fileName, const BA2File& archiveFiles,
 
 NIFFile::NIFFile(const unsigned char *buf, size_t bufSize,
                  const BA2File& archiveFiles,
-                 const CE2MaterialDB *materials, int l)
+                 CE2MaterialDB *materials, int l)
   : FileBuffer(buf, bufSize),
     blockOffsets(nullptr),
     blocks(nullptr),
@@ -803,7 +803,7 @@ NIFFile::NIFFile(const unsigned char *buf, size_t bufSize,
 }
 
 NIFFile::NIFFile(FileBuffer& buf, const BA2File& archiveFiles,
-                 const CE2MaterialDB *materials, int l)
+                 CE2MaterialDB *materials, int l)
   : FileBuffer(buf.data(), buf.size()),
     blockOffsets(nullptr),
     blocks(nullptr),

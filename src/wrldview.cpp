@@ -53,7 +53,7 @@ static const char *cmdOptsTable[] =
 
 static const char *usageStrings[] =
 {
-  "Usage: wrldview INFILE.ESM[,...] W H ARCHIVEPATH MATCDBPATH [OPTIONS...]",
+  "Usage: wrldview INFILE.ESM[,...] W H ARCHIVEPATH [OPTIONS...]",
   "",
   "Options:",
   "    --help | -h         print usage",
@@ -262,7 +262,6 @@ struct WorldSpaceViewer
   const char  *dataPath;
   std::vector< char > tmpBuf;
   WorldSpaceViewer(int w, int h, const char *esmFiles, const char *archivePath,
-                   const char *materialDBPath,
                    int argc, const char * const *argv);
   virtual ~WorldSpaceViewer();
   void setViewTransform();
@@ -282,7 +281,7 @@ struct WorldSpaceViewer
 
 WorldSpaceViewer::WorldSpaceViewer(
     int w, int h, const char *esmFiles, const char *archivePath,
-    const char *materialDBPath, int argc, const char * const *argv)
+    int argc, const char * const *argv)
   : renderer(nullptr),
     threadCnt(0),
     modelBatchCnt(16),
@@ -345,8 +344,7 @@ WorldSpaceViewer::WorldSpaceViewer(
   height = display.getHeight();
   imageDataSize = size_t(width) * size_t(height);
   imageBuf.resize(imageDataSize, 0U);
-  renderer = new Renderer(width, height, ba2File, esmFile, materialDBPath,
-                          imageBuf.data());
+  renderer = new Renderer(width, height, ba2File, esmFile, imageBuf.data());
   try
   {
     if (!formID)
@@ -1588,7 +1586,7 @@ int main(int argc, char **argv)
       for ( ; n > 0; i++, n--)
         args2.push_back(argv[i + 1]);
     }
-    if (args.size() != 5)
+    if (args.size() != 4)
     {
       SDLDisplay::enableConsole();
       for (size_t i = 0; usageStrings[i]; i++)
@@ -1600,7 +1598,7 @@ int main(int argc, char **argv)
         int(parseInteger(args[1], 0, "invalid image width", 640, 16384));
     int     height =
         int(parseInteger(args[2], 0, "invalid image height", 360, 16384));
-    wrldView = new WorldSpaceViewer(width, height, args[0], args[3], args[4],
+    wrldView = new WorldSpaceViewer(width, height, args[0], args[3],
                                     int(args2.size()), args2.data());
     while (!wrldView->quitFlag)
     {

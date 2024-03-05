@@ -18,7 +18,6 @@ Create an RGB land texture from the output of [btddump](btddump.md) (formats 2, 
 ### ESM/BTD input file options
 
 * **-btd FILENAME.BTD**: Read terrain data from Starfield .btd file.
-* **-cdb FILENAME.CDB**: Set material database file name.
 * **-w FORMID**: Form ID of world to use from ESM input file.
 * **-r X0 Y0 X1 Y1**: Limit range of cells to X0,Y0 (SW) to X1,Y1 (NE).
 * **-l INT**: Level of detail to use from BTD file (0 to 4).

@@ -33,14 +33,13 @@ class LandscapeData
   void allocateDataBuf();
   void loadBTDFile(const unsigned char *btdFileData, size_t btdFileSize,
                    unsigned char mipLevel);
-  void loadTextureInfo(ESMFile& esmFile,
-                       const CE2MaterialDB *materials, size_t n);
+  void loadTextureInfo(ESMFile& esmFile, CE2MaterialDB *materials, size_t n);
   // returns the form ID of the parent world, or 0 if there is none
   unsigned int loadWorldInfo(ESMFile& esmFile, unsigned int worldID);
  public:
   LandscapeData(
       ESMFile *esmFile, const char *btdFileName,
-      const BA2File *ba2File, const CE2MaterialDB *materials,
+      const BA2File *ba2File, CE2MaterialDB *materials,
       unsigned int worldID = 0U, int mipLevel = 0,
       int xMin = -32768, int yMin = -32768, int xMax = 32767, int yMax = 32767);
   virtual ~LandscapeData();

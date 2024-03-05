@@ -265,7 +265,7 @@ class NIFFile : public FileBuffer
     std::vector< unsigned int > extraData;
     const CE2Material *material;
     std::string materialPath;
-    NIFBlkBSLightingShaderProperty(NIFFile& f, const CE2MaterialDB *materials);
+    NIFBlkBSLightingShaderProperty(NIFFile& f, CE2MaterialDB *materials);
     virtual ~NIFBlkBSLightingShaderProperty();
   };
   struct NIFBlkNiAlphaProperty : public NIFBlock
@@ -306,18 +306,18 @@ class NIFFile : public FileBuffer
     int     n = readInt32();
     return (n >= 0 && (unsigned int) n < blockCnt ? n : -1);
   }
-  void loadNIFFile(const CE2MaterialDB *materials, int l);
+  void loadNIFFile(CE2MaterialDB *materials, int l);
   void getMesh(std::vector< NIFTriShape >& v, unsigned int blockNum,
                std::vector< unsigned int >& parentBlocks,
                unsigned int switchActive, bool noRootNodeTransform) const;
  public:
   // l = LOD
   NIFFile(const char *fileName, const BA2File& archiveFiles,
-          const CE2MaterialDB *materials, int l = 0);
+          CE2MaterialDB *materials, int l = 0);
   NIFFile(const unsigned char *buf, size_t bufSize, const BA2File& archiveFiles,
-          const CE2MaterialDB *materials, int l = 0);
+          CE2MaterialDB *materials, int l = 0);
   NIFFile(FileBuffer& buf, const BA2File& archiveFiles,
-          const CE2MaterialDB *materials, int l = 0);
+          CE2MaterialDB *materials, int l = 0);
   virtual ~NIFFile();
   inline unsigned int getVersion() const;
   inline const std::string& getAuthorName() const;

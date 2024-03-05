@@ -23,7 +23,6 @@ Render a world, cell, or object from ESM file(s), terrain data, and archives.
   * 256: Disable the use of effect materials.
   * 512: Disable the use of object bounds data (OBND) for the purpose of testing if an object is visible.
   * 1024: Disable reordering objects, ensures deterministic output at the cost of worse threading performance.
-* **-cdb FILENAME**: Set material database file name(s), can be a comma separated list of multiple CDB files (default: materials/materialsbeta.cdb).
 * **-watermask BOOL**: Render water mask, non-water surfaces are made transparent or black.
 
 Values in hexadecimal format (prefixed with 0x) are accepted by **-w** and **-rq**.

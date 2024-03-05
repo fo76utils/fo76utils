@@ -173,7 +173,7 @@ static void printMeshData(std::FILE *f, const NIFFile& nifFile)
       std::fprintf(f, "  Alpha threshold: %.3f\n", ts.m->alphaThreshold);
     printVertexTransform(f, ts.vertexTransform);
     if (ts.m)
-      std::fprintf(f, "  Material: %s\n", ts.m->name->c_str());
+      std::fprintf(f, "  Material: %s\n", ts.m->name);
     std::fprintf(f, "  Vertex list:\n");
     for (size_t j = 0; j < ts.vertexCnt; j++)
     {
@@ -213,10 +213,10 @@ bool ObjFileMaterialNames::getMaterialName(
     s = i->second;
     return false;
   }
-  if (!(ts.m && !ts.m->name->empty()))
+  if (!(ts.m && ts.m->name[0]))
     s = "DefaultMaterial";
   else
-    s = *(ts.m->name);
+    s = ts.m->name;
   for (size_t j = 0; j < s.length(); j++)
   {
     char    c = s[j];
@@ -467,7 +467,6 @@ int main(int argc, char **argv)
     bool    verboseMaterialInfo = false;
     bool    enableVertexColors = false;
     bool    enableVertexWeights = false;
-    const char  *materialDBPath = (char *) 0;
     for ( ; argc >= 2 && argv[1][0] == '-'; argc--, argv++)
     {
       if (std::strcmp(argv[1], "--") == 0)
@@ -539,14 +538,6 @@ int main(int argc, char **argv)
         argc--;
         argv++;
       }
-      else if (std::strcmp(argv[1], "-cdb") == 0)
-      {
-        if (argc < 3)
-          errorMessage("missing material database file name");
-        materialDBPath = argv[2];
-        argc--;
-        argv++;
-      }
       else if (std::strcmp(argv[1], "-m") == 0)
       {
         verboseMaterialInfo = true;
@@ -574,7 +565,6 @@ int main(int argc, char **argv)
       std::fprintf(stderr, "    --      Remaining options are file names\n");
       std::fprintf(stderr, "    -o FILENAME     Set output file name "
                            "(default: standard output)\n");
-      std::fprintf(stderr, "    -cdb FILENAME   Set material database path\n");
       std::fprintf(stderr, "    -q      Print author name, file name, "
                            "and file size only\n");
       std::fprintf(stderr, "    -v      Verbose mode, print block list, "
@@ -599,13 +589,14 @@ int main(int argc, char **argv)
     fileNames.push_back(".bgem");
     fileNames.push_back(".bgsm");
     fileNames.push_back(".cdb");
+    fileNames.push_back(".mat");
     fileNames.push_back(".mesh");
     if (outFmt >= 5)
       fileNames.push_back(".dds");
     BA2File ba2File(argv[1], &archiveFilterFunction, &fileNames);
     ba2File.getFileList(fileNames);
     if (outFmt >= 5)
-      renderer = new NIF_View(ba2File, (ESMFile *) 0, materialDBPath);
+      renderer = new NIF_View(ba2File, (ESMFile *) 0);
     if (outFmt == 6)
     {
       for (size_t i = 0; i < fileNames.size(); )
@@ -636,7 +627,8 @@ int main(int argc, char **argv)
       delete renderer;
       return 0;
     }
-    CE2MaterialDB materials(ba2File, materialDBPath);
+    CE2MaterialDB materials;
+    materials.loadArchives(ba2File);
     if (outFileName)
     {
       outFile = std::fopen(outFileName, (outFmt != 5 ? "w" : "wb"));

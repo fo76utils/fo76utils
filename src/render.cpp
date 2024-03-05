@@ -1561,7 +1561,7 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
       renderMode | renderQuality | ((p.flags >> 5) & 2);
   if (p.model.d.b->modelPath.empty())
     return;
-  const CE2Material *m = materials.findMaterial(p.model.d.b->modelPath);
+  const CE2Material *m = materials.loadMaterial(p.model.d.b->modelPath);
   const CE2Material::TextureSet *txtSet = findTextureSet(m);
   if (!txtSet)
     return;
@@ -1936,7 +1936,7 @@ void Renderer::threadFunction(Renderer *p, size_t threadNum)
 }
 
 Renderer::Renderer(int imageWidth, int imageHeight, const BA2File& archiveFiles,
-                   ESMFile& masterFiles, const char *materialDBPath,
+                   ESMFile& masterFiles,
                    std::uint32_t *bufRGBA, float *bufZ, int zMax)
   : outBufRGBA(bufRGBA),
     outBufZ(bufZ),
@@ -1984,9 +1984,9 @@ Renderer::Renderer(int imageWidth, int imageHeight, const BA2File& archiveFiles,
     waterRenderMode(0),
     bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
     whiteTexture(0xFFFFFFFFU),
-    outBufN(nullptr),
-    materials(ba2File, materialDBPath)
+    outBufN(nullptr)
 {
+  materials.loadArchives(ba2File);
   if (!renderMode)
     renderMode = 4;
   size_t  imageDataSize = size_t(width) * size_t(height);

@@ -1,10 +1,9 @@
-    wrldview INFILE.ESM[,...] W H ARCHIVEPATH MATCDBPATH [OPTIONS...]
+    wrldview INFILE.ESM[,...] W H ARCHIVEPATH [OPTIONS...]
 
 Interactively render a world, cell, or object from ESM file(s), terrain data, and archives. See also [render](render.md) for additional details. W and H are the width and height of the window to be created. A window that would be larger than the display dimensions and has even width and height is automatically downsampled to half resolution.
 
 ### General options
 
-* **MATCDBPATH**: Material database file name(s), can be a comma separated list of multiple CDB files. Defaults to materials/materialsbeta.cdb if an empty string is specified.
 * **--help** or **-h**: Print usage.
 * **--list** or **--list-defaults**: Print defaults for all options, and exit. If used after other options, then the updated values are printed, including the light vector calculated from **-light**.
 * **--**: Remaining options are file names.
@@ -97,5 +96,5 @@ Interactively render a world, cell, or object from ESM file(s), terrain data, an
 
 ### Example
 
-    ./wrldview Starfield/Data/Starfield.esm 3200 1800 Starfield/Data "" -w 0x0001251B -light 1.0 45 90 -lcolor 1.5 -1 1.0 -1 -1 -rq 0x2F -minscale 1 -cam 2.828427 1 -1188.59 -1014.737 1428.076
+    ./wrldview Starfield/Data/Starfield.esm 3200 1800 Starfield/Data -w 0x0001251B -light 1.0 45 90 -lcolor 1.5 -1 1.0 -1 -1 -rq 0x2F -minscale 1 -cam 2.828427 1 -1188.59 -1014.737 1428.076
 
