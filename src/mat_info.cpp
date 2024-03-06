@@ -133,8 +133,6 @@ static int dumpCDBFiles(
   return 0;
 }
 
-#include "../libfo76utils/src/mat_dirs.cpp"
-
 static void loadMaterialPaths(
     std::vector< std::string >& args, const CE2MaterialDB& materials,
     const std::vector< std::string >& includePatterns,
@@ -144,51 +142,7 @@ static void loadMaterialPaths(
   for (size_t i = 1; i < args.size(); i++)
     matPaths.insert(args[i]);
   args.resize(1);
-  std::map< std::uint32_t, std::string >  dirNameMap;
-  getStarfieldMaterialDirMap(dirNameMap);
-  std::string tmp;
-  std::vector< const BSMaterialsCDB::MaterialObject * > matObjects;
-  materials.getMaterials(matObjects);
-  for (size_t i = 0; i < matObjects.size(); i++)
-  {
-    const BSMaterialsCDB::MaterialObject  *o = matObjects[i];
-    if (!o->parent && o->persistentID.ext == 0x0074616D &&      // "mat\0"
-        o->baseObject && o->baseObject->persistentID.file == 0x7EA3660C)
-    {                                                   // "layeredmaterials"
-      std::map< std::uint32_t, std::string >::const_iterator  j =
-          dirNameMap.find(o->persistentID.dir);
-      if (j == dirNameMap.end())
-        continue;
-      const char  *baseName = nullptr;
-      const BSMaterialsCDB::MaterialComponent *k = o->components;
-      while (k)
-      {
-        if (k->className == BSReflStream::String_BSComponentDB_CTName &&
-            k->o && k->o->type == BSReflStream::String_BSComponentDB_CTName &&
-            k->o->childCnt >= 1 && k->o->children()[0] &&
-            k->o->children()[0]->type == BSReflStream::String_String)
-        {
-          baseName = k->o->children()[0]->stringValue();
-          break;
-        }
-      }
-      if (!(baseName && *baseName))
-        continue;
-      tmp = baseName;
-      std::uint32_t h = 0U;
-      for (size_t k = 0; k < tmp.length(); k++)
-      {
-        if (tmp[k] >= 'A' && tmp[k] <= 'Z')
-          tmp[k] = tmp[k] + ('a' - 'A');
-        hashFunctionCRC32(h, (unsigned char) tmp[k]);
-      }
-      if (h != o->persistentID.file)
-        continue;
-      tmp.insert(0, j->second);
-      tmp += ".mat";
-      matPaths.insert(tmp);
-    }
-  }
+  materials.getMaterialList(matPaths);
   for (std::set< std::string >::const_iterator
            i = matPaths.begin(); i != matPaths.end(); i++)
   {
