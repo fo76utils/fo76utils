@@ -355,6 +355,8 @@ int main(int argc, char **argv)
         {
           if (args.size() > 2)
             std::printf("%s\n", args[i].c_str());
+          if (ba2File.findFile(args[i]))
+            (void) materials.loadMaterial(args[i]);
           materials.getJSONMaterial(tmpBuf, args[i]);
           if (tmpBuf.empty())
           {
