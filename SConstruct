@@ -103,10 +103,10 @@ if ("win" in sys.platform) and buildPackage:
     pkgFiles += [render, terrain]
     if buildCubeView:
         pkgFiles += [cubeview, wrldview]
-        pkgFiles += ["/mingw64/bin/SDL2.dll", "LICENSE.SDL"]
-    pkgFiles += ["/mingw64/bin/libwinpthread-1.dll"]
-    pkgFiles += ["/mingw64/bin/libgcc_s_seh-1.dll"]
-    pkgFiles += ["/mingw64/bin/libstdc++-6.dll"]
+        pkgFiles += ["/ucrt64/bin/SDL2.dll", "LICENSE.SDL"]
+    pkgFiles += ["/ucrt64/bin/libwinpthread-1.dll"]
+    pkgFiles += ["/ucrt64/bin/libgcc_s_seh-1.dll"]
+    pkgFiles += ["/ucrt64/bin/libstdc++-6.dll"]
     pkgFiles += Split("doc libfo76utils ltex scripts src SConstruct")
     pkgFiles += Split("SConstruct.maps .github .gitignore LICENSE README.detex")
     pkgFiles += Split("README.md README.mman-win32 mapicons.py tes5cell.txt")
