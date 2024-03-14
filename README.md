@@ -43,14 +43,14 @@ Can be built with MSYS2 (https://www.msys2.org/) on 64-bit Windows, and also on 
 * In the MSYS2 MSYS terminal, run these commands to install development packages:
   *     pacman -Syu
         pacman -Su
-        pacman -S --needed base-devel mingw-w64-x86_64-toolchain
+        pacman -S --needed base-devel mingw-w64-ucrt-x86_64-toolchain
         pacman -S msys/scons
 * Optionally, install SDL 2 for cubeview, wrldview, and the NIF viewer mode of esmview and nif\_info, matplotlib for plotting scripts, and SWIG for building the Python interface to libce2utils:
-  *     pacman -S mingw64/mingw-w64-x86_64-SDL2
-        pacman -S mingw64/mingw-w64-x86_64-python-matplotlib
-        pacman -S mingw64/mingw-w64-x86_64-swig
+  *     pacman -S ucrt64/mingw-w64-ucrt-x86_64-SDL2
+        pacman -S ucrt64/mingw-w64-ucrt-x86_64-python-matplotlib
+        pacman -S ucrt64/mingw-w64-ucrt-x86_64-swig
 * The installed MSYS2 and MinGW packages can be updated anytime by running **pacman -Syu** again.
-* In the MSYS2 MinGW x64 terminal, compile the utilities with **scons**. Use **scons -j 8** for building with 8 parallel jobs, and **scons -c** to clean up and delete the object files and executables.
+* In the MSYS2 UCRT64 terminal, compile the utilities with **scons**. Use **scons -j 8** for building with 8 parallel jobs, and **scons -c** to clean up and delete the object files and executables.
 * By default, the code generated is compatible with Intel Haswell or newer CPUs. Adding **avx=1** disables the use of instruction set extensions (including F16C, FMA and AVX2) that are not compatible with Sandy Bridge, while **avx=0** disables all instruction set extensions and compiles for a generic x86\_64 CPU.
 * Running scons with the **rgb10a2=1** option compiles all tools that can render NIF files with RGB10A2 frame buffer format.
 * Adding the **pymodule=1** option builds a Python interface to libce2utils under scripts.

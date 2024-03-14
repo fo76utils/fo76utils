@@ -2,8 +2,7 @@
 import os, sys
 
 env = Environment(tools = [*filter(None, ARGUMENTS.get('tools','').split(','))] or None,
-                  ENV = { "PATH" : os.environ["PATH"],
-                          "HOME" : os.environ["HOME"] })
+                  ENV = os.environ)
 env["CCFLAGS"] = Split("-Wall -Isrc -Ilibfo76utils/src -DBUILD_CE2UTILS")
 env["CFLAGS"] = Split("-std=c99")
 env["CXXFLAGS"] = Split("-std=c++20")
@@ -58,7 +57,7 @@ if int(ARGUMENTS.get("pymodule", 0)):
     else:
         pyModuleEnv.ParseConfig("pkg-config --cflags --libs python-3.8")
     pyModuleEnv["SHLIBPREFIX"] = "_"
-    pyModuleEnv["SWIGFLAGS"] = Split("-c++ -python -Isrc")
+    pyModuleEnv["SWIGFLAGS"] = Split("-c++ -python -Isrc -Ilibfo76utils/src")
     pythonInterface = pyModuleEnv.SharedLibrary(
                           "scripts/ce2utils",
                           ["scripts/ce2utils.i"] + libSources)

@@ -1,4 +1,4 @@
-%module fo76utils
+%module ce2utils
 
 %include "carrays.i"
 %array_functions(std::uint32_t, uint32Array);

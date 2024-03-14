@@ -20,10 +20,10 @@ jobs:
     - name: 'Setup MSYS2'
       uses: msys2/setup-msys2@v2
       with:
-        msystem: MINGW64
+        msystem: UCRT64
         update: true
         cache: true
-        install: 'base-devel mingw-w64-x86_64-toolchain msys/scons mingw64/mingw-w64-x86_64-SDL2 mingw64/mingw-w64-x86_64-python-matplotlib mingw64/mingw-w64-x86_64-swig msys/p7zip'
+        install: 'base-devel mingw-w64-ucrt-x86_64-toolchain msys/scons ucrt64/mingw-w64-ucrt-x86_64-SDL2 ucrt64/mingw-w64-ucrt-x86_64-python-matplotlib ucrt64/mingw-w64-ucrt-x86_64-swig msys/p7zip'
     
     - name: 'Build with Scons'
       shell: msys2 {0}
