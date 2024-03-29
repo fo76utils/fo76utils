@@ -32,14 +32,14 @@ class NIF_View : protected Renderer_Base
   NIFFile::NIFVertexTransform modelTransform;
   NIFFile::NIFVertexTransform viewTransform;
   DDSTexture  defaultTexture;
-  std::string defaultEnvMap;
-  std::string waterTexture;
   CE2MaterialDB materials;
   static void threadFunction(NIF_View *p, size_t n);
   const DDSTexture *loadTexture(const std::string& texturePath,
                                 size_t threadNum = 0);
-  void setDefaultTextures();
+  void setDefaultTextures(int envMapNum = 0);
  public:
+  std::string defaultEnvMap;
+  std::string waterTexture;
   float   modelRotationX, modelRotationY, modelRotationZ;
   float   viewRotationX, viewRotationY, viewRotationZ;
   float   viewOffsX, viewOffsY, viewOffsZ, viewScale;
@@ -51,7 +51,6 @@ class NIF_View : protected Renderer_Base
   float   waterEnvMapLevel;
   unsigned int  waterFormID;
   bool    enableHidden;
-  unsigned char defaultEnvMapNum;       // 0 to 7
   int     debugMode;            // 0 to 5
   std::map< unsigned int, WaterProperties > waterMaterials;
   NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr = (ESMFile *) 0);

@@ -171,14 +171,13 @@ const DDSTexture * NIF_View::loadTexture(const std::string& texturePath,
   return t;
 }
 
-void NIF_View::setDefaultTextures()
+void NIF_View::setDefaultTextures(int envMapNum)
 {
   int     n = 3;
   if (nifFile)
     n = std::min(std::max(int(nifFile->getVersion() >> 4) - 7, 0), 3);
-  n = n + ((defaultEnvMapNum & 7) << 2);
+  n = n + ((envMapNum & 7) << 2);
   defaultEnvMap = cubeMapPaths[n];
-  waterTexture = "textures/water/wavesdefault_normal.dds";
 }
 
 NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
@@ -190,6 +189,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
     lightZ(1.0f),
     nifFile(nullptr),
     defaultTexture(0xFFFFFFFFU),
+    waterTexture("textures/water/wavesdefault_normal.dds"),
     modelRotationX(0.0f),
     modelRotationY(0.0f),
     modelRotationZ(0.0f),
@@ -209,7 +209,6 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
     waterEnvMapLevel(1.0f),
     waterFormID(0U),
     enableHidden(false),
-    defaultEnvMapNum(0),
     debugMode(0)
 {
   threadCnt = int(std::thread::hardware_concurrency());
@@ -218,7 +217,6 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
   threadErrMsg.resize(size_t(threadCnt));
   viewOffsetY.resize(size_t(threadCnt + 1), 0);
   threadFileBuffers.resize(size_t(threadCnt));
-  setDefaultTextures();
   getWaterMaterial(waterMaterials, *esmFile, nullptr, defaultWaterColor, true);
   try
   {
@@ -341,7 +339,8 @@ void NIF_View::renderModel(std::uint32_t *outBufRGBA, float *outBufZ,
                                   float(imageHeight) * reflZScale);
   }
   viewOffsetY[renderers.size()] = imageHeight;
-  setDefaultTextures();
+  if (defaultEnvMap.empty())
+    setDefaultTextures();
   {
     FloatVector4  ambientLight =
         renderers[0]->cubeMapToAmbient(loadTexture(defaultEnvMap, 0));
@@ -1155,9 +1154,7 @@ bool NIF_View::viewModels(SDLDisplay& display,
               case SDLDisplay::SDLKeySymF6:
               case SDLDisplay::SDLKeySymF7:
               case SDLDisplay::SDLKeySymF8:
-                defaultEnvMapNum =
-                    (unsigned char) (d1 - SDLDisplay::SDLKeySymF1);
-                setDefaultTextures();
+                setDefaultTextures(d1 - SDLDisplay::SDLKeySymF1);
                 messageBuf += "Default environment map: ";
                 messageBuf += defaultEnvMap;
                 messageBuf += '\n';

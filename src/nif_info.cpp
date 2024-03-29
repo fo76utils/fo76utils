@@ -382,7 +382,7 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
     if (!matNames.getMaterialName(matName, ts))
       continue;
     FloatVector4  baseColor(1.0f);
-    const CE2Material::TextureSet *txtSet = (CE2Material::TextureSet *) 0;
+    const CE2Material::TextureSet *txtSet = nullptr;
     if (ts.m)
     {
       for (unsigned int j = 0U; j < CE2Material::maxLayers; j++)
@@ -445,11 +445,81 @@ static bool archiveFilterFunction(void *p, const std::string& s)
   return false;
 }
 
+static const char *usageStrings[] =
+{
+  "Usage: nif_info [OPTIONS] ARCHIVEPATH PATTERN...",
+  "Options:",
+  "    --      Remaining options are file names",
+  "    -o FILENAME     Set output file name (default: standard output)",
+  "    -q      Print author name, file name, and file size only",
+  "    -v      Verbose mode, print block list, and vertex and triangle data",
+  "    -m      Print detailed material information",
+  "    -obj    Print model data in .obj format",
+  "    -mtl    Print material data in .mtl format",
+  "    -c      Enable vertex colors in .obj output",
+  "    -w      Enable vertex weights in .obj output",
+  "    -lN     Set level of detail (default: -l0)",
+  "    -render[WIDTHxHEIGHT] DDSFILE   Render model to DDS file",
+#ifndef HAVE_SDL2
+  "Render options:",
+#else
+  "    -view[WIDTHxHEIGHT]     View model",
+  "Render and view options:",
+#endif
+  "    -cam SCALE DIR RX RY RZ",
+  "                        set view scale and direction, and model rotation",
+  "    -light SCALE RY RZ  set RGB scale and Y, Z rotation (0, 0 = top)",
+  "    -env FILENAME.DDS   default environment map texture path in archives",
+  "    -lcolor LMULT LCOLOR EMULT ECOLOR",
+  "                        set light source, environment, and ambient light",
+  "                        colors and levels (colors in 0xRRGGBB format)",
+  "    -rscale FLOAT       reflection view vector Z scale",
+  "    -wtxt FILENAME.DDS  water normal map texture path in archives",
+  "    -wrefl FLOAT        water environment map scale",
+  "    -debug INT          set debug render mode (0: disabled, 1: block IDs,",
+  "                        2: depth, 3: normals, 4: diffuse, 5: light only)",
+  "    -enable-markers     enable rendering markers and hidden geometry",
+  nullptr
+};
+
+static const float  viewRotations[60] =
+{
+  54.73561f,  180.0f,     45.0f,        // isometric from NW
+  54.73561f,  180.0f,     135.0f,       // isometric from SW
+  54.73561f,  180.0f,     -135.0f,      // isometric from SE
+  54.73561f,  180.0f,     -45.0f,       // isometric from NE
+  180.0f,     0.0f,       0.0f,         // top (up = N)
+  -90.0f,     0.0f,       0.0f,         // S
+  -90.0f,     0.0f,       90.0f,        // E
+  -90.0f,     0.0f,       180.0f,       // N
+  -90.0f,     0.0f,       -90.0f,       // W
+    0.0f,     0.0f,       0.0f,         // bottom (up = S)
+  54.73561f,  180.0f,     0.0f,         // isometric from N
+  54.73561f,  180.0f,     90.0f,        // isometric from W
+  54.73561f,  180.0f,     180.0f,       // isometric from S
+  54.73561f,  180.0f,     -90.0f,       // isometric from E
+  180.0f,     0.0f,       -45.0f,       // top (up = NE)
+  -90.0f,     0.0f,       -45.0f,       // SW
+  -90.0f,     0.0f,       45.0f,        // SE
+  -90.0f,     0.0f,       135.0f,       // NE
+  -90.0f,     0.0f,       -135.0f,      // NW
+    0.0f,     0.0f,       -45.0f        // bottom (up = SW)
+};
+
+static FloatVector4 convertLightColor(std::uint32_t c, float l)
+{
+  FloatVector4  tmp(c);
+  tmp.shuffleValues(0xC6).srgbExpand();
+  l = ((l * -0.01728125f + 0.17087940f) * l + 0.83856107f) * l + 0.00784078f;
+  l *= l;
+  return (tmp * l).blendValues(FloatVector4(1.0f), 0x08);
+}
+
 int main(int argc, char **argv)
 {
-  std::FILE   *outFile = (std::FILE *) 0;
-  const char  *outFileName = (char *) 0;
-  NIF_View    *renderer = (NIF_View *) 0;
+  std::FILE   *outFile = nullptr;
+  const char  *outFileName = nullptr;
+  NIF_View    *renderer = nullptr;
   bool    consoleFlag = true;
   try
   {
@@ -467,6 +537,25 @@ int main(int argc, char **argv)
     bool    verboseMaterialInfo = false;
     bool    enableVertexColors = false;
     bool    enableVertexWeights = false;
+    // render and view options
+    unsigned char debugMode = 0;
+    bool    enableHidden = false;
+    unsigned char viewDirection = 0;
+    float   viewScale = 1.0f;
+    float   modelRotationX = 0.0f;
+    float   modelRotationY = 0.0f;
+    float   modelRotationZ = 0.0f;
+    float   lightScale = 1.0f;
+    float   lightRotationY = 56.25f;
+    float   lightRotationZ = -135.0f;
+    float   waterEnvMapLevel = 1.0f;
+    float   lightLevel = 1.0f;
+    std::uint32_t lightColor = 0xFFFFFFFFU;
+    float   envLevel = 1.0f;
+    std::uint32_t envColor = 0xFFFFFFFFU;
+    const char  *defaultEnvMap = nullptr;
+    const char  *waterTexture = nullptr;
+    float   reflZScale = 1.0f;
     for ( ; argc >= 2 && argv[1][0] == '-'; argc--, argv++)
     {
       if (std::strcmp(argv[1], "--") == 0)
@@ -542,6 +631,103 @@ int main(int argc, char **argv)
       {
         verboseMaterialInfo = true;
       }
+      else if (std::strcmp(argv[1], "-cam") == 0)
+      {
+        if (argc < 7)
+          throw FO76UtilsError("missing argument for %s", argv[1]);
+        viewScale = float(parseFloat(argv[2], "invalid view scale",
+                                     1.0 / 512.0, 16.0));
+        viewDirection = (unsigned char) parseInteger(argv[3], 10,
+                                                     "invalid view direction",
+                                                     0, 19);
+        modelRotationX = float(parseFloat(argv[4], "invalid model X rotation",
+                                          -360.0, 360.0));
+        modelRotationY = float(parseFloat(argv[5], "invalid model Y rotation",
+                                          -360.0, 360.0));
+        modelRotationZ = float(parseFloat(argv[6], "invalid model Z rotation",
+                                          -360.0, 360.0));
+        argc = argc - 5;
+        argv = argv + 5;
+      }
+      else if (std::strcmp(argv[1], "-light") == 0)
+      {
+        if (argc < 5)
+          throw FO76UtilsError("missing argument for %s", argv[1]);
+        lightScale = float(parseFloat(argv[2], "invalid RGB scale",
+                                      0.125, 4.0));
+        lightRotationY = float(parseFloat(argv[3], "invalid light Y rotation",
+                                          -360.0, 360.0));
+        lightRotationZ = float(parseFloat(argv[4], "invalid light Z rotation",
+                                          -360.0, 360.0));
+        argc = argc - 3;
+        argv = argv + 3;
+      }
+      else if (std::strcmp(argv[1], "-env") == 0)
+      {
+        if (argc < 3)
+          throw FO76UtilsError("missing argument for %s", argv[1]);
+        defaultEnvMap = argv[2];
+        argc--;
+        argv++;
+      }
+      else if (std::strcmp(argv[1], "-lcolor") == 0)
+      {
+        if (argc < 6)
+          throw FO76UtilsError("missing argument for %s", argv[1]);
+        lightLevel = float(parseFloat(argv[2], "invalid light source level",
+                                      0.125, 4.0));
+        lightColor = std::uint32_t(parseInteger(argv[3], 0,
+                                                "invalid light source color",
+                                                -1, 0x00FFFFFF) & 0x00FFFFFF);
+        envLevel = float(parseFloat(argv[4], "invalid environment light level",
+                                    0.125, 4.0));
+        envColor = std::uint32_t(parseInteger(argv[5], 0,
+                                              "invalid environment light color",
+                                              -1, 0x00FFFFFF) & 0x00FFFFFF);
+        argc = argc - 4;
+        argv = argv + 4;
+      }
+      else if (std::strcmp(argv[1], "-rscale") == 0)
+      {
+        if (argc < 3)
+          throw FO76UtilsError("missing argument for %s", argv[1]);
+        reflZScale =
+            float(parseFloat(argv[2], "invalid reflection view vector Z scale",
+                             0.25, 16.0));
+        argc--;
+        argv++;
+      }
+      else if (std::strcmp(argv[1], "-wtxt") == 0)
+      {
+        if (argc < 3)
+          throw FO76UtilsError("missing argument for %s", argv[1]);
+        waterTexture = argv[2];
+        argc--;
+        argv++;
+      }
+      else if (std::strcmp(argv[1], "-wrefl") == 0)
+      {
+        if (argc < 3)
+          throw FO76UtilsError("missing argument for %s", argv[1]);
+        waterEnvMapLevel =
+            float(parseFloat(argv[2], "invalid water environment map scale",
+                             0.0, 4.0));
+        argc--;
+        argv++;
+      }
+      else if (std::strcmp(argv[1], "-debug") == 0)
+      {
+        if (argc < 3)
+          throw FO76UtilsError("missing argument for %s", argv[1]);
+        debugMode = (unsigned char) parseInteger(argv[2], 10,
+                                                 "invalid debug mode", 0, 5);
+        argc--;
+        argv++;
+      }
+      else if (std::strcmp(argv[1], "-enable-markers") == 0)
+      {
+        enableHidden = true;
+      }
       else if (std::strcmp(argv[1], "-h") == 0 ||
                std::strcmp(argv[1], "--help") == 0)
       {
@@ -559,44 +745,46 @@ int main(int argc, char **argv)
       SDLDisplay::enableConsole();
     if (argc < 3)
     {
-      std::fprintf(stderr,
-                   "Usage: nif_info [OPTIONS] ARCHIVEPATH PATTERN...\n");
-      std::fprintf(stderr, "Options:\n");
-      std::fprintf(stderr, "    --      Remaining options are file names\n");
-      std::fprintf(stderr, "    -o FILENAME     Set output file name "
-                           "(default: standard output)\n");
-      std::fprintf(stderr, "    -q      Print author name, file name, "
-                           "and file size only\n");
-      std::fprintf(stderr, "    -v      Verbose mode, print block list, "
-                           "and vertex and triangle data\n");
-      std::fprintf(stderr, "    -m      Print detailed material information\n");
-      std::fprintf(stderr, "    -obj    Print model data in .obj format\n");
-      std::fprintf(stderr, "    -mtl    Print material data in .mtl format\n");
-      std::fprintf(stderr, "    -c      Enable vertex colors in .obj output\n");
-      std::fprintf(stderr, "    -w      Enable vertex weights in .obj "
-                           "output\n");
-      std::fprintf(stderr, "    -lN     Set level of detail (default: -l0)\n");
-      std::fprintf(stderr, "    -render[WIDTHxHEIGHT] DDSFILE   "
-                           "Render model to DDS file\n");
-#ifdef HAVE_SDL2
-      std::fprintf(stderr, "    -view[WIDTHxHEIGHT]     View model\n");
-#endif
+      for (size_t i = 0; usageStrings[i]; i++)
+        std::fprintf(stderr, "%s\n", usageStrings[i]);
       return 1;
     }
     std::vector< std::string >  fileNames;
     for (int i = 2; i < argc; i++)
-      fileNames.push_back(argv[i]);
-    fileNames.push_back(".bgem");
-    fileNames.push_back(".bgsm");
-    fileNames.push_back(".cdb");
-    fileNames.push_back(".mat");
-    fileNames.push_back(".mesh");
+      fileNames.emplace_back(argv[i]);
+    fileNames.emplace_back(".bgem");
+    fileNames.emplace_back(".bgsm");
+    fileNames.emplace_back(".cdb");
+    fileNames.emplace_back(".mat");
+    fileNames.emplace_back(".mesh");
     if (outFmt >= 5)
-      fileNames.push_back(".dds");
+      fileNames.emplace_back(".dds");
     BA2File ba2File(argv[1], &archiveFilterFunction, &fileNames);
     ba2File.getFileList(fileNames);
     if (outFmt >= 5)
-      renderer = new NIF_View(ba2File, (ESMFile *) 0);
+    {
+      renderer = new NIF_View(ba2File, nullptr);
+      renderer->debugMode = debugMode;
+      renderer->enableHidden = enableHidden;
+      renderer->viewRotationX = viewRotations[viewDirection * 3];
+      renderer->viewRotationY = viewRotations[viewDirection * 3 + 1];
+      renderer->viewRotationZ = viewRotations[viewDirection * 3 + 2];
+      renderer->viewScale = viewScale;
+      renderer->modelRotationX = modelRotationX;
+      renderer->modelRotationY = modelRotationY;
+      renderer->modelRotationZ = modelRotationZ;
+      renderer->rgbScale = convertLightColor(0xFFFFFFFFU, lightScale)[0];
+      renderer->lightRotationY = lightRotationY;
+      renderer->lightRotationZ = lightRotationZ;
+      renderer->waterEnvMapLevel = waterEnvMapLevel;
+      renderer->lightColor = convertLightColor(lightColor, lightLevel);
+      renderer->envColor = convertLightColor(envColor, envLevel);
+      if (defaultEnvMap)
+        renderer->defaultEnvMap = defaultEnvMap;
+      if (waterTexture)
+        renderer->waterTexture = waterTexture;
+      renderer->reflZScale = reflZScale;
+    }
     if (outFmt == 6)
     {
       for (size_t i = 0; i < fileNames.size(); )
