@@ -4,7 +4,7 @@
 
 #include "common.hpp"
 #include "filebuf.hpp"
-#include "ddstxt.hpp"
+#include "ddstxt16.hpp"
 #include "landdata.hpp"
 #include "landtxt.hpp"
 #include "nif_file.hpp"
@@ -17,7 +17,7 @@ class TerrainMesh : public NIFFile::NIFTriShape
   std::vector< unsigned char >  textureBuf;
   std::vector< unsigned char >  textureBuf2;
   std::vector< std::uint16_t >  hmapBuf;
-  DDSTexture    *landTexture[8];
+  DDSTexture16  *landTexture[8];
   unsigned int  landTextureMask;
  public:
   TerrainMesh();
@@ -38,7 +38,7 @@ class TerrainMesh : public NIFFile::NIFTriShape
   {
     return landTextureMask;
   }
-  inline const DDSTexture * const *getTextures() const
+  inline const DDSTexture16 * const *getTextures() const
   {
     return landTexture;
   }

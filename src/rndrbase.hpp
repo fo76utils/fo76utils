@@ -6,7 +6,7 @@
 #include "filebuf.hpp"
 #include "ba2file.hpp"
 #include "esmfile.hpp"
-#include "ddstxt.hpp"
+#include "ddstxt16.hpp"
 #include "material.hpp"
 #include "nif_file.hpp"
 #include "plot3d.hpp"
@@ -33,7 +33,8 @@ struct Renderer_Base
     };
     struct CachedTexture
     {
-      DDSTexture    *texture;
+      DDSTexture16  *texture;
+      DDSTexture16  *texture2;          // diffuse texture for cube maps
       std::map< CachedTextureKey, CachedTexture >::iterator i;
       CachedTexture *prv;
       CachedTexture *nxt;
@@ -45,8 +46,8 @@ struct Renderer_Base
     CachedTexture *lastTexture;
     std::mutex  textureCacheMutex;
     std::map< CachedTextureKey, CachedTexture > textureCache;
-    static size_t getTextureDataSize(const DDSTexture *t);
-    TextureCache(size_t n = 0x40000000)
+    static size_t getTextureDataSize(const DDSTexture16 *t);
+    TextureCache(size_t n = 0x7FFF0000)
       : textureDataSize(0),
         textureCacheSize(n),
         firstTexture(nullptr),
@@ -56,10 +57,10 @@ struct Renderer_Base
     ~TextureCache();
     // returns NULL on failure
     // *waitFlag is set to true if the texture is locked by another thread
-    const DDSTexture *loadTexture(const BA2File& ba2File,
-                                  const std::string& fileName,
-                                  std::vector< unsigned char >& fileBuf,
-                                  int mipLevel, bool *waitFlag = nullptr);
+    const DDSTexture16 *loadTexture(const BA2File& ba2File,
+                                    const std::string& fileName,
+                                    std::vector< unsigned char >& fileBuf,
+                                    int mipLevel, bool *waitFlag = nullptr);
     void shrinkTextureCache();
     void clear();
   };

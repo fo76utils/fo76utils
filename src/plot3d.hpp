@@ -4,7 +4,7 @@
 
 #include "common.hpp"
 #include "fp32vec4.hpp"
-#include "ddstxt.hpp"
+#include "ddstxt16.hpp"
 #include "material.hpp"
 #include "nif_file.hpp"
 
@@ -61,11 +61,12 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   std::uint32_t *bufN;                  // normals for decal rendering
   int     width;
   int     height;
-  const DDSTexture  *textures[9];
-  const DDSTexture  *textureE;          // environment map
-  float   mipOffsets[9];
-  std::uint16_t textureWidth;
-  std::uint16_t textureHeight;
+  const DDSTexture16  *textures[8];
+  const DDSTexture16  *textureESpec;    // environment map
+  const DDSTexture16  *textureEDiff;
+  float   mipOffsets[8];
+  int     textureWidth;
+  int     textureHeight;
   unsigned int  renderMode;
   unsigned int  debugMode;
   FloatVector4  lightVector;
@@ -90,7 +91,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   {
     struct                              // shader material
     {
-      float   alphaThreshold;           // scaled to 255.0
+      float   alphaThreshold;           // scaled to 0.0 - 1.0
       std::uint32_t alphaBlendMode;
       float   unused1;
       float   unused2;
@@ -129,7 +130,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     }
   };
   MaterialParams  mp;
-  DDSTexture    *defaultTextures;
+  DDSTexture16    *defaultTextures;
   static FloatVector4 colorToSRGB(FloatVector4 c);
   size_t transformVertexData(const NIFFile::NIFVertexTransform& modelTransform);
   inline bool glowEnabled() const
@@ -141,7 +142,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     return bool(flags & CE2Material::Flag_AlphaBlending);
   }
   inline void storeNormal(FloatVector4 n, const std::uint32_t *cPtr);
-  // a = alpha * 255
+  // a = alpha
   FloatVector4 alphaBlend(FloatVector4 c, float a, const Fragment& z) const;
   // c = albedo, e = environment, f0 = reflectance
   // r = roughness, s_i = smoothness * 255
@@ -189,7 +190,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
                         float w0f, float w1f, float w2f);
   void drawLine(Fragment& v, const Vertex& v0, const Vertex& v1);
   void drawTriangles();
-  void setMaterialProperties(const DDSTexture * const *textureSet,
+  void setMaterialProperties(const DDSTexture16 * const *textureSet,
                              unsigned int textureMask);
  public:
   // mode & 3 = 0: diffuse texture only
@@ -216,9 +217,11 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   }
   void setViewAndLightVector(const NIFFile::NIFVertexTransform& vt,
                              float lightX, float lightY, float lightZ);
-  inline void setEnvironmentMap(const DDSTexture *t)
+  inline void setEnvironmentMap(const DDSTexture16 *t,
+                                const DDSTexture16 *t2 = nullptr)
   {
-    textureE = t;
+    textureESpec = t;
+    textureEDiff = t2;
   }
   // Vector to be added to (image X, image Y, 0.0) for cube mapping.
   // Defaults to -(imageWidth / 2), -(imageHeight / 2), imageHeight.
@@ -250,7 +253,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // textureSet[7] = glow map (_emissive.dds)
   // textureSet[8] = translucency map (_transmissive.dds)
   void drawTriShape(const NIFFile::NIFVertexTransform& modelTransform,
-                    const DDSTexture * const *textureSet,
+                    const DDSTexture16 * const *textureSet,
                     unsigned int textureMask);
   // n = 0: default mode
   // n = 1: render c as a solid color (0xRRGGBB)
@@ -263,7 +266,7 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
     debugMode = (n <= 5U ? (n != 1U ? n : (0x80000000U | c)) : 0U);
   }
   // Calculate ambient light from the average color of a cube map.
-  FloatVector4 cubeMapToAmbient(const DDSTexture *e) const;
+  FloatVector4 cubeMapToAmbient(const DDSTexture16 *e) const;
   // Try to find the point of impact for a decal within the specified bounds.
   // Returns the (possibly incorrect) Y offset, or a large negative value that
   // is out of bounds if the search is not successful.
@@ -273,7 +276,8 @@ class Plot3D_TriShape : public NIFFile::NIFTriShape
   // c = color (sRGB) in bits 0 to 23, flags in bits 24 to 31
   //     subtextures (selected with b30 and b31) are enabled if b27 is not set
   void drawDecal(const NIFFile::NIFVertexTransform& modelTransform,
-                 const DDSTexture * const *textureSet, unsigned int textureMask,
+                 const DDSTexture16 * const *textureSet,
+                 unsigned int textureMask,
                  const NIFFile::NIFBounds& b, std::uint32_t c = 0xFFFFFFFFU);
 };
 

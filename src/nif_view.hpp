@@ -6,7 +6,7 @@
 #include "ba2file.hpp"
 #include "material.hpp"
 #include "nif_file.hpp"
-#include "ddstxt.hpp"
+#include "ddstxt16.hpp"
 #include "plot3d.hpp"
 #include "rndrbase.hpp"
 #include "sdlvideo.hpp"
@@ -31,11 +31,11 @@ class NIF_View : protected Renderer_Base
   NIFFile *nifFile;
   NIFFile::NIFVertexTransform modelTransform;
   NIFFile::NIFVertexTransform viewTransform;
-  DDSTexture  defaultTexture;
+  DDSTexture16  defaultTexture;
   CE2MaterialDB materials;
   static void threadFunction(NIF_View *p, size_t n);
-  const DDSTexture *loadTexture(const std::string& texturePath,
-                                size_t threadNum = 0);
+  const DDSTexture16 *loadTexture(const std::string& texturePath,
+                                  size_t threadNum = 0);
   void setDefaultTextures(int envMapNum = 0);
  public:
   std::string defaultEnvMap;

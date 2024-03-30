@@ -106,7 +106,7 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
           ts.setDebugMode(1, c);
         }
       }
-      const DDSTexture  *textures[10];
+      const DDSTexture16  *textures[10];
       unsigned int  textureMask = 0U;
       if (ts.flags & CE2Material::Flag_IsWater) [[unlikely]]
       {
@@ -155,10 +155,10 @@ void NIF_View::threadFunction(NIF_View *p, size_t n)
   }
 }
 
-const DDSTexture * NIF_View::loadTexture(const std::string& texturePath,
-                                         size_t threadNum)
+const DDSTexture16 * NIF_View::loadTexture(const std::string& texturePath,
+                                           size_t threadNum)
 {
-  const DDSTexture  *t =
+  const DDSTexture16  *t =
       textureSet.loadTexture(ba2File, texturePath,
                              threadFileBuffers[threadNum], 0);
 #if 0
@@ -188,7 +188,7 @@ NIF_View::NIF_View(const BA2File& archiveFiles, ESMFile *esmFilePtr)
     lightY(0.0f),
     lightZ(1.0f),
     nifFile(nullptr),
-    defaultTexture(0xFFFFFFFFU),
+    defaultTexture(FloatVector4(1.0f)),
     waterTexture("textures/water/wavesdefault_normal.dds"),
     modelRotationX(0.0f),
     modelRotationY(0.0f),

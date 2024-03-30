@@ -71,7 +71,7 @@ int main(int argc, char **argv)
     std::vector< const char * > args;
     unsigned char threadCnt = 0;
     unsigned char modelBatchCnt = 16;
-    unsigned int  textureCacheSize = 1024U;
+    unsigned int  textureCacheSize = 2047U;
     bool    verboseMode = true;
     bool    distantObjectsOnly = false;
     bool    noDisabledObjects = true;

@@ -3,7 +3,7 @@
 #define LANDTXT_HPP_INCLUDED
 
 #include "common.hpp"
-#include "ddstxt.hpp"
+#include "ddstxt16.hpp"
 #include "landdata.hpp"
 #include "fp32vec4.hpp"
 #include "material.hpp"
@@ -18,17 +18,17 @@ struct LandscapeTextureSet
   // textures[5] = ambient occlusion (_ao.dds)
   // textures[6] = height map (_height.dds)
   // textures[7] = glow map (_emissive.dds)
-  const DDSTexture  *textures[8];
+  const DDSTexture16  *textures[8];
   LandscapeTextureSet()
   {
     for (size_t i = 0; i < 8; i++)
-      textures[i] = (DDSTexture *) 0;
+      textures[i] = nullptr;
   }
-  inline const DDSTexture*& operator[](size_t n)
+  inline const DDSTexture16*& operator[](size_t n)
   {
     return textures[n];
   }
-  inline const DDSTexture * const& operator[](size_t n) const
+  inline const DDSTexture16 * const& operator[](size_t n) const
   {
     return textures[n];
   }
@@ -51,7 +51,7 @@ class LandscapeTexture
   float   txtScale;
   bool    integerMip;
   unsigned char txtSetMip;
-  std::uint32_t defaultColor;
+  std::uint64_t defaultColor;
   static inline FloatVector4 rotateNormalSF(const FloatVector4& n);
   static inline FloatVector4 blendColors(FloatVector4 c0, FloatVector4 c1,
                                          float f);
@@ -99,8 +99,8 @@ class LandscapeTexture
                            int x0, int y0, int x1, int y1);
  public:
   // output resolution is 2^renderScale pixels per vertex
-  // outBufs[0]: diffuse texture in B8G8R8 format
-  // outBufs[1]: normal map in X8Y8 format
+  // outBufs[0]: diffuse texture in R8G8B8A8_UNORM_SRGB format
+  // outBufs[1]: normal map in R8G8_SNORM format
   // outBufs[3]: roughness map in R8 (grayscale) format
   // outBufs[4]: metalness map in R8 (grayscale) format
   // outBufs[5]: ambient occlusion map in R8 (grayscale) format

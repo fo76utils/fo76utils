@@ -1566,7 +1566,7 @@ void Renderer::renderDecal(RenderThread& t, const RenderObject& p)
   if (!txtSet)
     return;
   t.renderer->setMaterial(m);
-  const DDSTexture  *textures[10];
+  const DDSTexture16  *textures[10];
   unsigned int  textureMask = 0U;
   unsigned int  texturePathMask = txtSet->texturePathMask;
   std::uint16_t texturePathMaskBase = 0x0005;
@@ -1687,7 +1687,7 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
     for (size_t j = 0; j < t.sortBuf.size(); j++)
     {
       *(t.renderer) = nifFiles[n].meshData[size_t(t.sortBuf[j])];
-      const DDSTexture  *textures[10];
+      const DDSTexture16  *textures[10];
       unsigned int  textureMask = 0U;
       if (t.renderer->flags & CE2Material::Flag_IsWater) [[unlikely]]
       {
@@ -1821,7 +1821,7 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
     tmp.m = nullptr;
     t.renderer->setRenderMode(3U | renderMode);
     *(t.renderer) = tmp;
-    const DDSTexture  *textures[2];
+    const DDSTexture16  *textures[2];
     unsigned int  textureMask = 0U;
     textures[1] = textureCache.loadTexture(ba2File, defaultWaterTexture,
                                            t.fileBuf, 0);
@@ -1983,7 +1983,7 @@ Renderer::Renderer(int imageWidth, int imageHeight, const BA2File& archiveFiles,
     enableActors(false),
     waterRenderMode(0),
     bufAllocFlags((unsigned char) (int(!bufRGBA) | (int(!bufZ) << 1))),
-    whiteTexture(0xFFFFFFFFU),
+    whiteTexture(FloatVector4(1.0f)),
     outBufN(nullptr)
 {
   materials.loadArchives(ba2File);

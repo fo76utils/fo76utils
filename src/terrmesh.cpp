@@ -1,6 +1,7 @@
 
 #include "common.hpp"
 #include "fp32vec4.hpp"
+#include "filebuf.hpp"
 #include "terrmesh.hpp"
 #include "landtxt.hpp"
 #include "material.hpp"
@@ -14,21 +15,22 @@ static inline FloatVector4 calculateNormal(FloatVector4 v1, FloatVector4 v2)
   return tmp.normalize3Fast();
 }
 
-static inline unsigned int landTxtPixelBytes(size_t n)
+static inline unsigned char landTxtPixelFormat(size_t n)
 {
-  return ((0x31111123U >> (unsigned char) (n << 2)) & 15U);
+  unsigned char b = (unsigned char) (n << 3);
+  return (unsigned char) ((0x1D3D3D3D3D3D331DULL >> b) & 0xFFU);
 }
 
 TerrainMesh::TerrainMesh()
   : NIFFile::NIFTriShape()
 {
-  for (size_t i = 0; i < (sizeof(landTexture) / sizeof(DDSTexture *)); i++)
+  for (size_t i = 0; i < (sizeof(landTexture) / sizeof(DDSTexture16 *)); i++)
     landTexture[i] = nullptr;
 }
 
 TerrainMesh::~TerrainMesh()
 {
-  for (size_t i = 0; i < (sizeof(landTexture) / sizeof(DDSTexture *)); i++)
+  for (size_t i = 0; i < (sizeof(landTexture) / sizeof(DDSTexture16 *)); i++)
   {
     if (landTexture[i])
       delete landTexture[i];
@@ -156,7 +158,7 @@ void TerrainMesh::createMesh(
   }
   // create textures
   landTextureMask = 0U;
-  for (size_t i = 0; i < (sizeof(landTexture) / sizeof(DDSTexture *)); i++)
+  for (size_t i = 0; i < (sizeof(landTexture) / sizeof(DDSTexture16 *)); i++)
   {
     if (landTexture[i])
     {
@@ -164,41 +166,21 @@ void TerrainMesh::createMesh(
       landTexture[i] = nullptr;
     }
   }
-  textureBuf.reserve(size_t(txtWP2) * size_t(txtHP2) * 3U + 128U);
-  unsigned int  ddsHdrBuf[32];
-  for (size_t i = 6; i < 32; i++)
-    ddsHdrBuf[i] = 0U;
-  ddsHdrBuf[0] = 0x20534444;    // "DDS "
-  ddsHdrBuf[1] = 124;           // size of DDS_HEADER
-  ddsHdrBuf[2] = 0x0000100F;    // caps, height, width, pitch, pixel format
-  ddsHdrBuf[3] = (unsigned int) txtHP2;
-  ddsHdrBuf[4] = (unsigned int) txtWP2;
-  ddsHdrBuf[19] = 32;           // size of DDS_PIXELFORMAT
-  ddsHdrBuf[20] = 0x00000040;   // DDPF_RGB
-  ddsHdrBuf[27] = 0x00001000;   // DDSCAPS_TEXTURE
+  textureBuf.reserve(size_t(txtWP2) * size_t(txtHP2) * 4U + 148U);
   int     txtOffsX = (txtWP2 - txtW) >> 1;
   int     txtOffsY = (txtHP2 - txtH) >> 1;
-  for (size_t k = 0; k < (sizeof(landTexture) / sizeof(DDSTexture *)); k++)
+  for (size_t k = 0; k < (sizeof(landTexture) / sizeof(DDSTexture16 *)); k++)
   {
     unsigned int  b = 1U << (unsigned char) k;
     if (!(ltexMask & b))
       continue;
-    unsigned int  pixelBytes = landTxtPixelBytes(k);
-    ddsHdrBuf[5] = (unsigned int) txtWP2 * pixelBytes;  // pitch
-    ddsHdrBuf[22] = pixelBytes << 3;                    // bits per pixel
-    ddsHdrBuf[23] = 0xFFU << ((2U - pixelBytes) & 16U); // red mask
-    ddsHdrBuf[24] = (1U - pixelBytes) & 0x0000FF00U;    // green mask
-    ddsHdrBuf[25] = ddsHdrBuf[23] >> 16;                // blue mask
-    textureBuf.resize(size_t(txtWP2) * size_t(txtHP2) * pixelBytes + 128U);
+    unsigned char dxgiFormat = landTxtPixelFormat(k);
+    unsigned int  pixelBytes =
+        FileBuffer::dxgiFormatSizeTable[dxgiFormat] & 0x7FU;
+    textureBuf.resize(size_t(txtWP2) * size_t(txtHP2) * pixelBytes + 148U);
     unsigned char *dstPtr = textureBuf.data();
-    for (size_t i = 0; i < 32; i++, dstPtr = dstPtr + 4)
-    {
-      unsigned int  n = ddsHdrBuf[i];
-      dstPtr[0] = (unsigned char) (n & 0xFF);
-      dstPtr[1] = (unsigned char) ((n >> 8) & 0xFF);
-      dstPtr[2] = (unsigned char) ((n >> 16) & 0xFF);
-      dstPtr[3] = (unsigned char) ((n >> 24) & 0xFF);
-    }
+    FileBuffer::writeDDSHeader(dstPtr, dxgiFormat, txtWP2, txtHP2);
+    dstPtr = dstPtr + 148;
     for (int y = 0; y < txtHP2; y++)
     {
       int     yc = (y0 << textureScale) + ((y + txtOffsY) & (txtHP2 - 1));
@@ -227,18 +209,17 @@ void TerrainMesh::createMesh(
       }
       else
       {
-        for (int x = 0; x < txtWP2; x++, dstPtr = dstPtr + 3)
+        for (int x = 0; x < txtWP2; x++, dstPtr = dstPtr + 4)
         {
           int     xc = (x0 << textureScale) + ((x + txtOffsX) & (txtWP2 - 1));
           xc = std::min(std::max(xc - txtOffsX, 0), ltexWidth - 1);
-          size_t  offs = size_t(xc) * 3U;
-          FileBuffer::writeUInt16Fast(
-              dstPtr, FileBuffer::readUInt16Fast(srcPtr + offs));
-          dstPtr[2] = srcPtr[offs + 2];
+          size_t  offs = size_t(xc) * 4U;
+          FileBuffer::writeUInt32Fast(
+              dstPtr, FileBuffer::readUInt32Fast(srcPtr + offs));
         }
       }
     }
-    landTexture[k] = new DDSTexture(textureBuf.data(), textureBuf.size());
+    landTexture[k] = new DDSTexture16(textureBuf.data(), textureBuf.size());
     landTextureMask = landTextureMask | b;
   }
 }
@@ -263,7 +244,7 @@ void TerrainMesh::createMesh(
   {
     unsigned int  b = 1U << (unsigned char) i;
     if (ltexMask & b)
-      totalDataSize = totalDataSize + landTxtPixelBytes(i);
+      totalDataSize = totalDataSize + ((!i || i == 7) ? 4 : (i == 1 ? 2 : 1));
   }
   totalDataSize = totalDataSize * (size_t(txtW) * size_t(txtH));
   textureBuf2.resize(totalDataSize);
@@ -278,7 +259,8 @@ void TerrainMesh::createMesh(
       continue;
     }
     ltexData[i] = p;
-    p = p + (size_t(txtW) * size_t(txtH) * landTxtPixelBytes(i));
+    p = p + (size_t(txtW) * size_t(txtH)
+             * ((!i || i == 7) ? 4U : (i == 1 ? 2U : 1U)));
   }
   if (totalDataSize > 0)
   {

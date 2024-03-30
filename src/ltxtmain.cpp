@@ -1,7 +1,7 @@
 
 #include "common.hpp"
 #include "filebuf.hpp"
-#include "ddstxt.hpp"
+#include "ddstxt16.hpp"
 #include "ba2file.hpp"
 #include "esmfile.hpp"
 #include "landdata.hpp"
@@ -117,11 +117,11 @@ static void loadTextures(
         if (ba2File)
         {
           int     n = ba2File->extractTexture(tmpBuf, fileName, mipOffset);
-          textures[i][j] = new DDSTexture(tmpBuf.data(), tmpBuf.size(), n);
+          textures[i][j] = new DDSTexture16(tmpBuf.data(), tmpBuf.size(), n);
         }
         else
         {
-          textures[i][j] = new DDSTexture(fileName.c_str(), mipOffset);
+          textures[i][j] = new DDSTexture16(fileName.c_str(), mipOffset);
         }
       }
       catch (...)
@@ -186,7 +186,7 @@ RenderThread::~RenderThread()
 
 void RenderThread::renderLines(int y0, int y1)
 {
-  outBuf.resize(size_t(width << xyScale) * size_t(y1 - y0) * 3U);
+  outBuf.resize(size_t(width << xyScale) * size_t(y1 - y0) * 4U);
   unsigned char *outBufs[8];
   for (size_t i = 0; i < 8; i++)
     outBufs[i] = (unsigned char *) 0;
@@ -459,7 +459,7 @@ int main(int argc, char **argv)
     hdrBuf[9] = hdrBuf[9] << xyScale;
     DDSOutputFile outFile(args[1],
                           width, height, DDSInputFile::pixelFormatRGB24,
-                          hdrBuf, (!ssaaLevel ? 0 : 16384));
+                          hdrBuf, 16384);
     if (ssaaLevel > 0)
     {
       xyScale += int(ssaaLevel);
@@ -515,19 +515,25 @@ int main(int argc, char **argv)
         threads[i]->threadPtr = (std::thread *) 0;
         if (!ssaaLevel)
         {
-          outFile.writeData(threads[i]->outBuf.data(),
-                            sizeof(unsigned char) * threads[i]->outBuf.size());
+          for (size_t j = 0; (j + 4) <= threads[i]->outBuf.size(); j = j + 4)
+          {
+            std::uint32_t c =
+                FileBuffer::readUInt32Fast(threads[i]->outBuf.data() + j);
+            unsigned char tmpBuf[3];
+            tmpBuf[0] = (unsigned char) ((c >> 16) & 0xFF);     // B
+            tmpBuf[1] = (unsigned char) ((c >> 8) & 0xFF);      // G
+            tmpBuf[2] = (unsigned char) (c & 0xFF);             // R
+            outFile.writeData(tmpBuf, 3);
+          }
         }
         else
         {
           size_t  k = size_t(downsampleY1) * size_t(width);
-          downsampleY1 += int(threads[i]->outBuf.size() / (size_t(width) * 3U));
-          for (size_t j = 0; (j + 2) < threads[i]->outBuf.size(); j = j + 3)
+          downsampleY1 += int(threads[i]->outBuf.size() / (size_t(width) * 4U));
+          for (size_t j = 0; (j + 4) <= threads[i]->outBuf.size(); j = j + 4)
           {
-            std::uint32_t b = threads[i]->outBuf[j];
-            std::uint32_t g = threads[i]->outBuf[j + 1];
-            std::uint32_t r = threads[i]->outBuf[j + 2];
-            downsampleBuf[k] = 0xFF000000U | r | (g << 8) | (b << 16);
+            downsampleBuf[k] =
+                FileBuffer::readUInt32Fast(threads[i]->outBuf.data() + j);
             k++;
           }
           bool    endFlag =
@@ -578,7 +584,7 @@ int main(int argc, char **argv)
   for (size_t i = 0; i < landTextures.size(); i++)
   {
     if (landTextures[i][0])
-      delete const_cast< DDSTexture * >(landTextures[i][0]);
+      delete const_cast< DDSTexture16 * >(landTextures[i][0]);
   }
   if (landData)
     delete landData;

@@ -7,7 +7,7 @@
 #include "ba2file.hpp"
 #include "esmfile.hpp"
 #include "landdata.hpp"
-#include "ddstxt.hpp"
+#include "ddstxt16.hpp"
 #include "landtxt.hpp"
 #include "material.hpp"
 #include "nif_file.hpp"
@@ -255,7 +255,7 @@ class Renderer : protected Renderer_Base
   NIFFile::NIFBounds  worldBounds;
   std::vector< std::int32_t > baseObjects;      // baseObjHashMask + 1 elements
   std::vector< std::vector< BaseObject > >  baseObjectBufs;
-  DDSTexture  whiteTexture;
+  DDSTexture16  whiteTexture;
   // for WATR objects, waterMaterials[0] is the default water
   std::map< unsigned int, WaterProperties > waterMaterials;
   std::uint32_t *outBufN;               // normals for decal rendering

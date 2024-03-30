@@ -1,6 +1,7 @@
 
 #include "common.hpp"
 #include "plot3d.hpp"
+#include "fp32vec8.hpp"
 
 #include <algorithm>
 
@@ -207,7 +208,6 @@ static inline FloatVector4 alphaBlendFunction(
 FloatVector4 Plot3D_TriShape::alphaBlend(
     FloatVector4 c, float a, const Fragment& z) const
 {
-  a = a * (1.0f / 255.0f);
   unsigned char blendMode = (unsigned char) ((mp.s.alphaBlendMode >> 1) & 0xFF);
   if (a >= (511.0f / 512.0f) && blendMode == 0x76)
     return c;
@@ -274,9 +274,8 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_SF(
 
 inline FloatVector4 Plot3D_TriShape::Fragment::normalMap(FloatVector4 n)
 {
-  n -= 127.5f;
   // calculate Z normal
-  float   z = 16256.25f - std::min(n.dotProduct2(n), 16256.25f);    // 127.5^2
+  float   z = 1.0f - std::min(n.dotProduct2(n), 1.0f);
   z = float(std::sqrt(z));
   FloatVector4  tmpN(FloatVector4::normalize3x3Fast(
                          tangent, bitangent, normal));
@@ -306,7 +305,7 @@ inline FloatVector4 Plot3D_TriShape::calculateReflection(const Vertex& v) const
 inline FloatVector4 Plot3D_TriShape::environmentMap(
     FloatVector4 reflectedView, float smoothness) const
 {
-  if (!textureE) [[unlikely]]
+  if (!textureESpec) [[unlikely]]
     return ambientLight;
   // inverse rotation by view matrix
   FloatVector4  v((viewTransformInvX * reflectedView[0])
@@ -314,12 +313,7 @@ inline FloatVector4 Plot3D_TriShape::environmentMap(
                   + (viewTransformInvZ * reflectedView[2]));
   float   mipLevel =
       (1.0f - smoothness) * ((1.0f - smoothness) * -4.0f + 10.0f);
-  FloatVector4  e(textureE->cubeMap(v[0], v[1], v[2], mipLevel));
-  if (textureE->isSRGBTexture()) [[likely]]
-    e.srgbExpand();
-  else
-    e *= (1.0f / 255.0f);
-  return e;
+  return textureESpec->cubeMap(v[0], v[1], v[2], mipLevel);
 }
 
 inline FloatVector4 Plot3D_TriShape::specularGGX(
@@ -346,8 +340,8 @@ inline FloatVector4 Plot3D_TriShape::calculateLighting_Water(
 {
   float   nDotL, nDotV;
   FloatVector4  n(textures[1]->getPixelT(z.u(), z.v(), z.mipLevel));
-  n = (n - 127.5f) * mp.w.normalScale + 127.5f;
-  n.maxValues(FloatVector4(0.0f)).minValues(FloatVector4(255.0f));
+  n *= mp.w.normalScale;
+  n.maxValues(FloatVector4(-1.0f)).minValues(FloatVector4(1.0f));
   n = z.normalMap(n);
   FloatVector4  reflectedView(calculateReflection(z));
   FloatVector4  e(environmentMap(reflectedView, 1.0f));
@@ -392,22 +386,18 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
   *(z.zPtr) = z.xyz[2];
   float   txtU = z.u();
   float   txtV = z.v();
-  float   smoothness = 255.0f;
+  float   roughness = 0.0f;
   float   ao = 1.0f;
   if (p.textures[5])
-  {
-    ao = p.textures[5]->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsets[5])[0]
-         * (1.0f / 255.0f);
-  }
+    ao = p.textures[5]->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsets[5])[0];
   if (p.textures[3])
   {
-    smoothness =
-        255.0f
-        - p.textures[3]->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsets[3])[0];
+    roughness =
+        p.textures[3]->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsets[3])[0];
   }
-  int     s_i = roundFloat(smoothness) & 0xFF;
-  smoothness = smoothness * (1.0f / 255.0f);
-  float   roughness = std::max(1.0f - smoothness, 0.03125f);
+  float   smoothness = 1.0f - roughness;
+  roughness = std::max(roughness, 0.03125f);
+  int     s_i = roundFloat(smoothness * 255.0f) & 0xFF;
   float   nDotL = z.normal.dotProduct3(p.lightVector);
   float   nDotV = float(std::fabs(z.normal[2]));
   FloatVector4  reflectedView(p.calculateReflection(z));
@@ -426,8 +416,8 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
   if (p.textures[4])
     m = p.textures[4]->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsets[4])[0];
   c.clearV3();
-  FloatVector4  f0(FloatVector4(0.04f) + (c * (m * (0.96f / 255.0f))));
-  c *= ((255.0f - m) * (1.0f / 255.0f));
+  FloatVector4  f0(FloatVector4(0.04f) + (c * (m * 0.96f)));
+  c *= (1.0f - m);
   c[3] = a;
   // Fresnel (coefficients are optimized for glass) with roughness
   float   f =
@@ -444,30 +434,12 @@ void Plot3D_TriShape::drawPixel_Effect(Plot3D_TriShape& p, Fragment& z)
   *(z.cPtr) = c.srgbCompress().convertToRGBA32(true, true);
 }
 
-static inline void srgbExpandWithBaseColor(
-    FloatVector4& c, FloatVector4 baseColor, bool isSRGB)
-{
-  if (isSRGB) [[likely]]
-  {
-    c *= baseColor;
-    c.srgbExpand();
-  }
-  else
-  {
-    // srgbExpand() modified to convert from 1.0 to 1.0/255.0 range
-    baseColor *= (baseColor * float(0.13945550 / 15.9687194)
-                  + float(0.86054450 / 15.9687194));    // divide by sqrt(255.0)
-    c *= (baseColor * baseColor);
-  }
-}
-
 FloatVector4 Plot3D_TriShape::glowMap(const Fragment& z) const
 {
   FloatVector4  c(mp.s.emissiveColor);
   FloatVector4  tmp(textures[7]->getPixelT_Inline(
                         z.u(), z.v(), z.mipLevel + mipOffsets[7]));
-  srgbExpandWithBaseColor(tmp, c, textures[7]->isSRGBTexture());
-  return (tmp * c[3]);
+  return (tmp * (c * c) * c[3]);
 }
 
 bool Plot3D_TriShape::getDiffuseColor_Effect(
@@ -488,7 +460,7 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
   FloatVector4  tmp(p.textures[0]->getPixelT_Inline(
                         z.u(), z.v(), z.mipLevel + p.mipOffsets[0]));
   FloatVector4  baseColor(p.mp.e.baseColor);
-  float   a = 255.0f;
+  float   a = 1.0f;
   if (p.textures[2])
     a = p.textures[2]->getPixelT(z.u(), z.v(), z.mipLevel + p.mipOffsets[2])[0];
   a *= baseColor[3];
@@ -519,9 +491,8 @@ bool Plot3D_TriShape::getDiffuseColor_Effect(
   a = a * vColor[3] * f;
   if (a < p.mp.e.alphaThreshold)
     return false;
-  srgbExpandWithBaseColor(tmp, vColor, p.textures[0]->isSRGBTexture());
-  tmp *= baseColor;
-  tmp[3] = a;                   // alpha * 255
+  tmp *= vColor * vColor * baseColor;
+  tmp[3] = a;                   // alpha
   c = tmp;
   if (!(p.m->effectSettings->flags & CE2Material::EffectFlag_ZWrite))
     z.zPtr = &(z.xyz[2]);
@@ -532,7 +503,7 @@ bool Plot3D_TriShape::getDiffuseColor_C(
     const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
   FloatVector4  baseColor(p.mp.s.baseColor);
-  float   a = 255.0f;
+  float   a = 1.0f;
   if (p.textures[2])
   {
     a = p.textures[2]->getPixelT_Inline(
@@ -543,8 +514,8 @@ bool Plot3D_TriShape::getDiffuseColor_C(
     return false;
   FloatVector4  tmp(p.textures[0]->getPixelT_Inline(
                         z.u(), z.v(), z.mipLevel + p.mipOffsets[0]));
-  srgbExpandWithBaseColor(tmp, baseColor, p.textures[0]->isSRGBTexture());
-  tmp[3] = a;                   // alpha * 255
+  tmp *= baseColor * baseColor;
+  tmp[3] = a;                   // alpha
   c = tmp;
   return true;
 }
@@ -553,11 +524,8 @@ bool Plot3D_TriShape::getDiffuseColor_Water(
     const Plot3D_TriShape& p, FloatVector4& c, Fragment& z)
 {
   FloatVector4  tmp(p.textures[0]->getPixelT(z.u(), z.v(), z.mipLevel));
-  tmp -= 127.5f;
-  tmp[2] = float(std::sqrt(std::max(16256.25f - tmp.dotProduct2(tmp), 0.0f)));
-  tmp += 127.5f;
-  tmp.srgbExpand();
-  tmp[3] = 255.0f;
+  tmp[2] = float(std::sqrt(std::max(1.0f - tmp.dotProduct2(tmp), 0.0f)));
+  tmp[3] = 1.0f;
   c = tmp;
   return true;
 }
@@ -670,14 +638,12 @@ void Plot3D_TriShape::drawPixel_SF(Plot3D_TriShape& p, Fragment& z)
       p.textures[5]->getPixelT(txtU, txtV, z.mipLevel + p.mipOffsets[5])[0];
   float   a = c[3];
   c.clearV3();
-  FloatVector4  f0(FloatVector4(0.04f) + (c * (m * (0.96f / 255.0f))));
-  c *= ((255.0f - m) * (1.0f / 255.0f));
+  FloatVector4  f0(FloatVector4(0.04f) + (c * (m * 0.96f)));
+  c *= (1.0f - m);
   c[3] = a;
-  ao *= (1.0f / 255.0f);
-  float   smoothness = 255.0f - r;
-  int     s_i = roundFloat(smoothness) & 0xFF;
-  smoothness = smoothness * (1.0f / 255.0f);
-  r = std::max(r * (1.0f / 255.0f), 0.03125f);
+  float   smoothness = 1.0f - r;
+  int     s_i = roundFloat(smoothness * 255.0f) & 0xFF;
+  r = std::max(r, 0.03125f);
   float   nDotL = z.normalMap(n).dotProduct3(p.lightVector);
   float   nDotV = float(std::fabs(z.normal[2]));
   FloatVector4  reflectedView(p.calculateReflection(z));
@@ -828,7 +794,7 @@ void Plot3D_TriShape::drawTriangles()
                           - ((v2->u() - v0->u()) * (v1->v() - v0->v()))));
       if (xyArea2 > uvArea2)
       {
-        uvArea2 *= (float(int(textureWidth)) * float(int(textureHeight)));
+        uvArea2 *= (float(textureWidth) * float(textureHeight));
         v.mipLevel = 0.0f;
         if (uvArea2 > xyArea2) [[likely]]
         {
@@ -938,14 +904,14 @@ static const std::uint32_t  alphaBlendModeTable[8] =
   0x00EDU, 0x000DU, 0x000DU, 0x0029U, 0x00EDU, 0x00EDU, 0x00EDU, 0x0002U
 };
 
-static const std::uint32_t  defaultTextureColors[9] =
+static const std::uint32_t  defaultTextureColors[8] =
 {
   0xFFFFFFFFU, 0xFFFF8080U, 0xFFFFFFFFU, 0xFFBDBDBDU, 0xFF000000U,
-  0xFFF0F0F0U, 0xFF000000U, 0xFF000000U, 0xFF000000U
+  0xFFFFFFFFU, 0xFFFFFFFFU, 0xFF000000U
 };
 
 void Plot3D_TriShape::setMaterialProperties(
-    const DDSTexture * const *textureSet, unsigned int textureMask)
+    const DDSTexture16 * const *textureSet, unsigned int textureMask)
 {
   if (flags & CE2Material::Flag_IsWater) [[unlikely]]
   {
@@ -960,17 +926,17 @@ void Plot3D_TriShape::setMaterialProperties(
     else if (textureMask & 1U)
       textures[1] = textureSet[0];
     else
-      textures[1] = new(defaultTextures + 1) DDSTexture(0xFFFF8080U);
+      textures[1] = new(defaultTextures + 1) DDSTexture16(FloatVector4(0.0f));
     textures[0] = textures[1];
-    textureWidth = std::uint16_t(textures[1]->getWidth());
-    textureHeight = std::uint16_t(textures[1]->getHeight());
+    textureWidth = textures[1]->getWidth();
+    textureHeight = textures[1]->getHeight();
     mipOffsets[0] = 0.0f;
     mipOffsets[1] = 0.0f;
     return;
   }
   // set defaults
   mp.s.alphaThreshold =
-      (!(flags & CE2Material::Flag_HasOpacity) ? -1.0f : 127.5f);
+      (!(flags & CE2Material::Flag_HasOpacity) ? -1.0f : 0.5f);
   mp.s.alphaBlendMode =
       (!(flags & CE2Material::Flag_AlphaBlending) ? 0U : 0x00EDU);
   mp.s.uvScaleAndOffset = FloatVector4(1.0f, 1.0f, 0.0f, 0.0f);
@@ -993,7 +959,7 @@ void Plot3D_TriShape::setMaterialProperties(
   {
     // set properties from material objects
     if (flags & CE2Material::Flag_HasOpacity)
-      mp.s.alphaThreshold = m->alphaThreshold * 255.0f;
+      mp.s.alphaThreshold = m->alphaThreshold;
     unsigned int  i = (unsigned int) std::countr_zero(m->layerMask);
     i = std::min(i, (unsigned int) (CE2Material::maxLayers - 1));
     const CE2Material::Layer  *l = m->layers[i];
@@ -1021,7 +987,7 @@ void Plot3D_TriShape::setMaterialProperties(
       if (!(m->effectSettings->flags & CE2Material::EffectFlag_IsAlphaTested))
         mp.e.alphaThreshold = -1.0f;
       else
-        mp.e.alphaThreshold = m->effectSettings->alphaThreshold * 255.0f;
+        mp.e.alphaThreshold = m->effectSettings->alphaThreshold;
       mp.e.baseColor[3] = m->effectSettings->materialAlpha;
       mp.e.falloffParams[0] = m->effectSettings->falloffStartAngle;
       mp.e.falloffParams[1] = m->effectSettings->falloffStopAngle;
@@ -1062,7 +1028,7 @@ void Plot3D_TriShape::setMaterialProperties(
       mp.s.baseColor[3] = m->decalSettings->decalAlpha;
     }
   }
-  DDSTexture  *defTxts = defaultTextures;
+  DDSTexture16  *defTxts = defaultTextures;
   unsigned int  maxTextureArea = 1U;
   int     maxTextureWidth = 1;
   int     maxTextureHeight = 1;
@@ -1073,7 +1039,6 @@ void Plot3D_TriShape::setMaterialProperties(
   textures[5] = nullptr;
   textures[6] = nullptr;
   textures[7] = nullptr;
-  textures[8] = nullptr;
   mipOffsets[0] = 1.0f;
   mipOffsets[1] = 1.0f;
   mipOffsets[2] = 1.0f;
@@ -1082,8 +1047,7 @@ void Plot3D_TriShape::setMaterialProperties(
   mipOffsets[5] = 1.0f;
   mipOffsets[6] = 1.0f;
   mipOffsets[7] = 1.0f;
-  mipOffsets[8] = 1.0f;
-  for (unsigned int i = 0U; i <= 8U && (1U << i) <= txtEnableMask; i++)
+  for (unsigned int i = 0U; i <= 7U && (1U << i) <= txtEnableMask; i++)
   {
     if (!((1U << i) & txtEnableMask))
       continue;
@@ -1100,33 +1064,26 @@ void Plot3D_TriShape::setMaterialProperties(
         maxTextureHeight = textureSet[i]->getHeight();
       }
     }
-    else if (t && ((1U << i) & t->textureReplacementMask))
-    {
-      textures[i] = new(defTxts + i) DDSTexture(t->textureReplacements[i],
-                                                bool((1U << i) & 0x0081U));
-    }
     else
     {
-      textures[i] = new(defTxts + i) DDSTexture(defaultTextureColors[i]);
+      FloatVector4  c;
+      if (t && ((1U << i) & t->textureReplacementMask))
+        c = FloatVector4(&(t->textureReplacements[i]));
+      else
+        c = FloatVector4(&(defaultTextureColors[i]));
+      if (i == 1) [[unlikely]]
+        c = c * (1.0f / 127.5f) - 1.0f;
+      else
+        c *= (1.0f / 255.0f);
+      textures[i] = new(defTxts + i) DDSTexture16(c, bool((1U << i) & 0x0081U));
     }
   }
-  textureWidth = std::uint16_t(maxTextureWidth);
-  textureHeight = std::uint16_t(maxTextureHeight);
+  textureWidth = maxTextureWidth;
+  textureHeight = maxTextureHeight;
   float   mipOffsetBase = float(int(std::bit_width(maxTextureArea)));
-  FloatVector4  tmp(mipOffsets[0], mipOffsets[1], mipOffsets[2], mipOffsets[3]);
+  FloatVector8  tmp(&(mipOffsets[0]));
   tmp = (tmp - mipOffsetBase) * 0.5f;
-  mipOffsets[0] = tmp[0];
-  mipOffsets[1] = tmp[1];
-  mipOffsets[2] = tmp[2];
-  mipOffsets[3] = tmp[3];
-  tmp = FloatVector4(mipOffsets[4], mipOffsets[5], mipOffsets[6],
-                     mipOffsets[7]);
-  tmp = (tmp - mipOffsetBase) * 0.5f;
-  mipOffsets[4] = tmp[0];
-  mipOffsets[5] = tmp[1];
-  mipOffsets[6] = tmp[2];
-  mipOffsets[7] = tmp[3];
-  mipOffsets[8] = (mipOffsets[8] - mipOffsetBase) * 0.5f;
+  tmp.convertToFloats(&(mipOffsets[0]));
 }
 
 Plot3D_TriShape::Plot3D_TriShape(
@@ -1137,7 +1094,8 @@ Plot3D_TriShape::Plot3D_TriShape(
     bufN(nullptr),
     width(imageWidth),
     height(imageHeight),
-    textureE(nullptr),
+    textureESpec(nullptr),
+    textureEDiff(nullptr),
     textureWidth(1),
     textureHeight(1),
     renderMode(mode & 3U),
@@ -1160,21 +1118,20 @@ Plot3D_TriShape::Plot3D_TriShape(
     defaultTextures(nullptr)
 {
   defaultTextures =
-      reinterpret_cast< DDSTexture * >(std::malloc(sizeof(DDSTexture) * 9));
-  textures[0] = new(defaultTextures) DDSTexture(0xFFFFFFFFU);
-  textures[1] = new(defaultTextures + 1) DDSTexture(0xFFFF8080U);
-  textures[2] = new(defaultTextures + 2) DDSTexture(0xFFFFFFFFU);
-  textures[3] = new(defaultTextures + 3) DDSTexture(0xFFBDBDBDU);
-  textures[4] = new(defaultTextures + 4) DDSTexture(0xFF000000U);
-  textures[5] = new(defaultTextures + 5) DDSTexture(0xFFF0F0F0U);
-  textures[6] = new(defaultTextures + 6) DDSTexture(0xFF000000U);
-  textures[7] = new(defaultTextures + 7) DDSTexture(0xFF000000U);
-  textures[8] = new(defaultTextures + 8) DDSTexture(0xFF000000U);
-  for (size_t i = 0; i < 9; i++)
+      reinterpret_cast< DDSTexture16 * >(std::malloc(sizeof(DDSTexture16) * 8));
+  textures[0] = new(defaultTextures) DDSTexture16(FloatVector4(1.0f));
+  textures[1] = new(defaultTextures + 1) DDSTexture16(FloatVector4(0.0f));
+  textures[2] = new(defaultTextures + 2) DDSTexture16(FloatVector4(1.0f));
+  textures[3] = new(defaultTextures + 3) DDSTexture16(FloatVector4(0.741f));
+  textures[4] = new(defaultTextures + 4) DDSTexture16(FloatVector4(0.0f));
+  textures[5] = new(defaultTextures + 5) DDSTexture16(FloatVector4(1.0f));
+  textures[6] = new(defaultTextures + 6) DDSTexture16(FloatVector4(1.0f));
+  textures[7] = new(defaultTextures + 7) DDSTexture16(FloatVector4(0.0f));
+  for (size_t i = 0; i < 8; i++)
     mipOffsets[i] = 0.0f;
   flags = CE2Material::Flag_IsWater;
   mp.w.unused = 0U;
-  setMaterialProperties((DDSTexture **) 0, 0U);
+  setMaterialProperties((DDSTexture16 **) 0, 0U);
 }
 
 Plot3D_TriShape::~Plot3D_TriShape()
@@ -1247,7 +1204,7 @@ Plot3D_TriShape& Plot3D_TriShape::operator=(const NIFFile::NIFTriShape& t)
 
 void Plot3D_TriShape::drawTriShape(
     const NIFFile::NIFVertexTransform& modelTransform,
-    const DDSTexture * const *textureSet, unsigned int textureMask)
+    const DDSTexture16 * const *textureSet, unsigned int textureMask)
 {
   if (!(flags & (CE2Material::Flag_IsEffect
                  | CE2Material::Flag_IsWater))) [[likely]]
@@ -1294,7 +1251,7 @@ void Plot3D_TriShape::drawTriShape(
     drawTriangles();
 }
 
-FloatVector4 Plot3D_TriShape::cubeMapToAmbient(const DDSTexture *e) const
+FloatVector4 Plot3D_TriShape::cubeMapToAmbient(const DDSTexture16 *e) const
 {
   if (!e)
     return FloatVector4(0.05f);
@@ -1309,14 +1266,7 @@ FloatVector4 Plot3D_TriShape::cubeMapToAmbient(const DDSTexture *e) const
     for (int y = 0; y < txtH; y++)
     {
       for (int x = 0; x < txtW; x++, w++)
-      {
-        FloatVector4  tmp(e->getPixelN(x, y, mipLevel, i));
-        if (e->isSRGBTexture()) [[likely]]
-          tmp.srgbExpand();
-        else
-          tmp *= (1.0f / 255.0f);
-        s += tmp;
-      }
+        s += FloatVector4::convertFloat16(e->getPixelN(x, y, mipLevel, i));
     }
   }
   if (w < 1)
@@ -1403,7 +1353,7 @@ float Plot3D_TriShape::findDecalYOffset(
 
 void Plot3D_TriShape::drawDecal(
     const NIFFile::NIFVertexTransform& modelTransform,
-    const DDSTexture * const *textureSet, unsigned int textureMask,
+    const DDSTexture16 * const *textureSet, unsigned int textureMask,
     const NIFFile::NIFBounds& b, std::uint32_t c)
 {
   if (!(m && (m->flags & CE2Material::Flag_IsDecal) && m->decalSettings))
@@ -1458,7 +1408,7 @@ void Plot3D_TriShape::drawDecal(
     float   xyArea = float(std::fabs((v1[0] * v2[1]) - (v2[0] * v1[1])));
     if (xyArea < 0.25f)
       return;
-    float   uvArea = float(int(textureWidth)) * float(int(textureHeight));
+    float   uvArea = float(textureWidth) * float(textureHeight);
     mipScale = float(std::sqrt(std::max(uvArea * 0.5f / xyArea, 1.0f)));
   }
   int     x0 = roundFloat(screenBounds.boundsMin[0]);
@@ -1498,8 +1448,8 @@ void Plot3D_TriShape::drawDecal(
     vOffset = vOffset * 0.5f + (!(c & 0x80000000U) ? 0.0f : 0.5f);
   }
   float   uMin, vMin, uMax, vMax;
-  uMin = std::min(mipScale * 0.5f / float(int(textureWidth)), 0.5f);
-  vMin = std::min(mipScale * 0.5f / float(int(textureHeight)), 0.5f);
+  uMin = std::min(mipScale * 0.5f / float(textureWidth), 0.5f);
+  vMin = std::min(mipScale * 0.5f / float(textureHeight), 0.5f);
   uMax = 1.0f - uMin;
   vMax = 1.0f - vMin;
 

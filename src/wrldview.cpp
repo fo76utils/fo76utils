@@ -285,7 +285,7 @@ WorldSpaceViewer::WorldSpaceViewer(
   : renderer(nullptr),
     threadCnt(0),
     modelBatchCnt(16),
-    textureCacheSize(1024U),
+    textureCacheSize(2047U),
     distantObjectsOnly(false),
     noDisabledObjects(true),
     enableTextures(true),
