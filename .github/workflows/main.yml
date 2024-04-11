@@ -38,9 +38,9 @@ jobs:
       with:
         name: build-win
         path: |
-          fo76utils-main-10bit.7z
+          fo76utils-main-10bit-avx2.7z
+          fo76utils-main-avx2.7z
           fo76utils-main.7z
-          fo76utils-main-noavx2.7z
           fo76utils-main-noavx.7z
   
   
