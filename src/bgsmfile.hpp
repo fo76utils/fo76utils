@@ -73,7 +73,7 @@ struct BGSMFile
     Flag_TSMarker = 0x00010000
   };
   std::uint32_t flags;
-  // 0: material data from NIF file, 2: Fallout 4, 20: Fallout 76
+  // 0: material data from NIF file, 2: Fallout 4, 20 or 21: Fallout 76
   unsigned char version;
   unsigned char alphaThreshold;
   // bit 0 = blending enabled

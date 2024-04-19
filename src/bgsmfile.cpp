@@ -255,7 +255,7 @@ void BGSMFile::loadBGSMFile(FileBuffer& buf)
     if (tmp != 0x4D534742 && tmp != 0x4D454742)         // "BGSM", "BGEM"
       errorMessage("invalid material file header");
   }
-  if (buf.readUInt32Fast() > 0xFFU || (buf[4] != 2 && buf[4] != 20))
+  if (buf.readUInt32Fast() > 0xFFU || (buf[4] != 2 && (buf[4] & 0xFE) != 20))
     errorMessage("unsupported material file version");
   version = buf[4];
   if (!nifVersion)
