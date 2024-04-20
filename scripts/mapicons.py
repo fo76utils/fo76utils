@@ -166,6 +166,7 @@ iconList_FO76 = [
     [ 0x005C, 229, "P. Winding Path"   ],
     [ 0x0052, 233, "overlook"          ],
     [ 0x0008, 235, "building"          ],
+    [ 0x0022, 237, "Shenandoah Weather Station" ],
     [ 0x0061, 243, "Nuka-Cola plant"   ],
     [ 0x0004, 257, "Sugarmaple"        ],
     [ 0x005F, 259, "Pylon V-13"        ],
@@ -193,6 +194,7 @@ iconList_FO76 = [
     [ 0x0002, 367, "camp"              ],
     [ 0x0016, 369, "highway"           ],
     [ 0x0041, 371, "power substation"  ],
+    [ 0x0015, 373, "Makeout Point"     ],
     [ 0x005E, 379, "dam", "96,344", "166,388", "228,344",
                           "236,344", "304,388", "372,344" ],
     [ 0x0065, 383, "Mothman Cult", "176,192" ],
@@ -204,16 +206,18 @@ iconList_FO76 = [
     [ 0x0031, 397, "Prickett's Fort"   ],
     [ 0x0011, 399, "dirt track"        ],
     [ 0x0057, 401, "capitol"           ],
+    [ 0x0010, 403, "Naked Creek"       ],
     [ 0x0055, 405, "cabin"             ],
     [ 0x0030, 407, "bunker"            ],
     [ 0x002F, 409, "business"          ],
-    [ 0x002E, 413, "Fort Atlas", "152,192" ],
+    [ 0x002E, 411, "Fort Atlas"        ],
+    [ 0x0068, 413, "forward station", "152,192" ],
     [ 0x0066, 415, "Blood Eagles"      ],
-    [ 0x0049, 417, "Arktos Pharma", "256,144", "336,80", "352,48" ],
-    [ 0x004C, 419, "App. Antiques"     ],
-    [ 0x0047, 421, "amusement park", "256,368" ],
-    [ 0x000F, 423, "airport"           ],
-    [ 0x004E, 425, "agricult. center"  ] ]
+    [ 0x0049, 420, "Arktos Pharma", "256,144", "336,80", "352,48" ],
+    [ 0x004C, 422, "App. Antiques"     ],
+    [ 0x0047, 424, "amusement park", "256,368" ],
+    [ 0x000F, 426, "airport"           ],
+    [ 0x004E, 428, "agricult. center"  ] ]
 
 def getMapIconList(gameName):
     if gameName == "tes5":
