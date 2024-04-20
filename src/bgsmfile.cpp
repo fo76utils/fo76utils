@@ -176,7 +176,7 @@ void BGSMFile::loadBGEMFile(FileBuffer& buf)
   flags = flags | (std::uint32_t(bool(buf.readUInt8Fast())) << 3);
   // two sided
   flags = flags | (std::uint32_t(bool(buf.readUInt8Fast())) << 4);
-  unsigned int  texturePathMap = 0U;
+  std::uint64_t texturePathMap = 0U;
   float   envScale = 0.0f;
   if (version == 2)                     // Fallout 4
   {
@@ -192,11 +192,15 @@ void BGSMFile::loadBGEMFile(FileBuffer& buf)
   else                                  // Fallout 76
   {
     texturePathMap = (!buf[58] ? 0xF98514F0U : 0xF9851430U);
+    if (version >= 21)
+      texturePathMap |= std::uint64_t(0x000000FF00000000ULL);
     buf.setPosition(60);
   }
   texturePathMask = texturePaths.readTexturePaths(buf, texturePathMap);
   if (version != 2)
   {
+    if (version >= 21)
+      (void) buf.readUInt8();
     if (buf.readUInt8())
     {
       envScale = buf.readFloat();
