@@ -199,8 +199,8 @@ void BGSMFile::loadBGEMFile(FileBuffer& buf)
   texturePathMask = texturePaths.readTexturePaths(buf, texturePathMap);
   if (version != 2)
   {
-    if (version >= 21)
-      (void) buf.readUInt8();
+    if (version >= 21 && buf.readUInt8())
+      buf.setPosition(buf.getPosition() + 20);  // glass refraction (5 floats)
     if (buf.readUInt8())
     {
       envScale = buf.readFloat();
