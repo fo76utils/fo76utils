@@ -20,7 +20,7 @@ struct Renderer_Base
   {
     struct CachedTextureKey
     {
-      const BA2File::FileDeclaration  *fd;      // pointer from BA2File
+      const BA2File::FileInfo *fd;      // pointer from BA2File
       int     mipLevel;
       inline bool operator<(const CachedTextureKey& r) const
       {

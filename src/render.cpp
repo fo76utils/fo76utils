@@ -1094,7 +1094,7 @@ const Renderer::BaseObject * Renderer::readModelProperties(
       tmp.flags = tmp.flags | 0x2002
                   | (!isWater ? 0 : 0x0004) | (!isHDModel ? 0 : 0x0040)
                   | (!(r == "NPC_" || r == "CONT") ? 0 : 0x4000);
-      const BA2File::FileDeclaration  *fd = ba2File.findFile(stringBuf);
+      const BA2File::FileInfo *fd = ba2File.findFile(stringBuf);
       if (!fd)
         tmp.flags = 0;
       else
