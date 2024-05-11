@@ -516,21 +516,20 @@ static void printMTLData(std::FILE *f, const NIFFile& nifFile)
   }
 }
 
-static bool archiveFilterFunction(void *p, const std::string& s)
+static bool archiveFilterFunction(void *p, const std::string_view& s)
 {
   std::vector< std::string >& includePatterns =
       *(reinterpret_cast< std::vector< std::string > * >(p));
   if (includePatterns.begin() == includePatterns.end())
     return true;
-  for (std::vector< std::string >::const_iterator
-           i = includePatterns.begin(); i != includePatterns.end(); i++)
+  for (const auto& i : includePatterns)
   {
-    if ((i->length() == 4 || i->length() == 5) && (*i)[0] == '.')
+    if ((i.length() == 4 || i.length() == 5) && i[0] == '.')
     {
-      if (s.ends_with(*i))
+      if (s.ends_with(i))
         return true;
     }
-    else if (s.find(*i) != std::string::npos)
+    else if (s.find(i) != std::string_view::npos)
     {
       return true;
     }
@@ -855,7 +854,13 @@ int main(int argc, char **argv)
     if (outFmt >= 5)
       fileNames.emplace_back(".dds");
     BA2File ba2File(argv[1], &archiveFilterFunction, &fileNames);
-    ba2File.getFileList(fileNames);
+    fileNames.clear();
+    {
+      std::vector< std::string_view > tmpFileNames;
+      ba2File.getFileList(tmpFileNames);
+      for (const auto& i : tmpFileNames)
+        fileNames.emplace_back(i);
+    }
     if (outFmt >= 5)
     {
       renderer = new NIF_View(ba2File);

@@ -338,10 +338,10 @@ void findWater(ESMFile& esmFile, unsigned int formID)
   while (formID);
 }
 
-static bool archiveFilterFunction(void *p, const std::string& s)
+static bool archiveFilterFunction(void *p, const std::string_view& s)
 {
   (void) p;
-  return (s.find("water") != std::string::npos);
+  return (s.find("water") != std::string_view::npos);
 }
 
 int main(int argc, char **argv)

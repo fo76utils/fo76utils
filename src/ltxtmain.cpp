@@ -203,13 +203,13 @@ static const char *usageStrings[] =
   (char *) 0
 };
 
-static bool archiveFilterFunction(void *p, const std::string& s)
+static bool archiveFilterFunction(void *p, const std::string_view& s)
 {
   (void) p;
   if (!(s.ends_with(".dds") || s.ends_with(".bgsm")))
     return false;
-  return (s.find("/lod/") == std::string::npos &&
-          s.find("/actors/") == std::string::npos);
+  return (s.find("/lod/") == std::string_view::npos &&
+          s.find("/actors/") == std::string_view::npos);
 }
 
 int main(int argc, char **argv)

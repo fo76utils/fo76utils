@@ -2442,14 +2442,15 @@ void Renderer::loadTerrain(const char *btdFileName,
     }
     if (renderQuality < 1)
       continue;
-    long    fileSizeD = ba2File.getFileSize(landData->getTextureDiffuse(i));
+    long    fileSizeD =
+        long(ba2File.getFileSize(landData->getTextureDiffuse(i)));
     for (size_t j = 1; j < 10; j++)
     {
       if (j >= 2 && !(renderQuality >= 3 && (j == 6 || j >= 8)))
         continue;
       const std::string&  fileName =
           landData->getTextureMaterial(i).texturePaths[j];
-      long    fileSizeN = ba2File.getFileSize(fileName);
+      long    fileSizeN = long(ba2File.getFileSize(fileName));
       int     mipLevelN = mipLevelD + calculateLandTxtMip(fileSizeN)
                           - calculateLandTxtMip(fileSizeD);
       mipLevelN = (mipLevelN > 0 ? (mipLevelN < 15 ? mipLevelN : 15) : 0);

@@ -129,7 +129,7 @@ void ESMView::printID(unsigned int id)
   consolePrint("%s", tmpBuf);
 }
 
-static bool archiveFilterFunction(void *p, const std::string& s)
+static bool archiveFilterFunction(void *p, const std::string_view& s)
 {
   (void) p;
 #ifdef HAVE_SDL2
