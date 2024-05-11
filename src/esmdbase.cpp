@@ -615,6 +615,7 @@ bool ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
     case 0x4D414E53:            // "SNAM"
       if (r == "MSWP")
         dataType = 10;
+      [[fallthrough]];
     case 0x49504550:            // "PEPI"
       if (!tsvFormat && r == "QUST")
         dataType = 10;
@@ -653,6 +654,7 @@ bool ESMDump::convertField(std::string& s, const ESMRecord& r, ESMField& f)
       break;
     case 0x524B4C58:            // "XLKR"
       arraySize = 2;
+      [[fallthrough]];
     case 0x4E434C58:            // "XLCN"
     case 0x54524C58:            // "XLRT"
     case 0x52594C58:            // "XLYR"
