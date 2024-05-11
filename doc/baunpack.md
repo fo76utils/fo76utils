@@ -15,6 +15,11 @@ Extract files with a name including any of the patterns, archives listed first h
 
 Extract all valid file names specified in the list file. Names are separated by tabs or new lines, any string not including at least one /, \\, or . character is ignored.
 
+    baunpack ARCHIVES... --test [PATTERNS...]
+    baunpack ARCHIVES... --test @LISTFILE
+
+Extract data without writing files.
+
 ### Examples
 
     ./baunpack Fallout76/Data -- textures/interface/pip-boy/ textures/interface/season/

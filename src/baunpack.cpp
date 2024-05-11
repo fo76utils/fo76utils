@@ -20,8 +20,25 @@ static inline char convertNameCharacter(unsigned char c)
   return char(c);
 }
 
-static void loadFileList(std::set< std::string >& fileNames,
-                         const char *listFileName)
+struct BA2NameFilters
+{
+  std::vector< std::string_view > includePatterns;
+  std::vector< std::string_view > excludePatterns;
+  std::set< std::string_view >  fileNames;
+  AllocBuffers  stringBufs;
+  std::string_view storeString(const std::string& s);
+};
+
+std::string_view BA2NameFilters::storeString(const std::string& s)
+{
+  char    *p = reinterpret_cast< char * >(
+                   stringBufs.allocateSpace(sizeof(char) * (s.length() + 1),
+                                            alignof(char)));
+  std::memcpy(p, s.c_str(), s.length() + 1);
+  return std::string_view(p, s.length());
+}
+
+static void loadFileList(BA2NameFilters& fileNames, const char *listFileName)
 {
   FileBuffer  inFile(listFileName);
   std::string s;
@@ -39,7 +56,7 @@ static void loadFileList(std::set< std::string >& fileNames,
         if (s.find('/') != std::string::npos ||
             s.find('.') != std::string::npos)
         {
-          fileNames.insert(s);
+          fileNames.fileNames.insert(fileNames.storeString(s));
         }
         s.clear();
       }
@@ -92,32 +109,25 @@ static void writeFileWithPath(const char *fileName,
 }
 
 static inline bool checkNamePattern(
-    const std::string& fileName, const std::string& pattern)
+    const std::string_view& fileName, const std::string_view& pattern)
 {
   size_t  n = pattern.length() - 4;
   if (!(n & ~(size_t(1))) && pattern[0] == '.')
   {
     if (fileName.length() < pattern.length()) [[unlikely]]
       return false;
-    const char  *s1 = fileName.c_str() + (fileName.length() - 4);
-    const char  *s2 = pattern.c_str() + n;
+    const char  *s1 = fileName.data() + (fileName.length() - 4);
+    const char  *s2 = pattern.data() + n;
     if (FileBuffer::readUInt32Fast(s1) != FileBuffer::readUInt32Fast(s2))
       return false;
     if (!n)
       return true;
     return (*(s1 - 1) == '.');
   }
-  return (fileName.find(pattern) != std::string::npos);
+  return (fileName.find(pattern) != std::string_view::npos);
 }
 
-struct BA2NameFilters
-{
-  std::vector< std::string >  includePatterns;
-  std::vector< std::string >  excludePatterns;
-  std::set< std::string > fileNames;
-};
-
-static bool archiveFilterFunction(void *p, const std::string& fileName)
+static bool archiveFilterFunction(void *p, const std::string_view& fileName)
 {
   BA2NameFilters& nameFilters = *(reinterpret_cast< BA2NameFilters * >(p));
   bool    nameMatches = false;
@@ -128,11 +138,16 @@ static bool archiveFilterFunction(void *p, const std::string& fileName)
   }
   if (nameFilters.includePatterns.begin() != nameFilters.includePatterns.end())
   {
-    for (std::vector< std::string >::const_iterator
-             i = nameFilters.includePatterns.begin();
-         !nameMatches && i != nameFilters.includePatterns.end(); i++)
+    if (!nameMatches)
     {
-      nameMatches = checkNamePattern(fileName, *i);
+      for (const auto& i : nameFilters.includePatterns)
+      {
+        if (checkNamePattern(fileName, i))
+        {
+          nameMatches = true;
+          break;
+        }
+      }
     }
   }
   else if (nameFilters.fileNames.begin() == nameFilters.fileNames.end())
@@ -141,11 +156,9 @@ static bool archiveFilterFunction(void *p, const std::string& fileName)
   }
   if (!nameMatches)
     return false;
-  for (std::vector< std::string >::const_iterator
-           i = nameFilters.excludePatterns.begin();
-       i != nameFilters.excludePatterns.end(); i++)
+  for (const auto& i : nameFilters.excludePatterns)
   {
-    if (checkNamePattern(fileName, *i))
+    if (checkNamePattern(fileName, i))
       return false;
   }
   return true;
@@ -159,21 +172,24 @@ int main(int argc, char **argv)
     int     archiveCnt = argc - 1;
     bool    extractingFiles = false;
     bool    listPackedSizes = false;
+    bool    testingFiles = false;
     for (int i = 1; i < argc; i++)
     {
       if (std::strcmp(argv[i], "--") == 0 ||
           std::strcmp(argv[i], "--list") == 0 ||
-          std::strcmp(argv[i], "--list-packed") == 0)
+          std::strcmp(argv[i], "--list-packed") == 0 ||
+          std::strcmp(argv[i], "--test") == 0)
       {
         archiveCnt = i - 1;
-        extractingFiles = (argv[i][2] == '\0');
+        extractingFiles = (argv[i][2] != 'l');
+        testingFiles = (argv[i][2] == 't');
         if (!extractingFiles)
           listPackedSizes = (argv[i][6] != '\0');
         while (++i < argc)
         {
           if (argv[i][0] == '@' && argv[i][1] != '\0')
           {
-            loadFileList(nameFilters.fileNames, argv[i] + 1);
+            loadFileList(nameFilters, argv[i] + 1);
             continue;
           }
           std::string s;
@@ -182,19 +198,19 @@ int main(int argc, char **argv)
             for (size_t j = 3; argv[i][j] != '\0'; j++)
               s += convertNameCharacter((unsigned char) argv[i][j]);
             if (!s.empty())
-              nameFilters.excludePatterns.push_back(s);
+              nameFilters.excludePatterns.push_back(nameFilters.storeString(s));
           }
           else if (argv[i][0] == '*' && argv[i][1] == '\0')
           {
             nameFilters.includePatterns.clear();
-            nameFilters.includePatterns.emplace_back();
+            nameFilters.includePatterns.emplace_back("");
           }
           else
           {
             for (size_t j = 0; argv[i][j] != '\0'; j++)
               s += convertNameCharacter((unsigned char) argv[i][j]);
             if (!s.empty())
-              nameFilters.includePatterns.push_back(s);
+              nameFilters.includePatterns.push_back(nameFilters.storeString(s));
           }
         }
         break;
@@ -225,31 +241,29 @@ int main(int argc, char **argv)
       std::fprintf(stderr, "    are separated by tabs or new lines, "
                            "any string not including\n");
       std::fprintf(stderr, "    at least one /, \\, or . character "
-                           "is ignored\n");
+                           "is ignored.\n");
+      std::fprintf(stderr, "%s ARCHIVES... --test @LISTFILE\n", argv[0]);
+      std::fprintf(stderr, "    Extract data without writing files.\n");
       return 1;
     }
 
-    std::set< std::string > namesFound;
+    std::set< std::string_view >  namesFound;
     if (!extractingFiles)
     {
       for (int i = 1; i <= archiveCnt; i++)
       {
         BA2File ba2File(argv[i], &archiveFilterFunction, &nameFilters);
-        std::vector< std::string >  fileList;
+        std::vector< std::string_view > fileList;
         ba2File.getFileList(fileList);
         if (fileList.size() > 0)
           std::printf("%s:\n", argv[i]);
-        for (size_t j = 0; j < fileList.size(); j++)
+        for (const auto& j : fileList)
         {
-          if (nameFilters.fileNames.find(fileList[j])
-              != nameFilters.fileNames.end())
-          {
-            namesFound.insert(fileList[j]);
-          }
+          if (nameFilters.fileNames.find(j) != nameFilters.fileNames.end())
+            namesFound.insert(j);
           std::printf("%s\t%8u bytes\n",
-                      fileList[j].c_str(),
-                      (unsigned int) ba2File.getFileSize(fileList[j],
-                                                         listPackedSizes));
+                      j.data(),
+                      (unsigned int) ba2File.getFileSize(j, listPackedSizes));
         }
       }
     }
@@ -259,31 +273,27 @@ int main(int argc, char **argv)
       for (int i = archiveCnt; i >= 1; i--)
         archivePaths.push_back(std::string(argv[i]));
       BA2File ba2File(archivePaths, &archiveFilterFunction, &nameFilters);
-      std::vector< std::string >  fileList;
+      std::vector< std::string_view > fileList;
       ba2File.getFileList(fileList);
       std::vector< unsigned char >  outBuf;
-      for (size_t i = 0; i < fileList.size(); i++)
+      for (const auto& i : fileList)
       {
-        if (nameFilters.fileNames.find(fileList[i])
-            != nameFilters.fileNames.end())
-        {
-          namesFound.insert(fileList[i]);
-        }
+        if (nameFilters.fileNames.find(i) != nameFilters.fileNames.end())
+          namesFound.insert(i);
         std::printf("%s\t%8u bytes\n",
-                    fileList[i].c_str(),
-                    (unsigned int) ba2File.getFileSize(fileList[i]));
-        ba2File.extractFile(outBuf, fileList[i]);
-        writeFileWithPath(fileList[i].c_str(), outBuf);
+                    i.data(), (unsigned int) ba2File.getFileSize(i));
+        ba2File.extractFile(outBuf, i);
+        if (!testingFiles)
+          writeFileWithPath(i.data(), outBuf);
       }
     }
     if (namesFound.size() != nameFilters.fileNames.size())
     {
       std::fprintf(stderr, "\n%s: file(s) not found in archives:\n", argv[0]);
-      for (std::set< std::string >::iterator i = nameFilters.fileNames.begin();
-           i != nameFilters.fileNames.end(); i++)
+      for (const auto& i : nameFilters.fileNames)
       {
-        if (namesFound.find(*i) == namesFound.end())
-          std::fprintf(stderr, "  %s\n", i->c_str());
+        if (namesFound.find(i) == namesFound.end())
+          std::fprintf(stderr, "  %s\n", i.data());
       }
       return 1;
     }
