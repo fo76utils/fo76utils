@@ -270,10 +270,9 @@ int main(int argc, char **argv)
     }
     else
     {
-      std::vector< std::string >  archivePaths;
-      for (int i = archiveCnt; i >= 1; i--)
-        archivePaths.push_back(std::string(argv[i]));
-      BA2File ba2File(archivePaths, &archiveFilterFunction, &nameFilters);
+      BA2File ba2File;
+      for (int i = 1; i <= archiveCnt; i++)
+        ba2File.loadArchivePath(argv[i], &archiveFilterFunction, &nameFilters);
       std::vector< std::string_view > fileList;
       ba2File.getFileList(fileList);
       BA2File::UCharArray outBuf;

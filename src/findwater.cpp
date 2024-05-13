@@ -389,8 +389,16 @@ int main(int argc, char **argv)
           hmapFileName = tmp;
       }
     }
-    if (meshArchivePaths.size() > 0)
-      meshArchiveFile = new BA2File(meshArchivePaths, &archiveFilterFunction);
+    if (!meshArchivePaths.empty())
+    {
+      meshArchiveFile = new BA2File();
+      for (std::vector< std::string >::const_iterator
+               i = meshArchivePaths.end(); i != meshArchivePaths.begin(); )
+      {
+        i--;
+        meshArchiveFile->loadArchivePath(i->c_str(), &archiveFilterFunction);
+      }
+    }
     unsigned int  hdrBuf[11];
     hdrBuf[0] = 0x36374F46;             // "FO76"
     hdrBuf[10] = 0;
