@@ -69,7 +69,7 @@ static void loadFileList(BA2NameFilters& fileNames, const char *listFileName)
 }
 
 static void writeFileWithPath(const char *fileName,
-                              const std::vector< unsigned char >& buf)
+                              const BA2File::UCharArray& buf)
 {
   OutputFile  *f = (OutputFile *) 0;
   try
@@ -98,7 +98,7 @@ static void writeFileWithPath(const char *fileName,
   }
   try
   {
-    f->writeData(buf.data(), sizeof(unsigned char) * buf.size());
+    f->writeData(buf.data, sizeof(unsigned char) * buf.size);
   }
   catch (...)
   {
@@ -275,7 +275,7 @@ int main(int argc, char **argv)
       BA2File ba2File(archivePaths, &archiveFilterFunction, &nameFilters);
       std::vector< std::string_view > fileList;
       ba2File.getFileList(fileList);
-      std::vector< unsigned char >  outBuf;
+      BA2File::UCharArray outBuf;
       for (const auto& i : fileList)
       {
         if (nameFilters.fileNames.find(i) != nameFilters.fileNames.end())

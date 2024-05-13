@@ -24,7 +24,7 @@ elif int(ARGUMENTS.get("profile", 0)):
     env.Prepend(LINKFLAGS = ["-pg"])
 else:
     env.Append(CCFLAGS = Split("-O3 -fomit-frame-pointer -ffast-math"))
-    env.Append(LINKFLAGS = ["-s"])
+    env.Append(LINKFLAGS = ["-s", "-O2"])
 if int(ARGUMENTS.get("rgb10a2", 0)):
     env.Append(CCFLAGS = ["-DUSE_PIXELFMT_RGB10A2=1"])
 

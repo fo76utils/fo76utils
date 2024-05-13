@@ -222,12 +222,12 @@ static std::vector< NIFFile::NIFTriShape >& getMeshData(ESMFile& esmFile,
   }
   if (meshArchiveFile && !modelPath.empty())
   {
-    NIFFile *nifFile = (NIFFile *) 0;
+    NIFFile *nifFile = nullptr;
     try
     {
-      std::vector< unsigned char >  fileBuf;
+      BA2File::UCharArray fileBuf;
       meshArchiveFile->extractFile(fileBuf, modelPath);
-      nifFile = new NIFFile(fileBuf.data(), fileBuf.size());
+      nifFile = new NIFFile(fileBuf.data, fileBuf.size);
       nifFile->getMesh(i->second);
       nifFiles.push_back(nifFile);
       return i->second;

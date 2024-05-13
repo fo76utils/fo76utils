@@ -195,7 +195,7 @@ class Renderer : protected Renderer_Base
     std::string errMsg;
     TerrainMesh *terrainMesh;
     Plot3D_TriShape *renderer;
-    std::vector< unsigned char >  fileBuf;
+    BA2File::UCharArray fileBuf;
     std::vector< Renderer_Base::TriShapeSortObject >  sortBuf;
     RenderThread();
     ~RenderThread();

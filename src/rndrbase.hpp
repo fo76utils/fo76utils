@@ -58,7 +58,7 @@ struct Renderer_Base
     // *waitFlag is set to true if the texture is locked by another thread
     const DDSTexture *loadTexture(const BA2File& ba2File,
                                   const std::string& fileName,
-                                  std::vector< unsigned char >& fileBuf,
+                                  BA2File::UCharArray& fileBuf,
                                   int mipLevel, bool *waitFlag = nullptr);
     void shrinkTextureCache();
     void clear();

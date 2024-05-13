@@ -73,7 +73,7 @@ static void loadTextures(
   if (fileNames.size() < 1)
     errorMessage("texture file list is empty");
   textures.resize(fileNames.size());
-  std::vector< unsigned char >  tmpBuf;
+  BA2File::UCharArray tmpBuf;
   for (size_t i = 0; i < fileNames.size(); i++)
   {
     if (fileNames[i].empty())
@@ -88,7 +88,7 @@ static void loadTextures(
       if (ba2File)
       {
         int     n = ba2File->extractTexture(tmpBuf, fileNames[i], mipOffset);
-        textures[i][0] = new DDSTexture(tmpBuf.data(), tmpBuf.size(), n);
+        textures[i][0] = new DDSTexture(tmpBuf.data, tmpBuf.size, n);
       }
       else
       {

@@ -1610,9 +1610,9 @@ bool Renderer::loadModel(const BaseObject& o, size_t threadNum)
   }
   try
   {
-    std::vector< unsigned char >& fileBuf = renderThreads[threadNum].fileBuf;
+    BA2File::UCharArray&  fileBuf = renderThreads[threadNum].fileBuf;
     ba2File.extractFile(fileBuf, *(o.modelPath));
-    nifFiles[n].nifFile = new NIFFile(fileBuf.data(), fileBuf.size(), &ba2File);
+    nifFiles[n].nifFile = new NIFFile(fileBuf.data, fileBuf.size, &ba2File);
     bool    isHDModel = bool(o.flags & 0x0040);
     nifFiles[n].nifFile->getMesh(nifFiles[n].meshData, 0U,
                                  (unsigned int) (modelLOD && !isHDModel), true);
@@ -2426,7 +2426,7 @@ void Renderer::loadTerrain(const char *btdFileName,
   size_t  textureCnt = landData->getTextureCount();
   if (!landTextures)
     landTextures = new LandscapeTextureSet[textureCnt];
-  std::vector< unsigned char >& fileBuf(renderThreads[0].fileBuf);
+  BA2File::UCharArray&  fileBuf(renderThreads[0].fileBuf);
   int     mipLevelD = std::min(textureMip + int(landTextureMip), 15);
   for (size_t i = 0; i < textureCnt; i++)
   {

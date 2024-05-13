@@ -10,16 +10,15 @@
 #include <algorithm>
 #include <ctime>
 
-static void printAuthorName(std::FILE *f,
-                            const std::vector< unsigned char >& fileBuf,
+static void printAuthorName(std::FILE *f, const BA2File::UCharArray& fileBuf,
                             const char *nifFileName)
 {
-  if (fileBuf.size() < 57)
+  if (fileBuf.size < 57)
     return;
-  if (std::memcmp(fileBuf.data(), "Gamebryo File Format, Version 20", 32) != 0)
+  if (std::memcmp(fileBuf.data, "Gamebryo File Format, Version 20", 32) != 0)
     return;
   size_t  nameLen = fileBuf[56];
-  if ((nameLen + 57) > fileBuf.size())
+  if ((nameLen + 57) > fileBuf.size)
     throw FO76UtilsError("%s: end of input file", nifFileName);
   std::string authorName;
   for (size_t i = 0; i < nameLen; i++)
@@ -32,7 +31,7 @@ static void printAuthorName(std::FILE *f,
     authorName += c;
   }
   std::fprintf(f, "%s\t%s\t%lu\n",
-               authorName.c_str(), nifFileName, (unsigned long) fileBuf.size());
+               authorName.c_str(), nifFileName, (unsigned long) fileBuf.size);
 }
 
 static void printVertexTransform(std::FILE *f,
@@ -938,14 +937,14 @@ int main(int argc, char **argv)
         std::fprintf(outFile, "==== %s ====\n", fileNames[i].c_str());
       else if (outFmt == 3 || outFmt == 4)
         std::fprintf(outFile, "# %s\n\n", fileNames[i].c_str());
-      std::vector< unsigned char >  fileBuf;
+      BA2File::UCharArray fileBuf;
       ba2File.extractFile(fileBuf, fileNames[i]);
       if (outFmt == 1)
       {
         printAuthorName(outFile, fileBuf, fileNames[i].c_str());
         continue;
       }
-      NIFFile nifFile(fileBuf.data(), fileBuf.size(), &ba2File);
+      NIFFile nifFile(fileBuf.data, fileBuf.size, &ba2File);
       if (outFmt == 0 || outFmt == 2)
         printBlockList(outFile, nifFile, verboseMaterialInfo);
       if (outFmt == 2)

@@ -228,7 +228,7 @@ static void renderCubeMap(const BA2File& ba2File,
 {
   SDLDisplay  display(imageWidth, imageHeight, "cubeview", 4U, 48);
   display.setDefaultTextColor(0x00, 0xC0);
-  std::vector< unsigned char >  fileBuf;
+  BA2File::UCharArray fileBuf;
   float   viewRotationX = 0.0f;
   float   viewRotationY = 0.0f;
   float   viewRotationZ = 0.0f;
@@ -261,7 +261,7 @@ static void renderCubeMap(const BA2File& ba2File,
       try
       {
         ba2File.extractFile(fileBuf, texturePaths[fileNum]);
-        texture = new DDSTexture(fileBuf.data(), fileBuf.size());
+        texture = new DDSTexture(fileBuf.data, fileBuf.size);
         display.clearTextBuffer();
         cubeViewMode = texture->getIsCubeMap();
         display.consolePrint("%s (%dx%d, %s)\n",

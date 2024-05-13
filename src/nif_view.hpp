@@ -26,7 +26,7 @@ class NIF_View : protected Renderer_Base
   std::vector< int >  viewOffsetY;
   std::vector< NIFFile::NIFTriShape > meshData;
   TextureCache  textureSet;
-  std::vector< std::vector< unsigned char > > threadFileBuffers;
+  std::vector< BA2File::UCharArray >  threadFileBuffers;
   int     threadCnt;
   float   lightX, lightY, lightZ;
   NIFFile *nifFile;
