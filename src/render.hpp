@@ -45,7 +45,7 @@ class Renderer : protected Renderer_Base
     signed short  obndX1;
     signed short  obndY1;
     signed short  obndZ1;
-    const std::string *modelPath;       // NULL for decals
+    const std::string_view  *modelPath; // NULL for decals
   };
   struct RenderObject
   {
@@ -291,8 +291,8 @@ class Renderer : protected Renderer_Base
   // 0x0020: clear model cache
   // 0x0040: clear texture cache
   void clear(unsigned int flags);
-  bool isExcludedModel(const std::string& modelPath) const;
-  bool isHighQualityModel(const std::string& modelPath) const;
+  bool isExcludedModel(const std::string_view& modelPath) const;
+  bool isHighQualityModel(const std::string_view& modelPath) const;
   bool loadModel(const BaseObject& o, size_t threadNum);
   static inline float getDecalYOffsetMin(FloatVector4 boundsMin)
   {

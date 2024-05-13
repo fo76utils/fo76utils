@@ -242,6 +242,7 @@ int main(int argc, char **argv)
                            "any string not including\n");
       std::fprintf(stderr, "    at least one /, \\, or . character "
                            "is ignored.\n");
+      std::fprintf(stderr, "%s ARCHIVES... --test [PATTERNS...]\n", argv[0]);
       std::fprintf(stderr, "%s ARCHIVES... --test @LISTFILE\n", argv[0]);
       std::fprintf(stderr, "    Extract data without writing files.\n");
       return 1;

@@ -1557,21 +1557,21 @@ void Renderer::clear(unsigned int flags)
     textureCache.clear();
 }
 
-bool Renderer::isExcludedModel(const std::string& modelPath) const
+bool Renderer::isExcludedModel(const std::string_view& modelPath) const
 {
   for (size_t i = 0; i < excludeModelPatterns.size(); i++)
   {
-    if (modelPath.find(excludeModelPatterns[i]) != std::string::npos)
+    if (modelPath.find(excludeModelPatterns[i]) != std::string_view::npos)
       return true;
   }
   return false;
 }
 
-bool Renderer::isHighQualityModel(const std::string& modelPath) const
+bool Renderer::isHighQualityModel(const std::string_view& modelPath) const
 {
   for (size_t i = 0; i < hdModelNamePatterns.size(); i++)
   {
-    if (modelPath.find(hdModelNamePatterns[i]) != std::string::npos)
+    if (modelPath.find(hdModelNamePatterns[i]) != std::string_view::npos)
       return true;
   }
   return false;

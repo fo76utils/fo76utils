@@ -173,7 +173,7 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
     if (i != materialSwaps.end())
       return (i->second.begin() != i->second.end() ? formID : 0U);
   }
-  std::vector< unsigned char >  fileBuf;
+  BA2File::UCharArray fileBuf;
   std::string bnamPath;
   std::string snamPath;
   std::map< std::string, BGSMFile >&  v = materialSwaps[formID];
@@ -245,7 +245,7 @@ unsigned int Renderer_Base::MaterialSwaps::loadMaterialSwap(
           {
             BGSMFile& m = v[bnamPath];
             ba2File.extractFile(fileBuf, snamPath);
-            FileBuffer  tmp(fileBuf.data(), fileBuf.size());
+            FileBuffer  tmp(fileBuf.data, fileBuf.size);
             m.loadBGSMFile(tmp);
             if (gradientMapV >= 0.0f)
               m.s.gradientMapV = gradientMapV;
