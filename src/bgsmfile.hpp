@@ -29,7 +29,19 @@ struct BGSMFile
    protected:
     struct TextureSetData
     {
-      std::string texturePaths[texturePathCnt];
+      struct TexturePathArray
+      {
+        std::string texturePaths[texturePathCnt];
+        inline std::string& operator[](size_t n)
+        {
+          return texturePaths[n];
+        }
+        inline const std::string& operator[](size_t n) const
+        {
+          return texturePaths[n];
+        }
+      };
+      TexturePathArray  texturePaths;
       std::string materialPath;
       mutable std::atomic< size_t > refCnt;
       inline TextureSetData();
