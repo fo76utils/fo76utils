@@ -7,11 +7,25 @@ env = Environment(tools = [*filter(None, ARGUMENTS.get('tools','').split(','))] 
 env["CCFLAGS"] = Split("-Wall -Isrc -Ilibfo76utils/src")
 env["CFLAGS"] = Split("-std=c99")
 env["CXXFLAGS"] = Split("-std=c++20")
-if int(ARGUMENTS.get("avx2", 0)):
-    env.Append(CCFLAGS = ["-march=haswell"])
-elif int(ARGUMENTS.get("avx", 1)):
-    env.Append(CCFLAGS = ["-march=sandybridge"])
-env.Append(CCFLAGS = ["-mtune=generic"])
+
+arch = os.uname().machine
+if arch == "arm64":
+    if "darwin" in sys.platform:
+        if int(ARGUMENTS.get("apple-m1", 0)):
+            env.Append(CCFLAGS = ["-mcpu=apple-m1"])
+        elif int(ARGUMENTS.get("apple-m2", 0)):
+            env.Append(CCFLAGS = ["-mcpu=apple-m2"])
+        else:
+            env.Append(CCFLAGS = ["-arch", "arm64"])
+    else:
+        env.Append(CCFLAGS = ["-arch", "arm64"])
+else:
+    if int(ARGUMENTS.get("avx2", 0)):
+        env.Append(CCFLAGS = ["-march=haswell"])
+    elif int(ARGUMENTS.get("avx", 1)):
+        env.Append(CCFLAGS = ["-march=sandybridge"])
+    env.Append(CCFLAGS = ["-mtune=generic"])
+
 env.Append(LIBS = ["m"])
 if "win" in sys.platform:
     buildPackage = ARGUMENTS.get("buildpkg", "")

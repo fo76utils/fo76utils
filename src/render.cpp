@@ -1826,13 +1826,23 @@ void Renderer::renderObject(RenderThread& t, const RenderObject& p)
       {
         FloatVector4  zMax(0.0f);
         const float *zPtr = outBufZ + (size_t(y) * size_t(width) + size_t(x0));
+        if (zPtr == nullptr)
+          continue; // Skip to the next iteration if zPtr is invalid
         int     w = x1 + 1 - x0;
         for ( ; w >= 4; w = w - 4, zPtr = zPtr + 4)
+        {
+          if (zPtr < outBufZ || zPtr + 3 >= outBufZ + (size_t(width) * size_t(height)))
+            break; // Exit the loop if the pointer is out of bounds
           zMax.maxValues(FloatVector4(zPtr));
+        }
         zMax.maxValues(FloatVector4(zMax[1], zMax[0], zMax[3], zMax[2]));
         float   tmp = (zMax[0] > zMax[2] ? zMax[0] : zMax[2]);
         for ( ; w > 0; w--, zPtr++)
+        {
+          if (zPtr < outBufZ || zPtr >= outBufZ + (size_t(width) * size_t(height)))
+            break; // Exit the loop if the pointer is invalid
           tmp = (*zPtr > tmp ? *zPtr : tmp);
+        }
         if (tmp < b.zMin())
           continue;
         isVisible = true;
