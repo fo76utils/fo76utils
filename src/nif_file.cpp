@@ -735,7 +735,7 @@ void NIFFile::loadNIFFile(const BA2File *ba2File)
   if (bsVersion >= 0x84)
     (void) readUInt32();
   readString(headerStrings[1], 1);              // process script name
-  if (bsVersion == 0xAC) [[unlikely]]
+  if (bsVersion >= 0xAA) [[unlikely]]
   {
     headerStrings[2] = "0x0000000000000000";
     size_t  n = readUInt8();

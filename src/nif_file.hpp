@@ -316,7 +316,7 @@ class NIFFile : public FileBuffer
   //     100: Skyrim
   //     130: Fallout 4
   //     155: Fallout 76
-  //     172: Starfield
+  //  >= 170: Starfield
   unsigned int  bsVersion;
   unsigned int  blockCnt;
   std::vector< size_t >     blockOffsets;
