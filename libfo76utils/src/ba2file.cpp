@@ -1083,7 +1083,8 @@ void BA2File::extractFile(
   if (archiveType & 0x40000100)         // BSA with compression or full names
   {
     unpackedSize = getBSAUnpackedSize(p, fd);
-    packedSize = packedSize - (unsigned int) (p - fd.fileData);
+    if (packedSize) [[likely]]
+      packedSize = packedSize - (unsigned int) (p - fd.fileData);
   }
 
   unsigned char *buf = allocFunc(bufPtr, unpackedSize);
