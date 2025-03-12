@@ -49,6 +49,24 @@ inline FloatVector4 FloatVector4::convertInt16(const std::uint64_t& n)
   return FloatVector4(v);
 }
 
+inline FloatVector4 FloatVector4::convertInt32(const std::int32_t *p)
+{
+  XMM_Int32 tmp = { p[0], p[1], p[2], p[3] };
+  XMM_Float v;
+  __asm__ ("vcvtdq2ps %1, %0" : "=x" (v) : "x" (tmp));
+  return FloatVector4(v);
+}
+
+inline void FloatVector4::convertToInt32(std::int32_t *p)
+{
+  XMM_Int32 tmp;
+  __asm__ ("vcvtps2dq %1, %0" : "=x" (tmp) : "xm" (v));
+  p[0] = tmp[0];
+  p[1] = tmp[1];
+  p[2] = tmp[2];
+  p[3] = tmp[3];
+}
+
 inline FloatVector4 FloatVector4::convertFloat16(
     std::uint64_t n, [[maybe_unused]] bool noInfNaN)
 {
@@ -87,51 +105,56 @@ inline FloatVector4 FloatVector4::convertFloat16(
 
 inline std::uint64_t FloatVector4::convertToFloat16(unsigned int mask) const
 {
-#if ENABLE_X86_64_SIMD >= 3
   XMM_UInt64  tmp;
+  XMM_Float   x = v;
   if (mask < 15U)
   {
     __asm__ ("vmovd %1, %0" : "=x" (tmp) : "r" (mask * 0x10204080U));
     __asm__ ("vpmovsxbd %0, %0" : "+x" (tmp));
     __asm__ ("vpsrad $0x1f, %0, %0" : "+x" (tmp));
-    __asm__ ("vpand %1, %0, %0" : "+x" (tmp) : "xm" (v));
-    __asm__ ("vcvtps2ph $0x00, %0, %0" : "+x" (tmp));
+    __asm__ ("vpand %1, %0, %0" : "+x" (x) : "x" (tmp));
   }
-  else
-  {
-    __asm__ ("vcvtps2ph $0x00, %1, %0" : "=x" (tmp) : "x" (v));
-  }
-  return tmp[0];
+#if ENABLE_X86_64_SIMD >= 3
+  __asm__ ("vcvtps2ph $0x00, %1, %0" : "=x" (tmp) : "x" (x));
 #else
-  std::uint64_t r = 0U;
-  if (mask & 1U)
-    r = ::convertToFloat16(v[0]);
-  if (mask & 2U)
-    r = r | (std::uint64_t(::convertToFloat16(v[1])) << 16);
-  if (mask & 4U)
-    r = r | (std::uint64_t(::convertToFloat16(v[2])) << 32);
-  if (mask & 8U)
-    r = r | (std::uint64_t(::convertToFloat16(v[3])) << 48);
-  return r;
+  XMM_UInt32  n = std::bit_cast< XMM_UInt32 >(x);
+  XMM_UInt32  s = { 0x80000000U, 0x80000000U, 0x80000000U, 0x80000000U };
+  s = s & n;
+  n = n ^ s;
+  XMM_UInt32  d = { 0x4B800000U, 0x4B800000U, 0x4B800000U, 0x4B800000U };
+  XMM_UInt32  m = { 0x000007FFU, 0x000007FFU, 0x000007FFU, 0x000007FFU };
+  __asm__ ("vmulps %1, %0, %0" : "+x" (d) : "x" (n));
+  __asm__ ("vcvtps2dq %0, %0" : "+x" (d));
+  d = d & m;
+  XMM_UInt32  offs = { 0x37FFF001U, 0x37FFF001U, 0x37FFF001U, 0x37FFF001U };
+  XMM_UInt32  r = { 0x00002000U, 0x00002000U, 0x00002000U, 0x00002000U };
+  r = (r & n) >> 13;
+  n = n + r - offs;
+  __asm__ ("vpsrad $0x0d, %0, %0" : "+x" (n));
+  __asm__ ("vpackssdw %0, %0, %0" : "+x" (s));
+  __asm__ ("vpmaxsd %1, %0, %0" : "+x" (n) : "x" (d));
+  __asm__ ("vpackssdw %0, %0, %0" : "+x" (n));
+  __asm__ ("vpor %2, %1, %0" : "=x" (tmp) : "x" (n), "x" (s));
 #endif
+  return tmp[0];
 }
 
 inline void FloatVector4::convertToFloats(float *p) const
 {
-  __asm__ ("vmovups %1, %0" : "=m" (*p) : "x" (v));
+  __asm__ ("vmovups %1, %0" : "=m" (*((float (*)[4]) p)) : "x" (v));
 }
 
 inline FloatVector4 FloatVector4::convertVector3(const float *p)
 {
   XMM_Float tmp;
-  __asm__ ("vmovq %1, %0" : "=x" (tmp) : "m" (*p));
+  __asm__ ("vmovq %1, %0" : "=x" (tmp) : "m" (*((const float (*)[2]) p)));
   __asm__ ("vinsertps $0x20, %1, %0, %0" : "+x" (tmp) : "m" (p[2]));
   return FloatVector4(tmp);
 }
 
 inline void FloatVector4::convertToVector3(float *p) const
 {
-  __asm__ ("vmovq %1, %0" : "=m" (*p) : "x" (v));
+  __asm__ ("vmovq %1, %0" : "=m" (*((float (*)[2]) p)) : "x" (v));
   __asm__ ("vextractps $0x02, %1, %0" : "=m" (p[2]) : "x" (v));
 }
 
@@ -444,13 +467,11 @@ inline FloatVector4& FloatVector4::exp2V()
 
 inline FloatVector4& FloatVector4::normalize(bool invFlag)
 {
-  static const float  invMultTable[2] = { -0.5f, 0.5f };
+  const float minVal = std::bit_cast< float >(std::uint32_t(0x00800000));
   float   tmp = dotProduct(*this);
-  float   tmp2;
-  __asm__ ("vmaxss %2, %1, %0"
-           : "=x" (tmp2) : "x" (tmp), "xm" (floatMinVal));
-  __asm__ ("vrsqrtss %0, %0, %0" : "+x" (tmp2));
-  v *= ((tmp * tmp2 * tmp2 - 3.0f) * (tmp2 * invMultTable[int(invFlag)]));
+  __asm__ ("vmaxss %1, %0, %0" : "+x" (tmp) : "xm" (minVal));
+  __asm__ ("vsqrtss %0, %0, %0" : "+x" (tmp));
+  v /= (!invFlag ? tmp : -tmp);
   return (*this);
 }
 

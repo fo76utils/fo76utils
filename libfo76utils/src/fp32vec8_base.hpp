@@ -3,15 +3,8 @@
 #define FP32VEC8_BASE_HPP_INCLUDED
 
 inline FloatVector8::FloatVector8(const float& x)
+  : v{ x, x, x, x, x, x, x, x }
 {
-  v[0] = x;
-  v[1] = x;
-  v[2] = x;
-  v[3] = x;
-  v[4] = x;
-  v[5] = x;
-  v[6] = x;
-  v[7] = x;
 }
 
 inline FloatVector8::FloatVector8(const std::uint64_t *p)
@@ -29,53 +22,23 @@ inline FloatVector8::FloatVector8(const std::uint64_t *p)
 
 inline FloatVector8::FloatVector8(const FloatVector4 *p)
 {
-  v[0] = p[0][0];
-  v[1] = p[0][1];
-  v[2] = p[0][2];
-  v[3] = p[0][3];
-  v[4] = p[1][0];
-  v[5] = p[1][1];
-  v[6] = p[1][2];
-  v[7] = p[1][3];
+  std::memcpy(&((*this)[0]), &(p[0][0]), sizeof(FloatVector8));
 }
 
 inline FloatVector8::FloatVector8(FloatVector4 v0, FloatVector4 v1)
+  : v{ v0[0], v0[1], v0[2], v0[3], v1[0], v1[1], v1[2], v1[3] }
 {
-  v[0] = v0[0];
-  v[1] = v0[1];
-  v[2] = v0[2];
-  v[3] = v0[3];
-  v[4] = v1[0];
-  v[5] = v1[1];
-  v[6] = v1[2];
-  v[7] = v1[3];
 }
 
 inline FloatVector8::FloatVector8(float v0, float v1, float v2, float v3,
                                   float v4, float v5, float v6, float v7)
+  : v{ v0, v1, v2, v3, v4, v5, v6, v7 }
 {
-  v[0] = v0;
-  v[1] = v1;
-  v[2] = v2;
-  v[3] = v3;
-  v[4] = v4;
-  v[5] = v5;
-  v[6] = v6;
-  v[7] = v7;
 }
 
 inline FloatVector8::FloatVector8(const float *p)
 {
-  FloatVector8  tmp;
-  tmp.v[0] = p[0];
-  tmp.v[1] = p[1];
-  tmp.v[2] = p[2];
-  tmp.v[3] = p[3];
-  tmp.v[4] = p[4];
-  tmp.v[5] = p[5];
-  tmp.v[6] = p[6];
-  tmp.v[7] = p[7];
-  *this = tmp;
+  std::memcpy(&((*this)[0]), p, sizeof(FloatVector8));
 }
 
 inline FloatVector8::FloatVector8(const std::int16_t *p)
@@ -117,27 +80,12 @@ inline FloatVector8::FloatVector8(const std::uint16_t *p, bool noInfNaN)
 
 inline void FloatVector8::convertToFloats(float *p) const
 {
-  FloatVector8  tmp(*this);
-  p[0] = tmp.v[0];
-  p[1] = tmp.v[1];
-  p[2] = tmp.v[2];
-  p[3] = tmp.v[3];
-  p[4] = tmp.v[4];
-  p[5] = tmp.v[5];
-  p[6] = tmp.v[6];
-  p[7] = tmp.v[7];
+  std::memcpy(p, &((*this)[0]), sizeof(FloatVector8));
 }
 
 inline void FloatVector8::convertToFloatVector4(FloatVector4 *p) const
 {
-  p[0][0] = v[0];
-  p[0][1] = v[1];
-  p[0][2] = v[2];
-  p[0][3] = v[3];
-  p[1][0] = v[4];
-  p[1][1] = v[5];
-  p[1][2] = v[6];
-  p[1][3] = v[7];
+  std::memcpy(&(p[0][0]), &((*this)[0]), sizeof(FloatVector8));
 }
 
 inline void FloatVector8::convertToInt16(std::int16_t *p) const
@@ -184,6 +132,95 @@ inline void FloatVector8::convertToFloat16(std::uint16_t *p) const
   p[7] = ::convertToFloat16(v[7]);
 }
 
+#if ENABLE_GCC_SIMD_32
+inline FloatVector8& FloatVector8::operator+=(const FloatVector8& r)
+{
+  v += r.v;
+  return (*this);
+}
+
+inline FloatVector8& FloatVector8::operator-=(const FloatVector8& r)
+{
+  v -= r.v;
+  return (*this);
+}
+
+inline FloatVector8& FloatVector8::operator*=(const FloatVector8& r)
+{
+  v *= r.v;
+  return (*this);
+}
+
+inline FloatVector8& FloatVector8::operator/=(const FloatVector8& r)
+{
+  v /= r.v;
+  return (*this);
+}
+
+inline FloatVector8 FloatVector8::operator+(const FloatVector8& r) const
+{
+  return FloatVector8(v + r.v);
+}
+
+inline FloatVector8 FloatVector8::operator-(const FloatVector8& r) const
+{
+  return FloatVector8(v - r.v);
+}
+
+inline FloatVector8 FloatVector8::operator*(const FloatVector8& r) const
+{
+  return FloatVector8(v * r.v);
+}
+
+inline FloatVector8 FloatVector8::operator/(const FloatVector8& r) const
+{
+  return FloatVector8(v / r.v);
+}
+
+inline FloatVector8& FloatVector8::operator+=(float r)
+{
+  v += r;
+  return (*this);
+}
+
+inline FloatVector8& FloatVector8::operator-=(float r)
+{
+  v -= r;
+  return (*this);
+}
+
+inline FloatVector8& FloatVector8::operator*=(float r)
+{
+  v *= r;
+  return (*this);
+}
+
+inline FloatVector8& FloatVector8::operator/=(float r)
+{
+  v /= r;
+  return (*this);
+}
+
+inline FloatVector8 FloatVector8::operator+(const float& r) const
+{
+  return FloatVector8(v + r);
+}
+
+inline FloatVector8 FloatVector8::operator-(const float& r) const
+{
+  return FloatVector8(v - r);
+}
+
+inline FloatVector8 FloatVector8::operator*(const float& r) const
+{
+  return FloatVector8(v * r);
+}
+
+inline FloatVector8 FloatVector8::operator/(const float& r) const
+{
+  return FloatVector8(v / r);
+}
+#else
 inline FloatVector8& FloatVector8::operator+=(const FloatVector8& r)
 {
   FloatVector8  tmp(r);
@@ -347,6 +384,7 @@ inline FloatVector8 FloatVector8::operator/(const float& r) const
   return FloatVector8(v[0] / r, v[1] / r, v[2] / r, v[3] / r,
                       v[4] / r, v[5] / r, v[6] / r, v[7] / r);
 }
+#endif
 
 inline FloatVector8& FloatVector8::shuffleValues(unsigned char mask)
 {
@@ -377,6 +415,26 @@ inline FloatVector8& FloatVector8::blendValues(
   return (*this);
 }
 
+#if ENABLE_GCC_SIMD_32
+inline FloatVector8& FloatVector8::blendValues(
+    const FloatVector8& r, const FloatVector8& mask)
+{
+  v = (mask.v < 0.0f ? r.v : v);
+  return (*this);
+}
+
+inline FloatVector8& FloatVector8::minValues(const FloatVector8& r)
+{
+  v = (v < r.v ? v : r.v);
+  return (*this);
+}
+
+inline FloatVector8& FloatVector8::maxValues(const FloatVector8& r)
+{
+  v = (v > r.v ? v : r.v);
+  return (*this);
+}
+#else
 inline FloatVector8& FloatVector8::blendValues(
     const FloatVector8& r, const FloatVector8& mask)
 {
@@ -420,6 +478,7 @@ inline FloatVector8& FloatVector8::maxValues(const FloatVector8& r)
   v[7] = (v[7] > tmp.v[7] ? v[7] : tmp.v[7]);
   return (*this);
 }
+#endif
 
 inline FloatVector8& FloatVector8::floorValues()
 {
@@ -462,6 +521,14 @@ inline FloatVector8& FloatVector8::roundValues()
 
 inline FloatVector8& FloatVector8::absValues()
 {
+#if ENABLE_GCC_SIMD_32
+  YMM_Int32 m =
+  {
+    0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF,
+    0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF
+  };
+  v = std::bit_cast< YMM_Float >(std::bit_cast< YMM_Int32 >(v) & m);
+#else
   v[0] = float(std::fabs(v[0]));
   v[1] = float(std::fabs(v[1]));
   v[2] = float(std::fabs(v[2]));
@@ -470,6 +537,7 @@ inline FloatVector8& FloatVector8::absValues()
   v[5] = float(std::fabs(v[5]));
   v[6] = float(std::fabs(v[6]));
   v[7] = float(std::fabs(v[7]));
+#endif
   return (*this);
 }
 
@@ -524,27 +592,13 @@ inline FloatVector8& FloatVector8::rsqrtFast()
 
 inline FloatVector8& FloatVector8::rcpFast()
 {
-  v[0] = 1.0f / v[0];
-  v[1] = 1.0f / v[1];
-  v[2] = 1.0f / v[2];
-  v[3] = 1.0f / v[3];
-  v[4] = 1.0f / v[4];
-  v[5] = 1.0f / v[5];
-  v[6] = 1.0f / v[6];
-  v[7] = 1.0f / v[7];
+  *this = FloatVector8(1.0f) / *this;
   return (*this);
 }
 
 inline FloatVector8& FloatVector8::rcpSqr()
 {
-  v[0] = 1.0f / (v[0] * v[0]);
-  v[1] = 1.0f / (v[1] * v[1]);
-  v[2] = 1.0f / (v[2] * v[2]);
-  v[3] = 1.0f / (v[3] * v[3]);
-  v[4] = 1.0f / (v[4] * v[4]);
-  v[5] = 1.0f / (v[5] * v[5]);
-  v[6] = 1.0f / (v[6] * v[6]);
-  v[7] = 1.0f / (v[7] * v[7]);
+  *this = FloatVector8(1.0f) / (*this * *this);
   return (*this);
 }
 

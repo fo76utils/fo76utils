@@ -4,7 +4,7 @@
 
 #include "common.hpp"
 
-#if ENABLE_X86_64_SIMD
+#if ENABLE_GCC_SIMD_16
 typedef float   XMM_Float __attribute__ ((__vector_size__ (16)));
 typedef double  XMM_Double __attribute__ ((__vector_size__ (16)));
 typedef std::uint8_t  XMM_UInt8 __attribute__ ((__vector_size__ (16)));
@@ -15,7 +15,8 @@ typedef std::uint32_t XMM_UInt32 __attribute__ ((__vector_size__ (16)));
 typedef std::int32_t  XMM_Int32 __attribute__ ((__vector_size__ (16)));
 typedef unsigned long long  XMM_UInt64 __attribute__ ((__vector_size__ (16)));
 typedef long long     XMM_Int64 __attribute__ ((__vector_size__ (16)));
-#  if ENABLE_X86_64_SIMD >= 2
+#endif
+#if ENABLE_GCC_SIMD_32
 typedef float   YMM_Float __attribute__ ((__vector_size__ (32)));
 typedef double  YMM_Double __attribute__ ((__vector_size__ (32)));
 typedef std::uint8_t  YMM_UInt8 __attribute__ ((__vector_size__ (32)));
@@ -26,7 +27,6 @@ typedef std::uint32_t YMM_UInt32 __attribute__ ((__vector_size__ (32)));
 typedef std::int32_t  YMM_Int32 __attribute__ ((__vector_size__ (32)));
 typedef std::uint64_t YMM_UInt64 __attribute__ ((__vector_size__ (32)));
 typedef std::int64_t  YMM_Int64 __attribute__ ((__vector_size__ (32)));
-#  endif
 #endif
 
 #ifndef USE_PIXELFMT_RGB10A2
@@ -44,6 +44,8 @@ struct FloatVector4
   };
   typedef char  XMM_Char __attribute__ ((__vector_size__ (16)));
  public:
+#endif
+#if ENABLE_GCC_SIMD_16
   XMM_Float v;
   inline FloatVector4(const XMM_Float& r)
     : v(r)
@@ -76,6 +78,8 @@ struct FloatVector4
                       const std::uint32_t *p1_3, const std::uint32_t *p2_3,
                       float xf, float yf, bool isSRGB = false);
   static inline FloatVector4 convertInt16(const std::uint64_t& n);
+  static inline FloatVector4 convertInt32(const std::int32_t *p);
+  inline void convertToInt32(std::int32_t *p);
   // if noInfNaN is true, Inf and NaN values are never returned
   static inline FloatVector4 convertFloat16(std::uint64_t n,
                                             bool noInfNaN = false);
@@ -88,18 +92,18 @@ struct FloatVector4
   inline void convertToVector3(float *p) const;
   inline float& operator[](size_t n)
   {
-#if !(ENABLE_X86_64_SIMD >= 2 && defined(__clang__))
-    return v[n];
-#else
+#if ENABLE_GCC_SIMD_16 && defined(__clang__)
     return (reinterpret_cast< float * >(&v))[n];
+#else
+    return v[n];
 #endif
   }
   inline const float& operator[](size_t n) const
   {
-#if !(ENABLE_X86_64_SIMD >= 2 && defined(__clang__))
-    return v[n];
-#else
+#if ENABLE_GCC_SIMD_16 && defined(__clang__)
     return (reinterpret_cast< const float * >(&v))[n];
+#else
+    return v[n];
 #endif
   }
   inline FloatVector4& operator+=(const FloatVector4& r);

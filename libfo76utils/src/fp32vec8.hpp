@@ -15,6 +15,8 @@ struct FloatVector8
     floatMinVal, floatMinVal, floatMinVal, floatMinVal
   };
  public:
+#endif
+#if ENABLE_GCC_SIMD_32
   YMM_Float v;
   inline FloatVector8(const YMM_Float& r)
     : v(r)
@@ -48,18 +50,18 @@ struct FloatVector8
   inline void convertToFloat16(std::uint16_t *p) const;
   inline float& operator[](size_t n)
   {
-#if !(ENABLE_X86_64_SIMD >= 2 && defined(__clang__))
-    return v[n];
-#else
+#if ENABLE_GCC_SIMD_32 && defined(__clang__)
     return (reinterpret_cast< float * >(&v))[n];
+#else
+    return v[n];
 #endif
   }
   inline const float& operator[](size_t n) const
   {
-#if !(ENABLE_X86_64_SIMD >= 2 && defined(__clang__))
-    return v[n];
-#else
+#if ENABLE_GCC_SIMD_32 && defined(__clang__)
     return (reinterpret_cast< const float * >(&v))[n];
+#else
+    return v[n];
 #endif
   }
   inline FloatVector8& operator+=(const FloatVector8& r);

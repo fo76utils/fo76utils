@@ -227,8 +227,12 @@ class DDSTexture16
   // y = -1.0 to 1.0: S to N
   // z = -1.0 to 1.0: bottom to top
   FloatVector4 cubeMap(float x, float y, float z, float mipLevel) const;
-  // Calculate a weighted sum of cube map samples, each element of sampleBuf
-  // is a vector (X, Y, Z) and a mip level (W) in the range 0.0 to 16.0:
+  // Calculate a weighted sum of cube map samples, sampleBuf is expected to
+  // contain X, Y, Z vectors and mip levels (W) in the range 0.0 to 16.0 in
+  // this format:
+  //     (X0, X1, X2, X3), (Y0, Y1, Y2, Y3), (Z0, Z1, Z2, Z3), (W0, W1, W2, W3)
+  //     (X4, X5, X6, X7), (Y4, Y5, Y6, Y7), ...
+  // sampleCnt must be a multiple of 8. Each sample is calculated as follows:
   //     v = (t * X) + (b * Y) + (n * Z)
   //     sample = cubeMap(v[0], v[1], v[2], W) * Z
   FloatVector4 cubeMapImportanceSample(

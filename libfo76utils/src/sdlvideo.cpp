@@ -600,7 +600,8 @@ void SDLDisplay::clearSurface(std::uint32_t c, bool forceTransparent)
       for ( ; (xc + 8U) <= (unsigned int) imageWidth; xc = xc + 8U, p = p + 8)
       {
         __asm__ ("vmovdqu %t1, %t0"
-                 : "=m" (*p) : "x" (!((xc ^ yc) & gridSize) ? tmp0 : tmp1));
+                 : "=m" (*((std::uint32_t (*)[8]) p))
+                 : "x" (!((xc ^ yc) & gridSize) ? tmp0 : tmp1));
       }
 #endif
       for ( ; xc < (unsigned int) imageWidth; xc++, p++)

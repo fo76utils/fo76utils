@@ -822,12 +822,12 @@ DDSTexture::DDSTexture(std::uint32_t c, bool srgbColor)
       std::uintptr_t(reinterpret_cast< unsigned char * >(&textureColor));
   const YMM_UInt64  tmp2 = { tmp1, tmp1, tmp1, tmp1 };
   // sizeof(textureData) == sizeof(std::uint32_t *) * 19
-  __asm__ ("vmovdqu %t1, %0" : "=m" (textureData[0]) : "x" (tmp2));
-  __asm__ ("vmovdqu %t1, %0" : "=m" (textureData[4]) : "x" (tmp2));
-  __asm__ ("vmovdqu %t1, %0" : "=m" (textureData[8]) : "x" (tmp2));
-  __asm__ ("vmovdqu %t1, %0" : "=m" (textureData[12]) : "x" (tmp2));
-  __asm__ ("vmovdqu %x1, %0" : "=m" (textureData[16]) : "x" (tmp2));
-  __asm__ ("vmovq %x1, %0" : "=m" (textureData[18]) : "x" (tmp2));
+  std::uint32_t **p = &(textureData[0]);
+  __asm__ ("vmovdqu %t1, %0" : "=m" (*((char (*)[32]) p)) : "x" (tmp2));
+  __asm__ ("vmovdqu %t1, %0" : "=m" (*((char (*)[32]) (p + 4))) : "x" (tmp2));
+  __asm__ ("vmovdqu %t1, %0" : "=m" (*((char (*)[32]) (p + 8))) : "x" (tmp2));
+  __asm__ ("vmovdqu %t1, %0" : "=m" (*((char (*)[32]) (p + 12))) : "x" (tmp2));
+  __asm__ ("vmovdqu %t1, %0" : "=m" (*((char (*)[32]) (p + 15))) : "x" (tmp2));
 #else
   for (size_t i = 0; i < (sizeof(textureData) / sizeof(std::uint32_t *)); i++)
     textureData[i] = &textureColor;

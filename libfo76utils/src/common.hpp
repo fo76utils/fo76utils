@@ -42,6 +42,21 @@
 #  endif
 #endif
 
+#ifndef ENABLE_GCC_SIMD_16
+#  if defined(__GNUC__) && defined(__SSE2__)
+#    define ENABLE_GCC_SIMD_16  1
+#  else
+#    define ENABLE_GCC_SIMD_16  0
+#  endif
+#endif
+#ifndef ENABLE_GCC_SIMD_32
+#  if defined(__GNUC__) && defined(__AVX__)
+#    define ENABLE_GCC_SIMD_32  1
+#  else
+#    define ENABLE_GCC_SIMD_32  0
+#  endif
+#endif
+
 class FO76UtilsError : public std::exception
 {
  protected:
@@ -131,24 +146,18 @@ inline float convertFloat16(unsigned short n)
     std::int16_t(n), 0, 0, 0, 0, 0, 0, 0
   };
   return __builtin_ia32_vcvtph2ps(tmp)[0];
-#elif defined(__i386__) || defined(__x86_64__) || defined(__x86_64)
+#else
   std::uint32_t m = (std::uint32_t) int((std::int16_t) n);
   std::uint32_t i = ((m << 13) & 0x8FFFE000U) + 0x38000000U;
   float   r = std::bit_cast< float >(i);
   if (!(m & 0x7C00U)) [[unlikely]]
   {
     // zero or denormal
-    i = std::bit_cast< std::uint32_t >(r) & 0xFF800000U;
+    i = i & 0xFF800000U;
     r = r - std::bit_cast< float >(i);
     r = r + r;
   }
   return r;
-#else
-  unsigned char e = (unsigned char) ((n >> 10) & 0x1F);
-  if (!e)
-    return 0.0f;
-  long long m = (long long) ((n & 0x03FF) | 0x0400) << e;
-  return (float(!(n & 0x8000) ? m : -m) * (1.0f / 33554432.0f));
 #endif
 }
 

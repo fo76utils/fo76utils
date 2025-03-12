@@ -11,11 +11,8 @@ inline FloatVector4::FloatVector4(unsigned int c)
 }
 
 inline FloatVector4::FloatVector4(float x)
+  : v{ x, x, x, x }
 {
-  v[0] = x;
-  v[1] = x;
-  v[2] = x;
-  v[3] = x;
 }
 
 inline FloatVector4::FloatVector4(const std::uint32_t *p)
@@ -39,21 +36,13 @@ inline FloatVector4::FloatVector4(const std::uint32_t *p1,
 }
 
 inline FloatVector4::FloatVector4(float v0, float v1, float v2, float v3)
+  : v{ v0, v1, v2, v3 }
 {
-  v[0] = v0;
-  v[1] = v1;
-  v[2] = v2;
-  v[3] = v3;
 }
 
 inline FloatVector4::FloatVector4(const float *p)
 {
-  FloatVector4  tmp;
-  tmp.v[0] = p[0];
-  tmp.v[1] = p[1];
-  tmp.v[2] = p[2];
-  tmp.v[3] = p[3];
-  *this = tmp;
+  std::memcpy(&((*this)[0]), p, sizeof(FloatVector4));
 }
 
 inline FloatVector4 FloatVector4::convertInt16(const std::uint64_t& n)
@@ -62,6 +51,19 @@ inline FloatVector4 FloatVector4::convertInt16(const std::uint64_t& n)
                       float(std::int16_t((n >> 16) & 0xFFFFU)),
                       float(std::int16_t((n >> 32) & 0xFFFFU)),
                       float(std::int16_t((n >> 48) & 0xFFFFU)));
+}
+
+inline FloatVector4 FloatVector4::convertInt32(const std::int32_t *p)
+{
+  return FloatVector4(float(p[0]), float(p[1]), float(p[2]), float(p[3]));
+}
+
+inline void FloatVector4::convertToInt32(std::int32_t *p)
+{
+  p[0] = std::int32_t(roundFloat(v[0]));
+  p[1] = std::int32_t(roundFloat(v[1]));
+  p[2] = std::int32_t(roundFloat(v[2]));
+  p[3] = std::int32_t(roundFloat(v[3]));
 }
 
 inline FloatVector4 FloatVector4::convertFloat16(std::uint64_t n, bool noInfNaN)
@@ -89,11 +91,7 @@ inline std::uint64_t FloatVector4::convertToFloat16(unsigned int mask) const
 
 inline void FloatVector4::convertToFloats(float *p) const
 {
-  FloatVector4  tmp(*this);
-  p[0] = tmp.v[0];
-  p[1] = tmp.v[1];
-  p[2] = tmp.v[2];
-  p[3] = tmp.v[3];
+  std::memcpy(p, &((*this)[0]), sizeof(FloatVector4));
 }
 
 inline FloatVector4 FloatVector4::convertVector3(const float *p)
@@ -103,12 +101,98 @@ inline FloatVector4 FloatVector4::convertVector3(const float *p)
 
 inline void FloatVector4::convertToVector3(float *p) const
 {
-  FloatVector4  tmp(*this);
-  p[0] = tmp.v[0];
-  p[1] = tmp.v[1];
-  p[2] = tmp.v[2];
+  std::memcpy(p, &((*this)[0]), sizeof(float) * 3);
 }
 
+#if ENABLE_GCC_SIMD_16
+inline FloatVector4& FloatVector4::operator+=(const FloatVector4& r)
+{
+  v += r.v;
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::operator-=(const FloatVector4& r)
+{
+  v -= r.v;
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::operator*=(const FloatVector4& r)
+{
+  v *= r.v;
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::operator/=(const FloatVector4& r)
+{
+  v /= r.v;
+  return (*this);
+}
+
+inline FloatVector4 FloatVector4::operator+(const FloatVector4& r) const
+{
+  return FloatVector4(v + r.v);
+}
+
+inline FloatVector4 FloatVector4::operator-(const FloatVector4& r) const
+{
+  return FloatVector4(v - r.v);
+}
+
+inline FloatVector4 FloatVector4::operator*(const FloatVector4& r) const
+{
+  return FloatVector4(v * r.v);
+}
+
+inline FloatVector4 FloatVector4::operator/(const FloatVector4& r) const
+{
+  return FloatVector4(v / r.v);
+}
+
+inline FloatVector4& FloatVector4::operator+=(float r)
+{
+  v += r;
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::operator-=(float r)
+{
+  v -= r;
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::operator*=(float r)
+{
+  v *= r;
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::operator/=(float r)
+{
+  v /= r;
+  return (*this);
+}
+
+inline FloatVector4 FloatVector4::operator+(const float& r) const
+{
+  return FloatVector4(v + r);
+}
+
+inline FloatVector4 FloatVector4::operator-(const float& r) const
+{
+  return FloatVector4(v - r);
+}
+
+inline FloatVector4 FloatVector4::operator*(const float& r) const
+{
+  return FloatVector4(v * r);
+}
+
+inline FloatVector4 FloatVector4::operator/(const float& r) const
+{
+  return FloatVector4(v / r);
+}
+#else
 inline FloatVector4& FloatVector4::operator+=(const FloatVector4& r)
 {
   FloatVector4  tmp(r);
@@ -228,6 +312,7 @@ inline FloatVector4 FloatVector4::operator/(const float& r) const
 {
   return FloatVector4(v[0] / r, v[1] / r, v[2] / r, v[3] / r);
 }
+#endif
 
 inline FloatVector4& FloatVector4::clearV3()
 {
@@ -256,6 +341,26 @@ inline FloatVector4& FloatVector4::blendValues(
   return (*this);
 }
 
+#if ENABLE_GCC_SIMD_16
+inline FloatVector4& FloatVector4::blendValues(
+    const FloatVector4& r, const FloatVector4& mask)
+{
+  v = (mask.v < 0.0f ? r.v : v);
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::minValues(const FloatVector4& r)
+{
+  v = (v < r.v ? v : r.v);
+  return (*this);
+}
+
+inline FloatVector4& FloatVector4::maxValues(const FloatVector4& r)
+{
+  v = (v > r.v ? v : r.v);
+  return (*this);
+}
+#else
 inline FloatVector4& FloatVector4::blendValues(
     const FloatVector4& r, const FloatVector4& mask)
 {
@@ -287,6 +392,7 @@ inline FloatVector4& FloatVector4::maxValues(const FloatVector4& r)
   v[3] = (v[3] > tmp.v[3] ? v[3] : tmp.v[3]);
   return (*this);
 }
+#endif
 
 inline FloatVector4& FloatVector4::floorValues()
 {
@@ -317,10 +423,15 @@ inline FloatVector4& FloatVector4::roundValues()
 
 inline FloatVector4& FloatVector4::absValues()
 {
+#if ENABLE_GCC_SIMD_16
+  XMM_Int32 m = { 0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF };
+  v = std::bit_cast< XMM_Float >(std::bit_cast< XMM_Int32 >(v) & m);
+#else
   v[0] = float(std::fabs(v[0]));
   v[1] = float(std::fabs(v[1]));
   v[2] = float(std::fabs(v[2]));
   v[3] = float(std::fabs(v[3]));
+#endif
   return (*this);
 }
 
@@ -381,19 +492,13 @@ inline FloatVector4& FloatVector4::rsqrtFast()
 
 inline FloatVector4& FloatVector4::rcpFast()
 {
-  v[0] = 1.0f / v[0];
-  v[1] = 1.0f / v[1];
-  v[2] = 1.0f / v[2];
-  v[3] = 1.0f / v[3];
+  *this = FloatVector4(1.0f) / *this;
   return (*this);
 }
 
 inline FloatVector4& FloatVector4::rcpSqr()
 {
-  v[0] = 1.0f / (v[0] * v[0]);
-  v[1] = 1.0f / (v[1] * v[1]);
-  v[2] = 1.0f / (v[2] * v[2]);
-  v[3] = 1.0f / (v[3] * v[3]);
+  *this = FloatVector4(1.0f) / (*this * *this);
   return (*this);
 }
 
@@ -440,10 +545,10 @@ inline FloatVector4& FloatVector4::exp2V()
 inline FloatVector4& FloatVector4::normalize(bool invFlag)
 {
   float   tmp = dotProduct(*this);
-  if (tmp > 0.0f)
+  if (tmp > 0.0f) [[likely]]
   {
-    tmp = (!invFlag ? 1.0f : -1.0f) / float(std::sqrt(tmp));
-    *this *= tmp;
+    tmp = float(std::sqrt(tmp));
+    *this /= (!invFlag ? tmp : -tmp);
   }
   return (*this);
 }

@@ -21,8 +21,10 @@ inline FloatVector8::FloatVector8(const std::uint64_t *p)
 #else
   const unsigned char *b = reinterpret_cast< const unsigned char * >(p);
   XMM_UInt32  tmp;
-  __asm__ ("vpmovzxbd %1, %x0" : "=x" (v) : "m" (*p));
-  __asm__ ("vpmovzxbd %1, %0" : "=x" (tmp) : "m" (*(b + 4)));
+  __asm__ ("vpmovzxbd %1, %x0"
+           : "=x" (v) : "m" (*((const unsigned char (*)[4]) b)));
+  __asm__ ("vpmovzxbd %1, %0"
+           : "=x" (tmp) : "m" (*((const unsigned char (*)[4]) (b + 4))));
   __asm__ ("vcvtdq2ps %x0, %x0" : "+x" (v));
   __asm__ ("vcvtdq2ps %0, %0" : "+x" (tmp));
   __asm__ ("vinsertf128 $0x01, %1, %t0, %t0" : "+x" (v) : "x" (tmp));
@@ -31,7 +33,7 @@ inline FloatVector8::FloatVector8(const std::uint64_t *p)
 
 inline FloatVector8::FloatVector8(const FloatVector4 *p)
 {
-  __asm__ ("vmovups %1, %t0" : "=x" (v) : "m" (*p));
+  __asm__ ("vmovups %1, %t0" : "=x" (v) : "m" (*((const float (*)[8]) p)));
 }
 
 inline FloatVector8::FloatVector8(FloatVector4 v0, FloatVector4 v1)
@@ -52,18 +54,21 @@ inline FloatVector8::FloatVector8(float v0, float v1, float v2, float v3,
 
 inline FloatVector8::FloatVector8(const float *p)
 {
-  __asm__ ("vmovups %1, %t0" : "=x" (v) : "m" (*p));
+  __asm__ ("vmovups %1, %t0" : "=x" (v) : "m" (*((const float (*)[8]) p)));
 }
 
 inline FloatVector8::FloatVector8(const std::int16_t *p)
 {
 #if ENABLE_X86_64_SIMD >= 4
-  __asm__ ("vpmovsxwd %1, %t0" : "=x" (v) : "m" (*p));
+  __asm__ ("vpmovsxwd %1, %t0"
+           : "=x" (v) : "m" (*((const std::int16_t (*)[8]) p)));
   __asm__ ("vcvtdq2ps %t0, %t0" : "+x" (v));
 #else
   XMM_UInt32  tmp;
-  __asm__ ("vpmovsxwd %1, %x0" : "=x" (v) : "m" (*p));
-  __asm__ ("vpmovsxwd %1, %0" : "=x" (tmp) : "m" (*(p + 4)));
+  __asm__ ("vpmovsxwd %1, %x0"
+           : "=x" (v) : "m" (*((const std::int16_t (*)[4]) p)));
+  __asm__ ("vpmovsxwd %1, %0"
+           : "=x" (tmp) : "m" (*((const std::int16_t (*)[4]) (p + 4))));
   __asm__ ("vcvtdq2ps %x0, %x0" : "+x" (v));
   __asm__ ("vcvtdq2ps %0, %0" : "+x" (tmp));
   __asm__ ("vinsertf128 $0x01, %1, %t0, %t0" : "+x" (v) : "x" (tmp));
@@ -72,7 +77,8 @@ inline FloatVector8::FloatVector8(const std::int16_t *p)
 
 inline FloatVector8::FloatVector8(const std::int32_t *p)
 {
-  __asm__ ("vmovdqu %1, %t0" : "=x" (v) : "m" (*p));
+  __asm__ ("vmovdqu %1, %t0"
+           : "=x" (v) : "m" (*((const std::int32_t (*)[8]) p)));
   __asm__ ("vcvtdq2ps %t0, %t0" : "+x" (v));
 }
 
@@ -81,11 +87,13 @@ inline FloatVector8::FloatVector8(const std::uint16_t *p, bool noInfNaN)
 #if ENABLE_X86_64_SIMD >= 3
   if (!noInfNaN)
   {
-    __asm__ ("vcvtph2ps %1, %t0" : "=x" (v) : "m" (*p));
+    __asm__ ("vcvtph2ps %1, %t0"
+             : "=x" (v) : "m" (*((const std::uint16_t (*)[8]) p)));
   }
   else
   {
-    __asm__ ("vmovdqu %1, %x0" : "=x" (v) : "m" (*p));
+    __asm__ ("vmovdqu %1, %x0"
+             : "=x" (v) : "m" (*((const std::uint16_t (*)[8]) p)));
     const XMM_UInt16  expMaskTbl =
     {
       0x7C00, 0x7C00, 0x7C00, 0x7C00, 0x7C00, 0x7C00, 0x7C00, 0x7C00
@@ -98,8 +106,9 @@ inline FloatVector8::FloatVector8(const std::uint16_t *p, bool noInfNaN)
   }
 #else
   std::uint64_t v0, v1;
-  __asm__ ("mov %1, %0" : "=r" (v0) : "m" (*p));
-  __asm__ ("mov %1, %0" : "=r" (v1) : "m" (*(p + 4)));
+  __asm__ ("mov %1, %0" : "=r" (v0) : "m" (*((const std::uint16_t (*)[4]) p)));
+  __asm__ ("mov %1, %0"
+           : "=r" (v1) : "m" (*((const std::uint16_t (*)[4]) (p + 4))));
   v = FloatVector8(FloatVector4::convertFloat16(v0, noInfNaN),
                    FloatVector4::convertFloat16(v1, noInfNaN)).v;
 #endif
@@ -107,12 +116,12 @@ inline FloatVector8::FloatVector8(const std::uint16_t *p, bool noInfNaN)
 
 inline void FloatVector8::convertToFloats(float *p) const
 {
-  __asm__ ("vmovups %t1, %0" : "=m" (*p) : "x" (v));
+  __asm__ ("vmovups %t1, %0" : "=m" (*((float (*)[8]) p)) : "x" (v));
 }
 
 inline void FloatVector8::convertToFloatVector4(FloatVector4 *p) const
 {
-  __asm__ ("vmovups %t1, %0" : "=m" (*p) : "x" (v));
+  __asm__ ("vmovups %t1, %0" : "=m" (*((float (*)[8]) p)) : "x" (v));
 }
 
 inline void FloatVector8::convertToInt16(std::int16_t *p) const
@@ -121,28 +130,29 @@ inline void FloatVector8::convertToInt16(std::int16_t *p) const
   YMM_UInt32  tmp;
   __asm__ ("vcvtps2dq %t1, %t0" : "=x" (tmp) : "xm" (v));
   __asm__ ("vpackssdw %t0, %t0, %t0" : "+x" (tmp));
-  __asm__ ("vmovdqu %x1, %0" : "=m" (*p) : "x" (tmp));
+  __asm__ ("vmovdqu %x1, %0" : "=m" (*((std::int16_t (*)[8]) p)) : "x" (tmp));
 #else
   XMM_UInt32  tmp1, tmp2;
   __asm__ ("vextractf128 $0x01, %t1, %0" : "=x" (tmp2) : "x" (v));
   __asm__ ("vcvtps2dq %x1, %0" : "=x" (tmp1) : "x" (v));
   __asm__ ("vcvtps2dq %0, %0" : "+x" (tmp2));
   __asm__ ("vpackssdw %1, %0, %0" : "+x" (tmp1) : "x" (tmp2));
-  __asm__ ("vmovdqu %1, %0" : "=m" (*p) : "x" (tmp1));
+  __asm__ ("vmovdqu %1, %0" : "=m" (*((std::int16_t (*)[8]) p)) : "x" (tmp1));
 #endif
 }
 
 inline void FloatVector8::convertToInt32(std::int32_t *p) const
 {
-  YMM_UInt32  tmp;
-  __asm__ ("vcvtps2dq %t1, %t0" : "=x" (tmp) : "xm" (v));
-  __asm__ ("vmovdqu %t1, %0" : "=m" (*p) : "x" (tmp));
+  YMM_Int32 tmp;
+  __asm__ ("vcvtps2dq %t1, %t0" : "=x" (tmp) : "x" (v));
+  __asm__ ("vmovdqu %t1, %0" : "=m" (*((std::int32_t (*)[8]) p)) : "x" (tmp));
 }
 
 inline void FloatVector8::convertToFloat16(std::uint16_t *p) const
 {
 #if ENABLE_X86_64_SIMD >= 3
-  __asm__ ("vcvtps2ph $0x00, %t1, %0" : "=m" (*p) : "x" (v));
+  __asm__ ("vcvtps2ph $0x00, %t1, %0"
+           : "=m" (*((std::uint16_t (*)[8]) p)) : "x" (v));
 #else
   p[0] = ::convertToFloat16(v[0]);
   p[1] = ::convertToFloat16(v[1]);
@@ -324,7 +334,7 @@ inline FloatVector8& FloatVector8::absValues()
     0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF,
     0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF
   };
-  __asm__ ("vandps %t1, %t0, %t0" : "+x" (v) : "xm" (m));
+  __asm__ ("vandps %t1, %t0, %t0" : "+x" (v) : "x" (m));
   return (*this);
 }
 
